@@ -124,7 +124,7 @@ DESTINATION_META = [
                     "link": {"label": "Google Auth Platform - Audience", "url": "https://console.cloud.google.com/auth/audience"},
                 },
                 {
-                    "text": "On the Data access tab, add the scope Backuparr requests: .../auth/drive.file (\"See, edit, create, and delete only the specific Google Drive files you use with this app\").",
+                    "text": "On the Data access tab, click \"Add or remove scopes\", then use the Filter box and filter by API = \"Google Drive API\" (the unfiltered table has 40+ scopes across every enabled API, so Drive's own scopes are easy to miss). Check the row for .../auth/drive.file (\"See, edit, create, and delete only the specific Google Drive files you use with this app\") - not .../auth/drive, which is full access - then click \"Update\" at the bottom of the panel.",
                     "link": {"label": "Google Auth Platform - Data access", "url": "https://console.cloud.google.com/auth/scopes"},
                 },
                 {
