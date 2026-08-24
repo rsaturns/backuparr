@@ -1,6 +1,7 @@
 "use strict";
 
 let APP_META = [];
+let DESTINATION_META = [];
 let RUN_POLL_TIMER = null;
 let SETTINGS_SNAPSHOT = null;
 
@@ -65,24 +66,53 @@ function initTabs() {
       document.getElementById(`tab-${btn.dataset.tab}`).classList.add("active");
       if (btn.dataset.tab === "overview") loadOverview();
       if (btn.dataset.tab === "run") refreshRunStatus();
-      if (btn.dataset.tab === "history") loadHistory();
+      if (btn.dataset.tab === "history") initHistoryTab();
       if (btn.dataset.tab === "restore") initRestoreTab();
     });
   });
 }
 
 // ----------------------------------------------------------- overview ----
+function destLabel(destId) {
+  const m = DESTINATION_META.find((d) => d.id === destId);
+  return m ? m.label : destId;
+}
+
+function enabledDestinationIds(cfg) {
+  // Order from DESTINATION_META (a stable, intentionally-ordered list), not
+  // Object.keys(cfg.destinations) - Flask's jsonify() sorts object keys
+  // alphabetically, which would put "gdrive" before "local" in the UI.
+  const ids = DESTINATION_META.length ? DESTINATION_META.map((m) => m.id) : Object.keys(cfg.destinations || {});
+  return ids.filter((id) => (cfg.destinations || {})[id] && cfg.destinations[id].enabled);
+}
+
 async function loadOverview() {
   const summaryEl = document.getElementById("overview-summary");
   const appsEl = document.getElementById("overview-apps");
   summaryEl.textContent = "Loading...";
   appsEl.innerHTML = "";
   try {
-    const [cfg, history, status] = await Promise.all([
-      apiFetch("/api/config"),
-      apiFetch("/api/history"),
+    const cfg = await apiFetch("/api/config");
+    const destIds = enabledDestinationIds(cfg);
+
+    const [histories, status] = await Promise.all([
+      Promise.all(destIds.map((id) => apiFetch(`/api/history/${id}`).catch(() => ({})))),
       apiFetch("/api/backup/status"),
     ]);
+    // Per app, the single most recent backup across every enabled
+    // destination - "last backup happened at X" is meaningful regardless
+    // of where it landed, and with one destination this is just that
+    // destination's latest entry.
+    const latestByApp = {};
+    histories.forEach((history) => {
+      Object.keys(history).forEach((appId) => {
+        const entry = (history[appId] || [])[0];
+        if (entry && (!latestByApp[appId] || entry.mod_time > latestByApp[appId].mod_time)) {
+          latestByApp[appId] = entry;
+        }
+      });
+    });
+
     const allIds = Object.keys(cfg.apps || {});
     const enabledIds = allIds.filter((id) => cfg.apps[id].enabled);
 
@@ -96,7 +126,7 @@ async function loadOverview() {
     summaryEl.innerHTML = "";
     const stats = [
       { label: "Enabled services", value: `${enabledIds.length} / ${allIds.length}` },
-      { label: "Google Drive remote", value: cfg.rclone_remote || "Not configured" },
+      { label: "Destinations", value: destIds.length ? destIds.map(destLabel).join(", ") : "None configured" },
       { label: "Cron schedule", value: cfg.cron_schedule || "-" },
       { label: "Retention", value: `${cfg.retention_days || 14} days` },
     ];
@@ -120,7 +150,7 @@ async function loadOverview() {
 
     enabledIds.forEach((appId) => {
       const meta = appMeta(appId);
-      const latest = (history[appId] || [])[0];
+      const latest = latestByApp[appId];
       const failure = failureByApp[appId];
 
       const card = document.createElement("div");
@@ -236,30 +266,77 @@ function readAppCard(appId) {
   return out;
 }
 
+// ---------------------------------------------------------- destinations ----
+function destCard(destId) {
+  return document.querySelector(`.dest-card[data-dest="${destId}"]`);
+}
+
+function fillDestCard(destId, cfg) {
+  const card = destCard(destId);
+  if (!card) return;
+  card.querySelector(".d-enabled").checked = !!cfg.enabled;
+  card.querySelectorAll(".d-field").forEach((input) => {
+    input.value = cfg[input.dataset.field] || "";
+  });
+  const body = card.querySelector(".app-card-body");
+  if (body) body.classList.toggle("hidden", !cfg.enabled);
+  if (destId === "gdrive") updateGdriveUI(cfg);
+}
+
+function readDestCard(destId) {
+  const card = destCard(destId);
+  const out = { enabled: card.querySelector(".d-enabled").checked };
+  card.querySelectorAll(".d-field").forEach((input) => {
+    out[input.dataset.field] = input.value.trim();
+  });
+  return out;
+}
+
+function updateGdriveUI(gdriveCfg) {
+  const statusEl = document.getElementById("gdrive-status");
+  const connectBtn = document.getElementById("gdrive-connect-btn");
+  const folderBtn = document.getElementById("gdrive-folder-btn");
+  const disconnectBtn = document.getElementById("gdrive-disconnect-btn");
+  if (!statusEl) return;
+  const connected = !!gdriveCfg.refresh_token;
+  connectBtn.classList.toggle("hidden", connected);
+  folderBtn.classList.toggle("hidden", !connected);
+  disconnectBtn.classList.toggle("hidden", !connected);
+  if (connected) {
+    statusEl.textContent = `Connected - backing up to "${gdriveCfg.folder_name || "My Drive (root)"}".`;
+  } else {
+    statusEl.textContent = "Not connected yet.";
+  }
+}
+
 async function loadConfig() {
   const cfg = await apiFetch("/api/config");
-  document.getElementById("s-rclone_remote").value = cfg.rclone_remote || "";
   document.getElementById("s-retention_days").value = cfg.retention_days || 14;
   document.getElementById("s-cron_schedule").value = cfg.cron_schedule || "";
   document.getElementById("s-notify_url").value = cfg.notify_url || "";
   document.getElementById("s-bazarr_backup_dir").value = cfg.bazarr_backup_dir || "";
   Object.keys(cfg.apps || {}).forEach((appId) => fillAppCard(appId, cfg.apps[appId]));
+  Object.keys(cfg.destinations || {}).forEach((destId) => fillDestCard(destId, cfg.destinations[destId]));
   snapshotSettingsState();
   return cfg;
 }
 
 function collectConfig() {
   const apps = {};
-  document.querySelectorAll(".app-card").forEach((card) => {
+  document.querySelectorAll(".app-card[data-app]").forEach((card) => {
     apps[card.dataset.app] = readAppCard(card.dataset.app);
   });
+  const destinations = {};
+  document.querySelectorAll(".dest-card[data-dest]").forEach((card) => {
+    destinations[card.dataset.dest] = readDestCard(card.dataset.dest);
+  });
   return {
-    rclone_remote: document.getElementById("s-rclone_remote").value.trim(),
     retention_days: Number(document.getElementById("s-retention_days").value || 14),
     cron_schedule: document.getElementById("s-cron_schedule").value.trim(),
     notify_url: document.getElementById("s-notify_url").value.trim(),
     bazarr_backup_dir: document.getElementById("s-bazarr_backup_dir").value.trim(),
     apps,
+    destinations,
   };
 }
 
@@ -330,28 +407,187 @@ async function testApp(appId) {
   }
 }
 
-async function testRclone() {
-  const resultEl = document.getElementById("test-rclone-result");
-  const remote = document.getElementById("s-rclone_remote").value.trim();
+async function testDestination(destId) {
+  const card = destCard(destId);
+  const dot = card.querySelector(".status-dot");
+  const resultEl = card.querySelector(".test-result");
+  const btn = card.querySelector(".test-dest-btn");
+  const payload = readDestCard(destId);
+
+  btn.disabled = true;
   resultEl.textContent = "Testing...";
   resultEl.className = "test-result";
+  dot.dataset.state = "idle";
   try {
-    const res = await apiFetch("/api/test-rclone", {
+    const res = await apiFetch(`/api/test-destination/${destId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rclone_remote: remote }),
+      body: JSON.stringify(payload),
     });
     resultEl.textContent = res.message;
     resultEl.className = `test-result ${res.ok ? "ok" : "fail"}`;
+    dot.dataset.state = res.ok ? "ok" : "fail";
   } catch (e) {
     resultEl.textContent = e.message;
     resultEl.className = "test-result fail";
+    dot.dataset.state = "fail";
+  } finally {
+    btn.disabled = false;
   }
+}
+
+// ------------------------------------------------------------ gdrive ----
+function gdriveRedirectUri() {
+  return `${window.location.origin}/api/destinations/gdrive/oauth/callback`;
+}
+
+async function connectGdrive() {
+  // Client ID/secret have to be saved before Google will redirect back here
+  // with anything useful, so save the whole form first (same as clicking
+  // the header Save button) and only navigate away if that succeeds.
+  const resultEl = document.getElementById("save-result");
+  resultEl.textContent = "Saving before connecting...";
+  resultEl.className = "save-result";
+  try {
+    await apiFetch("/api/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(collectConfig()),
+    });
+    snapshotSettingsState();
+    window.location.href = "/api/destinations/gdrive/oauth/start";
+  } catch (e) {
+    resultEl.textContent = e.message;
+    resultEl.className = "save-result fail";
+    toast(`Could not save before connecting: ${e.message}`, "fail");
+  }
+}
+
+function loadGooglePickerApi() {
+  return new Promise((resolve, reject) => {
+    if (window.google && window.google.picker) return resolve();
+    if (!window.gapi) return reject(new Error("Google API script did not load"));
+    window.gapi.load("picker", { callback: resolve, onerror: () => reject(new Error("could not load Google Picker")) });
+  });
+}
+
+async function openGooglePicker() {
+  const btn = document.getElementById("gdrive-folder-btn");
+  btn.disabled = true;
+  try {
+    const [{ access_token: accessToken }] = await Promise.all([
+      apiFetch("/api/destinations/gdrive/access-token", { method: "POST" }),
+      loadGooglePickerApi(),
+    ]);
+    const view = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
+      .setSelectFolderEnabled(true)
+      .setIncludeFolders(true);
+    const picker = new google.picker.PickerBuilder()
+      .addView(view)
+      .setTitle("Choose a folder for Backuparr's backups")
+      .setOAuthToken(accessToken)
+      .setCallback(gdrivePickerCallback)
+      .build();
+    picker.setVisible(true);
+  } catch (e) {
+    toast(`Could not open the folder picker: ${e.message}`, "fail");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function gdrivePickerCallback(data) {
+  if (data.action !== google.picker.Action.PICKED) return;
+  const folder = data.docs[0];
+  try {
+    await apiFetch("/api/destinations/gdrive/folder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ folder_id: folder.id, folder_name: folder.name }),
+    });
+    toast(`Backing up to "${folder.name}"`, "ok");
+    await loadConfig();
+  } catch (e) {
+    toast(`Could not save the selected folder: ${e.message}`, "fail");
+  }
+}
+
+async function disconnectGdrive() {
+  if (!confirm("Disconnect Google Drive? Existing backups already there are left untouched.")) return;
+  try {
+    await apiFetch("/api/destinations/gdrive/disconnect", { method: "POST" });
+    toast("Google Drive disconnected", "ok");
+    await loadConfig();
+  } catch (e) {
+    toast(`Could not disconnect: ${e.message}`, "fail");
+  }
+}
+
+// ------------------------------------------------------------ setup guide ----
+function openSetupGuide(destId) {
+  const meta = DESTINATION_META.find((m) => m.id === destId);
+  if (!meta || !meta.setup_help) return;
+  const help = meta.setup_help;
+
+  document.getElementById("setup-guide-title").textContent = help.title;
+  document.getElementById("setup-guide-intro").textContent = help.intro || "";
+
+  const stepsEl = document.getElementById("setup-guide-steps");
+  stepsEl.innerHTML = "";
+  (help.steps || []).forEach((step) => {
+    const li = document.createElement("li");
+    li.textContent = step;
+    stepsEl.appendChild(li);
+  });
+
+  const redirectBlock = document.getElementById("setup-guide-redirect");
+  if (destId === "gdrive") {
+    document.getElementById("setup-guide-redirect-input").value = gdriveRedirectUri();
+    redirectBlock.classList.remove("hidden");
+  } else {
+    redirectBlock.classList.add("hidden");
+  }
+
+  const linksEl = document.getElementById("setup-guide-links");
+  linksEl.innerHTML = "";
+  (help.links || []).forEach((link) => {
+    const a = document.createElement("a");
+    a.href = link.url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.textContent = `${link.label} ↗`;
+    linksEl.appendChild(a);
+  });
+
+  document.getElementById("setup-guide-modal").classList.remove("hidden");
+}
+
+function closeSetupGuide() {
+  document.getElementById("setup-guide-modal").classList.add("hidden");
+}
+
+function initSetupGuideEvents() {
+  document.getElementById("setup-guide-close").addEventListener("click", closeSetupGuide);
+  document.getElementById("setup-guide-modal").addEventListener("click", (e) => {
+    if (e.target.id === "setup-guide-modal") closeSetupGuide();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeSetupGuide();
+  });
+  document.getElementById("setup-guide-copy-btn").addEventListener("click", async () => {
+    const input = document.getElementById("setup-guide-redirect-input");
+    try {
+      await navigator.clipboard.writeText(input.value);
+      toast("Copied", "ok");
+    } catch (e) {
+      input.select();
+      toast("Couldn't copy automatically - text is selected, copy manually", "fail");
+    }
+  });
 }
 
 function initSettingsEvents() {
   document.getElementById("save-btn").addEventListener("click", saveSettings);
-  document.getElementById("test-rclone-btn").addEventListener("click", testRclone);
   document.querySelectorAll(".test-btn").forEach((btn) => {
     btn.addEventListener("click", () => testApp(btn.closest(".app-card").dataset.app));
   });
@@ -365,6 +601,28 @@ function initSettingsEvents() {
       document.getElementById("s-cron_schedule").value = chip.dataset.cron;
     });
   });
+
+  document.querySelectorAll(".test-dest-btn").forEach((btn) => {
+    btn.addEventListener("click", () => testDestination(btn.closest(".dest-card").dataset.dest));
+  });
+  document.querySelectorAll(".d-enabled").forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      const card = checkbox.closest(".dest-card");
+      const body = card.querySelector(".app-card-body");
+      if (body) body.classList.toggle("hidden", !checkbox.checked);
+    });
+  });
+  document.querySelectorAll(".setup-guide-btn").forEach((btn) => {
+    btn.addEventListener("click", () => openSetupGuide(btn.dataset.dest));
+  });
+  initSetupGuideEvents();
+
+  const gdriveConnectBtn = document.getElementById("gdrive-connect-btn");
+  if (gdriveConnectBtn) gdriveConnectBtn.addEventListener("click", connectGdrive);
+  const gdriveFolderBtn = document.getElementById("gdrive-folder-btn");
+  if (gdriveFolderBtn) gdriveFolderBtn.addEventListener("click", openGooglePicker);
+  const gdriveDisconnectBtn = document.getElementById("gdrive-disconnect-btn");
+  if (gdriveDisconnectBtn) gdriveDisconnectBtn.addEventListener("click", disconnectGdrive);
 }
 
 // -------------------------------------------------------------- run tab ----
@@ -448,10 +706,10 @@ function appLabel(appId) {
   return m ? m.label : appId;
 }
 
-async function deleteBackup(appId, filename, row) {
+async function deleteBackup(destId, appId, filename, row) {
   if (!confirm(`Delete ${filename}? This can't be undone.`)) return;
   try {
-    await apiFetch(`/api/history/${appId}/${encodeURIComponent(filename)}`, { method: "DELETE" });
+    await apiFetch(`/api/history/${destId}/${appId}/${encodeURIComponent(filename)}`, { method: "DELETE" });
     row.remove();
     toast(`Deleted ${filename}`, "ok");
   } catch (e) {
@@ -459,15 +717,55 @@ async function deleteBackup(appId, filename, row) {
   }
 }
 
+async function populateDestinationSelect(select) {
+  const previous = select.value;
+  try {
+    const cfg = await apiFetch("/api/config");
+    const destIds = enabledDestinationIds(cfg);
+    select.innerHTML = "";
+    if (!destIds.length) {
+      select.innerHTML = "<option>No destinations enabled</option>";
+      return [];
+    }
+    destIds.forEach((id) => {
+      const opt = document.createElement("option");
+      opt.value = id;
+      opt.textContent = destLabel(id);
+      select.appendChild(opt);
+    });
+    if (destIds.includes(previous)) select.value = previous;
+    return destIds;
+  } catch (e) {
+    select.innerHTML = "<option>Error loading destinations</option>";
+    return [];
+  }
+}
+
+async function initHistoryTab() {
+  const select = document.getElementById("h-destination");
+  await populateDestinationSelect(select);
+  loadHistory();
+}
+
+function initHistoryEvents() {
+  document.getElementById("history-refresh-btn").addEventListener("click", loadHistory);
+  document.getElementById("h-destination").addEventListener("change", loadHistory);
+}
+
 async function loadHistory() {
   const root = document.getElementById("history-root");
+  const destId = document.getElementById("h-destination").value;
   root.textContent = "Loading...";
+  if (!destId) {
+    root.innerHTML = '<p class="empty-note">No destinations enabled - turn one on in Settings first.</p>';
+    return;
+  }
   try {
-    const history = await apiFetch("/api/history");
+    const history = await apiFetch(`/api/history/${destId}`);
     root.innerHTML = "";
     const appIds = Object.keys(history).filter((appId) => (history[appId] || []).length > 0);
     if (!appIds.length) {
-      root.innerHTML = '<p class="empty-note">No backups yet - set a Google Drive remote in Settings and run a backup.</p>';
+      root.innerHTML = '<p class="empty-note">No backups yet on this destination - run a backup first.</p>';
       return;
     }
     appIds.forEach((appId) => {
@@ -492,13 +790,18 @@ async function loadHistory() {
         timeTd.textContent = fmtTime(e.mod_time);
         const actionsTd = document.createElement("td");
         actionsTd.className = "actions-cell";
+        const dlLink = document.createElement("a");
+        dlLink.className = "icon-btn";
+        dlLink.title = "Download this backup";
+        dlLink.textContent = "↓";
+        dlLink.href = `/api/history/${destId}/${appId}/${encodeURIComponent(e.name)}/download`;
         const delBtn = document.createElement("button");
         delBtn.type = "button";
         delBtn.className = "icon-btn";
         delBtn.title = "Delete this backup";
         delBtn.textContent = "×";
-        delBtn.addEventListener("click", () => deleteBackup(appId, e.name, tr));
-        actionsTd.appendChild(delBtn);
+        delBtn.addEventListener("click", () => deleteBackup(destId, appId, e.name, tr));
+        actionsTd.append(dlLink, delBtn);
         tr.append(nameTd, sizeTd, timeTd, actionsTd);
         tbody.appendChild(tr);
       });
@@ -530,12 +833,17 @@ function initRestoreAppOptions() {
 }
 
 async function loadRestoreFiles() {
+  const destId = document.getElementById("r-destination").value;
   const appId = document.getElementById("r-app").value;
   const fileSelect = document.getElementById("r-file");
   fileSelect.innerHTML = "<option>Loading...</option>";
   document.getElementById("r-extra").innerHTML = "";
+  if (!destId) {
+    fileSelect.innerHTML = "<option>No destinations enabled</option>";
+    return;
+  }
   try {
-    const res = await apiFetch(`/api/restore/${appId}/backups`);
+    const res = await apiFetch(`/api/restore/${destId}/${appId}/backups`);
     fileSelect.innerHTML = "";
     if (!res.files.length) {
       fileSelect.innerHTML = "<option>No backups found</option>";
@@ -589,11 +897,12 @@ function renderRestoreExtra() {
 }
 
 async function loadSabnzbdPreview() {
+  const destId = document.getElementById("r-destination").value;
   const fileSelect = document.getElementById("r-file");
   const container = document.getElementById("r-sabnzbd-servers");
   container.textContent = "Loading...";
   try {
-    const res = await apiFetch("/api/restore/sabnzbd/preview", {
+    const res = await apiFetch(`/api/restore/${destId}/sabnzbd/preview`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ file: fileSelect.value }),
@@ -632,6 +941,7 @@ async function loadSabnzbdPreview() {
 }
 
 async function doRestore() {
+  const destId = document.getElementById("r-destination").value;
   const appId = document.getElementById("r-app").value;
   const file = document.getElementById("r-file").value;
   const confirmed = document.getElementById("r-confirm").checked;
@@ -659,7 +969,7 @@ async function doRestore() {
   resultEl.textContent = "Restoring...";
   resultEl.className = "save-result";
   try {
-    const res = await apiFetch(`/api/restore/${appId}`, {
+    const res = await apiFetch(`/api/restore/${destId}/${appId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -681,23 +991,41 @@ async function doRestore() {
   }
 }
 
-function initRestoreTab() {
+async function initRestoreTab() {
   initRestoreAppOptions();
+  await populateDestinationSelect(document.getElementById("r-destination"));
   loadRestoreFiles();
 }
 
 function initRestoreEvents() {
+  document.getElementById("r-destination").addEventListener("change", loadRestoreFiles);
   document.getElementById("r-app").addEventListener("change", loadRestoreFiles);
   document.getElementById("r-file").addEventListener("change", renderRestoreExtra);
   document.getElementById("restore-btn").addEventListener("click", doRestore);
 }
 
 // -------------------------------------------------------------- startup ----
+function handleGdriveRedirect() {
+  const params = new URLSearchParams(window.location.search);
+  const error = params.get("gdrive_error");
+  const connected = params.get("gdrive");
+  if (!error && !connected) return;
+
+  if (error) {
+    toast(`Google Drive: ${decodeURIComponent(error)}`, "fail");
+  } else if (connected === "connected") {
+    toast("Google Drive connected - choose a folder in Settings", "ok");
+  }
+  window.history.replaceState({}, "", window.location.pathname);
+  document.querySelector('.tab-btn[data-tab="settings"]').click();
+}
+
 async function init() {
   initTabs();
   initTheme();
   initSettingsEvents();
   initRunEvents();
+  initHistoryEvents();
   initRestoreEvents();
   syncTopbarHeight();
   window.addEventListener("resize", syncTopbarHeight);
@@ -713,12 +1041,18 @@ async function init() {
     toast(`Could not load app metadata: ${e.message}`, "fail");
   }
   try {
+    DESTINATION_META = await apiFetch("/api/destinations");
+  } catch (e) {
+    toast(`Could not load destination metadata: ${e.message}`, "fail");
+  }
+  try {
     await loadConfig();
   } catch (e) {
     toast(`Could not load config: ${e.message}`, "fail");
   }
   refreshRunStatus();
   loadOverview();
+  handleGdriveRedirect();
 }
 
 document.addEventListener("DOMContentLoaded", init);

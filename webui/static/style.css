@@ -51,6 +51,11 @@
 
 * { box-sizing: border-box; }
 
+/* Generic utility - needs !important since it's applied to elements with
+   all sorts of base display values (div, button, ...) and must win
+   regardless of what else targets them. */
+.hidden { display: none !important; }
+
 body {
   margin: 0;
   background: var(--bg);
@@ -196,6 +201,14 @@ body {
 @media (max-width: 860px) {
   .grid { grid-template-columns: 1fr; }
 }
+
+.right-col {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.right-col .card { margin-bottom: 0; }
 
 .card {
   background: var(--bg-elevated);
@@ -637,3 +650,86 @@ code {
 .icon-btn:hover { color: var(--danger); border-color: var(--danger); }
 
 .history-table td.actions-cell { width: 1%; white-space: nowrap; }
+.history-table td.actions-cell .icon-btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+.history-table td.actions-cell .icon-btn + .icon-btn { margin-left: 6px; }
+
+/* -------------------------------------------------------- destinations --- */
+.dest-description { margin: 6px 0 0; }
+
+.dest-card-soon {
+  opacity: 0.55;
+}
+
+.dest-card-soon .app-card-head h3 { color: var(--text-muted); }
+
+.badge-soon {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+/* -------------------------------------------------------------- modal --- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 12, 16, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 200;
+}
+
+.modal-overlay.hidden { display: none; }
+
+.modal {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  width: 100%;
+  max-width: 560px;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg-elevated);
+}
+
+.modal-head h3 { margin: 0; font-size: 15px; }
+
+.modal-body { padding: 20px; }
+
+.guide-steps {
+  margin: 0 0 16px;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.guide-steps li { font-size: 13px; line-height: 1.5; }
+
+.guide-links {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.guide-links a { color: var(--accent); }

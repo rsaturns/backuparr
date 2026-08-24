@@ -101,37 +101,84 @@
         </div>
       </div>
 
-      <div class="card">
-        <h2>Storage &amp; schedule</h2>
-        <div class="field">
-          <span class="field-label">Google Drive remote (rclone)</span>
-          <div class="inline-group">
-            <input type="text" id="s-rclone_remote" placeholder="gdrive:backuparr">
-            <button type="button" class="btn btn-ghost btn-sm" id="test-rclone-btn">Test</button>
+      <div class="right-col">
+        <div class="card destinations-card">
+          <h2>Destinations</h2>
+          <p class="hint">Choose where backups go - enable as many as you like, every enabled destination gets a copy of every backup.</p>
+          <div id="destination-list">
+            {% for m in destination_meta %}
+            <div class="app-card dest-card{% if m.status != 'available' %} dest-card-soon{% endif %}" data-dest="{{ m.id }}">
+              <div class="app-card-head">
+                <label class="switch">
+                  <input type="checkbox" class="d-enabled"{% if m.status != 'available' %} disabled{% endif %}>
+                  <span class="slider"></span>
+                </label>
+                <h3>{{ m.label }}</h3>
+                {% if m.status != 'available' %}<span class="badge-soon">Coming soon</span>{% endif %}
+                <span class="status-dot" data-state="idle"></span>
+              </div>
+              {% if m.status == 'available' %}
+              <p class="hint dest-description">{{ m.description }}</p>
+              <div class="app-card-body hidden">
+                {% if m.id == 'local' %}
+                <label class="field">
+                  <span class="field-label">Custom path <span class="muted">(optional - defaults to /config/backuparr/backups)</span></span>
+                  <input type="text" class="d-field" data-field="path" placeholder="/config/backuparr/backups">
+                </label>
+                {% endif %}
+                {% if m.id == 'gdrive' %}
+                <label class="field">
+                  <span class="field-label">Client ID</span>
+                  <input type="text" class="d-field" data-field="client_id" autocomplete="off">
+                </label>
+                <label class="field">
+                  <span class="field-label">Client Secret</span>
+                  <input type="password" class="d-field" data-field="client_secret" autocomplete="off">
+                </label>
+                <p id="gdrive-status" class="hint">Not connected yet.</p>
+                <div class="app-card-actions">
+                  <button type="button" class="btn btn-ghost btn-sm" id="gdrive-connect-btn">Connect Google Drive</button>
+                  <button type="button" class="btn btn-ghost btn-sm hidden" id="gdrive-folder-btn">Choose folder</button>
+                  <button type="button" class="btn btn-ghost btn-sm hidden" id="gdrive-disconnect-btn">Disconnect</button>
+                </div>
+                {% endif %}
+                <div class="app-card-actions">
+                  <button type="button" class="btn btn-ghost btn-sm setup-guide-btn" data-dest="{{ m.id }}">Setup guide</button>
+                  <button type="button" class="btn btn-ghost btn-sm test-dest-btn">Test</button>
+                  <span class="test-result"></span>
+                </div>
+              </div>
+              {% else %}
+              <p class="hint dest-description">{{ m.description }}</p>
+              {% endif %}
+            </div>
+            {% endfor %}
           </div>
-          <span class="test-result" id="test-rclone-result"></span>
-          <p class="hint">Requires a one-time <code>rclone config</code> setup on the host - see README.md.</p>
         </div>
-        <div class="field">
-          <span class="field-label">Retention (days)</span>
-          <input type="number" id="s-retention_days" min="1" step="1">
-        </div>
-        <div class="field">
-          <span class="field-label">Cron schedule</span>
-          <input type="text" id="s-cron_schedule" placeholder="0 3 * * *">
-          <div class="preset-row">
-            <button type="button" class="chip" data-cron="0 3 * * *">Daily 03:00</button>
-            <button type="button" class="chip" data-cron="0 */6 * * *">Every 6h</button>
-            <button type="button" class="chip" data-cron="0 3 * * 0">Weekly (Sun 03:00)</button>
+
+        <div class="card">
+          <h2>Schedule &amp; notifications</h2>
+          <div class="field">
+            <span class="field-label">Retention (days)</span>
+            <input type="number" id="s-retention_days" min="1" step="1">
           </div>
-        </div>
-        <div class="field">
-          <span class="field-label">Notify URL <span class="muted">(optional, e.g. an ntfy.sh topic)</span></span>
-          <input type="text" id="s-notify_url" placeholder="https://ntfy.sh/your-topic">
-        </div>
-        <div class="field">
-          <span class="field-label">Bazarr backup folder <span class="muted">(local path, only needed to restore Bazarr)</span></span>
-          <input type="text" id="s-bazarr_backup_dir" placeholder="/mnt/bazarr-backup">
+          <div class="field">
+            <span class="field-label">Cron schedule</span>
+            <input type="text" id="s-cron_schedule" placeholder="0 3 * * *">
+            <div class="preset-row">
+              <button type="button" class="chip" data-cron="0 3 * * *">Daily 03:00</button>
+              <button type="button" class="chip" data-cron="0 */6 * * *">Every 6h</button>
+              <button type="button" class="chip" data-cron="0 3 * * 0">Weekly (Sun 03:00)</button>
+            </div>
+          </div>
+          <div class="field">
+            <span class="field-label">Notify URL <span class="muted">(optional, e.g. an ntfy.sh topic)</span></span>
+            <input type="text" id="s-notify_url" placeholder="https://ntfy.sh/your-topic">
+          </div>
+          <div class="field">
+            <span class="field-label">Bazarr backup folder <span class="muted">(local path, only needed to restore Bazarr)</span></span>
+            <input type="text" id="s-bazarr_backup_dir" placeholder="/mnt/bazarr-backup">
+          </div>
         </div>
       </div>
     </div>
@@ -154,6 +201,10 @@
         <h2>Backup history</h2>
         <button type="button" class="btn btn-ghost btn-sm" id="history-refresh-btn">Refresh</button>
       </div>
+      <div class="field">
+        <span class="field-label">Destination</span>
+        <select id="h-destination"></select>
+      </div>
       <div id="history-root"></div>
     </div>
   </section>
@@ -161,7 +212,11 @@
   <section id="tab-restore" class="tab-panel">
     <div class="card">
       <h2>Restore</h2>
-      <p class="hint">Restoring overwrites the target app's live configuration. Double check the app and file before confirming.</p>
+      <p class="hint">Restoring overwrites the target app's live configuration. Double check the destination, app, and file before confirming.</p>
+      <div class="field">
+        <span class="field-label">Destination</span>
+        <select id="r-destination"></select>
+      </div>
       <div class="field">
         <span class="field-label">App</span>
         <select id="r-app"></select>
@@ -184,7 +239,29 @@
 
 </main>
 
+<div id="setup-guide-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="setup-guide-title"></h3>
+      <button type="button" class="icon-btn modal-close" id="setup-guide-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p id="setup-guide-intro" class="hint"></p>
+      <ol id="setup-guide-steps" class="guide-steps"></ol>
+      <div id="setup-guide-redirect" class="field hidden">
+        <span class="field-label">Redirect URI - paste this exactly into "Authorized redirect URIs"</span>
+        <div class="inline-group">
+          <input type="text" id="setup-guide-redirect-input" readonly>
+          <button type="button" class="btn btn-ghost btn-sm" id="setup-guide-copy-btn">Copy</button>
+        </div>
+      </div>
+      <div id="setup-guide-links" class="guide-links"></div>
+    </div>
+  </div>
+</div>
+
 <div id="toast-root" class="toast-root"></div>
+<script src="https://apis.google.com/js/api.js"></script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
