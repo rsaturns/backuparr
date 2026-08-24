@@ -6,22 +6,44 @@ import copy
 import logging
 import os
 import re
+import secrets
 import shutil
+import tempfile
 import threading
+import time
+import urllib.parse
 from datetime import datetime, timezone
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, after_this_request, jsonify, redirect, render_template, request, send_file
 
+import destination_util
+import gdrive_oauth
 import rclone_util
 import restore_actions as ra
 from backup import build_app, notify, run_backup
-from config_store import APP_META, APP_NAMES, DEFAULT_APP, key_required, load_config, save_config
+from config_store import (
+    APP_META,
+    APP_NAMES,
+    DEFAULT_APP,
+    DEST_EDITABLE_FIELDS,
+    DEST_NAMES,
+    DESTINATION_META,
+    destination_meta,
+    key_required,
+    load_config,
+    save_config,
+)
 
 app = Flask(__name__)
 log = logging.getLogger("backuparr.webui")
 
 CRONTAB_PATH = "/etc/crontabs/root"
 CRON_MARKER_COMMENT = "# Backuparr schedule - managed by the web UI, do not edit by hand"
+
+# Single in-flight OAuth attempt is all a personal, single-admin tool needs -
+# CSRF-protects the callback without a real session store. (state -> ts)
+_OAUTH_STATE = {}
+_OAUTH_STATE_TTL = 600
 
 
 # ---------------------------------------------------------------- auth ----
@@ -90,7 +112,7 @@ def _do_run():
 # --------------------------------------------------------------- pages ----
 @app.get("/")
 def index():
-    return render_template("index.html", app_meta=APP_META)
+    return render_template("index.html", app_meta=APP_META, destination_meta=DESTINATION_META)
 
 
 # -------------------------------------------------------------- config ----
@@ -114,8 +136,6 @@ def _validate_config(data):
     if "cron_schedule" in data:
         if len(str(data["cron_schedule"]).split()) != 5:
             return "cron_schedule must be 5 space-separated fields (minute hour day month weekday)"
-    if "rclone_remote" in data and data["rclone_remote"] and ":" not in data["rclone_remote"]:
-        return "rclone_remote should look like 'gdrive:some/path'"
     for name, app_data in data.get("apps", {}).items():
         if name not in APP_NAMES:
             return f"unknown app: {name}"
@@ -123,6 +143,14 @@ def _validate_config(data):
             return f"{name}: a URL is required to enable it"
         if app_data.get("enabled") and key_required(name) and not app_data.get("api_key"):
             return f"{name}: an API key is required to enable it"
+    for name, dest_data in data.get("destinations", {}).items():
+        if name not in DEST_NAMES:
+            return f"unknown destination: {name}"
+        meta = destination_meta(name)
+        if dest_data.get("enabled") and meta["status"] != "available":
+            return f"{meta['label']} isn't available yet"
+        if name == "gdrive" and dest_data.get("enabled") and not dest_data.get("client_id"):
+            return "Google Drive: a Client ID is required to enable it (paste it in first, then Connect)"
     return None
 
 
@@ -134,16 +162,21 @@ def api_set_config():
         return jsonify({"error": error}), 400
 
     cfg = load_config()
-    for key in ("rclone_remote", "retention_days", "cron_schedule", "notify_url", "bazarr_backup_dir"):
+    for key in ("retention_days", "cron_schedule", "notify_url", "bazarr_backup_dir"):
         if key in data:
             cfg[key] = data[key]
     for name in APP_NAMES:
         if name in data.get("apps", {}):
             incoming = data["apps"][name]
             cfg["apps"][name].update({k: v for k, v in incoming.items() if k in DEFAULT_APP})
+    for name in DEST_NAMES:
+        if name in data.get("destinations", {}):
+            incoming = data["destinations"][name]
+            cfg["destinations"][name].update({k: v for k, v in incoming.items() if k in DEST_EDITABLE_FIELDS[name]})
 
     save_config(cfg)
     write_crontab(cfg["cron_schedule"])
+    destination_util.sync(cfg)
     return jsonify({"ok": True})
 
 
@@ -167,16 +200,43 @@ def api_test(app_name):
         return jsonify({"ok": False, "message": str(exc)})
 
 
-@app.post("/api/test-rclone")
-def api_test_rclone():
+# --------------------------------------------------------- destinations ----
+@app.get("/api/destinations")
+def api_destinations():
+    return jsonify(DESTINATION_META)
+
+
+@app.post("/api/test-destination/<dest_id>")
+def api_test_destination(dest_id):
+    if dest_id not in DEST_NAMES:
+        return jsonify({"ok": False, "message": "unknown destination"}), 404
+
+    cfg = load_config()
+    dest_cfg = dict(cfg["destinations"].get(dest_id, {}))
     data = request.get_json(force=True, silent=True) or {}
-    remote = data.get("rclone_remote", "")
-    if not remote:
-        return jsonify({"ok": False, "message": "rclone_remote is required"}), 400
+    dest_cfg.update({k: v for k, v in data.items() if k in DEST_EDITABLE_FIELDS.get(dest_id, set())})
+
     try:
-        rclone_util.check_remote(remote)
-        return jsonify({"ok": True, "message": "remote reachable"})
-    except rclone_util.RcloneError as exc:
+        if dest_id == "local":
+            path = destination_util.local_root(dest_cfg)
+            probe = os.path.join(path, ".backuparr-write-test")
+            with open(probe, "w") as f:
+                f.write("ok")
+            os.remove(probe)
+            return jsonify({"ok": True, "message": f"{path} is writable"})
+
+        if dest_id == "gdrive":
+            if not dest_cfg.get("refresh_token"):
+                return jsonify({"ok": False, "message": "Not connected yet - click Connect Google Drive first"})
+            cfg["destinations"]["gdrive"] = dest_cfg
+            destination_util.sync(cfg)
+            root = destination_util.remote_root("gdrive", dest_cfg)
+            rclone_util.check_remote(root)
+            folder = dest_cfg.get("folder_name") or "My Drive (root)"
+            return jsonify({"ok": True, "message": f"connected, backing up to \"{folder}\""})
+
+        return jsonify({"ok": False, "message": f"{dest_id} is not available yet"})
+    except (rclone_util.RcloneError, destination_util.DestinationError, OSError) as exc:
         return jsonify({"ok": False, "message": str(exc)})
 
 
@@ -207,15 +267,29 @@ def api_backup_status():
     return jsonify(state)
 
 
-@app.get("/api/history")
-def api_history():
+def _destination_root_or_error(cfg, dest_id):
+    """Returns (remote_root, None) or (None, (json_response, status))."""
+    if dest_id not in DEST_NAMES:
+        return None, (jsonify({"error": "unknown destination"}), 404)
+    dest_cfg = cfg["destinations"].get(dest_id, {})
+    if not dest_cfg.get("enabled"):
+        return None, (jsonify({"error": f"{dest_id} is not enabled"}), 400)
+    try:
+        destination_util.sync(cfg)
+        return destination_util.remote_root(dest_id, dest_cfg), None
+    except destination_util.DestinationError as exc:
+        return None, (jsonify({"error": str(exc)}), 400)
+
+
+@app.get("/api/history/<dest_id>")
+def api_history(dest_id):
     cfg = load_config()
-    remote = cfg.get("rclone_remote")
-    if not remote:
-        return jsonify({})
+    root, error = _destination_root_or_error(cfg, dest_id)
+    if error:
+        return error
     history = {}
     for name in APP_NAMES:
-        entries = rclone_util.lsjson(f"{remote.rstrip('/')}/{name}/")
+        entries = rclone_util.lsjson(f"{root}/{name}/")
         history[name] = sorted(
             [{"name": e["Name"], "size": e["Size"], "mod_time": e["ModTime"]} for e in entries],
             key=lambda e: e["mod_time"],
@@ -231,48 +305,77 @@ def api_history():
 _SAFE_FILENAME = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
-@app.delete("/api/history/<app_name>/<filename>")
-def api_history_delete(app_name, filename):
+@app.delete("/api/history/<dest_id>/<app_name>/<filename>")
+def api_history_delete(dest_id, app_name, filename):
     if app_name not in APP_NAMES:
         return jsonify({"error": "unknown app"}), 404
     if not _SAFE_FILENAME.match(filename):
         return jsonify({"error": "invalid filename"}), 400
 
     cfg = load_config()
-    remote = cfg.get("rclone_remote")
-    if not remote:
-        return jsonify({"error": "rclone_remote is not configured"}), 400
+    root, error = _destination_root_or_error(cfg, dest_id)
+    if error:
+        return error
 
-    remote_path = f"{remote.rstrip('/')}/{app_name}/{filename}"
     try:
-        rclone_util.delete_file(remote_path)
+        rclone_util.delete_file(f"{root}/{app_name}/{filename}")
     except rclone_util.RcloneError as exc:
         return jsonify({"error": str(exc)}), 500
     return jsonify({"ok": True})
 
 
-# ------------------------------------------------------------- restore ----
-@app.get("/api/restore/<app_name>/backups")
-def api_restore_backups(app_name):
+@app.get("/api/history/<dest_id>/<app_name>/<filename>/download")
+def api_history_download(dest_id, app_name, filename):
+    if app_name not in APP_NAMES:
+        return jsonify({"error": "unknown app"}), 404
+    if not _SAFE_FILENAME.match(filename):
+        return jsonify({"error": "invalid filename"}), 400
+
     cfg = load_config()
-    remote = cfg.get("rclone_remote")
-    if not remote:
-        return jsonify({"error": "rclone_remote is not configured"}), 400
+    root, error = _destination_root_or_error(cfg, dest_id)
+    if error:
+        return error
+
+    tmp_dir = tempfile.mkdtemp(prefix="backuparr-dl-")
+    local_path = os.path.join(tmp_dir, filename)
     try:
-        files = ra.list_backups(remote, app_name)
+        rclone_util.copyto(f"{root}/{app_name}/{filename}", local_path)
+    except rclone_util.RcloneError as exc:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        return jsonify({"error": str(exc)}), 500
+
+    @after_this_request
+    def _cleanup(response):
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        return response
+
+    return send_file(local_path, as_attachment=True, download_name=filename)
+
+
+# ------------------------------------------------------------- restore ----
+@app.get("/api/restore/<dest_id>/<app_name>/backups")
+def api_restore_backups(dest_id, app_name):
+    cfg = load_config()
+    root, error = _destination_root_or_error(cfg, dest_id)
+    if error:
+        return error
+    try:
+        files = ra.list_backups(root, app_name)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
     return jsonify({"files": list(reversed(files))})
 
 
-@app.post("/api/restore/sabnzbd/preview")
-def api_restore_sabnzbd_preview():
+@app.post("/api/restore/<dest_id>/sabnzbd/preview")
+def api_restore_sabnzbd_preview(dest_id):
     data = request.get_json(force=True, silent=True) or {}
     cfg = load_config()
-    remote = cfg.get("rclone_remote")
+    root, error = _destination_root_or_error(cfg, dest_id)
+    if error:
+        return error
     tmp_dir = None
     try:
-        tmp_dir, local_zip, filename = ra.fetch_backup(remote, "sabnzbd", data.get("file"))
+        tmp_dir, local_zip, filename = ra.fetch_backup(root, "sabnzbd", data.get("file"))
         config = ra.load_sabnzbd_config(tmp_dir, local_zip)
         servers = ra.sabnzbd_server_summary(config)
         return jsonify({"file": filename, "servers": servers})
@@ -283,8 +386,8 @@ def api_restore_sabnzbd_preview():
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
-@app.post("/api/restore/<app_name>")
-def api_restore(app_name):
+@app.post("/api/restore/<dest_id>/<app_name>")
+def api_restore(dest_id, app_name):
     if app_name not in APP_NAMES:
         return jsonify({"error": "unknown app"}), 404
 
@@ -293,16 +396,16 @@ def api_restore(app_name):
         return jsonify({"error": "confirm must be true"}), 400
 
     cfg = load_config()
-    remote = cfg.get("rclone_remote")
-    if not remote:
-        return jsonify({"error": "rclone_remote is not configured"}), 400
+    root, error = _destination_root_or_error(cfg, dest_id)
+    if error:
+        return error
     app_cfg = cfg["apps"].get(app_name, {})
     if not app_cfg.get("url") or (key_required(app_name) and not app_cfg.get("api_key")):
         return jsonify({"error": f"{app_name} is not configured"}), 400
 
     tmp_dir = None
     try:
-        tmp_dir, local_zip, filename = ra.fetch_backup(remote, app_name, data.get("file"))
+        tmp_dir, local_zip, filename = ra.fetch_backup(root, app_name, data.get("file"))
 
         if app_name in ra.UPLOAD_RESTORE_APPS:
             ra.restore_upload_app(app_name, app_cfg, local_zip)
@@ -335,6 +438,109 @@ def api_restore(app_name):
     finally:
         if tmp_dir:
             shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+# ------------------------------------------------------- gdrive oauth ----
+def _gdrive_redirect_uri():
+    return request.host_url.rstrip("/") + "/api/destinations/gdrive/oauth/callback"
+
+
+def _redirect_with_error(message):
+    return redirect("/?gdrive_error=" + urllib.parse.quote(str(message)))
+
+
+def _oauth_state_new():
+    now = time.time()
+    for s, ts in list(_OAUTH_STATE.items()):
+        if now - ts > _OAUTH_STATE_TTL:
+            del _OAUTH_STATE[s]
+    state = secrets.token_urlsafe(24)
+    _OAUTH_STATE[state] = now
+    return state
+
+
+def _oauth_state_consume(state):
+    ts = _OAUTH_STATE.pop(state, None)
+    return ts is not None and (time.time() - ts) <= _OAUTH_STATE_TTL
+
+
+@app.get("/api/destinations/gdrive/oauth/start")
+def api_gdrive_oauth_start():
+    cfg = load_config()
+    gdrive_cfg = cfg["destinations"]["gdrive"]
+    if not gdrive_cfg.get("client_id") or not gdrive_cfg.get("client_secret"):
+        return _redirect_with_error("Save a Client ID and Client Secret first")
+    state = _oauth_state_new()
+    url = gdrive_oauth.build_auth_url(gdrive_cfg["client_id"], _gdrive_redirect_uri(), state)
+    return redirect(url)
+
+
+@app.get("/api/destinations/gdrive/oauth/callback")
+def api_gdrive_oauth_callback():
+    error = request.args.get("error")
+    if error:
+        return _redirect_with_error(error)
+
+    state = request.args.get("state", "")
+    code = request.args.get("code")
+    if not code or not _oauth_state_consume(state):
+        return _redirect_with_error("invalid or expired authorization request, try connecting again")
+
+    cfg = load_config()
+    gdrive_cfg = cfg["destinations"]["gdrive"]
+    try:
+        tokens = gdrive_oauth.exchange_code(
+            gdrive_cfg["client_id"], gdrive_cfg["client_secret"], _gdrive_redirect_uri(), code
+        )
+    except gdrive_oauth.GDriveOAuthError as exc:
+        log.exception("gdrive oauth exchange failed")
+        return _redirect_with_error(str(exc))
+
+    gdrive_cfg["refresh_token"] = tokens["refresh_token"]
+    gdrive_cfg["enabled"] = True
+    save_config(cfg)
+    destination_util.sync(cfg)
+    return redirect("/?gdrive=connected")
+
+
+@app.post("/api/destinations/gdrive/access-token")
+def api_gdrive_access_token():
+    cfg = load_config()
+    try:
+        token = gdrive_oauth.get_access_token(cfg["destinations"]["gdrive"])
+        return jsonify({"access_token": token})
+    except gdrive_oauth.GDriveOAuthError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@app.post("/api/destinations/gdrive/folder")
+def api_gdrive_folder():
+    data = request.get_json(force=True, silent=True) or {}
+    folder_id = data.get("folder_id", "")
+    folder_name = data.get("folder_name", "")
+    if not folder_id:
+        return jsonify({"error": "folder_id is required"}), 400
+
+    cfg = load_config()
+    gdrive_cfg = cfg["destinations"]["gdrive"]
+    if not gdrive_cfg.get("refresh_token"):
+        return jsonify({"error": "Google Drive is not connected"}), 400
+    gdrive_cfg["folder_id"] = folder_id
+    gdrive_cfg["folder_name"] = folder_name
+    save_config(cfg)
+    destination_util.sync(cfg)
+    return jsonify({"ok": True})
+
+
+@app.post("/api/destinations/gdrive/disconnect")
+def api_gdrive_disconnect():
+    cfg = load_config()
+    cfg["destinations"]["gdrive"].update({
+        "enabled": False, "refresh_token": "", "folder_id": "", "folder_name": "",
+    })
+    save_config(cfg)
+    destination_util.sync(cfg)
+    return jsonify({"ok": True})
 
 
 # ------------------------------------------------------------- startup ----
