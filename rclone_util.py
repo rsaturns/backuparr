@@ -29,7 +29,12 @@ def delete_older_than(remote_dir, min_age):
 
 
 def lsf(remote_dir):
-    out = _run(["lsf", remote_dir])
+    """Returns [] instead of raising when the directory doesn't exist yet
+    (e.g. an app that's never had a successful backup) - same as lsjson."""
+    try:
+        out = _run(["lsf", remote_dir])
+    except RcloneError:
+        return []
     return [line.strip() for line in out.splitlines() if line.strip()]
 
 
