@@ -325,6 +325,7 @@ async function loadConfig() {
   const cfg = await apiFetch("/api/config");
   document.getElementById("s-retention_days").value = cfg.retention_days || 7;
   document.getElementById("s-cron_schedule").value = cfg.cron_schedule || "";
+  initSchedulePicker(cfg.cron_schedule);
   document.getElementById("s-notify_url").value = cfg.notify_url || "";
   document.getElementById("s-bazarr_backup_dir").value = cfg.bazarr_backup_dir || "";
   Object.keys(cfg.apps || {}).forEach((appId) => fillAppCard(appId, cfg.apps[appId]));
@@ -620,6 +621,96 @@ function initSetupGuideEvents() {
   });
 }
 
+// -------------------------------------------------------- schedule picker ----
+// Writes into #s-cron_schedule, same as if it'd been typed directly - the
+// rest of Settings (collectConfig/save/dirty-check) never needs to know a
+// picker was involved.
+function schedulePickerVisibility() {
+  const freq = document.getElementById("sched-frequency").value;
+  document.getElementById("sched-time").classList.toggle("hidden", freq === "hourly");
+  document.getElementById("sched-weekday").classList.toggle("hidden", freq !== "weekly");
+  document.getElementById("sched-interval-hours").classList.toggle("hidden", freq !== "hourly");
+}
+
+function applyPickerToCron() {
+  const freq = document.getElementById("sched-frequency").value;
+  let cron;
+  if (freq === "hourly") {
+    cron = `0 */${document.getElementById("sched-interval-hours").value} * * *`;
+  } else {
+    const [hh, mm] = (document.getElementById("sched-time").value || "03:00").split(":").map((n) => parseInt(n, 10));
+    cron = freq === "weekly" ? `${mm} ${hh} * * ${document.getElementById("sched-weekday").value}` : `${mm} ${hh} * * *`;
+  }
+  document.getElementById("s-cron_schedule").value = cron;
+}
+
+// Best-effort: only recognizes the exact shapes the picker itself can
+// produce (daily/weekly at HH:MM, or every-N-hours). Anything else - a
+// schedule someone hand-wrote in the advanced field - is left untouched;
+// the picker just falls back to a default display without altering it.
+function parseCronIntoPicker(cron) {
+  const parts = (cron || "").trim().split(/\s+/);
+  if (parts.length !== 5) return false;
+  const [min, hour, dom, mon, dow] = parts;
+  if (dom !== "*" || mon !== "*") return false;
+
+  const hourlyMatch = /^\*\/(\d{1,2})$/.exec(hour);
+  if (min === "0" && dow === "*" && hourlyMatch) {
+    const select = document.getElementById("sched-interval-hours");
+    if (![...select.options].some((o) => o.value === hourlyMatch[1])) return false;
+    document.getElementById("sched-frequency").value = "hourly";
+    select.value = hourlyMatch[1];
+    return true;
+  }
+
+  if (!/^\d{1,2}$/.test(hour) || !/^\d{1,2}$/.test(min)) return false;
+  const time = `${hour.padStart(2, "0")}:${min.padStart(2, "0")}`;
+
+  if (dow === "*") {
+    document.getElementById("sched-frequency").value = "daily";
+    document.getElementById("sched-time").value = time;
+    return true;
+  }
+  if (/^[0-6]$/.test(dow)) {
+    document.getElementById("sched-frequency").value = "weekly";
+    document.getElementById("sched-time").value = time;
+    document.getElementById("sched-weekday").value = dow;
+    return true;
+  }
+  return false;
+}
+
+function setCronAdvancedExpanded(expanded) {
+  document.getElementById("cron-advanced-body").classList.toggle("hidden", !expanded);
+  document.getElementById("cron-advanced-toggle").setAttribute("aria-expanded", String(expanded));
+}
+
+function initSchedulePicker(cronValue) {
+  const matched = parseCronIntoPicker(cronValue);
+  if (!matched) {
+    document.getElementById("sched-frequency").value = "daily";
+    if (!document.getElementById("sched-time").value) document.getElementById("sched-time").value = "03:00";
+  }
+  schedulePickerVisibility();
+  // Auto-expand the advanced field when the current schedule isn't
+  // something the simple picker can represent, so it's never silently
+  // hidden behind a picker state that doesn't actually match it.
+  setCronAdvancedExpanded(!matched);
+}
+
+function initScheduleEvents() {
+  ["sched-frequency", "sched-time", "sched-weekday", "sched-interval-hours"].forEach((id) => {
+    document.getElementById(id).addEventListener("change", () => {
+      schedulePickerVisibility();
+      applyPickerToCron();
+    });
+  });
+  document.getElementById("cron-advanced-toggle").addEventListener("click", () => {
+    const expanded = document.getElementById("cron-advanced-toggle").getAttribute("aria-expanded") === "true";
+    setCronAdvancedExpanded(!expanded);
+  });
+}
+
 function initSettingsEvents() {
   document.getElementById("save-btn").addEventListener("click", saveSettings);
   document.querySelectorAll(".test-btn").forEach((btn) => {
@@ -630,11 +721,7 @@ function initSettingsEvents() {
       setAppCardExpanded(checkbox.closest(".app-card"), checkbox.checked);
     });
   });
-  document.querySelectorAll(".chip[data-cron]").forEach((chip) => {
-    chip.addEventListener("click", () => {
-      document.getElementById("s-cron_schedule").value = chip.dataset.cron;
-    });
-  });
+  initScheduleEvents();
 
   document.querySelectorAll(".test-dest-btn").forEach((btn) => {
     btn.addEventListener("click", () => testDestination(btn.closest(".dest-card").dataset.dest));

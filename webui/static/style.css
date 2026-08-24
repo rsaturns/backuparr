@@ -310,24 +310,46 @@ input:focus, select:focus {
 
 .inline-group input { flex: 1; }
 
-.preset-row {
+.schedule-picker {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
+  gap: 8px;
 }
 
-.chip {
-  border: 1px solid var(--border);
-  background: var(--bg);
+.schedule-picker select,
+.schedule-picker input[type="time"] {
+  width: auto;
+  flex: 1;
+  min-width: 110px;
+}
+
+.collapse-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
   color: var(--text-muted);
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 12px;
+  font: inherit;
+  font-weight: 600;
+  font-size: 12.5px;
+  padding: 0;
   cursor: pointer;
 }
 
-.chip:hover { color: var(--text); border-color: var(--accent); }
+.collapse-toggle:hover { color: var(--text); }
+
+.collapse-arrow {
+  display: inline-block;
+  transition: transform 0.15s ease;
+  font-size: 10px;
+}
+
+.collapse-toggle[aria-expanded="true"] .collapse-arrow { transform: rotate(90deg); }
+
+.collapse-body {
+  margin-top: 10px;
+}
 
 .btn {
   font: inherit;

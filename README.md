@@ -120,7 +120,9 @@ Then open `http://<host>:8990` and, on the **Settings** tab:
    **Test connection** to confirm it's right before saving.
 2. Enable at least one destination - Local needs nothing further; see
    [Destinations](#destinations) above for connecting Google Drive.
-3. Set retention and a cron schedule (presets provided for common ones).
+3. Set retention and a backup schedule (Daily/Weekly/Every few hours, with
+   a time picker) - or expand **Advanced** to enter a raw cron expression
+   instead.
 4. **Save settings.**
 
 Everything is written to `config.json` on the `./data` volume, so it

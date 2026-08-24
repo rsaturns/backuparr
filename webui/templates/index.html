@@ -91,6 +91,12 @@
                 <input type="{{ f.type }}" class="f-extra" data-field="{{ f.name }}" autocomplete="off">
               </label>
               {% endfor %}
+              {% if m.id == 'bazarr' %}
+              <label class="field">
+                <span class="field-label">Backup folder <span class="muted">(local path, only needed to restore Bazarr)</span></span>
+                <input type="text" id="s-bazarr_backup_dir" placeholder="/mnt/bazarr-backup">
+              </label>
+              {% endif %}
               <div class="app-card-actions">
                 <button type="button" class="btn btn-ghost btn-sm test-btn">Test connection</button>
                 <span class="test-result"></span>
@@ -170,21 +176,47 @@
             <input type="number" id="s-retention_days" min="1" step="1">
           </div>
           <div class="field">
-            <span class="field-label">Cron schedule</span>
-            <input type="text" id="s-cron_schedule" placeholder="0 3 * * *">
-            <div class="preset-row">
-              <button type="button" class="chip" data-cron="0 3 * * *">Daily 03:00</button>
-              <button type="button" class="chip" data-cron="0 */6 * * *">Every 6h</button>
-              <button type="button" class="chip" data-cron="0 3 * * 0">Weekly (Sun 03:00)</button>
+            <span class="field-label">Backup schedule</span>
+            <div class="schedule-picker">
+              <select id="sched-frequency">
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="hourly">Every few hours</option>
+              </select>
+              <input type="time" id="sched-time">
+              <select id="sched-weekday" class="hidden">
+                <option value="0">Sunday</option>
+                <option value="1">Monday</option>
+                <option value="2">Tuesday</option>
+                <option value="3">Wednesday</option>
+                <option value="4">Thursday</option>
+                <option value="5">Friday</option>
+                <option value="6">Saturday</option>
+              </select>
+              <select id="sched-interval-hours" class="hidden">
+                <option value="1">Every hour</option>
+                <option value="2">Every 2 hours</option>
+                <option value="3">Every 3 hours</option>
+                <option value="4">Every 4 hours</option>
+                <option value="6">Every 6 hours</option>
+                <option value="8">Every 8 hours</option>
+                <option value="12">Every 12 hours</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <button type="button" class="collapse-toggle" id="cron-advanced-toggle">
+              <span class="collapse-arrow">&#9656;</span> Advanced: edit cron schedule directly
+            </button>
+            <div id="cron-advanced-body" class="collapse-body hidden">
+              <span class="field-label">Cron schedule</span>
+              <input type="text" id="s-cron_schedule" placeholder="0 3 * * *">
+              <p class="hint">Standard 5-field cron syntax (minute hour day month weekday). The picker above writes here automatically - edit directly for anything it can't express.</p>
             </div>
           </div>
           <div class="field">
             <span class="field-label">Notify URL <span class="muted">(optional, e.g. an ntfy.sh topic)</span></span>
             <input type="text" id="s-notify_url" placeholder="https://ntfy.sh/your-topic">
-          </div>
-          <div class="field">
-            <span class="field-label">Bazarr backup folder <span class="muted">(local path, only needed to restore Bazarr)</span></span>
-            <input type="text" id="s-bazarr_backup_dir" placeholder="/mnt/bazarr-backup">
           </div>
         </div>
       </div>
