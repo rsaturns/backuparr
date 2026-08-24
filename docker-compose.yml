@@ -1,0 +1,38 @@
+# Add this service block into your existing stack's docker-compose.yml
+# (the same file that defines radarr/sonarr/bazarr/prowlarr/sabnzbd) rather
+# than running it as a separate project - it needs to be on the same
+# Compose network to reach the other containers by name. Tdarr is the one
+# exception if it runs with network_mode: host - address it by the host's
+# LAN IP instead of a container name in that case.
+#
+# Everything app-specific (URLs, API keys, which apps are enabled, rclone
+# remote, schedule) is configured through the web UI at :8990 the first
+# time you start this, not through env vars here - config.json on the
+# ./data volume is what persists it across restarts.
+services:
+  arr-backup:
+    build: /path/to/arr-backup
+    # or once you publish it: image: ghcr.io/<you>/arr-backup:latest
+    container_name: arr-backup
+    restart: unless-stopped
+    environment:
+      TZ: America/Los_Angeles
+      # Set to "true" to run one backup immediately on container start, in
+      # addition to whatever's configured in the UI's cron schedule.
+      RUN_ON_START: "false"
+      # Recommended: protects the web UI (which holds every app's API key)
+      # with HTTP Basic auth. Left unset, it's open to anyone who can reach
+      # the port - fine on a trusted LAN, not otherwise.
+      # WEBUI_USERNAME: ""
+      # WEBUI_PASSWORD: ""
+    ports:
+      - "8990:8990"
+    volumes:
+      # Persists config.json (apps/keys/schedule) across container recreation.
+      - ./data:/config/arr-backup
+      # Generated once via `rclone config` - see README.md. Never commit
+      # this file, it contains your Google Drive OAuth token.
+      - ./rclone.conf:/config/rclone/rclone.conf:ro
+      # Optional: only needed if you want to restore Bazarr from the web UI
+      # or CLI - a local path to Bazarr's own config/backup folder.
+      # - /share/Container/bazarr/backup:/mnt/bazarr-backup

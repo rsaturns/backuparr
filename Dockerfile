@@ -1,0 +1,25 @@
+FROM python:3.12-alpine
+
+# Make sure the community repo (rclone lives there) is enabled.
+RUN sed -i 's/^#\(.*community.*\)/\1/' /etc/apk/repositories \
+    && apk update \
+    && apk add --no-cache bash rclone dcron tzdata
+
+WORKDIR /app
+COPY requirements.txt /app/
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY backup.py restore.py restore_actions.py rclone_util.py config_store.py entrypoint.sh /app/
+COPY apps /app/apps
+COPY webui /app/webui
+RUN chmod +x /app/entrypoint.sh
+
+ENV RCLONE_CONFIG=/config/rclone/rclone.conf \
+    ARR_BACKUP_CONFIG=/config/arr-backup/config.json \
+    ARR_BACKUP_LOG_DIR=/var/log/arr-backup \
+    WEBUI_PORT=8990 \
+    PYTHONUNBUFFERED=1
+
+EXPOSE 8990
+
+ENTRYPOINT ["/app/entrypoint.sh"]

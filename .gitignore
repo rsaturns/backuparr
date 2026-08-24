@@ -1,0 +1,8 @@
+rclone.conf
+data/
+*.zip
+.env
+__pycache__/
+*.pyc
+.claude/
+.playwright-mcp/

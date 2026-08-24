@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>arr-backup</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233b6bf6'/%3E%3Ctext x='16' y='22' font-size='18' text-anchor='middle' fill='white' font-family='sans-serif'%3E%E2%8C%A3%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">&#9099;</span>
+    <span class="brand-name">arr-backup</span>
+  </div>
+  <nav class="tabs" id="tabs">
+    <button class="tab-btn active" data-tab="settings" type="button">Settings</button>
+    <button class="tab-btn" data-tab="run" type="button">Run &amp; Status</button>
+    <button class="tab-btn" data-tab="history" type="button">History</button>
+    <button class="tab-btn" data-tab="restore" type="button">Restore</button>
+  </nav>
+</header>
+
+<main class="content">
+
+  <section id="tab-settings" class="tab-panel active">
+    <div class="grid">
+      <div class="card apps-card">
+        <h2>Apps</h2>
+        <p class="hint">Enable the apps you want backed up and fill in each one's URL and API key (find the key in that app's Settings &gt; General).</p>
+        <div id="app-list">
+          {% for m in app_meta %}
+          <div class="app-card" data-app="{{ m.id }}">
+            <div class="app-card-head">
+              <label class="switch">
+                <input type="checkbox" class="f-enabled">
+                <span class="slider"></span>
+              </label>
+              <h3>{{ m.label }}</h3>
+              <span class="status-dot" data-state="idle"></span>
+            </div>
+            <div class="app-card-body">
+              <label class="field">
+                <span class="field-label">URL</span>
+                <input type="text" class="f-url" placeholder="{{ m.url_placeholder }}" autocomplete="off">
+              </label>
+              <label class="field">
+                <span class="field-label">
+                  API key
+                  {% if not m.key_required %}<span class="muted">(optional{% if m.key_help %} &mdash; {{ m.key_help }}{% endif %})</span>{% endif %}
+                </span>
+                <input type="password" class="f-api_key" autocomplete="off">
+              </label>
+              {% for f in m.extra_fields %}
+              <label class="field">
+                <span class="field-label">{{ f.label }} {% if f.help %}<span class="muted">({{ f.help }})</span>{% endif %}</span>
+                <input type="{{ f.type }}" class="f-extra" data-field="{{ f.name }}" autocomplete="off">
+              </label>
+              {% endfor %}
+              <div class="app-card-actions">
+                <button type="button" class="btn btn-ghost btn-sm test-btn">Test connection</button>
+                <span class="test-result"></span>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Storage &amp; schedule</h2>
+        <div class="field">
+          <span class="field-label">Google Drive remote (rclone)</span>
+          <div class="inline-group">
+            <input type="text" id="s-rclone_remote" placeholder="gdrive:arr-backups">
+            <button type="button" class="btn btn-ghost btn-sm" id="test-rclone-btn">Test</button>
+          </div>
+          <span class="test-result" id="test-rclone-result"></span>
+          <p class="hint">Requires a one-time <code>rclone config</code> setup on the host - see README.md.</p>
+        </div>
+        <div class="field">
+          <span class="field-label">Retention (days)</span>
+          <input type="number" id="s-retention_days" min="1" step="1">
+        </div>
+        <div class="field">
+          <span class="field-label">Cron schedule</span>
+          <input type="text" id="s-cron_schedule" placeholder="0 3 * * *">
+          <div class="preset-row">
+            <button type="button" class="chip" data-cron="0 3 * * *">Daily 03:00</button>
+            <button type="button" class="chip" data-cron="0 */6 * * *">Every 6h</button>
+            <button type="button" class="chip" data-cron="0 3 * * 0">Weekly (Sun 03:00)</button>
+          </div>
+        </div>
+        <div class="field">
+          <span class="field-label">Notify URL <span class="muted">(optional, e.g. an ntfy.sh topic)</span></span>
+          <input type="text" id="s-notify_url" placeholder="https://ntfy.sh/your-topic">
+        </div>
+        <div class="field">
+          <span class="field-label">Bazarr backup folder <span class="muted">(local path, only needed to restore Bazarr)</span></span>
+          <input type="text" id="s-bazarr_backup_dir" placeholder="/mnt/bazarr-backup">
+        </div>
+        <div class="save-row">
+          <button type="button" class="btn btn-primary" id="save-btn">Save settings</button>
+          <span id="save-result" class="save-result"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-run" class="tab-panel">
+    <div class="card">
+      <div class="run-head">
+        <h2>Run &amp; status</h2>
+        <button type="button" class="btn btn-primary" id="run-btn">Run backup now</button>
+      </div>
+      <div id="run-summary" class="run-summary"></div>
+      <pre id="run-log" class="log-view">Loading...</pre>
+    </div>
+  </section>
+
+  <section id="tab-history" class="tab-panel">
+    <div class="card">
+      <div class="run-head">
+        <h2>Backup history</h2>
+        <button type="button" class="btn btn-ghost btn-sm" id="history-refresh-btn">Refresh</button>
+      </div>
+      <div id="history-root"></div>
+    </div>
+  </section>
+
+  <section id="tab-restore" class="tab-panel">
+    <div class="card">
+      <h2>Restore</h2>
+      <p class="hint">Restoring overwrites the target app's live configuration. Double check the app and file before confirming.</p>
+      <div class="field">
+        <span class="field-label">App</span>
+        <select id="r-app"></select>
+      </div>
+      <div class="field">
+        <span class="field-label">Backup file</span>
+        <select id="r-file"></select>
+      </div>
+      <div id="r-extra"></div>
+      <label class="field checkbox-field">
+        <input type="checkbox" id="r-confirm">
+        <span>I understand this will overwrite the current configuration.</span>
+      </label>
+      <div class="save-row">
+        <button type="button" class="btn btn-danger" id="restore-btn">Restore</button>
+        <span id="restore-result" class="save-result"></span>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div id="toast-root" class="toast-root"></div>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
