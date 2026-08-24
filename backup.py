@@ -26,7 +26,7 @@ from apps.sonarr import SonarrApp
 from apps.tdarr import TdarrApp
 from config_store import enabled_apps, load_config
 
-LOG_DIR = os.environ.get("ARR_BACKUP_LOG_DIR", "/var/log/arr-backup")
+LOG_DIR = os.environ.get("BACKUPARR_LOG_DIR", "/var/log/backuparr")
 LOG_FILE = os.path.join(LOG_DIR, "backup.log")
 
 logging.basicConfig(

@@ -7,7 +7,7 @@ import copy
 import json
 import os
 
-CONFIG_PATH = os.environ.get("ARR_BACKUP_CONFIG", "/config/arr-backup/config.json")
+CONFIG_PATH = os.environ.get("BACKUPARR_CONFIG", "/config/backuparr/config.json")
 
 APP_NAMES = ["radarr", "sonarr", "prowlarr", "bazarr", "tdarr", "sabnzbd"]
 

@@ -196,7 +196,7 @@ def api_backup_run():
 @app.get("/api/backup/status")
 def api_backup_status():
     tail = []
-    log_path = os.path.join(os.environ.get("ARR_BACKUP_LOG_DIR", "/var/log/arr-backup"), "backup.log")
+    log_path = os.path.join(os.environ.get("BACKUPARR_LOG_DIR", "/var/log/backuparr"), "backup.log")
     try:
         with open(log_path) as f:
             tail = f.readlines()[-200:]

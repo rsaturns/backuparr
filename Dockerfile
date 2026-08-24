@@ -15,8 +15,8 @@ COPY webui /app/webui
 RUN chmod +x /app/entrypoint.sh
 
 ENV RCLONE_CONFIG=/config/rclone/rclone.conf \
-    ARR_BACKUP_CONFIG=/config/arr-backup/config.json \
-    ARR_BACKUP_LOG_DIR=/var/log/arr-backup \
+    BACKUPARR_CONFIG=/config/backuparr/config.json \
+    BACKUPARR_LOG_DIR=/var/log/backuparr \
     WEBUI_PORT=8990 \
     PYTHONUNBUFFERED=1
 

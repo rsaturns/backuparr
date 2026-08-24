@@ -29,7 +29,7 @@ services:
       - "8990:8990"
     volumes:
       # Persists config.json (apps/keys/schedule) across container recreation.
-      - ./data:/config/arr-backup
+      - ./data:/config/backuparr
       # Generated once via `rclone config` - see README.md. Never commit
       # this file, it contains your Google Drive OAuth token.
       - ./rclone.conf:/config/rclone/rclone.conf:ro
