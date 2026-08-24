@@ -5,10 +5,12 @@
 # exception if it runs with network_mode: host - address it by the host's
 # LAN IP instead of a container name in that case.
 #
-# Everything app-specific (URLs, API keys, which apps are enabled, rclone
-# remote, schedule) is configured through the web UI at :8990 the first
+# Everything app-specific (URLs, API keys, which apps/destinations are
+# enabled, schedule) is configured through the web UI at :8990 the first
 # time you start this, not through env vars here - config.json on the
-# ./data volume is what persists it across restarts.
+# ./data volume is what persists it across restarts. Local storage works
+# out of the box with zero setup; Google Drive is connected from the
+# Settings tab itself (click Connect, no files to copy in by hand).
 services:
   backuparr:
     build: /path/to/backuparr
@@ -28,11 +30,9 @@ services:
     ports:
       - "8990:8990"
     volumes:
-      # Persists config.json (apps/keys/schedule) across container recreation.
+      # Persists config.json, the generated rclone.conf (for Google Drive),
+      # and local-destination backups across container recreation.
       - ./data:/config/backuparr
-      # Generated once via `rclone config` - see README.md. Never commit
-      # this file, it contains your Google Drive OAuth token.
-      - ./rclone.conf:/config/rclone/rclone.conf:ro
       # Optional: only needed if you want to restore Bazarr from the web UI
       # or CLI - a local path to Bazarr's own config/backup folder.
       # - /share/Container/bazarr/backup:/mnt/bazarr-backup

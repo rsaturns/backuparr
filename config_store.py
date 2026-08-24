@@ -6,6 +6,7 @@ are always looking at the same settings.
 import copy
 import json
 import os
+import tempfile
 
 CONFIG_PATH = os.environ.get("BACKUPARR_CONFIG", "/config/backuparr/config.json")
 
@@ -44,13 +45,104 @@ APP_META = [
     {"id": "sabnzbd", "label": "SABnzbd", "icon": "sabnzbd.svg", "key_required": True, "url_placeholder": "http://sabnzbd:8080", "extra_fields": []},
 ]
 
+DEST_NAMES = ["local", "gdrive", "dropbox", "onedrive"]
+
+# Where local-destination backups land by default if the user hasn't set a
+# custom path - a subdirectory of the same volume config.json already lives
+# on, so it survives container recreation with no extra mount needed.
+DEFAULT_LOCAL_DIR = "/config/backuparr/backups"
+
+DEFAULT_DEST = {
+    "local": {"enabled": True, "path": ""},
+    "gdrive": {
+        "enabled": False,
+        "client_id": "",
+        "client_secret": "",
+        "refresh_token": "",
+        "folder_id": "",
+        "folder_name": "",
+    },
+    "dropbox": {"enabled": False},
+    "onedrive": {"enabled": False},
+}
+
+# Fields the generic POST /api/config can write per destination. Notably
+# excludes gdrive's refresh_token/folder_id/folder_name - those are only
+# ever set by the dedicated OAuth/folder-picker routes in webui/app.py, so
+# a POST to the general settings form can't forge a connected state or
+# silently detach the picked folder.
+DEST_EDITABLE_FIELDS = {
+    "local": {"enabled", "path"},
+    "gdrive": {"enabled", "client_id", "client_secret"},
+    "dropbox": {"enabled"},
+    "onedrive": {"enabled"},
+}
+
+# Drives the Settings > Destinations card generically. "coming_soon" ones
+# render disabled with a badge instead of a working toggle - the roadmap is
+# visible in the UI without us having built (or registered OAuth apps for)
+# the integration yet.
+DESTINATION_META = [
+    {
+        "id": "local",
+        "label": "Local storage",
+        "status": "available",
+        "description": "Written straight to this container's own volume - nothing to connect. Download any backup from the History tab.",
+        "setup_help": {
+            "title": "Local storage",
+            "intro": "No setup needed - this works out of the box.",
+            "steps": [
+                "Backups are written to /config/backuparr/backups on the volume already mounted for this container (see docker-compose.yml).",
+                "Optionally set a custom path below if you'd rather use a different mounted volume - e.g. a NAS share mounted into this container.",
+            ],
+            "links": [],
+        },
+    },
+    {
+        "id": "gdrive",
+        "label": "Google Drive",
+        "status": "available",
+        "description": "Backed up to a folder in your Google Drive. Click-through OAuth - no rclone config, no terminal.",
+        "setup_help": {
+            "title": "Connect Google Drive",
+            "intro": "Google requires every app to have its own registered OAuth client - a one-time, ~5 minute setup in Google Cloud Console.",
+            "steps": [
+                "Go to the Google Cloud Console credentials page and create a new project (or pick an existing one).",
+                "Under \"OAuth consent screen\", set User type to External, fill in an app name and your email, and add yourself as a test user (this keeps it private to you - no Google review needed).",
+                "Enable the \"Google Drive API\" for the project (APIs & Services > Library).",
+                "Under \"Credentials\", create an OAuth client ID of type \"Web application\".",
+                "Add the redirect URI shown below to \"Authorized redirect URIs\" on that client, exactly as shown.",
+                "Copy the generated Client ID and Client Secret into the fields below, save, then click \"Connect Google Drive\".",
+            ],
+            "links": [
+                {"label": "Google Cloud Console - Credentials", "url": "https://console.cloud.google.com/apis/credentials"},
+                {"label": "Google's guide to creating OAuth credentials", "url": "https://developers.google.com/identity/protocols/oauth2/web-server#creatingcred"},
+            ],
+        },
+    },
+    {
+        "id": "dropbox",
+        "label": "Dropbox",
+        "status": "coming_soon",
+        "description": "Coming soon.",
+        "setup_help": None,
+    },
+    {
+        "id": "onedrive",
+        "label": "Microsoft OneDrive",
+        "status": "coming_soon",
+        "description": "Coming soon.",
+        "setup_help": None,
+    },
+]
+
 DEFAULTS = {
-    "rclone_remote": "",
     "retention_days": 14,
     "cron_schedule": "0 3 * * *",
     "notify_url": "",
     "bazarr_backup_dir": "",
     "apps": {name: dict(DEFAULT_APP) for name in APP_NAMES},
+    "destinations": {name: dict(DEFAULT_DEST[name]) for name in DEST_NAMES},
 }
 
 # Legacy per-app env vars from before the web UI existed, used only to seed
@@ -67,7 +159,6 @@ _LEGACY_ENV_MAP = {
 
 def _seed_from_legacy_env():
     cfg = copy.deepcopy(DEFAULTS)
-    cfg["rclone_remote"] = os.environ.get("RCLONE_REMOTE", "")
     cfg["retention_days"] = int(os.environ.get("RETENTION_DAYS", 14))
     cfg["cron_schedule"] = os.environ.get("CRON_SCHEDULE", DEFAULTS["cron_schedule"])
     cfg["notify_url"] = os.environ.get("NOTIFY_URL", "")
@@ -95,20 +186,30 @@ def load_config():
 
     merged = copy.deepcopy(DEFAULTS)
     for key, value in data.items():
-        if key != "apps":
+        if key not in ("apps", "destinations"):
             merged[key] = value
     for name in APP_NAMES:
         merged["apps"][name].update(data.get("apps", {}).get(name, {}))
+    for name in DEST_NAMES:
+        merged["destinations"][name].update(data.get("destinations", {}).get(name, {}))
     return merged
 
 
 def save_config(cfg):
-    os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
-    tmp_path = CONFIG_PATH + ".tmp"
-    with open(tmp_path, "w") as f:
-        json.dump(cfg, f, indent=2)
-    os.chmod(tmp_path, 0o600)
-    os.replace(tmp_path, CONFIG_PATH)
+    config_dir = os.path.dirname(CONFIG_PATH)
+    os.makedirs(config_dir, exist_ok=True)
+    # Unique tmp filename, not a fixed "<path>.tmp" - avoids two concurrent
+    # saves colliding on the same tmp path (see gdrive_oauth.sync_rclone_remote
+    # for a case where that raced in practice).
+    fd, tmp_path = tempfile.mkstemp(dir=config_dir, prefix=".config.json.")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(cfg, f, indent=2)
+        os.chmod(tmp_path, 0o600)
+        os.replace(tmp_path, CONFIG_PATH)
+    except BaseException:
+        os.remove(tmp_path)
+        raise
 
 
 def enabled_apps(cfg):
@@ -117,3 +218,18 @@ def enabled_apps(cfg):
 
 def key_required(name):
     return next((m["key_required"] for m in APP_META if m["id"] == name), True)
+
+
+def enabled_destinations(cfg):
+    """Only ones with status "available" can ever be enabled - a coming_soon
+    id can't be flipped on client-side, but guard here too since config.json
+    can be hand-edited."""
+    available = {m["id"] for m in DESTINATION_META if m["status"] == "available"}
+    return [
+        name for name in DEST_NAMES
+        if name in available and cfg["destinations"].get(name, {}).get("enabled")
+    ]
+
+
+def destination_meta(name):
+    return next((m for m in DESTINATION_META if m["id"] == name), None)

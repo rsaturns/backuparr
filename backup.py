@@ -17,6 +17,7 @@ from pathlib import Path
 
 import requests
 
+import destination_util
 import rclone_util
 from apps.bazarr import BazarrApp
 from apps.prowlarr import ProwlarrApp
@@ -24,7 +25,7 @@ from apps.radarr import RadarrApp
 from apps.sabnzbd import SabnzbdApp
 from apps.sonarr import SonarrApp
 from apps.tdarr import TdarrApp
-from config_store import enabled_apps, load_config
+from config_store import enabled_apps, enabled_destinations, load_config
 
 LOG_DIR = os.environ.get("BACKUPARR_LOG_DIR", "/var/log/backuparr")
 LOG_FILE = os.path.join(LOG_DIR, "backup.log")
@@ -85,22 +86,40 @@ def notify(notify_url, message):
 
 
 def run_backup(cfg):
-    """Run one backup pass for every enabled app in cfg. Returns (ok, failed)."""
+    """Run one backup pass for every enabled app in cfg, uploading each to
+    every enabled destination. Returns (ok, failed) - ok lists app names
+    that made it to every destination, failed lists "<app>: <message>"
+    strings (used both for per-app failures and destination-level ones, so
+    the Overview tab's app-id parsing keeps working either way)."""
     apps = enabled_apps(cfg)
     if not apps:
         log.error("No apps enabled - nothing to do")
         return [], ["no apps enabled in config"]
 
-    rclone_remote = (cfg.get("rclone_remote") or "").rstrip("/")
-    if not rclone_remote:
-        log.error("rclone_remote is not configured")
-        return [], ["rclone_remote not configured"]
+    destinations = enabled_destinations(cfg)
+    if not destinations:
+        log.error("No destinations enabled - nothing to do")
+        return [], ["no destinations enabled in config"]
+
+    destination_util.sync(cfg)
+
+    dest_roots = {}
+    failed = []
+    for dest_id in destinations:
+        try:
+            dest_roots[dest_id] = destination_util.remote_root(dest_id, cfg["destinations"][dest_id]).rstrip("/")
+        except destination_util.DestinationError as exc:
+            log.error("destination %s: %s", dest_id, exc)
+            failed.append(f"destination {dest_id}: {exc}")
+
+    if not dest_roots:
+        return [], failed
 
     retention_days = cfg.get("retention_days", 14)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    ok, failed = [], []
-    run_tmp = tempfile.mkdtemp(prefix="arrbackup-run-")
+    ok = []
+    run_tmp = tempfile.mkdtemp(prefix="backuparr-run-")
 
     try:
         for name in apps:
@@ -124,11 +143,21 @@ def run_backup(cfg):
                     # Prowlarr/Bazarr) - just stage it under our naming scheme.
                     shutil.copy(result_path, zip_path)
 
-                remote_dest = f"{rclone_remote}/{name}/{zip_name}"
-                rclone_util.copyto(zip_path, remote_dest)
                 size = os.path.getsize(zip_path)
-                log.info("%s: uploaded -> %s (%d bytes)", name, remote_dest, size)
-                ok.append(name)
+                dest_failures = []
+                for dest_id, root in dest_roots.items():
+                    remote_dest = f"{root}/{name}/{zip_name}"
+                    try:
+                        rclone_util.copyto(zip_path, remote_dest)
+                        log.info("%s: uploaded -> %s (%d bytes)", name, remote_dest, size)
+                    except rclone_util.RcloneError as exc:
+                        log.error("%s: upload to %s failed: %s", name, dest_id, exc)
+                        dest_failures.append(f"{dest_id}: {exc}")
+
+                if dest_failures:
+                    failed.append(f"{name}: failed on {'; '.join(dest_failures)}")
+                else:
+                    ok.append(name)
             except Exception as exc:
                 log.exception("%s: backup failed", name)
                 failed.append(f"{name}: {exc}")
@@ -139,9 +168,10 @@ def run_backup(cfg):
     finally:
         shutil.rmtree(run_tmp, ignore_errors=True)
 
-    log.info("Applying retention (%sd) per app", retention_days)
-    for name in apps:
-        rclone_util.delete_older_than(f"{rclone_remote}/{name}/", f"{retention_days}d")
+    log.info("Applying retention (%sd) per app per destination", retention_days)
+    for root in dest_roots.values():
+        for name in apps:
+            rclone_util.delete_older_than(f"{root}/{name}/", f"{retention_days}d")
 
     return ok, failed
 

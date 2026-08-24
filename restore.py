@@ -20,8 +20,10 @@ this from a real terminal so the prompts work, or use --yes to skip both
 confirmation and password prompts (servers are then left without a
 password, to be set manually in Settings > Servers).
 
-Settings (URLs, API keys, rclone remote) come from config.json - the same
-config the web UI edits - not environment variables.
+Settings (URLs, API keys, destinations) come from config.json - the same
+config the web UI edits - not environment variables. If more than one
+destination is enabled (e.g. both Local and Google Drive), pass
+--destination to say which one to restore from.
 """
 import argparse
 import getpass
@@ -29,8 +31,9 @@ import os
 import shutil
 import sys
 
+import destination_util
 import restore_actions as ra
-from config_store import key_required, load_config
+from config_store import DEST_NAMES, enabled_destinations, key_required, load_config
 
 
 def confirm(message, assume_yes):
@@ -43,21 +46,37 @@ def confirm(message, assume_yes):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("app", choices=["radarr", "sonarr", "prowlarr", "bazarr", "tdarr", "sabnzbd"])
+    parser.add_argument("--destination", choices=DEST_NAMES, help="Which destination to restore from (default: the only enabled one, if there's just one)")
     parser.add_argument("--file", help="Specific backup filename to restore (default: newest)")
     parser.add_argument("--bazarr-backup-dir", help="Local path to Bazarr's config/backup folder (required for bazarr)")
     parser.add_argument("--yes", action="store_true", help="Skip confirmation prompts")
     args = parser.parse_args()
 
     cfg = load_config()
-    rclone_remote = cfg.get("rclone_remote")
-    if not rclone_remote:
-        raise SystemExit("rclone_remote is not configured (set it via the web UI or config.json)")
+    dest_id = args.destination
+    if not dest_id:
+        enabled = enabled_destinations(cfg)
+        if len(enabled) == 1:
+            dest_id = enabled[0]
+        elif not enabled:
+            raise SystemExit("no destinations are enabled (set one up via the web UI)")
+        else:
+            raise SystemExit(f"multiple destinations enabled ({', '.join(enabled)}) - pass --destination to pick one")
+    elif dest_id not in enabled_destinations(cfg):
+        raise SystemExit(f"destination '{dest_id}' is not enabled")
+
+    destination_util.sync(cfg)
+    try:
+        remote = destination_util.remote_root(dest_id, cfg["destinations"][dest_id])
+    except destination_util.DestinationError as exc:
+        raise SystemExit(str(exc))
+
     app_cfg = cfg["apps"].get(args.app, {})
     if not app_cfg.get("url") or (key_required(args.app) and not app_cfg.get("api_key")):
         raise SystemExit(f"{args.app} is not configured (set its URL/API key via the web UI or config.json)")
 
-    print(f"Downloading {args.app} backup ...")
-    tmp_dir, local_zip, filename = ra.fetch_backup(rclone_remote, args.app, args.file)
+    print(f"Downloading {args.app} backup from {dest_id} ...")
+    tmp_dir, local_zip, filename = ra.fetch_backup(remote, args.app, args.file)
     print(f"  -> {filename}")
 
     try:

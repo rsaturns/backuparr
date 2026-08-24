@@ -9,12 +9,12 @@ WORKDIR /app
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY backup.py restore.py restore_actions.py rclone_util.py config_store.py entrypoint.sh /app/
+COPY backup.py restore.py restore_actions.py rclone_util.py config_store.py destination_util.py gdrive_oauth.py entrypoint.sh /app/
 COPY apps /app/apps
 COPY webui /app/webui
 RUN chmod +x /app/entrypoint.sh
 
-ENV RCLONE_CONFIG=/config/rclone/rclone.conf \
+ENV RCLONE_CONFIG=/config/backuparr/rclone.conf \
     BACKUPARR_CONFIG=/config/backuparr/config.json \
     BACKUPARR_LOG_DIR=/var/log/backuparr \
     WEBUI_PORT=8990 \
