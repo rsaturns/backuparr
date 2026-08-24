@@ -171,12 +171,14 @@ body {
 }
 
 .content {
+  width: 100%;
   max-width: 1080px;
   margin: 0 auto;
   padding: 24px 24px 48px;
 }
 
 .site-footer {
+  width: 100%;
   max-width: 1080px;
   margin: 0 auto;
   padding: 20px 24px 32px;
