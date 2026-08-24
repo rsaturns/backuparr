@@ -37,6 +37,16 @@ from config_store import (
 app = Flask(__name__)
 log = logging.getLogger("backuparr.webui")
 
+# Baked into the image at build time (see Dockerfile) - read once here
+# rather than on every page load, since it can't change for the lifetime of
+# a running container.
+_VERSION_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "VERSION")
+try:
+    with open(_VERSION_PATH) as _f:
+        VERSION = _f.read().strip()
+except OSError:
+    VERSION = "dev"
+
 CRONTAB_PATH = "/etc/crontabs/root"
 CRON_MARKER_COMMENT = "# Backuparr schedule - managed by the web UI, do not edit by hand"
 
@@ -112,7 +122,7 @@ def _do_run():
 # --------------------------------------------------------------- pages ----
 @app.get("/")
 def index():
-    return render_template("index.html", app_meta=APP_META, destination_meta=DESTINATION_META)
+    return render_template("index.html", app_meta=APP_META, destination_meta=DESTINATION_META, version=VERSION)
 
 
 # -------------------------------------------------------------- config ----
