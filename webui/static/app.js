@@ -104,11 +104,12 @@ async function loadOverview() {
     // of where it landed, and with one destination this is just that
     // destination's latest entry.
     const latestByApp = {};
-    histories.forEach((history) => {
+    histories.forEach((history, i) => {
+      const destId = destIds[i];
       Object.keys(history).forEach((appId) => {
         const entry = (history[appId] || [])[0];
         if (entry && (!latestByApp[appId] || entry.mod_time > latestByApp[appId].mod_time)) {
-          latestByApp[appId] = entry;
+          latestByApp[appId] = { ...entry, destId };
         }
       });
     });
@@ -177,7 +178,9 @@ async function loadOverview() {
       const last = document.createElement("div");
       last.className = "overview-app-last";
       if (failure) {
-        last.textContent = `Last run failed: ${failure}`;
+        const failLine = document.createElement("span");
+        failLine.textContent = `Last run failed: ${failure}`;
+        last.appendChild(failLine);
       } else if (latest) {
         const summaryLine = document.createElement("span");
         summaryLine.textContent = `Last backup: ${fmtTime(latest.mod_time)} (${fmtBytes(latest.size)})`;
@@ -189,6 +192,15 @@ async function loadOverview() {
         last.textContent = "No backups yet.";
       }
       card.appendChild(last);
+
+      if (latest) {
+        const dlLink = document.createElement("a");
+        dlLink.className = "overview-download-link";
+        dlLink.textContent = "Download latest backup";
+        dlLink.href = `/api/history/${latest.destId}/${appId}/${encodeURIComponent(latest.name)}/download`;
+        card.appendChild(dlLink);
+      }
+
       appsEl.appendChild(card);
     });
   } catch (e) {

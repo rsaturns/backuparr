@@ -628,6 +628,17 @@ code {
   word-break: break-all;
 }
 
+.overview-download-link {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.overview-download-link:hover { text-decoration: underline; }
+
 .overview-empty {
   color: var(--text-muted);
   font-size: 13px;
