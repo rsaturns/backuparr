@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>arr-backup</title>
+<script>
+(function () {
+  try {
+    var t = localStorage.getItem("arr-backup-theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  } catch (e) {}
+})();
+</script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233b6bf6'/%3E%3Ctext x='16' y='22' font-size='18' text-anchor='middle' fill='white' font-family='sans-serif'%3E%E2%8C%A3%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
@@ -14,16 +22,26 @@
     <span class="brand-name">arr-backup</span>
   </div>
   <nav class="tabs" id="tabs">
-    <button class="tab-btn active" data-tab="settings" type="button">Settings</button>
+    <button class="tab-btn active" data-tab="overview" type="button">Overview</button>
+    <button class="tab-btn" data-tab="settings" type="button">Settings</button>
     <button class="tab-btn" data-tab="run" type="button">Run &amp; Status</button>
     <button class="tab-btn" data-tab="history" type="button">History</button>
     <button class="tab-btn" data-tab="restore" type="button">Restore</button>
   </nav>
+  <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle light/dark theme">&#9789;</button>
 </header>
 
 <main class="content">
 
-  <section id="tab-settings" class="tab-panel active">
+  <section id="tab-overview" class="tab-panel active">
+    <div class="card">
+      <h2>At a glance</h2>
+      <div id="overview-summary" class="overview-summary"></div>
+    </div>
+    <div id="overview-apps" class="overview-apps"></div>
+  </section>
+
+  <section id="tab-settings" class="tab-panel">
     <div class="settings-toolbar">
       <div>
         <strong>Settings</strong>

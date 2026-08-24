@@ -15,7 +15,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #14161a;
     --bg-elevated: #1c1f26;
     --border: #2b2f38;
@@ -29,6 +29,24 @@
     --warn: #e0a83e;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.35);
   }
+}
+
+/* Manual override via the theme toggle - wins over prefers-color-scheme
+   in both directions since it's a plain attribute selector, not gated by
+   a media query. */
+:root[data-theme="dark"] {
+  --bg: #14161a;
+  --bg-elevated: #1c1f26;
+  --border: #2b2f38;
+  --text: #e7e9ed;
+  --text-muted: #9096a2;
+  --accent: #5b8bff;
+  --accent-contrast: #0c0e12;
+  --danger: #ff6b6b;
+  --danger-contrast: #1a0a0a;
+  --ok: #3ecf8e;
+  --warn: #e0a83e;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.35);
 }
 
 * { box-sizing: border-box; }
@@ -104,6 +122,29 @@ body {
   color: var(--accent-contrast);
 }
 
+.theme-toggle {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.theme-toggle:hover { border-color: var(--accent); }
+
+.app-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
 .content {
   max-width: 1080px;
   margin: 0 auto;
@@ -126,7 +167,9 @@ body {
   padding: 12px 16px;
   margin-bottom: 20px;
   position: sticky;
-  top: 12px;
+  /* Set to the topbar's real rendered height (plus a little gap) by JS on
+     load/resize - falls back to an approximation if that hasn't run yet. */
+  top: calc(var(--topbar-h, 64px) + 12px);
   z-index: 5;
 }
 
@@ -496,3 +539,93 @@ code {
   padding: 1px 5px;
   font-size: 12px;
 }
+
+/* ------------------------------------------------------------ overview --- */
+.overview-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin-top: 4px;
+}
+
+.overview-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.overview-stat .stat-value {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.overview-stat .stat-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.overview-apps {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.overview-app-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px;
+}
+
+.overview-app-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.overview-app-head .app-icon { width: 26px; height: 26px; }
+
+.overview-app-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  flex: 1;
+}
+
+.overview-app-last {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.overview-app-last .filename {
+  display: block;
+  color: var(--text);
+  font-size: 12.5px;
+  margin-top: 2px;
+  word-break: break-all;
+}
+
+.overview-empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 4px 0;
+}
+
+/* ---------------------------------------------------------- icon button --- */
+.icon-btn {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 6px;
+  width: 26px;
+  height: 26px;
+  line-height: 1;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.icon-btn:hover { color: var(--danger); border-color: var(--danger); }
+
+.history-table td.actions-cell { width: 1%; white-space: nowrap; }

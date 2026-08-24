@@ -2,6 +2,7 @@
 
 let APP_META = [];
 let RUN_POLL_TIMER = null;
+let SETTINGS_SNAPSHOT = null;
 
 async function apiFetch(url, opts) {
   const res = await fetch(url, opts);
@@ -52,14 +53,152 @@ function fmtTime(iso) {
 function initTabs() {
   document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
+      const current = document.querySelector(".tab-btn.active");
+      const leavingDirtySettings = current && current.dataset.tab === "settings" && btn !== current && isSettingsDirty();
+      if (leavingDirtySettings) {
+        const leave = confirm("You have unsaved changes in Settings. Leave without saving?");
+        if (!leave) return;
+      }
       document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
       document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
       btn.classList.add("active");
       document.getElementById(`tab-${btn.dataset.tab}`).classList.add("active");
+      if (btn.dataset.tab === "overview") loadOverview();
       if (btn.dataset.tab === "run") refreshRunStatus();
       if (btn.dataset.tab === "history") loadHistory();
       if (btn.dataset.tab === "restore") initRestoreTab();
     });
+  });
+}
+
+// ----------------------------------------------------------- overview ----
+async function loadOverview() {
+  const summaryEl = document.getElementById("overview-summary");
+  const appsEl = document.getElementById("overview-apps");
+  summaryEl.textContent = "Loading...";
+  appsEl.innerHTML = "";
+  try {
+    const [cfg, history, status] = await Promise.all([
+      apiFetch("/api/config"),
+      apiFetch("/api/history"),
+      apiFetch("/api/backup/status"),
+    ]);
+    const allIds = Object.keys(cfg.apps || {});
+    const enabledIds = allIds.filter((id) => cfg.apps[id].enabled);
+
+    // "<app>: <error message>" strings, see run_backup() in backup.py.
+    const failureByApp = {};
+    (status.failed || []).forEach((entry) => {
+      const idx = entry.indexOf(":");
+      if (idx > -1) failureByApp[entry.slice(0, idx)] = entry.slice(idx + 1).trim();
+    });
+
+    summaryEl.innerHTML = "";
+    const stats = [
+      { label: "Enabled services", value: `${enabledIds.length} / ${allIds.length}` },
+      { label: "Google Drive remote", value: cfg.rclone_remote || "Not configured" },
+      { label: "Cron schedule", value: cfg.cron_schedule || "-" },
+      { label: "Retention", value: `${cfg.retention_days || 14} days` },
+    ];
+    stats.forEach((s) => {
+      const div = document.createElement("div");
+      div.className = "overview-stat";
+      const value = document.createElement("div");
+      value.className = "stat-value";
+      value.textContent = s.value;
+      const label = document.createElement("div");
+      label.className = "stat-label";
+      label.textContent = s.label;
+      div.append(value, label);
+      summaryEl.appendChild(div);
+    });
+
+    if (!enabledIds.length) {
+      appsEl.innerHTML = '<p class="overview-empty">No services enabled yet - head to Settings to add one.</p>';
+      return;
+    }
+
+    enabledIds.forEach((appId) => {
+      const meta = appMeta(appId);
+      const latest = (history[appId] || [])[0];
+      const failure = failureByApp[appId];
+
+      const card = document.createElement("div");
+      card.className = "overview-app-card";
+
+      const head = document.createElement("div");
+      head.className = "overview-app-head";
+      if (meta) {
+        const img = document.createElement("img");
+        img.className = "app-icon";
+        img.src = `/static/icons/${meta.icon}`;
+        img.alt = "";
+        head.appendChild(img);
+      }
+      const h3 = document.createElement("h3");
+      h3.textContent = appLabel(appId);
+      head.appendChild(h3);
+      const dot = document.createElement("span");
+      dot.className = "status-dot";
+      dot.dataset.state = failure ? "fail" : latest ? "ok" : "idle";
+      head.appendChild(dot);
+      card.appendChild(head);
+
+      const last = document.createElement("div");
+      last.className = "overview-app-last";
+      if (failure) {
+        last.textContent = `Last run failed: ${failure}`;
+      } else if (latest) {
+        const summaryLine = document.createElement("span");
+        summaryLine.textContent = `Last backup: ${fmtTime(latest.mod_time)} (${fmtBytes(latest.size)})`;
+        const fn = document.createElement("span");
+        fn.className = "filename";
+        fn.textContent = latest.name;
+        last.append(summaryLine, fn);
+      } else {
+        last.textContent = "No backups yet.";
+      }
+      card.appendChild(last);
+      appsEl.appendChild(card);
+    });
+  } catch (e) {
+    summaryEl.innerHTML = "";
+    appsEl.innerHTML = `<p class="overview-empty">Error loading overview: ${e.message}</p>`;
+  }
+}
+
+// ------------------------------------------------------------- layout ----
+// Keeps the sticky Settings toolbar pinned just below the sticky topbar
+// instead of overlapping it, whatever the topbar's actual rendered height
+// (which varies with font size/zoom/wrapping).
+function syncTopbarHeight() {
+  const topbar = document.querySelector(".topbar");
+  if (topbar) document.documentElement.style.setProperty("--topbar-h", `${topbar.getBoundingClientRect().height}px`);
+}
+
+// -------------------------------------------------------------- theme ----
+function effectiveTheme() {
+  const explicit = document.documentElement.getAttribute("data-theme");
+  if (explicit === "light" || explicit === "dark") return explicit;
+  return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function applyThemeButton() {
+  const btn = document.getElementById("theme-toggle");
+  const theme = effectiveTheme();
+  btn.textContent = theme === "dark" ? "☀" : "☽"; // sun / moon
+  btn.setAttribute("aria-label", theme === "dark" ? "Switch to light theme" : "Switch to dark theme");
+}
+
+function initTheme() {
+  applyThemeButton();
+  document.getElementById("theme-toggle").addEventListener("click", () => {
+    const next = effectiveTheme() === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    try {
+      localStorage.setItem("arr-backup-theme", next);
+    } catch (e) {}
+    applyThemeButton();
   });
 }
 
@@ -105,6 +244,7 @@ async function loadConfig() {
   document.getElementById("s-notify_url").value = cfg.notify_url || "";
   document.getElementById("s-bazarr_backup_dir").value = cfg.bazarr_backup_dir || "";
   Object.keys(cfg.apps || {}).forEach((appId) => fillAppCard(appId, cfg.apps[appId]));
+  snapshotSettingsState();
   return cfg;
 }
 
@@ -123,6 +263,17 @@ function collectConfig() {
   };
 }
 
+// Tracks whether the Settings form has unsaved edits, so switching tabs or
+// closing the page can warn before silently discarding them.
+function snapshotSettingsState() {
+  SETTINGS_SNAPSHOT = JSON.stringify(collectConfig());
+}
+
+function isSettingsDirty() {
+  if (SETTINGS_SNAPSHOT === null) return false;
+  return JSON.stringify(collectConfig()) !== SETTINGS_SNAPSHOT;
+}
+
 async function saveSettings() {
   const resultEl = document.getElementById("save-result");
   resultEl.textContent = "Saving...";
@@ -135,6 +286,7 @@ async function saveSettings() {
     });
     resultEl.textContent = "Saved";
     resultEl.className = "save-result ok";
+    snapshotSettingsState();
     toast("Settings saved", "ok");
   } catch (e) {
     resultEl.textContent = e.message;
@@ -287,15 +439,35 @@ function initRunEvents() {
 }
 
 // ---------------------------------------------------------- history tab ----
+function appMeta(appId) {
+  return APP_META.find((m) => m.id === appId);
+}
+
+function appLabel(appId) {
+  const m = appMeta(appId);
+  return m ? m.label : appId;
+}
+
+async function deleteBackup(appId, filename, row) {
+  if (!confirm(`Delete ${filename}? This can't be undone.`)) return;
+  try {
+    await apiFetch(`/api/history/${appId}/${encodeURIComponent(filename)}`, { method: "DELETE" });
+    row.remove();
+    toast(`Deleted ${filename}`, "ok");
+  } catch (e) {
+    toast(`Delete failed: ${e.message}`, "fail");
+  }
+}
+
 async function loadHistory() {
   const root = document.getElementById("history-root");
   root.textContent = "Loading...";
   try {
     const history = await apiFetch("/api/history");
     root.innerHTML = "";
-    const appIds = Object.keys(history);
+    const appIds = Object.keys(history).filter((appId) => (history[appId] || []).length > 0);
     if (!appIds.length) {
-      root.innerHTML = '<p class="empty-note">Set a Google Drive remote in Settings first.</p>';
+      root.innerHTML = '<p class="empty-note">No backups yet - set a Google Drive remote in Settings and run a backup.</p>';
       return;
     }
     appIds.forEach((appId) => {
@@ -303,32 +475,35 @@ async function loadHistory() {
       const section = document.createElement("div");
       section.className = "history-app";
       const heading = document.createElement("h3");
-      heading.textContent = appId;
+      heading.textContent = appLabel(appId);
       section.appendChild(heading);
-      if (!entries.length) {
-        const empty = document.createElement("p");
-        empty.className = "empty-note";
-        empty.textContent = "No backups yet.";
-        section.appendChild(empty);
-      } else {
-        const table = document.createElement("table");
-        table.className = "history-table";
-        table.innerHTML = "<thead><tr><th>File</th><th>Size</th><th>Modified</th></tr></thead>";
-        const tbody = document.createElement("tbody");
-        entries.forEach((e) => {
-          const tr = document.createElement("tr");
-          const nameTd = document.createElement("td");
-          nameTd.textContent = e.name;
-          const sizeTd = document.createElement("td");
-          sizeTd.textContent = fmtBytes(e.size);
-          const timeTd = document.createElement("td");
-          timeTd.textContent = fmtTime(e.mod_time);
-          tr.append(nameTd, sizeTd, timeTd);
-          tbody.appendChild(tr);
-        });
-        table.appendChild(tbody);
-        section.appendChild(table);
-      }
+
+      const table = document.createElement("table");
+      table.className = "history-table";
+      table.innerHTML = "<thead><tr><th>File</th><th>Size</th><th>Modified</th><th></th></tr></thead>";
+      const tbody = document.createElement("tbody");
+      entries.forEach((e) => {
+        const tr = document.createElement("tr");
+        const nameTd = document.createElement("td");
+        nameTd.textContent = e.name;
+        const sizeTd = document.createElement("td");
+        sizeTd.textContent = fmtBytes(e.size);
+        const timeTd = document.createElement("td");
+        timeTd.textContent = fmtTime(e.mod_time);
+        const actionsTd = document.createElement("td");
+        actionsTd.className = "actions-cell";
+        const delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "icon-btn";
+        delBtn.title = "Delete this backup";
+        delBtn.textContent = "×";
+        delBtn.addEventListener("click", () => deleteBackup(appId, e.name, tr));
+        actionsTd.appendChild(delBtn);
+        tr.append(nameTd, sizeTd, timeTd, actionsTd);
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      section.appendChild(table);
       root.appendChild(section);
     });
   } catch (e) {
@@ -520,9 +695,18 @@ function initRestoreEvents() {
 // -------------------------------------------------------------- startup ----
 async function init() {
   initTabs();
+  initTheme();
   initSettingsEvents();
   initRunEvents();
   initRestoreEvents();
+  syncTopbarHeight();
+  window.addEventListener("resize", syncTopbarHeight);
+  window.addEventListener("beforeunload", (e) => {
+    if (isSettingsDirty()) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+  });
   try {
     APP_META = await apiFetch("/api/meta");
   } catch (e) {
@@ -534,6 +718,7 @@ async function init() {
     toast(`Could not load config: ${e.message}`, "fail");
   }
   refreshRunStatus();
+  loadOverview();
 }
 
 document.addEventListener("DOMContentLoaded", init);
