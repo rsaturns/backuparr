@@ -180,7 +180,7 @@ if you'd rather):
 | `destinations.local.enabled/path` | Local storage - path defaults to `/config/backuparr/backups` if blank |
 | `destinations.gdrive.enabled/client_id/client_secret` | Google Drive OAuth client, set via the Setup guide |
 | `destinations.gdrive.refresh_token/folder_id/folder_name` | Set automatically by the Connect/Choose folder buttons - don't hand-edit |
-| `retention_days` | Delete backups older than this, per app per destination (default 14) |
+| `retention_days` | Delete backups older than this, per app per destination (default 7) |
 | `cron_schedule` | Standard 5-field cron syntax (default `0 3 * * *`) |
 | `notify_url` | Optional: POST a plain-text summary here after every run (e.g. an ntfy.sh topic) |
 | `bazarr_backup_dir` | Local path to Bazarr's config/backup folder, for restores |

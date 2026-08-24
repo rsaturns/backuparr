@@ -115,7 +115,7 @@ def run_backup(cfg):
     if not dest_roots:
         return [], failed
 
-    retention_days = cfg.get("retention_days", 14)
+    retention_days = cfg.get("retention_days", 7)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     ok = []

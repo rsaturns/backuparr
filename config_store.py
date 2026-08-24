@@ -167,7 +167,7 @@ DESTINATION_META = [
 ]
 
 DEFAULTS = {
-    "retention_days": 14,
+    "retention_days": 7,
     "cron_schedule": "0 3 * * *",
     "notify_url": "",
     "bazarr_backup_dir": "",
@@ -189,7 +189,7 @@ _LEGACY_ENV_MAP = {
 
 def _seed_from_legacy_env():
     cfg = copy.deepcopy(DEFAULTS)
-    cfg["retention_days"] = int(os.environ.get("RETENTION_DAYS", 14))
+    cfg["retention_days"] = int(os.environ.get("RETENTION_DAYS", 7))
     cfg["cron_schedule"] = os.environ.get("CRON_SCHEDULE", DEFAULTS["cron_schedule"])
     cfg["notify_url"] = os.environ.get("NOTIFY_URL", "")
 

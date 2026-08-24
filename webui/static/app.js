@@ -129,7 +129,7 @@ async function loadOverview() {
       { label: "Enabled services", value: `${enabledIds.length} / ${allIds.length}` },
       { label: "Destinations", value: destIds.length ? destIds.map(destLabel).join(", ") : "None configured" },
       { label: "Cron schedule", value: cfg.cron_schedule || "-" },
-      { label: "Retention", value: `${cfg.retention_days || 14} days` },
+      { label: "Retention", value: `${cfg.retention_days || 7} days` },
     ];
     stats.forEach((s) => {
       const div = document.createElement("div");
@@ -323,7 +323,7 @@ function updateGdriveUI(gdriveCfg) {
 
 async function loadConfig() {
   const cfg = await apiFetch("/api/config");
-  document.getElementById("s-retention_days").value = cfg.retention_days || 14;
+  document.getElementById("s-retention_days").value = cfg.retention_days || 7;
   document.getElementById("s-cron_schedule").value = cfg.cron_schedule || "";
   document.getElementById("s-notify_url").value = cfg.notify_url || "";
   document.getElementById("s-bazarr_backup_dir").value = cfg.bazarr_backup_dir || "";
@@ -343,7 +343,7 @@ function collectConfig() {
     destinations[card.dataset.dest] = readDestCard(card.dataset.dest);
   });
   return {
-    retention_days: Number(document.getElementById("s-retention_days").value || 14),
+    retention_days: Number(document.getElementById("s-retention_days").value || 7),
     cron_schedule: document.getElementById("s-cron_schedule").value.trim(),
     notify_url: document.getElementById("s-notify_url").value.trim(),
     bazarr_backup_dir: document.getElementById("s-bazarr_backup_dir").value.trim(),
