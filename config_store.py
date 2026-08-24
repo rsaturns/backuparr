@@ -16,12 +16,13 @@ DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "pass
 # Drives the web UI's forms generically instead of hardcoding per-app
 # knowledge in JS.
 APP_META = [
-    {"id": "radarr", "label": "Radarr", "key_required": True, "url_placeholder": "http://radarr:7878", "extra_fields": []},
-    {"id": "sonarr", "label": "Sonarr", "key_required": True, "url_placeholder": "http://sonarr:8989", "extra_fields": []},
-    {"id": "prowlarr", "label": "Prowlarr", "key_required": True, "url_placeholder": "http://prowlarr:9696", "extra_fields": []},
+    {"id": "radarr", "label": "Radarr", "icon": "radarr.svg", "key_required": True, "url_placeholder": "http://radarr:7878", "extra_fields": []},
+    {"id": "sonarr", "label": "Sonarr", "icon": "sonarr.svg", "key_required": True, "url_placeholder": "http://sonarr:8989", "extra_fields": []},
+    {"id": "prowlarr", "label": "Prowlarr", "icon": "prowlarr.svg", "key_required": True, "url_placeholder": "http://prowlarr:9696", "extra_fields": []},
     {
         "id": "bazarr",
         "label": "Bazarr",
+        "icon": "bazarr.svg",
         "key_required": True,
         "url_placeholder": "http://bazarr:6767",
         "extra_fields": [
@@ -34,12 +35,13 @@ APP_META = [
     {
         "id": "tdarr",
         "label": "Tdarr",
+        "icon": "tdarr.png",
         "key_required": False,
         "url_placeholder": "http://192.168.1.10:8266",
         "extra_fields": [],
         "key_help": "Only if Tdarr's API auth token is enabled",
     },
-    {"id": "sabnzbd", "label": "SABnzbd", "key_required": True, "url_placeholder": "http://sabnzbd:8080", "extra_fields": []},
+    {"id": "sabnzbd", "label": "SABnzbd", "icon": "sabnzbd.svg", "key_required": True, "url_placeholder": "http://sabnzbd:8080", "extra_fields": []},
 ]
 
 DEFAULTS = {

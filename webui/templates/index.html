@@ -46,6 +46,7 @@
                 <input type="checkbox" class="f-enabled">
                 <span class="slider"></span>
               </label>
+              <img class="app-icon" src="{{ url_for('static', filename='icons/' ~ m.icon) }}" alt="" width="22" height="22">
               <h3>{{ m.label }}</h3>
               <span class="status-dot" data-state="idle"></span>
             </div>

@@ -171,3 +171,10 @@ If you're upgrading from a pre-web-UI deployment that used env vars like
 `RADARR_URL`/`APPS`/`RCLONE_REMOTE`, the first startup migrates them into
 `config.json` automatically - check the Settings tab looks right, then feel
 free to remove those env vars from `docker-compose.yml`.
+
+## Credits
+
+App icons (`webui/static/icons/`) are from the [selfh.st icon
+collection](https://selfh.st/icons/) ([selfhst/icons on
+GitHub](https://github.com/selfhst/icons)), licensed
+[CC BY 4.0](https://github.com/selfhst/icons/blob/main/LICENSE).
