@@ -106,7 +106,7 @@ DESTINATION_META = [
         "description": "Backed up to a folder in your Google Drive. Click-through OAuth - no rclone config, no terminal.",
         "setup_help": {
             "title": "Connect Google Drive",
-            "intro": "Google requires every app to have its own registered OAuth client - a one-time, ~5 minute setup in Google Cloud Console. Google reorganized this flow into the \"Google Auth Platform\" (Branding / Audience / Data access / Clients tabs) in 2025, so older guides describing a single \"OAuth consent screen\" page are out of date - these steps match the current layout.",
+            "intro": "Google requires every app to have its own registered OAuth client - a one-time, ~5 minute setup in Google Cloud Console.",
             "steps": [
                 {
                     "text": "Create a Google Cloud project (or pick an existing one) - billing is not required for this.",
