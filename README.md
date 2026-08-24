@@ -3,11 +3,15 @@
 **Secure your Arrs.**
 
 Scheduled config/database backups for Radarr, Sonarr, Bazarr, Prowlarr,
-Tdarr, and Sabnzbd, uploaded to Google Drive. If the host dies, the recovery
-path is: re-create the containers from your compose file, then restore each
-app's config from its latest backup. Everything - which apps to back up,
-their URLs/API keys, the schedule, retention, and restores - is configured
-and triggered from a web UI, not env vars.
+Tdarr, and Sabnzbd, sent to whichever destinations you enable - Local
+storage (zero setup, download straight from the History tab) and/or Google
+Drive (click-through OAuth, no config files to hand-copy) today, with
+Dropbox and OneDrive planned. Enable more than one and every backup gets a
+copy on each of them. If the host dies, the recovery path is: re-create the
+containers from your compose file, then restore each app's config from its
+latest backup. Everything - which apps to back up, their URLs/API keys,
+which destinations to use, the schedule, retention, and restores - is
+configured and triggered from a web UI, not env vars.
 
 Every app is backed up through **its own HTTP API** - this tool never reads
 an app's config volume directly. Each app has an official (or at least
@@ -21,8 +25,10 @@ validated restore path instead of a raw file overwrite.
 [Zerka30/servarr-backup](https://github.com/Zerka30/servarr-backup) does
 this for Radarr/Sonarr/Prowlarr via S3. This tool extends the same idea
 (trigger the app's own backup API, download it, upload it) to Bazarr and
-Tdarr, which have their own equivalent mechanisms, and uploads to Google
-Drive via [rclone](https://rclone.org/) instead of S3.
+Tdarr, which have their own equivalent mechanisms, and moves the storage
+side to a pick-your-destinations model built on [rclone](https://rclone.org/)
+under the hood - Local out of the box, Google Drive via an in-app "Connect"
+button instead of a terminal-based config wizard.
 
 ## Per-app backup method (read this before deploying)
 
@@ -51,34 +57,48 @@ Bearer <key>`. This header format isn't formally documented by Tdarr, so
 verify it actually works for your version with the "Test connection"
 button; leave it blank if Tdarr has no auth configured (the default).
 
-## One-time setup: rclone + Google Drive
+## Destinations
 
-This step needs a browser, so it has to be done interactively by you - it
-can't be scripted headlessly.
+Every backup is sent to whichever destinations you enable on the
+**Settings** tab - enable more than one and each run uploads to all of
+them.
 
-1. Install rclone somewhere with a browser available (your laptop is fine,
-   it doesn't have to be the NAS): https://rclone.org/downloads/
-2. Run `rclone config` and create a new remote:
-   - name: `gdrive`
-   - type: `drive` (Google Drive)
-   - client_id / client_secret: leave blank to use rclone's own (fine for
-     personal use), or supply your own OAuth app for higher API quota
-   - scope: `drive` (full access) or `drive.file` (only files rclone
-     creates - more restrictive, recommended)
-   - leave root_folder_id blank unless you want to scope it to a specific
-     Drive folder
-   - "Use auto config?" - say yes if you're on the machine with the
-     browser; if you're configuring this directly on a headless NAS over
-     SSH, say no and follow the `rclone authorize "drive"` prompt instead
-     (run that command on your laptop, paste the resulting token back into
-     the NAS session)
-3. This produces `~/.config/rclone/rclone.conf`. Copy it into this project
-   directory as `rclone.conf` (same directory as `docker-compose.yml`).
-   It contains an OAuth refresh token - treat it like a credential, don't
-   commit it (already covered by `.gitignore`).
-4. Sanity check: `rclone lsd gdrive:` should list your Drive's folders.
+### Local storage
 
-rclone refreshes the token on its own, so this is a one-time step.
+Works with zero setup. Backups land in `/config/backuparr/backups` inside
+the container, which is on the same `./data` volume as `config.json`, so
+they survive container recreation without any extra mount. Download or
+delete any of them straight from the **History** tab. Set a custom path on
+the Local card in Settings if you'd rather point it at a different mounted
+volume (e.g. a NAS share).
+
+### Google Drive
+
+Connected entirely from the web UI - no `rclone config`, no files to copy
+onto the host. There's one unavoidable one-time step: Google requires every
+app to have its own registered OAuth client (~5 minutes, all in a browser).
+On the Google Drive card in **Settings**:
+
+1. Click **Setup guide** - it walks through creating a Google Cloud project,
+   enabling the Drive API, and creating an OAuth client, and shows the exact
+   redirect URI to register (computed from whatever host/port you're
+   reaching Backuparr on).
+2. Paste the Client ID and Client Secret it gives you into the two fields,
+   then **Save settings**.
+3. Click **Connect Google Drive** and approve the consent screen - Backuparr
+   only ever requests the `drive.file` scope, so it can only see files/
+   folders it created or that you explicitly pick, not your whole Drive.
+4. Click **Choose folder** to pick (or create) the Drive folder backups
+   should go in, via Google's own folder picker.
+
+Behind the scenes this generates an rclone remote from the OAuth token (the
+same shape `rclone config`'s own Drive wizard would produce) and keeps it in
+sync automatically - rclone still does the actual upload/download/list/
+delete work, you just never have to touch its config file.
+
+### Dropbox / Microsoft OneDrive
+
+Shown on the Settings tab as "Coming soon" - not wired up yet.
 
 ## Deploying
 
@@ -98,8 +118,8 @@ Then open `http://<host>:8990` and, on the **Settings** tab:
    `http://radarr:7878` - or a LAN IP:port for anything on host networking,
    like Tdarr) and API key (from that app's Settings > General), then hit
    **Test connection** to confirm it's right before saving.
-2. Fill in your Google Drive remote (`gdrive:backuparr`, from the rclone
-   setup above) and hit **Test**.
+2. Enable at least one destination - Local needs nothing further; see
+   [Destinations](#destinations) above for connecting Google Drive.
 3. Set retention and a cron schedule (presets provided for common ones).
 4. **Save settings.**
 
@@ -108,8 +128,9 @@ survives container recreation - and the cron schedule inside the container
 picks up changes automatically the next time you save, no restart needed.
 
 Use the **Run & Status** tab to trigger a backup immediately and watch it
-happen live, **History** to see what's actually in Drive per app, and
-**Restore** for disaster recovery (see below).
+happen live, **History** to see what's on each destination per app (and
+download or delete any backup from there), and **Restore** for disaster
+recovery (see below).
 
 If this is reachable beyond your own LAN, set `WEBUI_USERNAME`/
 `WEBUI_PASSWORD` in `docker-compose.yml` first - the UI holds every app's
@@ -119,8 +140,8 @@ default.
 ## Restoring after a disaster
 
 Re-create the app containers from your compose file first (config volumes
-will be empty/fresh), then use the **Restore** tab: pick the app, pick a
-backup (newest first), and confirm.
+will be empty/fresh), then use the **Restore** tab: pick the destination,
+pick the app, pick a backup (newest first), and confirm.
 
 - **Radarr/Sonarr/Prowlarr** - fully automated, the app restarts itself.
 - **Bazarr** - needs a local path to its own config/backup folder; fill in
@@ -142,8 +163,10 @@ docker compose exec -it backuparr python3 restore.py radarr
 docker compose exec -it backuparr python3 restore.py sabnzbd   # -it matters here, for the password prompts
 ```
 
-`restore.py --help` documents the flags (`--file <name>` for a specific
-backup, `--yes` to skip confirmation/password prompts).
+If only one destination is enabled it's picked automatically; with more
+than one, pass `--destination local` or `--destination gdrive`. `restore.py
+--help` documents the rest (`--file <name>` for a specific backup, `--yes`
+to skip confirmation/password prompts).
 
 ## Configuration reference
 
@@ -154,8 +177,10 @@ if you'd rather):
 |---|---|
 | `apps.<name>.enabled/url/api_key` | Per app, as shown in the Settings tab |
 | `apps.bazarr.username/password` | Only if Bazarr's web auth is set to `Basic` |
-| `rclone_remote` | e.g. `gdrive:backuparr` |
-| `retention_days` | Delete remote backups older than this, per app (default 14) |
+| `destinations.local.enabled/path` | Local storage - path defaults to `/config/backuparr/backups` if blank |
+| `destinations.gdrive.enabled/client_id/client_secret` | Google Drive OAuth client, set via the Setup guide |
+| `destinations.gdrive.refresh_token/folder_id/folder_name` | Set automatically by the Connect/Choose folder buttons - don't hand-edit |
+| `retention_days` | Delete backups older than this, per app per destination (default 14) |
 | `cron_schedule` | Standard 5-field cron syntax (default `0 3 * * *`) |
 | `notify_url` | Optional: POST a plain-text summary here after every run (e.g. an ntfy.sh topic) |
 | `bazarr_backup_dir` | Local path to Bazarr's config/backup folder, for restores |
@@ -170,9 +195,9 @@ app-level (set in `docker-compose.yml`):
 | `WEBUI_PORT` | Default `8990` |
 
 If you're upgrading from a pre-web-UI deployment that used env vars like
-`RADARR_URL`/`APPS`/`RCLONE_REMOTE`, the first startup migrates them into
-`config.json` automatically - check the Settings tab looks right, then feel
-free to remove those env vars from `docker-compose.yml`.
+`RADARR_URL`/`APPS`, the first startup migrates them into `config.json`
+automatically - check the Settings tab looks right, then feel free to
+remove those env vars from `docker-compose.yml`.
 
 ## Credits
 
