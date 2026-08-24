@@ -736,6 +736,17 @@ code {
 
 .guide-steps li { font-size: 13px; line-height: 1.5; }
 
+.guide-step-link {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.guide-step-link:hover { text-decoration: underline; }
+
 .guide-links {
   display: flex;
   flex-direction: column;

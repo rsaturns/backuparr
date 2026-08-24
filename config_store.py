@@ -105,17 +105,39 @@ DESTINATION_META = [
         "description": "Backed up to a folder in your Google Drive. Click-through OAuth - no rclone config, no terminal.",
         "setup_help": {
             "title": "Connect Google Drive",
-            "intro": "Google requires every app to have its own registered OAuth client - a one-time, ~5 minute setup in Google Cloud Console.",
+            "intro": "Google requires every app to have its own registered OAuth client - a one-time, ~5 minute setup in Google Cloud Console. Google reorganized this flow into the \"Google Auth Platform\" (Branding / Audience / Data access / Clients tabs) in 2025, so older guides describing a single \"OAuth consent screen\" page are out of date - these steps match the current layout.",
             "steps": [
-                "Go to the Google Cloud Console credentials page and create a new project (or pick an existing one).",
-                "Under \"OAuth consent screen\", set User type to External, fill in an app name and your email, and add yourself as a test user (this keeps it private to you - no Google review needed).",
-                "Enable the \"Google Drive API\" for the project (APIs & Services > Library).",
-                "Under \"Credentials\", create an OAuth client ID of type \"Web application\".",
-                "Add the redirect URI shown below to \"Authorized redirect URIs\" on that client, exactly as shown.",
-                "Copy the generated Client ID and Client Secret into the fields below, save, then click \"Connect Google Drive\".",
+                {
+                    "text": "Create a Google Cloud project (or pick an existing one) - billing is not required for this.",
+                    "link": {"label": "Create a project", "url": "https://console.cloud.google.com/projectcreate"},
+                },
+                {
+                    "text": "Enable the Google Drive API for that project.",
+                    "link": {"label": "Enable the Google Drive API", "url": "https://console.cloud.google.com/apis/library/drive.googleapis.com"},
+                },
+                {
+                    "text": "Set up the Google Auth Platform: click \"Get started\", fill in an app name and your support email under App Information, then choose External under Audience (this just means anyone with a Google account can be added as a tester - it does not make the app public).",
+                    "link": {"label": "Google Auth Platform - Branding", "url": "https://console.cloud.google.com/auth/branding"},
+                },
+                {
+                    "text": "On the Audience tab, add your own Google account (and anyone else who should have access) under Test users - this is what keeps the app private with no Google review needed.",
+                    "link": {"label": "Google Auth Platform - Audience", "url": "https://console.cloud.google.com/auth/audience"},
+                },
+                {
+                    "text": "On the Data access tab, add the scope Backuparr requests: .../auth/drive.file (\"See, edit, create, and delete only the specific Google Drive files you use with this app\").",
+                    "link": {"label": "Google Auth Platform - Data access", "url": "https://console.cloud.google.com/auth/scopes"},
+                },
+                {
+                    "text": "On the Clients tab, click Create Client, choose Web application, and add the redirect URI shown below to Authorized redirect URIs, exactly as shown.",
+                    "link": {"label": "Google Auth Platform - Clients", "url": "https://console.cloud.google.com/auth/clients"},
+                },
+                {
+                    "text": "Click Create. Google only shows the Client Secret once, at this moment - copy both the Client ID and Client Secret now, paste them into the fields below, save, then click \"Connect Google Drive\".",
+                    "link": None,
+                },
             ],
             "links": [
-                {"label": "Google Cloud Console - Credentials", "url": "https://console.cloud.google.com/apis/credentials"},
+                {"label": "Google Auth Platform - Clients", "url": "https://console.cloud.google.com/auth/clients"},
                 {"label": "Google's guide to creating OAuth credentials", "url": "https://developers.google.com/identity/protocols/oauth2/web-server#creatingcred"},
             ],
         },

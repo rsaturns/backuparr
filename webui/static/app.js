@@ -548,7 +548,18 @@ function openSetupGuide(destId) {
   stepsEl.innerHTML = "";
   (help.steps || []).forEach((step) => {
     const li = document.createElement("li");
-    li.textContent = step;
+    const text = typeof step === "string" ? step : step.text;
+    li.appendChild(document.createTextNode(text));
+    const link = typeof step === "object" ? step.link : null;
+    if (link) {
+      const a = document.createElement("a");
+      a.className = "guide-step-link";
+      a.href = link.url;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = `${link.label} ↗`;
+      li.appendChild(a);
+    }
     stepsEl.appendChild(li);
   });
 
