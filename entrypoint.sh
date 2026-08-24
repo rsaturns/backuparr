@@ -8,7 +8,7 @@ WEBUI_PORT="${WEBUI_PORT:-8990}"
 # webui.app's own startup, which happens a moment later via waitress).
 python3 -c "from webui.app import init; init()"
 
-echo "arr-backup: starting cron"
+echo "Backuparr: starting cron"
 crond -l 2 &
 
 if [ "${RUN_ON_START:-false}" = "true" ]; then
@@ -16,5 +16,5 @@ if [ "${RUN_ON_START:-false}" = "true" ]; then
     (cd /app && python3 backup.py) || echo "Initial backup run failed (see above). Will retry on schedule."
 fi
 
-echo "arr-backup: starting web UI on :${WEBUI_PORT}"
+echo "Backuparr: starting web UI on :${WEBUI_PORT}"
 exec waitress-serve --host=0.0.0.0 --port="${WEBUI_PORT}" --threads=6 webui.app:app

@@ -10,10 +10,10 @@
 # time you start this, not through env vars here - config.json on the
 # ./data volume is what persists it across restarts.
 services:
-  arr-backup:
-    build: /path/to/arr-backup
-    # or once you publish it: image: ghcr.io/<you>/arr-backup:latest
-    container_name: arr-backup
+  backuparr:
+    build: /path/to/backuparr
+    # or once you publish it: image: ghcr.io/<you>/backuparr:latest
+    container_name: backuparr
     restart: unless-stopped
     environment:
       TZ: America/Los_Angeles

@@ -3,23 +3,28 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>arr-backup</title>
+<meta name="description" content="Backuparr - secure your Arrs">
+<title>Backuparr</title>
 <script>
 (function () {
   try {
-    var t = localStorage.getItem("arr-backup-theme");
+    var t = localStorage.getItem("backuparr-theme");
     if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
   } catch (e) {}
 })();
 </script>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233b6bf6'/%3E%3Ctext x='16' y='22' font-size='18' text-anchor='middle' fill='white' font-family='sans-serif'%3E%E2%8C%A3%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
 <header class="topbar">
   <div class="brand">
-    <span class="brand-mark">&#9099;</span>
-    <span class="brand-name">arr-backup</span>
+    <img class="brand-mark" src="{{ url_for('static', filename='logo.png') }}" alt="">
+    <span class="brand-text">
+      <span class="brand-name">Backuparr</span>
+      <span class="brand-tagline">Secure your Arrs</span>
+    </span>
   </div>
   <nav class="tabs" id="tabs">
     <button class="tab-btn active" data-tab="overview" type="button">Overview</button>
@@ -101,7 +106,7 @@
         <div class="field">
           <span class="field-label">Google Drive remote (rclone)</span>
           <div class="inline-group">
-            <input type="text" id="s-rclone_remote" placeholder="gdrive:arr-backups">
+            <input type="text" id="s-rclone_remote" placeholder="gdrive:backuparr">
             <button type="button" class="btn btn-ghost btn-sm" id="test-rclone-btn">Test</button>
           </div>
           <span class="test-result" id="test-rclone-result"></span>

@@ -196,7 +196,7 @@ function initTheme() {
     const next = effectiveTheme() === "dark" ? "light" : "dark";
     document.documentElement.setAttribute("data-theme", next);
     try {
-      localStorage.setItem("arr-backup-theme", next);
+      localStorage.setItem("backuparr-theme", next);
     } catch (e) {}
     applyThemeButton();
   });

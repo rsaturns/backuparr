@@ -1,4 +1,4 @@
-"""Persistent config for arr-backup, shared by backup.py, restore.py, and
+"""Persistent config for Backuparr, shared by backup.py, restore.py, and
 the web UI. Stored as a single JSON file on a volume so it survives
 container recreation, and so the web UI and the cron-triggered backup run
 are always looking at the same settings.

@@ -1,4 +1,6 @@
-# arr-backup
+# Backuparr
+
+**Secure your Arrs.**
 
 Scheduled config/database backups for Radarr, Sonarr, Bazarr, Prowlarr,
 Tdarr, and Sabnzbd, uploaded to Google Drive. If the host dies, the recovery
@@ -80,13 +82,13 @@ rclone refreshes the token on its own, so this is a one-time step.
 
 ## Deploying
 
-Add the `arr-backup` service block from `docker-compose.yml` into your
+Add the `backuparr` service block from `docker-compose.yml` into your
 **existing** compose file (the one that already defines radarr/sonarr/etc.)
 so it shares that stack's network and can reach the other containers by
 name.
 
 ```sh
-docker compose up -d --build arr-backup
+docker compose up -d --build backuparr
 ```
 
 Then open `http://<host>:8990` and, on the **Settings** tab:
@@ -96,7 +98,7 @@ Then open `http://<host>:8990` and, on the **Settings** tab:
    `http://radarr:7878` - or a LAN IP:port for anything on host networking,
    like Tdarr) and API key (from that app's Settings > General), then hit
    **Test connection** to confirm it's right before saving.
-2. Fill in your Google Drive remote (`gdrive:arr-backups`, from the rclone
+2. Fill in your Google Drive remote (`gdrive:backuparr`, from the rclone
    setup above) and hit **Test**.
 3. Set retention and a cron schedule (presets provided for common ones).
 4. **Save settings.**
@@ -123,7 +125,7 @@ backup (newest first), and confirm.
 - **Radarr/Sonarr/Prowlarr** - fully automated, the app restarts itself.
 - **Bazarr** - needs a local path to its own config/backup folder; fill in
   the override field if you didn't already set `bazarr_backup_dir` in
-  Settings (this needs that path mounted into the arr-backup container,
+  Settings (this needs that path mounted into the backuparr container,
   see the commented-out volume in `docker-compose.yml`).
 - **Tdarr** - destructive (wipes each DB collection before repopulating) -
   the UI warns about this before you confirm.
@@ -136,8 +138,8 @@ The same operations are available from the CLI inside the container, e.g.
 for scripting:
 
 ```sh
-docker compose exec -it arr-backup python3 restore.py radarr
-docker compose exec -it arr-backup python3 restore.py sabnzbd   # -it matters here, for the password prompts
+docker compose exec -it backuparr python3 restore.py radarr
+docker compose exec -it backuparr python3 restore.py sabnzbd   # -it matters here, for the password prompts
 ```
 
 `restore.py --help` documents the flags (`--file <name>` for a specific
@@ -152,7 +154,7 @@ if you'd rather):
 |---|---|
 | `apps.<name>.enabled/url/api_key` | Per app, as shown in the Settings tab |
 | `apps.bazarr.username/password` | Only if Bazarr's web auth is set to `Basic` |
-| `rclone_remote` | e.g. `gdrive:arr-backups` |
+| `rclone_remote` | e.g. `gdrive:backuparr` |
 | `retention_days` | Delete remote backups older than this, per app (default 14) |
 | `cron_schedule` | Standard 5-field cron syntax (default `0 3 * * *`) |
 | `notify_url` | Optional: POST a plain-text summary here after every run (e.g. an ntfy.sh topic) |

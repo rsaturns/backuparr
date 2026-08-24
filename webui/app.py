@@ -1,4 +1,4 @@
-"""Web UI for arr-backup: configure apps/API keys, trigger backups, browse
+"""Web UI for Backuparr: configure apps/API keys, trigger backups, browse
 history, and restore - all from the browser instead of editing
 docker-compose env vars by hand.
 """
@@ -18,10 +18,10 @@ from backup import build_app, notify, run_backup
 from config_store import APP_META, APP_NAMES, DEFAULT_APP, key_required, load_config, save_config
 
 app = Flask(__name__)
-log = logging.getLogger("arr-backup.webui")
+log = logging.getLogger("backuparr.webui")
 
 CRONTAB_PATH = "/etc/crontabs/root"
-CRON_MARKER_COMMENT = "# arr-backup schedule - managed by the web UI, do not edit by hand"
+CRON_MARKER_COMMENT = "# Backuparr schedule - managed by the web UI, do not edit by hand"
 
 
 # ---------------------------------------------------------------- auth ----
@@ -35,7 +35,7 @@ def _check_auth():
         return None
     auth = request.authorization
     if not auth or auth.username != os.environ["WEBUI_USERNAME"] or auth.password != os.environ["WEBUI_PASSWORD"]:
-        return ("Unauthorized", 401, {"WWW-Authenticate": 'Basic realm="arr-backup"'})
+        return ("Unauthorized", 401, {"WWW-Authenticate": 'Basic realm="Backuparr"'})
     return None
 
 
@@ -64,7 +64,7 @@ class _ListLogHandler(logging.Handler):
 
 
 def _do_run():
-    backup_logger = logging.getLogger("arr-backup")
+    backup_logger = logging.getLogger("backuparr")
     handler = _ListLogHandler(RUN_STATE["log"])
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
     backup_logger.addHandler(handler)
@@ -75,9 +75,9 @@ def _do_run():
         RUN_STATE["failed"] = failed
         notify_url = cfg.get("notify_url")
         if not failed:
-            notify(notify_url, f"arr-backup OK: {', '.join(ok) or 'none'}")
+            notify(notify_url, f"Backuparr OK: {', '.join(ok) or 'none'}")
         else:
-            notify(notify_url, f"arr-backup FAILED: {'; '.join(failed)} | OK: {', '.join(ok) or 'none'}")
+            notify(notify_url, f"Backuparr FAILED: {'; '.join(failed)} | OK: {', '.join(ok) or 'none'}")
     except Exception as exc:  # unexpected crash, not a per-app failure
         RUN_STATE["failed"] = [f"unexpected error: {exc}"]
         backup_logger.exception("backup run crashed")

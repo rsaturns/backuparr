@@ -33,7 +33,7 @@ logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "INFO"),
     format="%(asctime)s %(levelname)s %(message)s",
 )
-log = logging.getLogger("arr-backup")
+log = logging.getLogger("backuparr")
 
 # So the web UI's status view can show the result of cron-triggered runs
 # too, not just ones it started itself in-process (see webui/app.py).
@@ -153,11 +153,11 @@ def main():
 
     if not failed:
         log.info("Backup run complete. OK: %s", ", ".join(ok) or "none")
-        notify(notify_url, f"arr-backup OK: {', '.join(ok) or 'none'}")
+        notify(notify_url, f"Backuparr OK: {', '.join(ok) or 'none'}")
         return 0
     else:
         log.error("Backup run finished with failures: %s", "; ".join(failed))
-        notify(notify_url, f"arr-backup FAILED: {'; '.join(failed)} | OK: {', '.join(ok) or 'none'}")
+        notify(notify_url, f"Backuparr FAILED: {'; '.join(failed)} | OK: {', '.join(ok) or 'none'}")
         return 1
 
 
