@@ -20,6 +20,12 @@ def copyto(local_path, remote_path):
     _run(["copyto", local_path, remote_path])
 
 
+def delete_file(remote_path):
+    """Deletes a single remote file (as opposed to `delete`, which targets a
+    directory) - used for manual per-backup deletion from the History tab."""
+    _run(["deletefile", remote_path])
+
+
 def delete_older_than(remote_dir, min_age):
     """min_age e.g. '14d'."""
     try:

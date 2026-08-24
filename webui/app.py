@@ -5,6 +5,7 @@ docker-compose env vars by hand.
 import copy
 import logging
 import os
+import re
 import shutil
 import threading
 from datetime import datetime, timezone
@@ -221,6 +222,33 @@ def api_history():
             reverse=True,
         )
     return jsonify(history)
+
+
+# Backup filenames are always generated as <app>_<timestamp>.zip (see
+# backup.py); reject anything that doesn't look like that instead of passing
+# a user-supplied string into a remote path, since some rclone backends
+# (e.g. a local-disk remote) do honor ".." traversal.
+_SAFE_FILENAME = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+@app.delete("/api/history/<app_name>/<filename>")
+def api_history_delete(app_name, filename):
+    if app_name not in APP_NAMES:
+        return jsonify({"error": "unknown app"}), 404
+    if not _SAFE_FILENAME.match(filename):
+        return jsonify({"error": "invalid filename"}), 400
+
+    cfg = load_config()
+    remote = cfg.get("rclone_remote")
+    if not remote:
+        return jsonify({"error": "rclone_remote is not configured"}), 400
+
+    remote_path = f"{remote.rstrip('/')}/{app_name}/{filename}"
+    try:
+        rclone_util.delete_file(remote_path)
+    except rclone_util.RcloneError as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"ok": True})
 
 
 # ------------------------------------------------------------- restore ----
