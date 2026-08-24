@@ -550,6 +550,17 @@ function openSetupGuide(destId) {
     const li = document.createElement("li");
     const text = typeof step === "string" ? step : step.text;
     li.appendChild(document.createTextNode(text));
+    const checklist = typeof step === "object" ? step.checklist : null;
+    if (checklist && checklist.length) {
+      const ul = document.createElement("ul");
+      ul.className = "guide-step-checklist";
+      checklist.forEach((item) => {
+        const itemLi = document.createElement("li");
+        itemLi.textContent = item;
+        ul.appendChild(itemLi);
+      });
+      li.appendChild(ul);
+    }
     const link = typeof step === "object" ? step.link : null;
     if (link) {
       const a = document.createElement("a");

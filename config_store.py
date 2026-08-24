@@ -101,6 +101,7 @@ DESTINATION_META = [
     {
         "id": "gdrive",
         "label": "Google Drive",
+        "icon": "google-drive.svg",
         "status": "available",
         "description": "Backed up to a folder in your Google Drive. Click-through OAuth - no rclone config, no terminal.",
         "setup_help": {
@@ -124,7 +125,12 @@ DESTINATION_META = [
                     "link": {"label": "Google Auth Platform - Audience", "url": "https://console.cloud.google.com/auth/audience"},
                 },
                 {
-                    "text": "On the Data access tab, click \"Add or remove scopes\", then use the Filter box and filter by API = \"Google Drive API\" (the unfiltered table has 40+ scopes across every enabled API, so Drive's own scopes are easy to miss). Check the row for .../auth/drive.file (\"See, edit, create, and delete only the specific Google Drive files you use with this app\") - not .../auth/drive, which is full access - then click \"Update\" at the bottom of the panel.",
+                    "text": "On the Data access tab, click \"Add or remove scopes\", filter by API = \"Google Drive API\", check the row matching the permission below (not .../auth/drive, which is full access), then click \"Update\" at the bottom of the panel:",
+                    "checklist": [
+                        "API: Google Drive API",
+                        "Scope: .../auth/drive.file",
+                        "Description: \"See, edit, create, and delete only the specific Google Drive files you use with this app\"",
+                    ],
                     "link": {"label": "Google Auth Platform - Data access", "url": "https://console.cloud.google.com/auth/scopes"},
                 },
                 {
@@ -145,6 +151,7 @@ DESTINATION_META = [
     {
         "id": "dropbox",
         "label": "Dropbox",
+        "icon": "dropbox.svg",
         "status": "coming_soon",
         "description": "Coming soon.",
         "setup_help": None,
@@ -152,6 +159,7 @@ DESTINATION_META = [
     {
         "id": "onedrive",
         "label": "Microsoft OneDrive",
+        "icon": "microsoft-onedrive.svg",
         "status": "coming_soon",
         "description": "Coming soon.",
         "setup_help": None,

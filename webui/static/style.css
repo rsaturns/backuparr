@@ -722,24 +722,30 @@ code {
   background: var(--bg-elevated);
 }
 
-.modal-head h3 { margin: 0; font-size: 15px; }
+.modal-head h3 { margin: 0; font-size: 17px; }
 
-.modal-body { padding: 20px; }
+.modal-body { padding: 20px; font-size: 14.5px; }
+
+/* Overrides .hint/.field-label's app-wide small size - this modal is read
+   as a set of instructions to follow, not an incidental caption, so it
+   needs to read comfortably larger than the rest of the UI's hint text. */
+.modal-body .hint { font-size: 14px; line-height: 1.5; }
+.modal-body .field-label { font-size: 14px; }
 
 .guide-steps {
   margin: 0 0 16px;
   padding-left: 20px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
-.guide-steps li { font-size: 13px; line-height: 1.5; }
+.guide-steps li { font-size: 15px; line-height: 1.6; }
 
 .guide-step-link {
   display: block;
-  margin-top: 3px;
-  font-size: 12px;
+  margin-top: 4px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--accent);
   text-decoration: none;
@@ -747,11 +753,26 @@ code {
 
 .guide-step-link:hover { text-decoration: underline; }
 
+.guide-step-checklist {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  list-style: disc;
+}
+
+.guide-step-checklist li {
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
 .guide-links {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  font-size: 13px;
+  gap: 8px;
+  font-size: 14.5px;
 }
 
 .guide-links a { color: var(--accent); }

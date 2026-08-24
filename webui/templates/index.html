@@ -113,6 +113,7 @@
                   <input type="checkbox" class="d-enabled"{% if m.status != 'available' %} disabled{% endif %}>
                   <span class="slider"></span>
                 </label>
+                {% if m.icon %}<img class="app-icon" src="{{ url_for('static', filename='icons/' ~ m.icon) }}" alt="" width="22" height="22">{% endif %}
                 <h3>{{ m.label }}</h3>
                 {% if m.status != 'available' %}<span class="badge-soon">Coming soon</span>{% endif %}
                 <span class="status-dot" data-state="idle"></span>
@@ -140,13 +141,19 @@
                   <button type="button" class="btn btn-ghost btn-sm" id="gdrive-connect-btn">Connect Google Drive</button>
                   <button type="button" class="btn btn-ghost btn-sm hidden" id="gdrive-folder-btn">Choose folder</button>
                   <button type="button" class="btn btn-ghost btn-sm hidden" id="gdrive-disconnect-btn">Disconnect</button>
+                  <button type="button" class="btn btn-ghost btn-sm test-dest-btn">Test</button>
+                  <span class="test-result"></span>
                 </div>
-                {% endif %}
+                <div class="app-card-actions">
+                  <button type="button" class="btn btn-ghost btn-sm setup-guide-btn" data-dest="{{ m.id }}">Setup guide</button>
+                </div>
+                {% else %}
                 <div class="app-card-actions">
                   <button type="button" class="btn btn-ghost btn-sm setup-guide-btn" data-dest="{{ m.id }}">Setup guide</button>
                   <button type="button" class="btn btn-ghost btn-sm test-dest-btn">Test</button>
                   <span class="test-result"></span>
                 </div>
+                {% endif %}
               </div>
               {% else %}
               <p class="hint dest-description">{{ m.description }}</p>
