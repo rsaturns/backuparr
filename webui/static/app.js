@@ -68,6 +68,10 @@ function appCard(appId) {
   return document.querySelector(`.app-card[data-app="${appId}"]`);
 }
 
+function setAppCardExpanded(card, expanded) {
+  card.querySelector(".app-card-body").classList.toggle("hidden", !expanded);
+}
+
 function fillAppCard(appId, cfg) {
   const card = appCard(appId);
   if (!card) return;
@@ -77,6 +81,7 @@ function fillAppCard(appId, cfg) {
   card.querySelectorAll(".f-extra").forEach((input) => {
     input.value = cfg[input.dataset.field] || "";
   });
+  setAppCardExpanded(card, !!cfg.enabled);
 }
 
 function readAppCard(appId) {
@@ -197,6 +202,11 @@ function initSettingsEvents() {
   document.getElementById("test-rclone-btn").addEventListener("click", testRclone);
   document.querySelectorAll(".test-btn").forEach((btn) => {
     btn.addEventListener("click", () => testApp(btn.closest(".app-card").dataset.app));
+  });
+  document.querySelectorAll(".f-enabled").forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      setAppCardExpanded(checkbox.closest(".app-card"), checkbox.checked);
+    });
   });
   document.querySelectorAll(".chip[data-cron]").forEach((chip) => {
     chip.addEventListener("click", () => {

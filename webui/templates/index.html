@@ -24,10 +24,20 @@
 <main class="content">
 
   <section id="tab-settings" class="tab-panel active">
+    <div class="settings-toolbar">
+      <div>
+        <strong>Settings</strong>
+        <span class="hint">Covers everything below - the apps on the left and storage &amp; schedule on the right.</span>
+      </div>
+      <div class="save-row">
+        <button type="button" class="btn btn-primary" id="save-btn">Save settings</button>
+        <span id="save-result" class="save-result"></span>
+      </div>
+    </div>
     <div class="grid">
       <div class="card apps-card">
         <h2>Apps</h2>
-        <p class="hint">Enable the apps you want backed up and fill in each one's URL and API key (find the key in that app's Settings &gt; General).</p>
+        <p class="hint">Check the apps you want backed up - each one expands for its URL and API key (find the key in that app's Settings &gt; General).</p>
         <div id="app-list">
           {% for m in app_meta %}
           <div class="app-card" data-app="{{ m.id }}">
@@ -39,7 +49,7 @@
               <h3>{{ m.label }}</h3>
               <span class="status-dot" data-state="idle"></span>
             </div>
-            <div class="app-card-body">
+            <div class="app-card-body hidden">
               <label class="field">
                 <span class="field-label">URL</span>
                 <input type="text" class="f-url" placeholder="{{ m.url_placeholder }}" autocomplete="off">
@@ -98,10 +108,6 @@
         <div class="field">
           <span class="field-label">Bazarr backup folder <span class="muted">(local path, only needed to restore Bazarr)</span></span>
           <input type="text" id="s-bazarr_backup_dir" placeholder="/mnt/bazarr-backup">
-        </div>
-        <div class="save-row">
-          <button type="button" class="btn btn-primary" id="save-btn">Save settings</button>
-          <span id="save-result" class="save-result"></span>
         </div>
       </div>
     </div>
