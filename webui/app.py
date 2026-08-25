@@ -27,6 +27,7 @@ from backup import build_app, notify, run_backup
 from config_store import (
     APP_META,
     APP_NAMES,
+    CONFIG_PATH,
     DEFAULT_APP,
     DEST_EDITABLE_FIELDS,
     DEST_NAMES,
@@ -97,7 +98,7 @@ _OAUTH_STATE_TTL = 600
 # WEBUI_USERNAME/WEBUI_PASSWORD instead switches the whole app to HTTP Basic
 # Auth - kept for anyone already using it, or scripting/CI access where a
 # session cookie isn't practical - and takes priority whenever both are set.
-_PUBLIC_PATHS = {"/api/logout"}
+_PUBLIC_PATHS = {"/api/logout", "/api/reset"}
 
 
 @app.before_request
@@ -183,6 +184,46 @@ def api_login():
 
 @app.post("/api/logout")
 def api_logout():
+    session.clear()
+    return jsonify({"ok": True})
+
+
+# Deliberately reachable with no auth at all - it's the recovery path for a
+# forgotten password, so it can't require the password to trigger. The typed
+# phrase (checked here, not just in the UI) is the only thing gating it, so
+# it can't be hit by a stray/blind POST.
+RESET_CONFIRM_PHRASE = "i-want-to-reset-and-delete-files"
+
+
+@app.post("/api/reset")
+def api_reset():
+    data = request.get_json(force=True, silent=True) or {}
+    if data.get("confirm") != RESET_CONFIRM_PHRASE:
+        return jsonify({"error": "confirmation phrase didn't match"}), 400
+
+    # Resolve the local backup dir (which may be a custom path) before
+    # config.json - the only place that custom path is recorded - is gone.
+    local_backup_dir = None
+    try:
+        cfg = load_config()
+        local_backup_dir = destination_util.local_root(cfg["destinations"]["local"])
+    except Exception:
+        pass  # no usable config yet - nothing to look up, that's fine
+
+    if local_backup_dir and os.path.isdir(local_backup_dir):
+        shutil.rmtree(local_backup_dir, ignore_errors=True)
+
+    rclone_conf_path = os.environ.get("RCLONE_CONFIG", "/config/backuparr/rclone.conf")
+    secret_key_path = os.environ.get("BACKUPARR_SECRET_KEY_PATH", "/config/backuparr/secret_key")
+    # secret_key too, not just auth.json - it signs session cookies, so
+    # deleting it invalidates any session that was already logged in at the
+    # moment of reset, not just the one that triggered it.
+    for path in (CONFIG_PATH, rclone_conf_path, auth_store.AUTH_PATH, secret_key_path):
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+
     session.clear()
     return jsonify({"ok": True})
 

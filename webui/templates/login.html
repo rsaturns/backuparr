@@ -40,9 +40,47 @@
       <button type="button" class="btn btn-primary" id="login-submit-btn">Log in</button>
       <span id="login-result" class="save-result"></span>
     </div>
-    <p class="hint auth-forgot">Forgot your password? Delete <code>auth.json</code> on the config volume and restart the container to set up a new one.</p>
+    <p class="hint auth-forgot">Forgot your password? <button type="button" class="link-btn" id="reset-open-btn">Reset Backuparr</button></p>
   </div>
 </main>
+
+<div id="reset-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Reset Backuparr</h3>
+      <button type="button" class="icon-btn modal-close" id="reset-modal-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="reset-step-warning">
+        <p>This permanently deletes:</p>
+        <ul class="guide-step-checklist">
+          <li>Every app's URL and API key</li>
+          <li>Your Google Drive and OneDrive connections - you'll need to reconnect them</li>
+          <li>This admin account</li>
+          <li>All local backup files on this container's volume</li>
+        </ul>
+        <p class="hint">Backups already uploaded to Google Drive or OneDrive are not touched - they stay in your cloud storage. This only resets what's stored locally.</p>
+        <p><strong>This can't be undone.</strong></p>
+        <div class="app-card-actions">
+          <button type="button" class="btn btn-ghost btn-sm" id="reset-cancel-btn-1">Cancel</button>
+          <button type="button" class="btn btn-primary btn-sm" id="reset-continue-btn">Continue</button>
+        </div>
+      </div>
+      <div id="reset-step-confirm" class="hidden">
+        <label class="field">
+          <span class="field-label">Type <code>i-want-to-reset-and-delete-files</code> to confirm - this cannot be undone</span>
+          <input type="text" id="reset-confirm-input" autocomplete="off" placeholder="i-want-to-reset-and-delete-files">
+        </label>
+        <div class="app-card-actions">
+          <button type="button" class="btn btn-ghost btn-sm" id="reset-cancel-btn-2">Cancel</button>
+          <button type="button" class="btn btn-danger btn-sm" id="reset-confirm-btn" disabled>Delete everything and reset</button>
+        </div>
+        <p id="reset-result" class="save-result"></p>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="{{ url_for('static', filename='login.js') }}"></script>
 </body>
 </html>
