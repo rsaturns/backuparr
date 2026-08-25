@@ -71,10 +71,11 @@ def lsf(remote_dir):
     return [line.strip() for line in out.splitlines() if line.strip()]
 
 
-def lsjson(remote_dir):
+def lsjson(remote_dir, recursive=False):
     """Returns [] instead of raising when the directory doesn't exist yet."""
+    args = ["lsjson", "--recursive", remote_dir] if recursive else ["lsjson", remote_dir]
     try:
-        out = _run(["lsjson", remote_dir])
+        out = _run(args)
     except RcloneError:
         return []
     return json.loads(out)

@@ -522,17 +522,17 @@ def api_history(dest_id):
     root, error = _destination_root_or_error(cfg, dest_id)
     if error:
         return error
-    history = {}
-    # coming_soon apps can't have a backup - skip the rclone call.
-    for name in APP_NAMES:
-        if app_meta(name)["status"] != "available":
+    # One recursive listing of the whole destination instead of one rclone
+    # call per app - much faster against remote destinations (Drive/OneDrive).
+    history = {name: [] for name in APP_NAMES if app_meta(name)["status"] == "available"}
+    for entry in rclone_util.lsjson(root, recursive=True):
+        if entry.get("IsDir"):
             continue
-        entries = rclone_util.lsjson(f"{root}/{name}/")
-        history[name] = sorted(
-            [{"name": e["Name"], "size": e["Size"], "mod_time": e["ModTime"]} for e in entries],
-            key=lambda e: e["mod_time"],
-            reverse=True,
-        )
+        app_name, _, _ = entry["Path"].partition("/")
+        if app_name in history:
+            history[app_name].append({"name": entry["Name"], "size": entry["Size"], "mod_time": entry["ModTime"]})
+    for entries in history.values():
+        entries.sort(key=lambda e: e["mod_time"], reverse=True)
     return jsonify(history)
 
 
