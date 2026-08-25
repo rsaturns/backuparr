@@ -49,9 +49,18 @@ def fetch_backup(rclone_remote, app_name, filename=None):
 
 
 def extract_zip(local_zip, dest_dir):
+    """zipfile has no built-in Zip-Slip protection (unlike tarfile's
+    `filter="data"` from PEP 706 - there's no zipfile equivalent, in any
+    Python version), so member paths are checked by hand: every entry must
+    resolve to somewhere inside dest_dir before anything is extracted."""
     os.makedirs(dest_dir, exist_ok=True)
+    dest_root = os.path.realpath(dest_dir)
     with zipfile.ZipFile(local_zip) as zf:
-        zf.extractall(dest_dir, filter="data")
+        for member in zf.namelist():
+            target = os.path.realpath(os.path.join(dest_dir, member))
+            if target != dest_root and not target.startswith(dest_root + os.sep):
+                raise ValueError(f"unsafe path in zip: {member!r}")
+        zf.extractall(dest_dir)
     return dest_dir
 
 
