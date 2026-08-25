@@ -1,0 +1,17 @@
+# Mirrors .gitignore, plus git/editor/CI cruft that never needs to reach
+# the build context - none of this is COPYed into the image, but without
+# this file it's all still sent to the Docker daemon on every build.
+.git
+.gitignore
+.dockerignore
+data/
+rclone.conf
+*.zip
+.env
+__pycache__/
+*.pyc
+.claude/
+.playwright-mcp/
+README.md
+LICENSE
+scripts/
