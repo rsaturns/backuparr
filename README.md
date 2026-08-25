@@ -23,6 +23,10 @@ copying files means every backup is internally consistent (no risk of
 grabbing a database mid-write) and restores go through the app's own
 validated restore path instead of a raw file overwrite.
 
+## Architecture
+
+<img src="webui/static/architecture-diagram.svg" alt="Radarr, Sonarr, Prowlarr, Bazarr, Tdarr, and SABnzbd each feed Backuparr over their own HTTP API; Backuparr uploads each backup via rclone to Local storage, Google Drive, and Microsoft OneDrive" width="100%">
+
 ## Why not reuse an existing tool?
 
 [Zerka30/servarr-backup](https://github.com/Zerka30/servarr-backup) does
