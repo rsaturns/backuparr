@@ -175,8 +175,12 @@ DESTINATION_META = [
             "intro": "Microsoft requires every app to have its own registered app - a one-time, ~5 minute setup in the Microsoft Entra admin center. This connects personal Microsoft accounts only.",
             "steps": [
                 {
+                    "text": "Most personal Microsoft accounts don't have a directory yet, which Microsoft requires before registering any new app. If yours already does (e.g. from Microsoft 365, Azure, or a previous developer program signup), skip this - otherwise join the free Microsoft 365 Developer Program first (no credit card required).",
+                    "link": {"label": "Microsoft 365 Developer Program", "url": "https://developer.microsoft.com/en-us/microsoft-365/dev-program"},
+                },
+                {
                     "text": "In the Microsoft Entra admin center, go to App registrations and click New registration.",
-                    "link": {"label": "App registrations", "url": "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ListApplications"},
+                    "link": {"label": "App registrations", "url": "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade/quickStartType//sourceType/Microsoft_AAD_IAM"},
                 },
                 {
                     "text": "Give it any name. Under Supported account types, choose \"Personal Microsoft accounts only\" - this is what restricts sign-in to personal accounts.",
@@ -204,7 +208,8 @@ DESTINATION_META = [
                 },
             ],
             "links": [
-                {"label": "Microsoft Entra admin center - App registrations", "url": "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ListApplications"},
+                {"label": "Microsoft 365 Developer Program", "url": "https://developer.microsoft.com/en-us/microsoft-365/dev-program"},
+                {"label": "Microsoft Entra admin center - App registrations", "url": "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade/quickStartType//sourceType/Microsoft_AAD_IAM"},
                 {"label": "Microsoft's guide to registering an app", "url": "https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app"},
                 {"label": "Microsoft's docs on the OneDrive app folder", "url": "https://learn.microsoft.com/en-us/graph/onedrive-sharepoint-appfolder"},
             ],

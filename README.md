@@ -104,6 +104,11 @@ scoping choice: this only supports **personal** Microsoft accounts, not
 work/school (Microsoft 365) accounts - the OAuth flow itself is restricted
 to personal accounts at sign-in, not just documented that way.
 
+Since June 2024, Microsoft requires every app to be registered in a
+directory - most personal Microsoft accounts don't have one yet. If yours
+doesn't, the Setup guide's first step points at the free Microsoft 365
+Developer Program (no credit card required) to get one before continuing.
+
 1. Click **Setup guide** on the OneDrive card - it walks through registering
    an app in the Microsoft Entra admin center and shows the exact redirect
    URI to register.
@@ -163,7 +168,7 @@ default.
 ## Restoring after a disaster
 
 Re-create the app containers from your compose file first (config volumes
-will be empty/fresh), then use the **Restore** tab: pick the destination,
+will be empty/fresh), then use the **Restore** tab: pick the source,
 pick the app, pick a backup (newest first), and confirm.
 
 - **Radarr/Sonarr/Prowlarr** - fully automated, the app restarts itself.
