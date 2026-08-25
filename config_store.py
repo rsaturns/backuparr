@@ -45,7 +45,7 @@ APP_META = [
     {"id": "sabnzbd", "label": "SABnzbd", "icon": "sabnzbd.svg", "key_required": True, "url_placeholder": "http://sabnzbd:8080", "extra_fields": []},
 ]
 
-DEST_NAMES = ["local", "gdrive", "dropbox", "onedrive"]
+DEST_NAMES = ["local", "gdrive", "onedrive", "dropbox"]
 
 # Where local-destination backups land by default if the user hasn't set a
 # custom path - a subdirectory of the same volume config.json already lives
@@ -98,7 +98,11 @@ DESTINATION_META = [
             "title": "Local storage",
             "intro": "No setup needed - this works out of the box.",
             "steps": [
-                "Backups are written to /config/backuparr/backups on the volume already mounted for this container (see docker-compose.yml).",
+                {
+                    "text": "Backups are written here by default, on the volume already mounted for this container (see docker-compose.yml):",
+                    "code": "/config/backuparr/backups",
+                    "link": None,
+                },
                 "Optionally set a custom path below if you'd rather use a different mounted volume - e.g. a NAS share mounted into this container.",
             ],
             "links": [],
@@ -131,12 +135,8 @@ DESTINATION_META = [
                     "link": {"label": "Google Auth Platform - Audience", "url": "https://console.cloud.google.com/auth/audience"},
                 },
                 {
-                    "text": "On the Data access tab, click \"Add or remove scopes\", filter by API = \"Google Drive API\", check the row matching the permission below (not .../auth/drive, which is full access), then click \"Update\" at the bottom of the panel:",
-                    "checklist": [
-                        "API: Google Drive API",
-                        "Scope: .../auth/drive.file",
-                        "Description: \"See, edit, create, and delete only the specific Google Drive files you use with this app\"",
-                    ],
+                    "text": "On the Data access tab, click \"Add or remove scopes\", filter by API = \"Google Drive API\", and check the row for this scope (not .../auth/drive, which is full access) - its description reads \"See, edit, create, and delete only the specific Google Drive files you use with this app\". Then click \"Update\" at the bottom of the panel:",
+                    "code": "https://www.googleapis.com/auth/drive.file",
                     "link": {"label": "Google Auth Platform - Data access", "url": "https://console.cloud.google.com/auth/scopes"},
                 },
                 {
@@ -153,14 +153,6 @@ DESTINATION_META = [
                 {"label": "Google's guide to creating OAuth credentials", "url": "https://developers.google.com/identity/protocols/oauth2/web-server#creatingcred"},
             ],
         },
-    },
-    {
-        "id": "dropbox",
-        "label": "Dropbox",
-        "icon": "dropbox.svg",
-        "status": "coming_soon",
-        "description": "Coming soon.",
-        "setup_help": None,
     },
     {
         "id": "onedrive",
@@ -195,6 +187,14 @@ DESTINATION_META = [
                 {"label": "rclone's remote setup docs", "url": "https://rclone.org/remote_setup/"},
             ],
         },
+    },
+    {
+        "id": "dropbox",
+        "label": "Dropbox",
+        "icon": "dropbox.svg",
+        "status": "coming_soon",
+        "description": "Coming soon.",
+        "setup_help": None,
     },
 ]
 
