@@ -27,12 +27,19 @@ COLOR = {
     "accent": "#3b6bf6",
 }
 
-W, H = 1200, 650
+W = 1200
+# Vertical space reserved above the content for the caption, and below it
+# as a bottom margin - kept separate from centering math (rather than
+# just centering across the full canvas) so a longer SOURCES list doesn't
+# creep up and collide with the caption text.
+CONTENT_TOP = 90
+BOTTOM_MARGIN = 40
 
 SOURCES = [
     ("Radarr", os.path.join(ICONS, "radarr.svg"), "svg"),
     ("Sonarr", os.path.join(ICONS, "sonarr.svg"), "svg"),
     ("Prowlarr", os.path.join(ICONS, "prowlarr.svg"), "svg"),
+    ("Profilarr", os.path.join(ICONS, "profilarr.svg"), "svg"),
     ("Bazarr", os.path.join(ICONS, "bazarr.svg"), "svg"),
     ("Tdarr", os.path.join(ICONS, "tdarr.png"), "png"),
     ("SABnzbd", os.path.join(ICONS, "sabnzbd.svg"), "svg"),
@@ -44,7 +51,7 @@ DESTS = [
     ("Microsoft OneDrive", os.path.join(ICONS, "microsoft-onedrive.svg"), "svg", "rclone authorize"),
 ]
 
-CARD_W, CARD_H, CARD_GAP, ICON_SIZE = 230, 66, 20, 34
+CARD_W, CARD_H, CARD_GAP, ICON_SIZE = 230, 60, 16, 32
 DEST_W, DEST_H, DEST_GAP, DEST_ICON = 250, 90, 42, 38
 HUB_W, HUB_H = 240, 220
 LEFT_X = 40
@@ -90,6 +97,17 @@ def icon(path, kind, x, y, size, max_px=128):
 
 
 def build():
+    src_block_h = len(SOURCES) * CARD_H + (len(SOURCES) - 1) * CARD_GAP
+    dest_block_h = len(DESTS) * DEST_H + (len(DESTS) - 1) * DEST_GAP
+    # All three columns share one common vertical center line (content_h/2
+    # below CONTENT_TOP), sized to whichever column is tallest - currently
+    # always the source list, but this stays correct if that changes.
+    content_h = max(src_block_h, dest_block_h, HUB_H)
+    H = CONTENT_TOP + content_h + BOTTOM_MARGIN
+
+    def centered_start(block_h):
+        return CONTENT_TOP + (content_h - block_h) // 2
+
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" '
         f'''font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif">''',
@@ -106,8 +124,7 @@ def build():
         f'<text x="40" y="64" font-size="13" fill="{COLOR["muted"]}">Each app\'s own backup API in, rclone out - config files are never read directly.</text>',
     ]
 
-    src_block_h = len(SOURCES) * CARD_H + (len(SOURCES) - 1) * CARD_GAP
-    src_start_y = (H - src_block_h) // 2
+    src_start_y = centered_start(src_block_h)
     src_anchor = []
     for i, (label, path, kind) in enumerate(SOURCES):
         y = src_start_y + i * (CARD_H + CARD_GAP)
@@ -117,7 +134,7 @@ def build():
         parts.append(f'<text x="{ix + ICON_SIZE + 14}" y="{y + CARD_H / 2 + 5}" font-size="16" font-weight="600" fill="{COLOR["text"]}">{label}</text>')
         src_anchor.append((LEFT_X + CARD_W, y + CARD_H / 2))
 
-    hub_y = (H - HUB_H) // 2
+    hub_y = centered_start(HUB_H)
     parts.append(f'<rect x="{HUB_X}" y="{hub_y}" width="{HUB_W}" height="{HUB_H}" rx="16" fill="{COLOR["card_hub"]}" stroke="{COLOR["border_hub"]}" stroke-width="2.2" filter="url(#shadow)"/>')
     logo_size = 76
     logo_x, logo_y = HUB_X + (HUB_W - logo_size) / 2, hub_y + 26
@@ -130,8 +147,7 @@ def build():
     hub_in = (HUB_X, hub_y + HUB_H / 2)
     hub_out = (HUB_X + HUB_W, hub_y + HUB_H / 2)
 
-    dest_block_h = len(DESTS) * DEST_H + (len(DESTS) - 1) * DEST_GAP
-    dest_start_y = (H - dest_block_h) // 2
+    dest_start_y = centered_start(dest_block_h)
     dest_anchor = []
     for i, (label, path, kind, sub) in enumerate(DESTS):
         y = dest_start_y + i * (DEST_H + DEST_GAP)
