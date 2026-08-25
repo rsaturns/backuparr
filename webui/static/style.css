@@ -505,8 +505,15 @@ input:focus, select:focus, textarea:focus {
 
 .run-head h2 { margin: 0; }
 
+.run-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .run-summary {
   display: flex;
+  align-items: center;
   gap: 16px;
   flex-wrap: wrap;
   margin-bottom: 12px;
@@ -515,6 +522,21 @@ input:focus, select:focus, textarea:focus {
 }
 
 .run-summary strong { color: var(--text); }
+
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 
 .run-progress {
   height: 6px;

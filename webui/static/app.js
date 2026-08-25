@@ -894,11 +894,16 @@ function renderRunState(state) {
   const summary = document.getElementById("run-summary");
   const logView = document.getElementById("run-log");
   const runBtn = document.getElementById("run-btn");
+  const cancelBtn = document.getElementById("cancel-run-btn");
   const progress = document.getElementById("run-progress");
   const progressBar = document.getElementById("run-progress-bar");
 
   runBtn.disabled = !!state.running;
   runBtn.textContent = state.running ? "Running..." : "Run backup now";
+
+  cancelBtn.classList.toggle("hidden", !state.running);
+  cancelBtn.disabled = !!state.cancel_requested;
+  cancelBtn.textContent = state.cancel_requested ? "Cancelling..." : "Cancel";
 
   summary.innerHTML = "";
   const addPart = (label, text, danger) => {
@@ -918,6 +923,9 @@ function renderRunState(state) {
     addPart("Running", `since ${fmtTime(state.started_at)}`);
     if (state.total_apps) {
       addPart(null, `- backing up ${state.current_app} (${state.current_index} of ${state.total_apps})`);
+      const spinner = document.createElement("span");
+      spinner.className = "spinner";
+      summary.appendChild(spinner);
     }
   } else if (state.finished_at) {
     addPart(null, `Last run finished ${fmtTime(state.finished_at)}`);
@@ -968,8 +976,22 @@ async function runBackupNow() {
   }
 }
 
+async function cancelBackupRun() {
+  const cancelBtn = document.getElementById("cancel-run-btn");
+  cancelBtn.disabled = true;
+  cancelBtn.textContent = "Cancelling...";
+  try {
+    await apiFetch("/api/backup/cancel", { method: "POST" });
+    toast("Cancelling after the current step finishes...", "ok");
+    refreshRunStatus();
+  } catch (e) {
+    toast(`Could not cancel: ${e.message}`, "fail");
+  }
+}
+
 function initRunEvents() {
   document.getElementById("run-btn").addEventListener("click", runBackupNow);
+  document.getElementById("cancel-run-btn").addEventListener("click", cancelBackupRun);
 }
 
 // ---------------------------------------------------------- history tab ----

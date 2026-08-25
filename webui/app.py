@@ -242,6 +242,7 @@ def api_reset():
 
 # ---------------------------------------------------------- run state -----
 RUN_LOCK = threading.Lock()
+RUN_CANCEL_EVENT = threading.Event()
 RUN_STATE = {
     "running": False,
     "started_at": None,
@@ -252,6 +253,7 @@ RUN_STATE = {
     "current_app": None,
     "current_index": 0,
     "total_apps": 0,
+    "cancel_requested": False,
 }
 
 
@@ -276,7 +278,7 @@ def _do_run():
 
     try:
         cfg = load_config()
-        ok, failed = run_backup(cfg, on_progress=_progress)
+        ok, failed = run_backup(cfg, on_progress=_progress, should_cancel=RUN_CANCEL_EVENT.is_set)
         RUN_STATE["ok"] = ok
         RUN_STATE["failed"] = failed
         notify(cfg.get("notify_url"), format_run_message(ok, failed))
@@ -295,6 +297,7 @@ def _start_backup_run():
     with RUN_LOCK:
         if RUN_STATE["running"]:
             return False
+        RUN_CANCEL_EVENT.clear()
         RUN_STATE.update(
             {
                 "running": True,
@@ -306,9 +309,21 @@ def _start_backup_run():
                 "current_app": None,
                 "current_index": 0,
                 "total_apps": 0,
+                "cancel_requested": False,
             }
         )
     threading.Thread(target=_do_run, daemon=True).start()
+    return True
+
+
+def _cancel_backup_run():
+    """Requests cancellation of the in-progress run, if any. run_backup()
+    only checks between apps/uploads, so this stops the run at the next
+    safe point rather than instantly. Returns whether a run was running."""
+    if not RUN_STATE["running"]:
+        return False
+    RUN_STATE["cancel_requested"] = True
+    RUN_CANCEL_EVENT.set()
     return True
 
 
@@ -511,6 +526,13 @@ def api_backup_run():
     if not _start_backup_run():
         return jsonify({"error": "a backup is already running"}), 409
     return jsonify({"started": True})
+
+
+@app.post("/api/backup/cancel")
+def api_backup_cancel():
+    if not _cancel_backup_run():
+        return jsonify({"error": "no backup is running"}), 409
+    return jsonify({"cancelling": True})
 
 
 @app.get("/api/backup/status")

@@ -136,13 +136,27 @@ def format_run_message(ok, failed):
     return "\n".join(lines)
 
 
-def run_backup(cfg, on_progress=None):
+class RunCancelled(Exception):
+    pass
+
+
+def run_backup(cfg, on_progress=None, should_cancel=None):
     """Run one backup pass for every enabled app, uploading to every
     enabled destination. Returns (ok, failed) - failed entries are
     "<app>: <message>" strings.
 
     on_progress(index, total, name), if given, is called right before each
-    app starts - lets a caller (e.g. the web UI) show "app N of M"."""
+    app starts - lets a caller (e.g. the web UI) show "app N of M".
+
+    should_cancel(), if given, is polled between apps and between
+    destination uploads - a blocking API call or upload already in flight
+    still runs to completion, so cancelling stops the run at the next
+    safe point rather than instantly."""
+
+    def check_cancel():
+        if should_cancel and should_cancel():
+            raise RunCancelled()
+
     apps = enabled_apps(cfg)
     if not apps:
         log.error("No apps enabled - nothing to do")
@@ -172,9 +186,11 @@ def run_backup(cfg, on_progress=None):
 
     ok = []
     run_tmp = tempfile.mkdtemp(prefix="backuparr-run-")
+    cancelled = False
 
     try:
         for i, name in enumerate(apps, start=1):
+            check_cancel()
             if on_progress:
                 on_progress(i, len(apps), name)
             log.info("=== %s ===", name)
@@ -199,6 +215,7 @@ def run_backup(cfg, on_progress=None):
                 size = os.path.getsize(zip_path)
                 dest_failures = []
                 for dest_id, root in dest_roots.items():
+                    check_cancel()
                     remote_dest = f"{root}/{name}/{zip_name}"
                     log.info("%s: uploading to %s...", name, dest_id)
                     try:
@@ -212,6 +229,8 @@ def run_backup(cfg, on_progress=None):
                     failed.append(f"{name}: failed on {'; '.join(dest_failures)}")
                 else:
                     ok.append(name)
+            except RunCancelled:
+                raise
             except Exception as exc:
                 log.exception("%s: backup failed", name)
                 failed.append(f"{name}: {humanize_error(exc)}")
@@ -219,8 +238,15 @@ def run_backup(cfg, on_progress=None):
                 shutil.rmtree(work_dir, ignore_errors=True)
                 if os.path.exists(zip_path):
                     os.remove(zip_path)
+    except RunCancelled:
+        cancelled = True
+        log.warning("backup run cancelled")
     finally:
         shutil.rmtree(run_tmp, ignore_errors=True)
+
+    if cancelled:
+        failed.append("run cancelled")
+        return ok, failed
 
     log.info("Applying retention (%sd) per app per destination", retention_days)
     for root in dest_roots.values():
