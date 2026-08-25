@@ -11,6 +11,7 @@ a cron job shelling out to this file.
 import logging
 import logging.handlers
 import os
+import re
 import shutil
 import tempfile
 import zipfile
@@ -100,11 +101,34 @@ def zip_dir(src_dir, zip_path):
                 zf.write(full, os.path.relpath(full, src_dir))
 
 
+# A bare `requests.post(url, data=message)` - the fallback below - is
+# exactly ntfy.sh/Gotify/a generic webhook logger's native shape (plain
+# text as the whole request body), but Discord/Slack/Telegram each expect
+# their own JSON envelope instead and would otherwise just reject a raw
+# text body. Matched by URL shape so no separate "service type" setting is
+# needed - notify_url alone is still enough to configure any of these.
+_DISCORD_WEBHOOK_RE = re.compile(r"discord(?:app)?\.com/api/webhooks/")
+_SLACK_WEBHOOK_RE = re.compile(r"hooks\.slack\.com/services/")
+_TELEGRAM_RE = re.compile(r"api\.telegram\.org/bot")
+
+
 def notify(notify_url, message):
     if not notify_url:
         return
     try:
-        requests.post(notify_url, data=message.encode("utf-8"), timeout=10)
+        if _DISCORD_WEBHOOK_RE.search(notify_url):
+            # 2000 chars is Discord's hard per-message limit - truncate
+            # rather than let it reject the whole notification.
+            requests.post(notify_url, json={"content": message[:2000]}, timeout=10)
+        elif _SLACK_WEBHOOK_RE.search(notify_url):
+            requests.post(notify_url, json={"text": message}, timeout=10)
+        elif _TELEGRAM_RE.search(notify_url):
+            # chat_id (and anything else) stays in notify_url's own query
+            # string - Telegram's sendMessage accepts that alongside a
+            # JSON body carrying just the parts that vary per call.
+            requests.post(notify_url, json={"text": message}, timeout=10)
+        else:
+            requests.post(notify_url, data=message.encode("utf-8"), timeout=10)
     except requests.RequestException:
         log.warning("notify: failed to reach NOTIFY_URL")
 
