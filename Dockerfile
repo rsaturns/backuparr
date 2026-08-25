@@ -9,7 +9,7 @@ WORKDIR /app
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY backup.py restore.py restore_actions.py rclone_util.py config_store.py destination_util.py gdrive_oauth.py onedrive_oauth.py auth_store.py entrypoint.sh VERSION /app/
+COPY backup.py restore.py restore_actions.py rclone_util.py config_store.py destination_util.py gdrive_oauth.py onedrive_oauth.py auth_store.py secrets_crypto.py entrypoint.sh VERSION /app/
 COPY apps /app/apps
 COPY webui /app/webui
 RUN chmod +x /app/entrypoint.sh

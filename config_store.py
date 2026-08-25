@@ -8,6 +8,8 @@ import json
 import os
 import tempfile
 
+import secrets_crypto
+
 CONFIG_PATH = os.environ.get("BACKUPARR_CONFIG", "/config/backuparr/config.json")
 
 APP_NAMES = ["radarr", "sonarr", "prowlarr", "bazarr", "tdarr", "sabnzbd"]
@@ -237,6 +239,20 @@ def _seed_from_legacy_env():
     return cfg
 
 
+def _secret_fields(cfg):
+    """(container_dict, key) for every value that should be encrypted at
+    rest - an explicit allowlist, not "encrypt everything", so the rest of
+    config.json stays human-readable for debugging. Client IDs are excluded
+    on purpose (only the secret half of an OAuth credential is sensitive -
+    standard practice, client IDs are routinely embedded in public clients)."""
+    fields = [(cfg["apps"][name], "api_key") for name in APP_NAMES]
+    fields.append((cfg["apps"]["bazarr"], "password"))
+    fields.append((cfg["destinations"]["gdrive"], "client_secret"))
+    fields.append((cfg["destinations"]["gdrive"], "refresh_token"))
+    fields.append((cfg["destinations"]["onedrive"], "token"))
+    return fields
+
+
 def load_config():
     if not os.path.exists(CONFIG_PATH):
         cfg = _seed_from_legacy_env()
@@ -254,10 +270,30 @@ def load_config():
         merged["apps"][name].update(data.get("apps", {}).get(name, {}))
     for name in DEST_NAMES:
         merged["destinations"][name].update(data.get("destinations", {}).get(name, {}))
+
+    # Decrypt secret fields in place, transparently, so every other caller
+    # keeps just reading cfg["apps"]["radarr"]["api_key"] etc. as always. A
+    # value still in plaintext (written before this existed) gets persisted
+    # back out encrypted immediately, once, rather than waiting for the next
+    # unrelated save - no separate migration step to run by hand.
+    needs_migration = False
+    for container, key in _secret_fields(merged):
+        raw = container.get(key, "")
+        if raw and not raw.startswith(secrets_crypto.PREFIX):
+            needs_migration = True
+        container[key] = secrets_crypto.decrypt(raw)
+
+    if needs_migration:
+        save_config(merged)
+
     return merged
 
 
 def save_config(cfg):
+    to_write = copy.deepcopy(cfg)
+    for container, key in _secret_fields(to_write):
+        container[key] = secrets_crypto.encrypt(container.get(key, ""))
+
     config_dir = os.path.dirname(CONFIG_PATH)
     os.makedirs(config_dir, exist_ok=True)
     # Unique tmp filename, not a fixed "<path>.tmp" - avoids two concurrent
@@ -266,7 +302,7 @@ def save_config(cfg):
     fd, tmp_path = tempfile.mkstemp(dir=config_dir, prefix=".config.json.")
     try:
         with os.fdopen(fd, "w") as f:
-            json.dump(cfg, f, indent=2)
+            json.dump(to_write, f, indent=2)
         os.chmod(tmp_path, 0o600)
         os.replace(tmp_path, CONFIG_PATH)
     except BaseException:

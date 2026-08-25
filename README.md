@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="webui/static/logo.png" alt="Backuparr logo" width="160">
+</p>
+
 # Backuparr
 
 **Secure your Arrs.**
@@ -164,19 +168,40 @@ recovery (see below).
 
 ### Login
 
-The setup screen's admin account is all that's required by default - no
-env vars to set. If you'd rather manage the credential outside the app
-(scripting/CI, or just preference), set both `WEBUI_USERNAME` and
-`WEBUI_PASSWORD` in `docker-compose.yml`: this switches the whole app to
-HTTP Basic auth instead, and takes priority over the setup-screen account
-whenever both are set. Forgot the setup-screen password? Delete
-`auth.json` on the `./data` volume and restart the container - it'll show
-the setup screen again on next visit.
+The setup screen's admin account is required by default - nothing to
+configure, the first visit walks you through creating it. Forgot the
+password? Click **Reset Backuparr** on the login screen - after confirming
+a warning (it explains exactly what this deletes: every app's API key,
+both destinations' connections, this admin account, and local backup
+files - anything already uploaded to Google Drive/OneDrive is untouched)
+and typing a confirmation phrase, it wipes local state back to a fresh
+install and shows the setup screen again. There's no lighter-weight
+recovery on purpose - see [Encryption at rest](#encryption-at-rest) below
+for why.
 
-Either way, this only authenticates the app itself - if it's reachable
-beyond your own LAN, put it behind your own reverse proxy for TLS the same
-way you likely already do for Radarr/Sonarr, since neither method encrypts
+This only authenticates the app itself - if it's reachable beyond your own
+LAN, put it behind your own reverse proxy for TLS the same way you likely
+already do for Radarr/Sonarr, since a login page doesn't encrypt
 credentials in transit over plain HTTP on its own.
+
+### Encryption at rest
+
+Every app's API key, Bazarr's basic-auth password, and Google Drive's
+client secret/refresh token are encrypted in `config.json` - not just the
+admin login. The key lives in its own file, `secrets.key`, auto-generated
+on first run; override it with the `BACKUPARR_SECRETS_KEY` env var to keep
+the key off the volume entirely (a Docker secret, for instance) rather
+than trusting the auto-generated file next to everything it protects.
+
+This can't be tied to your login password: backups run unattended on a
+schedule, with nobody logged in to unlock anything, so the key has to be
+available on its own regardless of session state. That's also why a
+forgotten-password reset can't be a quiet, no-consequence action (see
+[Login](#login) above) - anyone who could reset the login without
+consequence would, by definition, still have everything the encryption is
+meant to protect sitting right there decrypted.
+
+Encryption is on unconditionally - nothing to enable.
 
 ## Restoring after a disaster
 
@@ -229,19 +254,12 @@ if you'd rather):
 | `notify_url` | Optional: POST a plain-text summary here after every run (e.g. an ntfy.sh topic) |
 | `bazarr_backup_dir` | Local path to Bazarr's config/backup folder, for restores |
 
-A few things are still env vars, since they're deployment-level rather than
+One thing is still an env var, since it's deployment-level rather than
 app-level (set in `docker-compose.yml`):
 
 | Env var | Purpose |
 |---|---|
-| `RUN_ON_START` | `true` to run one backup immediately on container start |
-| `WEBUI_USERNAME`, `WEBUI_PASSWORD` | Optional - switches the web UI from its own login to HTTP Basic auth instead (see [Login](#login)) |
 | `WEBUI_PORT` | Default `8990` |
-
-If you're upgrading from a pre-web-UI deployment that used env vars like
-`RADARR_URL`/`APPS`, the first startup migrates them into `config.json`
-automatically - check the Settings tab looks right, then feel free to
-remove those env vars from `docker-compose.yml`.
 
 ## Credits
 

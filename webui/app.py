@@ -22,6 +22,7 @@ import gdrive_oauth
 import onedrive_oauth
 import rclone_util
 import restore_actions as ra
+import secrets_crypto
 from backup import build_app, notify, run_backup
 from config_store import (
     APP_META,
@@ -204,8 +205,10 @@ def api_reset():
     secret_key_path = os.environ.get("BACKUPARR_SECRET_KEY_PATH", "/config/backuparr/secret_key")
     # secret_key too, not just auth.json - it signs session cookies, so
     # deleting it invalidates any session that was already logged in at the
-    # moment of reset, not just the one that triggered it.
-    for path in (CONFIG_PATH, rclone_conf_path, auth_store.AUTH_PATH, secret_key_path):
+    # moment of reset, not just the one that triggered it. secrets.key too -
+    # config.json's about to be deleted anyway, but leaving the encryption
+    # key behind would be a loose end if a stale copy of it ever resurfaces.
+    for path in (CONFIG_PATH, rclone_conf_path, auth_store.AUTH_PATH, secret_key_path, secrets_crypto.KEY_PATH):
         try:
             os.remove(path)
         except FileNotFoundError:
