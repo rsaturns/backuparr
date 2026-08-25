@@ -27,7 +27,6 @@ body:
         - New app/service support
         - New destination
         - Web UI
-        - CLI (restore.py)
         - Notifications
         - Scheduling/retention
         - Other
