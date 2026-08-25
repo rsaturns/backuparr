@@ -209,36 +209,6 @@ DEFAULTS = {
     "destinations": {name: dict(DEFAULT_DEST[name]) for name in DEST_NAMES},
 }
 
-# Legacy per-app env vars from before the web UI existed, used only to seed
-# config.json the first time this runs against an existing deployment.
-_LEGACY_ENV_MAP = {
-    "radarr": ("RADARR_URL", "RADARR_API_KEY"),
-    "sonarr": ("SONARR_URL", "SONARR_API_KEY"),
-    "prowlarr": ("PROWLARR_URL", "PROWLARR_API_KEY"),
-    "bazarr": ("BAZARR_URL", "BAZARR_API_KEY"),
-    "tdarr": ("TDARR_URL", "TDARR_API_KEY"),
-    "sabnzbd": ("SABNZBD_URL", "SABNZBD_API_KEY"),
-}
-
-
-def _seed_from_legacy_env():
-    cfg = copy.deepcopy(DEFAULTS)
-    cfg["retention_days"] = int(os.environ.get("RETENTION_DAYS", 7))
-    cfg["cron_schedule"] = os.environ.get("CRON_SCHEDULE", DEFAULTS["cron_schedule"])
-    cfg["notify_url"] = os.environ.get("NOTIFY_URL", "")
-
-    enabled_names = {a.strip() for a in os.environ.get("APPS", "").split(",") if a.strip()}
-    for name, (url_var, key_var) in _LEGACY_ENV_MAP.items():
-        url = os.environ.get(url_var, "")
-        if url:
-            cfg["apps"][name]["url"] = url
-            cfg["apps"][name]["api_key"] = os.environ.get(key_var, "")
-            cfg["apps"][name]["enabled"] = name in enabled_names
-    cfg["apps"]["bazarr"]["username"] = os.environ.get("BAZARR_USERNAME", "")
-    cfg["apps"]["bazarr"]["password"] = os.environ.get("BAZARR_PASSWORD", "")
-    return cfg
-
-
 def _secret_fields(cfg):
     """(container_dict, key) for every value that should be encrypted at
     rest - an explicit allowlist, not "encrypt everything", so the rest of
@@ -255,7 +225,7 @@ def _secret_fields(cfg):
 
 def load_config():
     if not os.path.exists(CONFIG_PATH):
-        cfg = _seed_from_legacy_env()
+        cfg = copy.deepcopy(DEFAULTS)
         save_config(cfg)
         return cfg
 

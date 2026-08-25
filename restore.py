@@ -27,7 +27,6 @@ destination is enabled (e.g. both Local and Google Drive), pass
 """
 import argparse
 import getpass
-import os
 import shutil
 import sys
 

@@ -1,15 +1,17 @@
-#!/usr/bin/env python3
 """Trigger each configured app's own backup mechanism over its API, zip the
 result if needed, and upload it to the configured rclone remote (Google
 Drive). No app config volumes are read directly - everything goes through
 each app's HTTP API. Settings come from config_store (edited via the web UI
 or config.json directly), not environment variables.
+
+run_backup()/build_app() are imported directly by webui/app.py, which is
+the only caller now that scheduling happens in-process there instead of via
+a cron job shelling out to this file.
 """
 import logging
 import logging.handlers
 import os
 import shutil
-import sys
 import tempfile
 import zipfile
 from datetime import datetime
@@ -25,7 +27,7 @@ from apps.radarr import RadarrApp
 from apps.sabnzbd import SabnzbdApp
 from apps.sonarr import SonarrApp
 from apps.tdarr import TdarrApp
-from config_store import enabled_apps, enabled_destinations, load_config
+from config_store import enabled_apps, enabled_destinations
 
 LOG_DIR = os.environ.get("BACKUPARR_LOG_DIR", "/var/log/backuparr")
 LOG_FILE = os.path.join(LOG_DIR, "backup.log")
@@ -174,22 +176,3 @@ def run_backup(cfg):
             rclone_util.delete_older_than(f"{root}/{name}/", f"{retention_days}d")
 
     return ok, failed
-
-
-def main():
-    cfg = load_config()
-    ok, failed = run_backup(cfg)
-    notify_url = cfg.get("notify_url")
-
-    if not failed:
-        log.info("Backup run complete. OK: %s", ", ".join(ok) or "none")
-        notify(notify_url, f"Backuparr OK: {', '.join(ok) or 'none'}")
-        return 0
-    else:
-        log.error("Backup run finished with failures: %s", "; ".join(failed))
-        notify(notify_url, f"Backuparr FAILED: {'; '.join(failed)} | OK: {', '.join(ok) or 'none'}")
-        return 1
-
-
-if __name__ == "__main__":
-    sys.exit(main())

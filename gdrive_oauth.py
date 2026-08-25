@@ -95,18 +95,6 @@ def get_access_token(dest_cfg):
     return data["access_token"]
 
 
-def folder_metadata(access_token, folder_id):
-    res = requests.get(
-        f"https://www.googleapis.com/drive/v3/files/{folder_id}",
-        params={"fields": "id,name"},
-        headers={"Authorization": f"Bearer {access_token}"},
-        timeout=15,
-    )
-    if res.status_code != 200:
-        raise GDriveOAuthError(f"could not read folder metadata: {res.text}")
-    return res.json()
-
-
 def remote_root(dest_cfg):
     """The rclone remote root to pass to rclone_util for this destination.
     Which Drive folder that resolves to is set via the remote's own
