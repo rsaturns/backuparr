@@ -5,7 +5,6 @@ docker-compose env vars by hand.
 import copy
 import logging
 import os
-import re
 import secrets
 import shutil
 import tempfile
@@ -508,18 +507,11 @@ def api_history(dest_id):
     return jsonify(history)
 
 
-# Backup filenames are always generated as <app>_<timestamp>.zip (see
-# backup.py); reject anything that doesn't look like that instead of passing
-# a user-supplied string into a remote path, since some rclone backends
-# (e.g. a local-disk remote) do honor ".." traversal.
-_SAFE_FILENAME = re.compile(r"^[A-Za-z0-9._-]+$")
-
-
 @app.delete("/api/history/<dest_id>/<app_name>/<filename>")
 def api_history_delete(dest_id, app_name, filename):
     if app_name not in APP_NAMES:
         return jsonify({"error": "unknown app"}), 404
-    if not _SAFE_FILENAME.match(filename):
+    if not ra.SAFE_FILENAME.match(filename):
         return jsonify({"error": "invalid filename"}), 400
 
     cfg = load_config()
@@ -538,7 +530,7 @@ def api_history_delete(dest_id, app_name, filename):
 def api_history_download(dest_id, app_name, filename):
     if app_name not in APP_NAMES:
         return jsonify({"error": "unknown app"}), 404
-    if not _SAFE_FILENAME.match(filename):
+    if not ra.SAFE_FILENAME.match(filename):
         return jsonify({"error": "invalid filename"}), 400
 
     cfg = load_config()

@@ -5,6 +5,7 @@ them.
 """
 import json
 import os
+import re
 import tempfile
 import zipfile
 
@@ -17,6 +18,13 @@ from apps.sonarr import SonarrApp
 from apps.tdarr import TdarrApp
 
 UPLOAD_RESTORE_APPS = {"radarr": RadarrApp, "sonarr": SonarrApp, "prowlarr": ProwlarrApp}
+
+# Backup filenames are always generated as <app>_<timestamp>.zip (see
+# backup.py). filename can come straight from a request body (the web UI's
+# restore routes), so reject anything that doesn't look like that instead of
+# letting it reach a local path.join() or a remote rclone path - both would
+# otherwise honor "..' traversal.
+SAFE_FILENAME = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
 def list_backups(rclone_remote, app_name):
@@ -31,6 +39,8 @@ def fetch_backup(rclone_remote, app_name, filename=None):
         if not files:
             raise FileNotFoundError(f"No backups found at {remote_dir}")
         filename = files[-1]
+    elif not SAFE_FILENAME.match(filename):
+        raise ValueError(f"invalid backup filename: {filename!r}")
 
     tmp_dir = tempfile.mkdtemp(prefix=f"arrrestore-{app_name}-")
     local_zip = os.path.join(tmp_dir, filename)
@@ -41,7 +51,7 @@ def fetch_backup(rclone_remote, app_name, filename=None):
 def extract_zip(local_zip, dest_dir):
     os.makedirs(dest_dir, exist_ok=True)
     with zipfile.ZipFile(local_zip) as zf:
-        zf.extractall(dest_dir)
+        zf.extractall(dest_dir, filter="data")
     return dest_dir
 
 
