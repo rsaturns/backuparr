@@ -635,6 +635,7 @@ code {
 .overview-stat {
   display: flex;
   flex-direction: column;
+  justify-content: flex-end;
   gap: 2px;
 }
 
@@ -645,6 +646,7 @@ code {
 
 .overview-stat .stat-label {
   font-size: 12px;
+  font-weight: 700;
   color: var(--text-muted);
 }
 
