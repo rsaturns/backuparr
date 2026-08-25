@@ -422,6 +422,19 @@ def api_test(app_name):
         return jsonify({"ok": False, "message": humanize_error(exc)})
 
 
+@app.post("/api/test-notify")
+def api_test_notify():
+    data = request.get_json(force=True, silent=True) or {}
+    notify_url = data.get("notify_url")
+    if not notify_url:
+        return jsonify({"ok": False, "message": "Notify URL is required"}), 400
+    try:
+        notify(notify_url, "Backuparr test notification - if you see this, your Notify URL is working.", raise_on_error=True)
+        return jsonify({"ok": True, "message": "sent - check your notification target"})
+    except Exception as exc:
+        return jsonify({"ok": False, "message": humanize_error(exc)})
+
+
 # --------------------------------------------------------- destinations ----
 @app.get("/api/destinations")
 def api_destinations():

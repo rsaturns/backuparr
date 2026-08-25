@@ -505,6 +505,34 @@ async function testDestination(destId) {
   }
 }
 
+async function testNotifyUrl() {
+  const btn = document.getElementById("notify-test-btn");
+  const resultEl = document.getElementById("notify-test-result");
+  const notifyUrl = document.getElementById("s-notify_url").value.trim();
+  if (!notifyUrl) {
+    resultEl.textContent = "Enter a Notify URL first";
+    resultEl.className = "test-result fail";
+    return;
+  }
+  btn.disabled = true;
+  resultEl.textContent = "Sending...";
+  resultEl.className = "test-result";
+  try {
+    const res = await apiFetch("/api/test-notify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notify_url: notifyUrl }),
+    });
+    resultEl.textContent = res.message;
+    resultEl.className = `test-result ${res.ok ? "ok" : "fail"}`;
+  } catch (e) {
+    resultEl.textContent = e.message;
+    resultEl.className = "test-result fail";
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 // ------------------------------------------------------------ gdrive ----
 function gdriveRedirectUri() {
   return `${window.location.origin}/api/destinations/gdrive/oauth/callback`;
@@ -830,6 +858,7 @@ function initSettingsEvents() {
       setAppCardExpanded(checkbox.closest(".app-card"), checkbox.checked);
     });
   });
+  document.getElementById("notify-test-btn").addEventListener("click", testNotifyUrl);
   initScheduleEvents();
 
   document.querySelectorAll(".test-dest-btn").forEach((btn) => {
