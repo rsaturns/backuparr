@@ -60,7 +60,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1.5;
 }
 
@@ -103,12 +103,12 @@ body {
 
 .brand-name {
   font-weight: 700;
-  font-size: 21px;
+  font-size: 24px;
 }
 
 .brand-tagline {
   font-weight: 400;
-  font-size: 13px;
+  font-size: 15px;
   color: var(--text-muted);
   letter-spacing: 0.02em;
 }
@@ -148,7 +148,7 @@ body {
   width: 34px;
   height: 34px;
   border-radius: 999px;
-  font-size: 16px;
+  font-size: 18.5px;
   line-height: 1;
   cursor: pointer;
   flex-shrink: 0;
@@ -179,7 +179,7 @@ body {
   border-top: 1px solid var(--border);
   text-align: center;
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: 14.5px;
 }
 
 .site-footer-name { font-weight: 600; }
@@ -242,13 +242,13 @@ body {
 
 .card h2 {
   margin: 0 0 4px;
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 600;
 }
 
 .hint {
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: 14.5px;
   margin: 4px 0 16px;
 }
 
@@ -269,7 +269,7 @@ body {
 
 .app-card-head h3 {
   margin: 0;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   flex: 1;
 }
@@ -291,7 +291,7 @@ body {
 
 .field-label {
   display: block;
-  font-size: 12.5px;
+  font-size: 14.5px;
   font-weight: 600;
   margin-bottom: 5px;
   color: var(--text-muted);
@@ -318,7 +318,7 @@ textarea {
 
 textarea {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12.5px;
+  font-size: 14.5px;
   resize: vertical;
 }
 
@@ -357,7 +357,7 @@ input:focus, select:focus, textarea:focus {
   color: var(--text-muted);
   font: inherit;
   font-weight: 600;
-  font-size: 12.5px;
+  font-size: 14.5px;
   padding: 0;
   cursor: pointer;
 }
@@ -367,7 +367,7 @@ input:focus, select:focus, textarea:focus {
 .collapse-arrow {
   display: inline-block;
   transition: transform 0.15s ease;
-  font-size: 10px;
+  font-size: 11.5px;
 }
 
 .collapse-toggle[aria-expanded="true"] .collapse-arrow { transform: rotate(90deg); }
@@ -410,7 +410,7 @@ input:focus, select:focus, textarea:focus {
 
 .btn-ghost:hover:not(:disabled) { border-color: var(--accent); }
 
-.btn-sm { padding: 5px 12px; font-size: 12.5px; }
+.btn-sm { padding: 5px 12px; font-size: 14.5px; }
 
 .link-btn {
   background: none;
@@ -432,7 +432,7 @@ input:focus, select:focus, textarea:focus {
 .field-actions-spaced { margin-top: 10px; }
 
 .test-result {
-  font-size: 12.5px;
+  font-size: 14.5px;
   color: var(--text-muted);
 }
 
@@ -492,7 +492,7 @@ input:focus, select:focus, textarea:focus {
   margin-top: 6px;
 }
 
-.save-result { font-size: 12.5px; color: var(--text-muted); }
+.save-result { font-size: 14.5px; color: var(--text-muted); }
 .save-result.ok { color: var(--ok); }
 .save-result.fail { color: var(--danger); }
 
@@ -510,7 +510,7 @@ input:focus, select:focus, textarea:focus {
   gap: 16px;
   flex-wrap: wrap;
   margin-bottom: 12px;
-  font-size: 13px;
+  font-size: 15px;
   color: var(--text-muted);
 }
 
@@ -524,7 +524,7 @@ input:focus, select:focus, textarea:focus {
   height: 420px;
   overflow-y: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12.5px;
+  font-size: 14.5px;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -536,14 +536,14 @@ input:focus, select:focus, textarea:focus {
 .history-app:last-child { margin-bottom: 0; }
 
 .history-app h3 {
-  font-size: 13.5px;
+  font-size: 15.5px;
   margin: 0 0 8px;
 }
 
 .history-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .history-table th, .history-table td {
@@ -555,12 +555,12 @@ input:focus, select:focus, textarea:focus {
 .history-table th {
   color: var(--text-muted);
   font-weight: 600;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .empty-note {
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: 14.5px;
   padding: 8px 0;
 }
 
@@ -588,7 +588,7 @@ input:focus, select:focus, textarea:focus {
 
 .server-pw-row .server-label {
   min-width: 220px;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .server-pw-row input { flex: 1; }
@@ -609,7 +609,7 @@ input:focus, select:focus, textarea:focus {
   box-shadow: var(--shadow);
   border-radius: 8px;
   padding: 10px 14px;
-  font-size: 13px;
+  font-size: 15px;
   max-width: 340px;
 }
 
@@ -621,7 +621,7 @@ code {
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 1px 5px;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 /* ------------------------------------------------------------ overview --- */
@@ -640,12 +640,12 @@ code {
 }
 
 .overview-stat .stat-value {
-  font-size: 20px;
+  font-size: 23px;
   font-weight: 700;
 }
 
 .overview-stat .stat-label {
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   color: var(--text-muted);
 }
@@ -674,7 +674,7 @@ code {
 }
 
 .overview-dest-icon span {
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 500;
   color: var(--text-muted);
   white-space: nowrap;
@@ -705,20 +705,20 @@ code {
 
 .overview-app-head h3 {
   margin: 0;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   flex: 1;
 }
 
 .overview-app-last {
-  font-size: 12.5px;
+  font-size: 14.5px;
   color: var(--text-muted);
 }
 
 .overview-app-last .filename {
   display: block;
   color: var(--text);
-  font-size: 12.5px;
+  font-size: 14.5px;
   margin-top: 2px;
   word-break: break-all;
 }
@@ -726,7 +726,7 @@ code {
 .overview-download-link {
   display: inline-block;
   margin-top: 10px;
-  font-size: 12.5px;
+  font-size: 14.5px;
   font-weight: 600;
   color: var(--accent);
   text-decoration: none;
@@ -736,7 +736,7 @@ code {
 
 .overview-empty {
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 15px;
   padding: 4px 0;
 }
 
@@ -749,7 +749,7 @@ code {
   width: 26px;
   height: 26px;
   line-height: 1;
-  font-size: 13px;
+  font-size: 15px;
   cursor: pointer;
 }
 
@@ -769,7 +769,7 @@ code {
 .card-soon .app-card-head h3 { color: var(--text-muted); }
 
 .badge-soon {
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -817,13 +817,13 @@ code {
   background: var(--bg-elevated);
 }
 
-.modal-head h3 { margin: 0; font-size: 17px; }
+.modal-head h3 { margin: 0; font-size: 19.5px; }
 
-.modal-body { padding: 20px; font-size: 14.5px; }
+.modal-body { padding: 20px; font-size: 16.5px; }
 
 /* Larger than the app-wide hint size - this modal's text is read as instructions. */
-.modal-body .hint { font-size: 14px; line-height: 1.5; }
-.modal-body .field-label { font-size: 14px; }
+.modal-body .hint { font-size: 16px; line-height: 1.5; }
+.modal-body .field-label { font-size: 16px; }
 
 .guide-steps {
   margin: 0 0 16px;
@@ -833,12 +833,12 @@ code {
   gap: 12px;
 }
 
-.guide-steps li { font-size: 15px; line-height: 1.6; }
+.guide-steps li { font-size: 17px; line-height: 1.6; }
 
 .guide-step-link {
   display: block;
   margin-top: 4px;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--accent);
   text-decoration: none;
@@ -856,7 +856,7 @@ code {
 }
 
 .guide-step-checklist li {
-  font-size: 14px;
+  font-size: 16px;
   color: var(--text-muted);
   line-height: 1.5;
 }
@@ -868,7 +868,7 @@ code {
   background: var(--bg);
   border: 1px solid var(--border);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 13px;
+  font-size: 15px;
   overflow-x: auto;
 }
 
@@ -876,7 +876,7 @@ code {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  font-size: 14.5px;
+  font-size: 16.5px;
 }
 
 .guide-links a { color: var(--accent); }
@@ -902,7 +902,7 @@ code {
 
 .auth-card h2 {
   margin: 0 0 12px;
-  font-size: 18px;
+  font-size: 20.5px;
 }
 
 .auth-forgot {
