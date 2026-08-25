@@ -27,8 +27,8 @@ this for Radarr/Sonarr/Prowlarr via S3. This tool extends the same idea
 (trigger the app's own backup API, download it, upload it) to Bazarr and
 Tdarr, which have their own equivalent mechanisms, and moves the storage
 side to a pick-your-destinations model built on [rclone](https://rclone.org/)
-under the hood - Local out of the box, Google Drive via an in-app "Connect"
-button instead of a terminal-based config wizard.
+under the hood - Local out of the box, Google Drive and OneDrive via an
+in-app "Connect" button instead of a terminal-based config wizard.
 
 ## Per-app backup method (read this before deploying)
 
@@ -96,7 +96,28 @@ same shape `rclone config`'s own Drive wizard would produce) and keeps it in
 sync automatically - rclone still does the actual upload/download/list/
 delete work, you just never have to touch its config file.
 
-### Dropbox / Microsoft OneDrive
+### OneDrive
+
+Connected entirely from the web UI, same pattern as Google Drive. Microsoft
+requires its own one-time app registration too, and there's one deliberate
+scoping choice: this only supports **personal** Microsoft accounts, not
+work/school (Microsoft 365) accounts - the OAuth flow itself is restricted
+to personal accounts at sign-in, not just documented that way.
+
+1. Click **Setup guide** on the OneDrive card - it walks through registering
+   an app in the Microsoft Entra admin center and shows the exact redirect
+   URI to register.
+2. Paste the Client ID and Client Secret it gives you into the two fields,
+   then **Save settings**.
+3. Click **Connect OneDrive** and approve the consent screen.
+
+There's no folder picker: Backuparr requests the `Files.ReadWrite.AppFolder`
+scope, which Microsoft Graph resolves to a single dedicated app folder
+(`Apps/Backuparr` in your OneDrive) created automatically on first connect -
+narrower than requesting access to your whole OneDrive, at the cost of not
+being able to choose a different folder.
+
+### Dropbox
 
 Shown on the Settings tab as "Coming soon" - not wired up yet.
 
@@ -166,7 +187,8 @@ docker compose exec -it backuparr python3 restore.py sabnzbd   # -it matters her
 ```
 
 If only one destination is enabled it's picked automatically; with more
-than one, pass `--destination local` or `--destination gdrive`. `restore.py
+than one, pass `--destination local`, `--destination gdrive`, or
+`--destination onedrive`. `restore.py
 --help` documents the rest (`--file <name>` for a specific backup, `--yes`
 to skip confirmation/password prompts).
 
@@ -182,6 +204,8 @@ if you'd rather):
 | `destinations.local.enabled/path` | Local storage - path defaults to `/config/backuparr/backups` if blank |
 | `destinations.gdrive.enabled/client_id/client_secret` | Google Drive OAuth client, set via the Setup guide |
 | `destinations.gdrive.refresh_token/folder_id/folder_name` | Set automatically by the Connect/Choose folder buttons - don't hand-edit |
+| `destinations.onedrive.enabled/client_id/client_secret` | OneDrive OAuth app, set via the Setup guide |
+| `destinations.onedrive.refresh_token/drive_id/drive_type/item_id` | Set automatically by the Connect button - don't hand-edit |
 | `retention_days` | Delete backups older than this, per app per destination (default 7) |
 | `cron_schedule` | Standard 5-field cron syntax (default `0 3 * * *`) |
 | `notify_url` | Optional: POST a plain-text summary here after every run (e.g. an ntfy.sh topic) |

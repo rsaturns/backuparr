@@ -18,6 +18,7 @@ from flask import Flask, after_this_request, jsonify, redirect, render_template,
 
 import destination_util
 import gdrive_oauth
+import onedrive_oauth
 import rclone_util
 import restore_actions as ra
 from backup import build_app, notify, run_backup
@@ -161,6 +162,8 @@ def _validate_config(data):
             return f"{meta['label']} isn't available yet"
         if name == "gdrive" and dest_data.get("enabled") and not dest_data.get("client_id"):
             return "Google Drive: a Client ID is required to enable it (paste it in first, then Connect)"
+        if name == "onedrive" and dest_data.get("enabled") and not dest_data.get("client_id"):
+            return "OneDrive: a Client ID is required to enable it (paste it in first, then Connect)"
     return None
 
 
@@ -244,6 +247,15 @@ def api_test_destination(dest_id):
             rclone_util.check_remote(root)
             folder = dest_cfg.get("folder_name") or "My Drive (root)"
             return jsonify({"ok": True, "message": f"connected, backing up to \"{folder}\""})
+
+        if dest_id == "onedrive":
+            if not dest_cfg.get("refresh_token"):
+                return jsonify({"ok": False, "message": "Not connected yet - click Connect OneDrive first"})
+            cfg["destinations"]["onedrive"] = dest_cfg
+            destination_util.sync(cfg)
+            root = destination_util.remote_root("onedrive", dest_cfg)
+            rclone_util.check_remote(root)
+            return jsonify({"ok": True, "message": "connected, backing up to your OneDrive app folder"})
 
         return jsonify({"ok": False, "message": f"{dest_id} is not available yet"})
     except (rclone_util.RcloneError, destination_util.DestinationError, OSError) as exc:
@@ -547,6 +559,69 @@ def api_gdrive_disconnect():
     cfg = load_config()
     cfg["destinations"]["gdrive"].update({
         "enabled": False, "refresh_token": "", "folder_id": "", "folder_name": "",
+    })
+    save_config(cfg)
+    destination_util.sync(cfg)
+    return jsonify({"ok": True})
+
+
+# ----------------------------------------------------- onedrive oauth ----
+def _onedrive_redirect_uri():
+    return request.host_url.rstrip("/") + "/api/destinations/onedrive/oauth/callback"
+
+
+def _onedrive_redirect_with_error(message):
+    return redirect("/?onedrive_error=" + urllib.parse.quote(str(message)))
+
+
+@app.get("/api/destinations/onedrive/oauth/start")
+def api_onedrive_oauth_start():
+    cfg = load_config()
+    onedrive_cfg = cfg["destinations"]["onedrive"]
+    if not onedrive_cfg.get("client_id") or not onedrive_cfg.get("client_secret"):
+        return _onedrive_redirect_with_error("Save a Client ID and Client Secret first")
+    state = _oauth_state_new()
+    url = onedrive_oauth.build_auth_url(onedrive_cfg["client_id"], _onedrive_redirect_uri(), state)
+    return redirect(url)
+
+
+@app.get("/api/destinations/onedrive/oauth/callback")
+def api_onedrive_oauth_callback():
+    error = request.args.get("error")
+    if error:
+        return _onedrive_redirect_with_error(request.args.get("error_description") or error)
+
+    state = request.args.get("state", "")
+    code = request.args.get("code")
+    if not code or not _oauth_state_consume(state):
+        return _onedrive_redirect_with_error("invalid or expired authorization request, try connecting again")
+
+    cfg = load_config()
+    onedrive_cfg = cfg["destinations"]["onedrive"]
+    try:
+        tokens = onedrive_oauth.exchange_code(
+            onedrive_cfg["client_id"], onedrive_cfg["client_secret"], _onedrive_redirect_uri(), code
+        )
+        approot = onedrive_oauth.approot_metadata(tokens["access_token"])
+    except onedrive_oauth.OneDriveOAuthError as exc:
+        log.exception("onedrive oauth exchange failed")
+        return _onedrive_redirect_with_error(str(exc))
+
+    onedrive_cfg["refresh_token"] = tokens["refresh_token"]
+    onedrive_cfg["drive_id"] = approot["parentReference"]["driveId"]
+    onedrive_cfg["drive_type"] = approot["parentReference"]["driveType"]
+    onedrive_cfg["item_id"] = approot["id"]
+    onedrive_cfg["enabled"] = True
+    save_config(cfg)
+    destination_util.sync(cfg)
+    return redirect("/?onedrive=connected")
+
+
+@app.post("/api/destinations/onedrive/disconnect")
+def api_onedrive_disconnect():
+    cfg = load_config()
+    cfg["destinations"]["onedrive"].update({
+        "enabled": False, "refresh_token": "", "drive_id": "", "drive_type": "", "item_id": "",
     })
     save_config(cfg)
     destination_util.sync(cfg)

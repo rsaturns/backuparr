@@ -63,19 +63,27 @@ DEFAULT_DEST = {
         "folder_name": "",
     },
     "dropbox": {"enabled": False},
-    "onedrive": {"enabled": False},
+    "onedrive": {
+        "enabled": False,
+        "client_id": "",
+        "client_secret": "",
+        "refresh_token": "",
+        "drive_id": "",
+        "drive_type": "",
+        "item_id": "",
+    },
 }
 
 # Fields the generic POST /api/config can write per destination. Notably
-# excludes gdrive's refresh_token/folder_id/folder_name - those are only
-# ever set by the dedicated OAuth/folder-picker routes in webui/app.py, so
-# a POST to the general settings form can't forge a connected state or
-# silently detach the picked folder.
+# excludes gdrive's refresh_token/folder_id/folder_name and onedrive's
+# refresh_token/drive_id/drive_type/item_id - those are only ever set by the
+# dedicated OAuth routes in webui/app.py, so a POST to the general settings
+# form can't forge a connected state.
 DEST_EDITABLE_FIELDS = {
     "local": {"enabled", "path"},
     "gdrive": {"enabled", "client_id", "client_secret"},
     "dropbox": {"enabled"},
-    "onedrive": {"enabled"},
+    "onedrive": {"enabled", "client_id", "client_secret"},
 }
 
 # Drives the Settings > Destinations card generically. "coming_soon" ones
@@ -160,9 +168,47 @@ DESTINATION_META = [
         "id": "onedrive",
         "label": "Microsoft OneDrive",
         "icon": "microsoft-onedrive.svg",
-        "status": "coming_soon",
-        "description": "Coming soon.",
-        "setup_help": None,
+        "status": "available",
+        "description": "Backed up to a dedicated app folder in your personal OneDrive. Click-through OAuth - no rclone config, no terminal. Personal Microsoft accounts only, not work/school (Microsoft 365) accounts.",
+        "setup_help": {
+            "title": "Connect OneDrive",
+            "intro": "Microsoft requires every app to have its own registered app - a one-time, ~5 minute setup in the Microsoft Entra admin center. This connects personal Microsoft accounts only.",
+            "steps": [
+                {
+                    "text": "In the Microsoft Entra admin center, go to App registrations and click New registration.",
+                    "link": {"label": "App registrations", "url": "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ListApplications"},
+                },
+                {
+                    "text": "Give it any name. Under Supported account types, choose \"Personal Microsoft accounts only\" - this is what restricts sign-in to personal accounts.",
+                    "link": None,
+                },
+                {
+                    "text": "Under Redirect URI, choose platform \"Web\" and paste the redirect URI shown below, exactly as shown. Click Register.",
+                    "link": None,
+                },
+                {
+                    "text": "On the app's Overview page, copy the \"Application (client) ID\" - you'll paste it below.",
+                    "link": None,
+                },
+                {
+                    "text": "Go to Certificates & secrets, click New client secret, give it a description, and pick the longest expiry offered. Copy the secret's Value immediately - Microsoft only shows it once. Paste both the Client ID and this secret into the fields below.",
+                    "link": None,
+                },
+                {
+                    "text": "Go to API permissions and confirm (or add) these Microsoft Graph delegated permissions, then save and click \"Connect OneDrive\" below:",
+                    "checklist": [
+                        "Files.ReadWrite.AppFolder",
+                        "offline_access",
+                    ],
+                    "link": None,
+                },
+            ],
+            "links": [
+                {"label": "Microsoft Entra admin center - App registrations", "url": "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ListApplications"},
+                {"label": "Microsoft's guide to registering an app", "url": "https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app"},
+                {"label": "Microsoft's docs on the OneDrive app folder", "url": "https://learn.microsoft.com/en-us/graph/onedrive-sharepoint-appfolder"},
+            ],
+        },
     },
 ]
 
