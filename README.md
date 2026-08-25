@@ -5,10 +5,10 @@
 **Secure your Arrs.**
 
 Scheduled config/database backups for Radarr, Sonarr, Prowlarr, Profilarr,
-Bazarr, Tdarr, and Sabnzbd, sent to whichever destinations you enable -
-Local storage (zero setup, download straight from the History tab),
-Google Drive (click-through OAuth, no config files to hand-copy), and
-OneDrive (one-time `rclone authorize` paste, no Azure account needed)
+Bazarr, Tdarr, Sabnzbd, and Tautulli, sent to whichever destinations you
+enable - Local storage (zero setup, download straight from the History
+tab), Google Drive (click-through OAuth, no config files to hand-copy),
+and OneDrive (one-time `rclone authorize` paste, no Azure account needed)
 today, with Dropbox planned. Enable more than one and every backup gets a
 copy on each of them. If the host dies, the recovery path is: re-create the
 containers from your compose file, then restore each app's config from its
@@ -25,15 +25,15 @@ validated restore path instead of a raw file overwrite.
 
 ## Architecture
 
-<img src="webui/static/architecture-diagram.svg" alt="Radarr, Sonarr, Prowlarr, Profilarr, Bazarr, Tdarr, and SABnzbd each feed Backuparr over their own HTTP API; Backuparr uploads each backup via rclone to Local storage, Google Drive, and Microsoft OneDrive" width="100%">
+<img src="webui/static/architecture-diagram.svg" alt="Radarr, Sonarr, Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, and Tautulli each feed Backuparr over their own HTTP API; Backuparr uploads each backup via rclone to Local storage, Google Drive, and Microsoft OneDrive" width="100%">
 
 ## Why not reuse an existing tool?
 
 [Zerka30/servarr-backup](https://github.com/Zerka30/servarr-backup) does
 this for Radarr/Sonarr/Prowlarr via S3. This tool extends the same idea
 (trigger the app's own backup API, download it, upload it) to Profilarr,
-Bazarr, and Tdarr, which have their own equivalent mechanisms, and moves
-the storage side to a pick-your-destinations model built on [rclone](https://rclone.org/)
+Bazarr, Tdarr, and Tautulli, which have their own equivalent mechanisms,
+and moves the storage side to a pick-your-destinations model built on [rclone](https://rclone.org/)
 under the hood - Local out of the box, Google Drive via an in-app
 "Connect" button, and OneDrive via a one-time `rclone authorize` paste,
 instead of running rclone's full interactive config wizard yourself.
@@ -47,6 +47,7 @@ instead of running rclone's full interactive config wizard yourself.
 | Bazarr | `POST /api/system/backups` to trigger, poll `GET` until the new file appears, download it, `DELETE` it server-side | The download route (`/system/backup/download/<file>`) is gated by Bazarr's own web-auth setting, **not** the API key - see below. Restore needs one local file write into Bazarr's own backup folder (no upload-restore endpoint exists), then an API call triggers the actual restore + restart. |
 | Tdarr | `POST /api/v2/cruddb` with `mode: getAll` for every internal DB collection (library settings, flows, global settings, node registrations, staged/output/statistics) | Fully API-driven both ways. Restore does `removeAll` then re-`insert`s each document per collection - destructive, asks for confirmation. |
 | Sabnzbd | `GET /sabnzbd/api?mode=get_config` to back up; `mode=set_config` per key to restore | SABnzbd's API hardcodes every password field (most importantly your Usenet server password) to `**********` on the way out - there's no API mode that returns the real value. Restore still automates everything else: it recreates each Usenet server (host/port/username/connections/ssl/priority/...) and every plain `misc`-style setting via the API, and interactively prompts you for each server's real password before sending it (verified against SABnzbd's own source - an existing server's fields not included in the API call are left untouched, so a skipped password doesn't get overwritten with a blank one). Categories, RSS feeds, and sorters use their own special-cased API shapes that aren't reverse-engineered here, so those aren't auto-restored. |
+| Tautulli | `GET /api/v2?cmd=download_database` and `cmd=download_config` - each streams a fresh copy directly, no trigger/poll step | The database comes back with Plex tokens nulled out; the config file is only lightly sanitized - see below. Restore uploads each back separately via `cmd=import_database` and `cmd=import_config` (multipart) - a config restore makes Tautulli restart itself. |
 
 ### Profilarr backup note
 
@@ -69,6 +70,22 @@ documents two things worth knowing before you rely on this:
   Backuparr's **History** tab, upload it in Profilarr's own
   **Settings > Backups**, restore it there, then restart the Profilarr
   container and re-add whatever was stripped above.
+
+### Tautulli backup note
+
+Tautulli's `download_database` command nulls out Plex user/server tokens
+server-side before streaming the file back - confirmed both in its source
+and empirically against a real instance. `download_config`, however, only
+strips `PMS_TOKEN`/`JWT_SECRET` (Tautulli's own hardcoded list) - **the
+Tautulli API key itself, and any notification agent credentials stored in
+config.ini (webhook URLs, tokens, etc.), come through in the backup in
+plain text.** This isn't a Backuparr limitation, it's what Tautulli's API
+actually strips - just narrower than "sanitized" might imply. Since
+config.json's secrets are already encrypted at rest (see [Encryption at
+rest](#encryption-at-rest)), the practical takeaway is: treat wherever
+your Tautulli backups land (local disk, Google Drive, OneDrive) as
+holding a live, usable Tautulli API key, and rotate it in Tautulli's own
+Settings if that destination is ever compromised.
 
 ### Bazarr auth note
 
@@ -269,6 +286,8 @@ pick the app, pick a backup (newest first), and confirm.
   password (SABnzbd's API never returns the real value - see the table
   above), type them in, then restore. Leave any blank to set that server's
   password manually in SABnzbd's Settings afterward instead.
+- **Tautulli** - restores the database and config separately; Tautulli
+  restarts itself once the config half is applied.
 
 The same operations are available from the CLI inside the container, e.g.
 for scripting:
