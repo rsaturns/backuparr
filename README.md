@@ -4,13 +4,13 @@
 
 **Secure your Arrs.**
 
-Scheduled config/database backups for Radarr, Sonarr, Bazarr, Prowlarr,
-Tdarr, and Sabnzbd, sent to whichever destinations you enable - Local
-storage (zero setup, download straight from the History tab), Google Drive
-(click-through OAuth, no config files to hand-copy), and OneDrive (one-time
-`rclone authorize` paste, no Azure account needed) today, with Dropbox
-planned. Enable more than one and every backup gets a copy on each of
-them. If the host dies, the recovery path is: re-create the
+Scheduled config/database backups for Radarr, Sonarr, Prowlarr, Profilarr,
+Bazarr, Tdarr, and Sabnzbd, sent to whichever destinations you enable -
+Local storage (zero setup, download straight from the History tab),
+Google Drive (click-through OAuth, no config files to hand-copy), and
+OneDrive (one-time `rclone authorize` paste, no Azure account needed)
+today, with Dropbox planned. Enable more than one and every backup gets a
+copy on each of them. If the host dies, the recovery path is: re-create the
 containers from your compose file, then restore each app's config from its
 latest backup. Everything - which apps to back up, their URLs/API keys,
 which destinations to use, the schedule, retention, and restores - is
@@ -25,15 +25,15 @@ validated restore path instead of a raw file overwrite.
 
 ## Architecture
 
-<img src="webui/static/architecture-diagram.svg" alt="Radarr, Sonarr, Prowlarr, Bazarr, Tdarr, and SABnzbd each feed Backuparr over their own HTTP API; Backuparr uploads each backup via rclone to Local storage, Google Drive, and Microsoft OneDrive" width="100%">
+<img src="webui/static/architecture-diagram.svg" alt="Radarr, Sonarr, Prowlarr, Profilarr, Bazarr, Tdarr, and SABnzbd each feed Backuparr over their own HTTP API; Backuparr uploads each backup via rclone to Local storage, Google Drive, and Microsoft OneDrive" width="100%">
 
 ## Why not reuse an existing tool?
 
 [Zerka30/servarr-backup](https://github.com/Zerka30/servarr-backup) does
 this for Radarr/Sonarr/Prowlarr via S3. This tool extends the same idea
-(trigger the app's own backup API, download it, upload it) to Bazarr and
-Tdarr, which have their own equivalent mechanisms, and moves the storage
-side to a pick-your-destinations model built on [rclone](https://rclone.org/)
+(trigger the app's own backup API, download it, upload it) to Profilarr,
+Bazarr, and Tdarr, which have their own equivalent mechanisms, and moves
+the storage side to a pick-your-destinations model built on [rclone](https://rclone.org/)
 under the hood - Local out of the box, Google Drive via an in-app
 "Connect" button, and OneDrive via a one-time `rclone authorize` paste,
 instead of running rclone's full interactive config wizard yourself.
@@ -43,9 +43,32 @@ instead of running rclone's full interactive config wizard yourself.
 | App | Method | Notes |
 |---|---|---|
 | Radarr / Sonarr / Prowlarr | `POST .../system/backup` to trigger, download the result, `DELETE` it server-side | Same official backup zip the apps use for manual backups. Restore is a genuine multipart upload to `.../system/backup/restore/upload` - fully automated, no filesystem access. |
+| Profilarr | `POST /api/v1/backups` to trigger (async job, polled via `GET /api/v1/jobs/{id}`), download the newest result, `DELETE` it server-side | Backup only - see below, Profilarr's own restore has no public API. |
 | Bazarr | `POST /api/system/backups` to trigger, poll `GET` until the new file appears, download it, `DELETE` it server-side | The download route (`/system/backup/download/<file>`) is gated by Bazarr's own web-auth setting, **not** the API key - see below. Restore needs one local file write into Bazarr's own backup folder (no upload-restore endpoint exists), then an API call triggers the actual restore + restart. |
 | Tdarr | `POST /api/v2/cruddb` with `mode: getAll` for every internal DB collection (library settings, flows, global settings, node registrations, staged/output/statistics) | Fully API-driven both ways. Restore does `removeAll` then re-`insert`s each document per collection - destructive, asks for confirmation. |
 | Sabnzbd | `GET /sabnzbd/api?mode=get_config` to back up; `mode=set_config` per key to restore | SABnzbd's API hardcodes every password field (most importantly your Usenet server password) to `**********` on the way out - there's no API mode that returns the real value. Restore still automates everything else: it recreates each Usenet server (host/port/username/connections/ssl/priority/...) and every plain `misc`-style setting via the API, and interactively prompts you for each server's real password before sending it (verified against SABnzbd's own source - an existing server's fields not included in the API call are left untouched, so a skipped password doesn't get overwritten with a blank one). Categories, RSS feeds, and sorters use their own special-cased API shapes that aren't reverse-engineered here, so those aren't auto-restored. |
+
+### Profilarr backup note
+
+Profilarr's own [OpenAPI spec](https://github.com/Dictionarry-Hub/profilarr)
+documents two things worth knowing before you rely on this:
+
+- **The downloaded backup is sanitized by Profilarr itself.** Arr instance
+  URLs/API keys, sync configs, notification webhook URLs/tokens, user
+  accounts and sessions, personal access tokens for linked databases, and
+  AI/TMDB API keys are all stripped before the file leaves the server -
+  Profilarr's design, not something Backuparr can change. Restoring on a
+  different host means re-adding those by hand regardless of how the
+  backup got there.
+- **Restore isn't automated here on purpose.** Profilarr's own restore
+  action is a browser-session-only form (not part of its versioned
+  `/api/v1` REST API), and even then it only *stages* a pending restore -
+  the actual swap happens at the next Profilarr container restart, which
+  Backuparr has no way to trigger. So Profilarr won't show up as an option
+  on the **Restore** tab. To restore by hand: download the backup from
+  Backuparr's **History** tab, upload it in Profilarr's own
+  **Settings > Backups**, restore it there, then restart the Profilarr
+  container and re-add whatever was stripped above.
 
 ### Bazarr auth note
 
@@ -234,6 +257,8 @@ will be empty/fresh), then use the **Restore** tab: pick the source,
 pick the app, pick a backup (newest first), and confirm.
 
 - **Radarr/Sonarr/Prowlarr** - fully automated, the app restarts itself.
+- **Profilarr** - not available here; see the [Profilarr backup
+  note](#profilarr-backup-note) above for the manual restore steps.
 - **Bazarr** - needs a local path to its own config/backup folder; fill in
   the override field if you didn't already set `bazarr_backup_dir` in
   Settings (this needs that path mounted into the backuparr container,
