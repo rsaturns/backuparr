@@ -17,6 +17,7 @@ import tempfile
 import zipfile
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 import requests
 
@@ -102,19 +103,29 @@ def zip_dir(src_dir, zip_path):
 
 
 # A bare `requests.post(url, data=message)` - the fallback below - is
-# exactly ntfy.sh/Gotify/a generic webhook logger's native shape (plain
-# text as the whole request body), but Discord/Slack/Telegram each expect
+# exactly ntfy.sh/a generic webhook logger's native shape (plain text as
+# the whole request body), but Discord/Slack/Telegram/Gotify each expect
 # their own JSON envelope instead and would otherwise just reject a raw
-# text body. Matched by URL shape so no separate "service type" setting is
-# needed - notify_url alone is still enough to configure any of these.
+# text body (Gotify's own OpenAPI spec declares "consumes:
+# application/json" on POST /message - confirmed, not assumed). Matched
+# by URL shape so no separate "service type" setting is needed -
+# notify_url alone is still enough to configure any of these.
 _DISCORD_WEBHOOK_RE = re.compile(r"discord(?:app)?\.com/api/webhooks/")
 _SLACK_WEBHOOK_RE = re.compile(r"hooks\.slack\.com/services/")
 _TELEGRAM_RE = re.compile(r"api\.telegram\.org/bot")
 
 
+def _is_gotify_url(parsed):
+    # Gotify is self-hosted (no fixed domain to match), so this goes by
+    # its distinctive /message path + ?token= query param instead - the
+    # same shape Gotify's own docs show for a message-creation URL.
+    return parsed.path.rstrip("/").endswith("/message") and "token" in parse_qs(parsed.query)
+
+
 def notify(notify_url, message):
     if not notify_url:
         return
+    parsed = urlparse(notify_url)
     try:
         if _DISCORD_WEBHOOK_RE.search(notify_url):
             # 2000 chars is Discord's hard per-message limit - truncate
@@ -127,6 +138,8 @@ def notify(notify_url, message):
             # string - Telegram's sendMessage accepts that alongside a
             # JSON body carrying just the parts that vary per call.
             requests.post(notify_url, json={"text": message}, timeout=10)
+        elif _is_gotify_url(parsed):
+            requests.post(notify_url, json={"title": "Backuparr", "message": message}, timeout=10)
         else:
             requests.post(notify_url, data=message.encode("utf-8"), timeout=10)
     except requests.RequestException:
