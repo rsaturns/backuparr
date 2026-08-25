@@ -11,10 +11,5 @@ python3 -c "from webui.app import init; init()"
 echo "Backuparr: starting cron"
 crond -l 2 &
 
-if [ "${RUN_ON_START:-false}" = "true" ]; then
-    echo "RUN_ON_START=true, running an initial backup now..."
-    (cd /app && python3 backup.py) || echo "Initial backup run failed (see above). Will retry on schedule."
-fi
-
 echo "Backuparr: starting web UI on :${WEBUI_PORT}"
 exec waitress-serve --host=0.0.0.0 --port="${WEBUI_PORT}" --threads=6 webui.app:app

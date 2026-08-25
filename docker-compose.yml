@@ -19,16 +19,9 @@ services:
     restart: unless-stopped
     environment:
       TZ: America/Los_Angeles
-      # Set to "true" to run one backup immediately on container start, in
-      # addition to whatever's configured in the UI's cron schedule.
-      RUN_ON_START: "false"
       # The web UI creates its own admin account on first visit (a setup
-      # screen, no env vars needed) and requires logging in from then on.
-      # Setting both of these switches the whole app to HTTP Basic auth
-      # instead - useful for scripting/CI, or if you'd rather manage the
-      # credential here than through the setup screen.
-      # WEBUI_USERNAME: ""
-      # WEBUI_PASSWORD: ""
+      # screen) and requires logging in from then on - nothing to configure
+      # here for that.
     ports:
       - "8990:8990"
     volumes:

@@ -3,7 +3,6 @@ history, and restore - all from the browser instead of editing
 docker-compose env vars by hand.
 """
 import copy
-import hmac
 import logging
 import os
 import re
@@ -94,29 +93,17 @@ _OAUTH_STATE_TTL = 600
 
 # ---------------------------------------------------------------- auth ----
 # Login is required by default, via a session cookie set after a one-time
-# setup screen creates the single admin account (see auth_store.py). Setting
-# WEBUI_USERNAME/WEBUI_PASSWORD instead switches the whole app to HTTP Basic
-# Auth - kept for anyone already using it, or scripting/CI access where a
-# session cookie isn't practical - and takes priority whenever both are set.
+# setup screen creates the single admin account (see auth_store.py). This
+# used to also support HTTP Basic Auth via WEBUI_USERNAME/WEBUI_PASSWORD env
+# vars as an alternative - removed once the setup screen existed, since it's
+# a strictly better path for everyone the env vars were meant to serve too
+# (no plaintext credential sitting in a compose file to manage/rotate).
 _PUBLIC_PATHS = {"/api/logout", "/api/reset"}
 
 
 @app.before_request
 def _check_auth():
     if request.path.startswith("/static/"):
-        return None
-
-    env_user = os.environ.get("WEBUI_USERNAME")
-    env_pass = os.environ.get("WEBUI_PASSWORD")
-    if env_user and env_pass:
-        auth = request.authorization
-        valid = (
-            auth is not None
-            and hmac.compare_digest(auth.username, env_user)
-            and hmac.compare_digest(auth.password, env_pass)
-        )
-        if not valid:
-            return ("Unauthorized", 401, {"WWW-Authenticate": 'Basic realm="Backuparr"'})
         return None
 
     if request.path in _PUBLIC_PATHS:
