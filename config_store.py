@@ -12,20 +12,23 @@ import secrets_crypto
 
 CONFIG_PATH = os.environ.get("BACKUPARR_CONFIG", "/config/backuparr/config.json")
 
-APP_NAMES = ["radarr", "sonarr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "tautulli"]
+APP_NAMES = ["radarr", "sonarr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "tautulli", "seerr"]
 
 DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "password": ""}
 
 # Drives the web UI's forms generically instead of hardcoding per-app
-# knowledge in JS.
+# knowledge in JS. "status": "coming_soon" ones render disabled with a
+# badge instead of a working card, same treatment as DESTINATION_META
+# below.
 APP_META = [
-    {"id": "radarr", "label": "Radarr", "icon": "radarr.svg", "key_required": True, "url_placeholder": "http://radarr:7878", "extra_fields": []},
-    {"id": "sonarr", "label": "Sonarr", "icon": "sonarr.svg", "key_required": True, "url_placeholder": "http://sonarr:8989", "extra_fields": []},
-    {"id": "prowlarr", "label": "Prowlarr", "icon": "prowlarr.svg", "key_required": True, "url_placeholder": "http://prowlarr:9696", "extra_fields": []},
+    {"id": "radarr", "label": "Radarr", "icon": "radarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://radarr:7878", "extra_fields": []},
+    {"id": "sonarr", "label": "Sonarr", "icon": "sonarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://sonarr:8989", "extra_fields": []},
+    {"id": "prowlarr", "label": "Prowlarr", "icon": "prowlarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://prowlarr:9696", "extra_fields": []},
     {
         "id": "profilarr",
         "label": "Profilarr",
         "icon": "profilarr.svg",
+        "status": "available",
         "key_required": True,
         "url_placeholder": "http://profilarr:6868",
         "extra_fields": [],
@@ -39,6 +42,7 @@ APP_META = [
         "id": "bazarr",
         "label": "Bazarr",
         "icon": "bazarr.svg",
+        "status": "available",
         "key_required": True,
         "url_placeholder": "http://bazarr:6767",
         "extra_fields": [
@@ -52,13 +56,27 @@ APP_META = [
         "id": "tdarr",
         "label": "Tdarr",
         "icon": "tdarr.png",
+        "status": "available",
         "key_required": False,
         "url_placeholder": "http://192.168.1.10:8266",
         "extra_fields": [],
         "key_help": "Only if Tdarr's API auth token is enabled",
     },
-    {"id": "sabnzbd", "label": "SABnzbd", "icon": "sabnzbd.svg", "key_required": True, "url_placeholder": "http://sabnzbd:8080", "extra_fields": []},
-    {"id": "tautulli", "label": "Tautulli", "icon": "tautulli.svg", "key_required": True, "url_placeholder": "http://tautulli:8181", "extra_fields": []},
+    {"id": "sabnzbd", "label": "SABnzbd", "icon": "sabnzbd.svg", "status": "available", "key_required": True, "url_placeholder": "http://sabnzbd:8080", "extra_fields": []},
+    {"id": "tautulli", "label": "Tautulli", "icon": "tautulli.svg", "status": "available", "key_required": True, "url_placeholder": "http://tautulli:8181", "extra_fields": []},
+    {
+        "id": "seerr",
+        "label": "Seerr",
+        "icon": "seerr.svg",
+        "status": "coming_soon",
+        # Seerr has no backup/restore API at all - its own docs recommend
+        # stopping the app and copying its data folder directly, which
+        # conflicts with backing up over HTTP the way every other app
+        # here does. Not implemented; card shown for visibility only.
+        "key_required": True,
+        "url_placeholder": "",
+        "extra_fields": [],
+    },
 ]
 
 DEST_NAMES = ["local", "gdrive", "onedrive", "dropbox"]
@@ -296,7 +314,14 @@ def save_config(cfg):
 
 
 def enabled_apps(cfg):
-    return [name for name in APP_NAMES if cfg["apps"].get(name, {}).get("enabled")]
+    """Only ones with status "available" can ever be enabled - a coming_soon
+    id can't be flipped on client-side, but guard here too since config.json
+    can be hand-edited."""
+    available = {m["id"] for m in APP_META if m["status"] == "available"}
+    return [
+        name for name in APP_NAMES
+        if name in available and cfg["apps"].get(name, {}).get("enabled")
+    ]
 
 
 def key_required(name):
@@ -305,6 +330,10 @@ def key_required(name):
 
 def restore_supported(name):
     return next((m.get("restore_supported", True) for m in APP_META if m["id"] == name), True)
+
+
+def app_meta(name):
+    return next((m for m in APP_META if m["id"] == name), None)
 
 
 def enabled_destinations(cfg):

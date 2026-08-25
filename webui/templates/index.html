@@ -64,16 +64,18 @@
         <p class="hint">Check the apps you want backed up - each one expands for its URL and API key (find the key in that app's Settings &gt; General).</p>
         <div id="app-list">
           {% for m in app_meta %}
-          <div class="app-card" data-app="{{ m.id }}">
+          <div class="app-card{% if m.status != 'available' %} card-soon{% endif %}" data-app="{{ m.id }}">
             <div class="app-card-head">
               <label class="switch">
-                <input type="checkbox" class="f-enabled">
+                <input type="checkbox" class="f-enabled"{% if m.status != 'available' %} disabled{% endif %}>
                 <span class="slider"></span>
               </label>
               <img class="app-icon" src="{{ url_for('static', filename='icons/' ~ m.icon) }}" alt="" width="22" height="22">
               <h3>{{ m.label }}</h3>
+              {% if m.status != 'available' %}<span class="badge-soon">Coming soon</span>{% endif %}
               <span class="status-dot" data-state="idle"></span>
             </div>
+            {% if m.status == 'available' %}
             <div class="app-card-body hidden">
               <label class="field">
                 <span class="field-label">URL</span>
@@ -103,6 +105,7 @@
                 <span class="test-result"></span>
               </div>
             </div>
+            {% endif %}
           </div>
           {% endfor %}
         </div>
@@ -114,7 +117,7 @@
           <p class="hint">Choose where backups go - enable as many as you like, every enabled destination gets a copy of every backup.</p>
           <div id="destination-list">
             {% for m in destination_meta %}
-            <div class="app-card dest-card{% if m.status != 'available' %} dest-card-soon{% endif %}" data-dest="{{ m.id }}">
+            <div class="app-card dest-card{% if m.status != 'available' %} card-soon{% endif %}" data-dest="{{ m.id }}">
               <div class="app-card-head">
                 <label class="switch">
                   <input type="checkbox" class="d-enabled"{% if m.status != 'available' %} disabled{% endif %}>

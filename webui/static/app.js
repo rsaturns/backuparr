@@ -310,14 +310,17 @@ function appCard(appId) {
 }
 
 function setAppCardExpanded(card, expanded) {
-  card.querySelector(".app-card-body").classList.toggle("hidden", !expanded);
+  const body = card.querySelector(".app-card-body");
+  if (body) body.classList.toggle("hidden", !expanded);
 }
 
 function fillAppCard(appId, cfg) {
   const card = appCard(appId);
   if (!card) return;
   card.querySelector(".f-enabled").checked = !!cfg.enabled;
-  card.querySelector(".f-url").value = cfg.url || "";
+  const urlInput = card.querySelector(".f-url");
+  if (!urlInput) return; // coming_soon app - no body/fields rendered
+  urlInput.value = cfg.url || "";
   card.querySelector(".f-api_key").value = cfg.api_key || "";
   card.querySelectorAll(".f-extra").forEach((input) => {
     input.value = cfg[input.dataset.field] || "";
@@ -327,9 +330,11 @@ function fillAppCard(appId, cfg) {
 
 function readAppCard(appId) {
   const card = appCard(appId);
+  const urlInput = card.querySelector(".f-url");
+  if (!urlInput) return { enabled: false }; // coming_soon app
   const out = {
     enabled: card.querySelector(".f-enabled").checked,
-    url: card.querySelector(".f-url").value.trim(),
+    url: urlInput.value.trim(),
     api_key: card.querySelector(".f-api_key").value.trim(),
   };
   card.querySelectorAll(".f-extra").forEach((input) => {

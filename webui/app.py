@@ -32,6 +32,7 @@ from config_store import (
     DEST_EDITABLE_FIELDS,
     DEST_NAMES,
     DESTINATION_META,
+    app_meta,
     destination_meta,
     key_required,
     load_config,
@@ -378,6 +379,9 @@ def _validate_config(data, cfg):
     for name, app_data in data.get("apps", {}).items():
         if name not in APP_NAMES:
             return f"unknown app: {name}"
+        meta = app_meta(name)
+        if app_data.get("enabled") and meta["status"] != "available":
+            return f"{meta['label']} isn't available yet"
         if app_data.get("enabled") and not app_data.get("url"):
             return f"{name}: a URL is required to enable it"
         if app_data.get("enabled") and key_required(name) and not app_data.get("api_key"):

@@ -761,11 +761,11 @@ code {
 /* -------------------------------------------------------- destinations --- */
 .dest-description { margin: 6px 0 0; }
 
-.dest-card-soon {
+.card-soon {
   opacity: 0.55;
 }
 
-.dest-card-soon .app-card-head h3 { color: var(--text-muted); }
+.card-soon .app-card-head h3 { color: var(--text-muted); }
 
 .badge-soon {
   font-size: 11px;
