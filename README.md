@@ -250,11 +250,11 @@ pick the app, pick a backup (newest first), and confirm.
 ## Notifications
 
 Set **Notify URL** on the Settings tab (`notify_url` in config.json) to
-get a one-line summary POSTed there after every run - something like
-`Backuparr OK: radarr, sonarr` or `Backuparr FAILED: radarr: couldn't
-connect | OK: sonarr`. Paste one URL and Backuparr sends the right kind
-of request automatically - it recognizes a few common webhook shapes by
-the URL itself.
+get a summary POSTed there after every run - one line per app (✅/❌),
+under a 🎉 header if everything succeeded or a ⚠️ header if anything
+failed. Paste one URL and Backuparr sends the right kind of request
+automatically - it recognizes a few common webhook shapes by the URL
+itself.
 
 ### Discord
 

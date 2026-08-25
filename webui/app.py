@@ -23,7 +23,7 @@ import onedrive_oauth
 import rclone_util
 import restore_actions as ra
 import secrets_crypto
-from backup import build_app, humanize_error, notify, run_backup
+from backup import build_app, format_run_message, humanize_error, notify, run_backup
 from config_store import (
     APP_META,
     APP_NAMES,
@@ -264,11 +264,7 @@ def _do_run():
         ok, failed = run_backup(cfg)
         RUN_STATE["ok"] = ok
         RUN_STATE["failed"] = failed
-        notify_url = cfg.get("notify_url")
-        if not failed:
-            notify(notify_url, f"Backuparr OK: {', '.join(ok) or 'none'}")
-        else:
-            notify(notify_url, f"Backuparr FAILED: {'; '.join(failed)} | OK: {', '.join(ok) or 'none'}")
+        notify(cfg.get("notify_url"), format_run_message(ok, failed))
     except Exception as exc:  # unexpected crash, not a per-app failure
         RUN_STATE["failed"] = [f"unexpected error: {exc}"]
         backup_logger.exception("backup run crashed")

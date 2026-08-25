@@ -127,6 +127,15 @@ def notify(notify_url, message, raise_on_error=False):
         log.warning("notify: failed to reach NOTIFY_URL")
 
 
+def format_run_message(ok, failed):
+    """One line per app (✅/❌), with a header reflecting overall status."""
+    header = "🎉 Backuparr completed successfully" if not failed else "⚠️ Backuparr completed with errors"
+    lines = [header, ""]
+    lines += [f"✅ {name}" for name in ok]
+    lines += [f"❌ {item}" for item in failed]
+    return "\n".join(lines)
+
+
 def run_backup(cfg):
     """Run one backup pass for every enabled app, uploading to every
     enabled destination. Returns (ok, failed) - failed entries are
