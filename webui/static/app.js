@@ -95,7 +95,7 @@ function enabledDestinationIds(cfg) {
 
 function destinationsStat(destIds) {
   const div = document.createElement("div");
-  div.className = "overview-stat";
+  div.className = "overview-stat overview-stat-dest";
   const row = document.createElement("div");
   row.className = "overview-dest-icons";
   if (!destIds.length) {

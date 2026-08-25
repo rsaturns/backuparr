@@ -648,6 +648,10 @@ code {
   color: var(--text-muted);
 }
 
+/* Centers the icon row and its "Destinations" label on each other's
+   natural width, so the label re-centers as the icon count changes. */
+.overview-stat-dest { align-items: center; }
+
 .overview-dest-icons {
   display: flex;
   flex-wrap: wrap;
