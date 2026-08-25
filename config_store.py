@@ -12,7 +12,7 @@ import secrets_crypto
 
 CONFIG_PATH = os.environ.get("BACKUPARR_CONFIG", "/config/backuparr/config.json")
 
-APP_NAMES = ["radarr", "sonarr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd"]
+APP_NAMES = ["radarr", "sonarr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "tautulli"]
 
 DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "password": ""}
 
@@ -58,6 +58,7 @@ APP_META = [
         "key_help": "Only if Tdarr's API auth token is enabled",
     },
     {"id": "sabnzbd", "label": "SABnzbd", "icon": "sabnzbd.svg", "key_required": True, "url_placeholder": "http://sabnzbd:8080", "extra_fields": []},
+    {"id": "tautulli", "label": "Tautulli", "icon": "tautulli.svg", "key_required": True, "url_placeholder": "http://tautulli:8181", "extra_fields": []},
 ]
 
 DEST_NAMES = ["local", "gdrive", "onedrive", "dropbox"]

@@ -7,6 +7,7 @@ Usage:
     python restore.py bazarr --bazarr-backup-dir /mnt/bazarr-config/backup
     python restore.py tdarr --yes
     python restore.py sabnzbd
+    python restore.py tautulli
 
 Radarr/Sonarr/Prowlarr restore purely over the API (multipart upload) - the
 app restarts itself once restored. Bazarr needs a local path to its own
@@ -18,7 +19,12 @@ API too, prompting interactively for each Usenet server's password
 (SABnzbd's API never returns the real value - see apps/sabnzbd.py); run
 this from a real terminal so the prompts work, or use --yes to skip both
 confirmation and password prompts (servers are then left without a
-password, to be set manually in Settings > Servers).
+password, to be set manually in Settings > Servers). Tautulli restores
+its database and config separately over the API, each as a multipart
+upload; a config restore makes Tautulli restart itself.
+
+Note: Profilarr is backed up but not restorable from here at all - its
+own restore has no public API. See the README's Profilarr note.
 
 Settings (URLs, API keys, destinations) come from config.json - the same
 config the web UI edits - not environment variables. If more than one
@@ -44,7 +50,7 @@ def confirm(message, assume_yes):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("app", choices=["radarr", "sonarr", "prowlarr", "bazarr", "tdarr", "sabnzbd"])
+    parser.add_argument("app", choices=["radarr", "sonarr", "prowlarr", "bazarr", "tdarr", "sabnzbd", "tautulli"])
     parser.add_argument("--destination", choices=DEST_NAMES, help="Which destination to restore from (default: the only enabled one, if there's just one)")
     parser.add_argument("--file", help="Specific backup filename to restore (default: newest)")
     parser.add_argument("--bazarr-backup-dir", help="Local path to Bazarr's config/backup folder (required for bazarr)")
@@ -108,6 +114,14 @@ def main():
                 return 1
             ra.restore_tdarr(app_cfg, tmp_dir, local_zip)
             print("tdarr: restore complete.")
+
+        elif args.app == "tautulli":
+            if not confirm(f"Restore tautulli from {filename}? This restarts tautulli if config.ini is included.", args.yes):
+                print("Aborted.")
+                return 1
+            summary = ra.restore_tautulli(app_cfg, tmp_dir, local_zip)
+            for part, message in summary.items():
+                print(f"tautulli: {part} restored - {message}")
 
         elif args.app == "sabnzbd":
             config = ra.load_sabnzbd_config(tmp_dir, local_zip)

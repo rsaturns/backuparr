@@ -15,6 +15,7 @@ from apps.prowlarr import ProwlarrApp
 from apps.radarr import RadarrApp
 from apps.sabnzbd import SabnzbdApp
 from apps.sonarr import SonarrApp
+from apps.tautulli import TautulliApp
 from apps.tdarr import TdarrApp
 
 UPLOAD_RESTORE_APPS = {"radarr": RadarrApp, "sonarr": SonarrApp, "prowlarr": ProwlarrApp}
@@ -79,6 +80,12 @@ def restore_tdarr(app_cfg, tmp_dir, local_zip):
     extract_dir = extract_zip(local_zip, os.path.join(tmp_dir, "extracted"))
     app = TdarrApp(app_cfg["url"], api_key=app_cfg.get("api_key") or None)
     app.restore(extract_dir)
+
+
+def restore_tautulli(app_cfg, tmp_dir, local_zip):
+    extract_dir = extract_zip(local_zip, os.path.join(tmp_dir, "extracted"))
+    app = TautulliApp(app_cfg["url"], app_cfg["api_key"])
+    return app.restore(extract_dir)
 
 
 def load_sabnzbd_config(tmp_dir, local_zip):

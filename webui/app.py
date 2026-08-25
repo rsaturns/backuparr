@@ -661,6 +661,10 @@ def api_restore(dest_id, app_name):
             ra.restore_tdarr(app_cfg, tmp_dir, local_zip)
             return jsonify({"ok": True, "message": "tdarr restore complete", "file": filename})
 
+        if app_name == "tautulli":
+            summary = ra.restore_tautulli(app_cfg, tmp_dir, local_zip)
+            return jsonify({"ok": True, "message": "tautulli restore uploaded", "file": filename, "summary": summary})
+
         if app_name == "sabnzbd":
             config = ra.load_sabnzbd_config(tmp_dir, local_zip)
             passwords = data.get("passwords", {})

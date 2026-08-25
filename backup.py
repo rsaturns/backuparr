@@ -27,6 +27,7 @@ from apps.prowlarr import ProwlarrApp
 from apps.radarr import RadarrApp
 from apps.sabnzbd import SabnzbdApp
 from apps.sonarr import SonarrApp
+from apps.tautulli import TautulliApp
 from apps.tdarr import TdarrApp
 from config_store import enabled_apps, enabled_destinations
 
@@ -86,6 +87,8 @@ def build_app(name, app_cfg):
         return TdarrApp(app_cfg["url"], api_key=app_cfg.get("api_key") or None)
     if name == "sabnzbd":
         return SabnzbdApp(app_cfg["url"], app_cfg["api_key"])
+    if name == "tautulli":
+        return TautulliApp(app_cfg["url"], app_cfg["api_key"])
     raise ValueError(f"Unknown app: {name}")
 
 
