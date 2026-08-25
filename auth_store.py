@@ -5,18 +5,22 @@ forgotten password is then just "delete this file and restart" without
 touching any app/destination settings, and it never round-trips through the
 generic config load/save path.
 
-Password hashing is Werkzeug's generate_password_hash/check_password_hash -
-already a Flask dependency, no extra requirement - which defaults to a
-salted scrypt hash.
+Password hashing is Argon2id (via argon2-cffi) - OWASP's current primary
+recommendation over scrypt/bcrypt/PBKDF2, since its hybrid data-dependent/
+-independent memory access resists both GPU cracking and timing side-
+channels. PasswordHasher()'s defaults (m=64MiB, t=3, p=4) are already one
+of OWASP's listed acceptable configurations, so nothing here overrides them.
 """
 import hmac
 import json
 import os
 import tempfile
 
-from werkzeug.security import check_password_hash, generate_password_hash
+from argon2 import PasswordHasher
+from argon2.exceptions import InvalidHashError, VerifyMismatchError
 
 AUTH_PATH = os.environ.get("BACKUPARR_AUTH", "/config/backuparr/auth.json")
+_hasher = PasswordHasher()
 
 
 def has_credentials():
@@ -29,7 +33,7 @@ def _load():
 
 
 def set_credentials(username, password):
-    data = {"username": username, "password_hash": generate_password_hash(password)}
+    data = {"username": username, "password_hash": _hasher.hash(password)}
     auth_dir = os.path.dirname(AUTH_PATH)
     os.makedirs(auth_dir, exist_ok=True)
     # Unique tmp filename, not a fixed "<path>.tmp" - see config_store.save_config
@@ -54,5 +58,9 @@ def verify_password(username, password):
     # password is the expensive part, so a plain `==` on the username alone
     # would let an attacker probe for valid usernames faster.
     valid_user = hmac.compare_digest(username, data.get("username", ""))
-    valid_pass = check_password_hash(data.get("password_hash", ""), password)
+    try:
+        _hasher.verify(data.get("password_hash", ""), password)
+        valid_pass = True
+    except (VerifyMismatchError, InvalidHashError):
+        valid_pass = False
     return valid_user and valid_pass
