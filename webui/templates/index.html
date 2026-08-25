@@ -154,15 +154,11 @@
                   <button type="button" class="btn btn-ghost btn-sm setup-guide-btn" data-dest="{{ m.id }}">Setup guide</button>
                 </div>
                 {% elif m.id == 'onedrive' %}
-                <label class="field">
-                  <span class="field-label">Client ID</span>
-                  <input type="text" class="d-field" data-field="client_id" autocomplete="off">
-                </label>
-                <label class="field">
-                  <span class="field-label">Client Secret</span>
-                  <input type="password" class="d-field" data-field="client_secret" autocomplete="off">
-                </label>
                 <p id="onedrive-status" class="hint">Not connected yet.</p>
+                <label class="field" id="onedrive-paste-field">
+                  <span class="field-label">Token from <code>rclone authorize onedrive</code></span>
+                  <textarea id="onedrive-token-input" rows="3" placeholder="Paste the output here"></textarea>
+                </label>
                 <div class="app-card-actions">
                   <button type="button" class="btn btn-ghost btn-sm" id="onedrive-connect-btn">Connect OneDrive</button>
                   <button type="button" class="btn btn-ghost btn-sm hidden" id="onedrive-disconnect-btn">Disconnect</button>

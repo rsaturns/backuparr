@@ -65,9 +65,7 @@ DEFAULT_DEST = {
     "dropbox": {"enabled": False},
     "onedrive": {
         "enabled": False,
-        "client_id": "",
-        "client_secret": "",
-        "refresh_token": "",
+        "token": "",
         "drive_id": "",
         "drive_type": "",
         "item_id": "",
@@ -76,14 +74,14 @@ DEFAULT_DEST = {
 
 # Fields the generic POST /api/config can write per destination. Notably
 # excludes gdrive's refresh_token/folder_id/folder_name and onedrive's
-# refresh_token/drive_id/drive_type/item_id - those are only ever set by the
-# dedicated OAuth routes in webui/app.py, so a POST to the general settings
-# form can't forge a connected state.
+# token/drive_id/drive_type/item_id - those are only ever set by the
+# dedicated OAuth/connect routes in webui/app.py, so a POST to the general
+# settings form can't forge a connected state.
 DEST_EDITABLE_FIELDS = {
     "local": {"enabled", "path"},
     "gdrive": {"enabled", "client_id", "client_secret"},
     "dropbox": {"enabled"},
-    "onedrive": {"enabled", "client_id", "client_secret"},
+    "onedrive": {"enabled"},
 }
 
 # Drives the Settings > Destinations card generically. "coming_soon" ones
@@ -169,49 +167,32 @@ DESTINATION_META = [
         "label": "Microsoft OneDrive",
         "icon": "microsoft-onedrive.svg",
         "status": "available",
-        "description": "Backed up to a dedicated app folder in your personal OneDrive. Click-through OAuth - no rclone config, no terminal. Personal Microsoft accounts only, not work/school (Microsoft 365) accounts.",
+        "description": "Backed up to a dedicated app folder in your personal OneDrive. Uses rclone's own built-in Microsoft app - no Azure account, no app registration. Personal Microsoft accounts only, not work/school (Microsoft 365) accounts.",
         "setup_help": {
             "title": "Connect OneDrive",
-            "intro": "Microsoft requires every app to have its own registered app - a one-time, ~5 minute setup in the Microsoft Entra admin center. This connects personal Microsoft accounts only.",
+            "intro": "Uses rclone's own built-in Microsoft app, so there's no Azure account or app registration to set up - just run one command on any computer with a browser (it doesn't need to be this server).",
             "steps": [
                 {
-                    "text": "Most personal Microsoft accounts don't have a directory yet, which Microsoft requires before registering any new app. If yours already does (e.g. from Microsoft 365, Azure, or a previous developer program signup), skip this - otherwise join the free Microsoft 365 Developer Program first (no credit card required).",
-                    "link": {"label": "Microsoft 365 Developer Program", "url": "https://developer.microsoft.com/en-us/microsoft-365/dev-program"},
+                    "text": "Download rclone (a single binary, no install needed) on any computer with a web browser - your own laptop is fine, it doesn't have to be wherever Backuparr runs.",
+                    "link": {"label": "Download rclone", "url": "https://rclone.org/downloads/"},
                 },
                 {
-                    "text": "In the Microsoft Entra admin center, go to App registrations and click New registration.",
-                    "link": {"label": "App registrations", "url": "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade/quickStartType//sourceType/Microsoft_AAD_IAM"},
-                },
-                {
-                    "text": "Give it any name. Under Supported account types, choose \"Personal Microsoft accounts only\" - this is what restricts sign-in to personal accounts.",
+                    "text": "Open a terminal there and run:",
+                    "code": "rclone authorize onedrive",
                     "link": None,
                 },
                 {
-                    "text": "Under Redirect URI, choose platform \"Web\" and paste the redirect URI shown below, exactly as shown. Click Register.",
+                    "text": "It prints a link - open it in your browser, sign in with your personal Microsoft account, and approve access.",
                     "link": None,
                 },
                 {
-                    "text": "On the app's Overview page, copy the \"Application (client) ID\" - you'll paste it below.",
-                    "link": None,
-                },
-                {
-                    "text": "Go to Certificates & secrets, click New client secret, give it a description, and pick the longest expiry offered. Copy the secret's Value immediately - Microsoft only shows it once. Paste both the Client ID and this secret into the fields below.",
-                    "link": None,
-                },
-                {
-                    "text": "Go to API permissions and confirm (or add) these Microsoft Graph delegated permissions, then save and click \"Connect OneDrive\" below:",
-                    "checklist": [
-                        "Files.ReadWrite.AppFolder",
-                        "offline_access",
-                    ],
+                    "text": "Back in the terminal, rclone prints a block starting with \"Paste the following into your remote machine --->\". Copy that whole block (or just the line in the middle - either works) and paste it below, then click \"Connect OneDrive\".",
                     "link": None,
                 },
             ],
             "links": [
-                {"label": "Microsoft 365 Developer Program", "url": "https://developer.microsoft.com/en-us/microsoft-365/dev-program"},
-                {"label": "Microsoft Entra admin center - App registrations", "url": "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade/quickStartType//sourceType/Microsoft_AAD_IAM"},
-                {"label": "Microsoft's guide to registering an app", "url": "https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app"},
-                {"label": "Microsoft's docs on the OneDrive app folder", "url": "https://learn.microsoft.com/en-us/graph/onedrive-sharepoint-appfolder"},
+                {"label": "rclone downloads", "url": "https://rclone.org/downloads/"},
+                {"label": "rclone's remote setup docs", "url": "https://rclone.org/remote_setup/"},
             ],
         },
     },

@@ -98,23 +98,22 @@ delete work, you just never have to touch its config file.
 
 ### OneDrive
 
-Connected entirely from the web UI, same pattern as Google Drive. Microsoft
-requires its own one-time app registration too, and there's one deliberate
-scoping choice: this only supports **personal** Microsoft accounts, not
-work/school (Microsoft 365) accounts - the OAuth flow itself is restricted
-to personal accounts at sign-in, not just documented that way.
+Uses rclone's own built-in Microsoft app instead of a Backuparr-hosted OAuth
+flow - Microsoft has required every *new* app registration to live in a
+directory since June 2024, which most personal Microsoft accounts (and not
+everyone qualifies for the free ways to get one) don't have. rclone's app
+predates that requirement, so there's no Azure account or app registration
+needed at all. Scoped to **personal** Microsoft accounts only, not
+work/school (Microsoft 365) ones.
 
-Since June 2024, Microsoft requires every app to be registered in a
-directory - most personal Microsoft accounts don't have one yet. If yours
-doesn't, the Setup guide's first step points at the free Microsoft 365
-Developer Program (no credit card required) to get one before continuing.
-
-1. Click **Setup guide** on the OneDrive card - it walks through registering
-   an app in the Microsoft Entra admin center and shows the exact redirect
-   URI to register.
-2. Paste the Client ID and Client Secret it gives you into the two fields,
-   then **Save settings**.
-3. Click **Connect OneDrive** and approve the consent screen.
+1. On any computer with a web browser - your own laptop is fine, it doesn't
+   need to be wherever Backuparr runs - [download rclone](https://rclone.org/downloads/)
+   (a single binary, no install) and run `rclone authorize onedrive`.
+2. It opens/prints a link - sign in with your personal Microsoft account and
+   approve access.
+3. Copy the block rclone prints starting with "Paste the following into your
+   remote machine --->" and paste it into the OneDrive card in **Settings**,
+   then click **Connect OneDrive**.
 
 There's no folder picker: Backuparr requests the `Files.ReadWrite.AppFolder`
 scope, which Microsoft Graph resolves to a single dedicated app folder
@@ -209,8 +208,8 @@ if you'd rather):
 | `destinations.local.enabled/path` | Local storage - path defaults to `/config/backuparr/backups` if blank |
 | `destinations.gdrive.enabled/client_id/client_secret` | Google Drive OAuth client, set via the Setup guide |
 | `destinations.gdrive.refresh_token/folder_id/folder_name` | Set automatically by the Connect/Choose folder buttons - don't hand-edit |
-| `destinations.onedrive.enabled/client_id/client_secret` | OneDrive OAuth app, set via the Setup guide |
-| `destinations.onedrive.refresh_token/drive_id/drive_type/item_id` | Set automatically by the Connect button - don't hand-edit |
+| `destinations.onedrive.enabled` | Whether the destination is active |
+| `destinations.onedrive.token/drive_id/drive_type/item_id` | Set automatically by pasting a token from `rclone authorize onedrive` - don't hand-edit |
 | `retention_days` | Delete backups older than this, per app per destination (default 7) |
 | `cron_schedule` | Standard 5-field cron syntax (default `0 3 * * *`) |
 | `notify_url` | Optional: POST a plain-text summary here after every run (e.g. an ntfy.sh topic) |

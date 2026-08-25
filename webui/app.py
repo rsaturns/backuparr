@@ -137,7 +137,7 @@ def api_meta():
     return jsonify(APP_META)
 
 
-def _validate_config(data):
+def _validate_config(data, cfg):
     if "retention_days" in data:
         try:
             if int(data["retention_days"]) < 1:
@@ -162,19 +162,19 @@ def _validate_config(data):
             return f"{meta['label']} isn't available yet"
         if name == "gdrive" and dest_data.get("enabled") and not dest_data.get("client_id"):
             return "Google Drive: a Client ID is required to enable it (paste it in first, then Connect)"
-        if name == "onedrive" and dest_data.get("enabled") and not dest_data.get("client_id"):
-            return "OneDrive: a Client ID is required to enable it (paste it in first, then Connect)"
+        if name == "onedrive" and dest_data.get("enabled") and not cfg["destinations"]["onedrive"].get("token"):
+            return "OneDrive: connect it first (paste a token from `rclone authorize onedrive`) before enabling"
     return None
 
 
 @app.post("/api/config")
 def api_set_config():
     data = request.get_json(force=True, silent=True) or {}
-    error = _validate_config(data)
+    cfg = load_config()
+    error = _validate_config(data, cfg)
     if error:
         return jsonify({"error": error}), 400
 
-    cfg = load_config()
     for key in ("retention_days", "cron_schedule", "notify_url", "bazarr_backup_dir"):
         if key in data:
             cfg[key] = data[key]
@@ -249,8 +249,8 @@ def api_test_destination(dest_id):
             return jsonify({"ok": True, "message": f"connected, backing up to \"{folder}\""})
 
         if dest_id == "onedrive":
-            if not dest_cfg.get("refresh_token"):
-                return jsonify({"ok": False, "message": "Not connected yet - click Connect OneDrive first"})
+            if not dest_cfg.get("token"):
+                return jsonify({"ok": False, "message": "Not connected yet - paste a token from `rclone authorize onedrive` first"})
             cfg["destinations"]["onedrive"] = dest_cfg
             destination_util.sync(cfg)
             root = destination_util.remote_root("onedrive", dest_cfg)
@@ -565,63 +565,43 @@ def api_gdrive_disconnect():
     return jsonify({"ok": True})
 
 
-# ----------------------------------------------------- onedrive oauth ----
-def _onedrive_redirect_uri():
-    return request.host_url.rstrip("/") + "/api/destinations/onedrive/oauth/callback"
-
-
-def _onedrive_redirect_with_error(message):
-    return redirect("/?onedrive_error=" + urllib.parse.quote(str(message)))
-
-
-@app.get("/api/destinations/onedrive/oauth/start")
-def api_onedrive_oauth_start():
-    cfg = load_config()
-    onedrive_cfg = cfg["destinations"]["onedrive"]
-    if not onedrive_cfg.get("client_id") or not onedrive_cfg.get("client_secret"):
-        return _onedrive_redirect_with_error("Save a Client ID and Client Secret first")
-    state = _oauth_state_new()
-    url = onedrive_oauth.build_auth_url(onedrive_cfg["client_id"], _onedrive_redirect_uri(), state)
-    return redirect(url)
-
-
-@app.get("/api/destinations/onedrive/oauth/callback")
-def api_onedrive_oauth_callback():
-    error = request.args.get("error")
-    if error:
-        return _onedrive_redirect_with_error(request.args.get("error_description") or error)
-
-    state = request.args.get("state", "")
-    code = request.args.get("code")
-    if not code or not _oauth_state_consume(state):
-        return _onedrive_redirect_with_error("invalid or expired authorization request, try connecting again")
-
-    cfg = load_config()
-    onedrive_cfg = cfg["destinations"]["onedrive"]
+# --------------------------------------------------------- onedrive ----
+@app.post("/api/destinations/onedrive/connect")
+def api_onedrive_connect():
+    """Takes the token blob the user pasted from a locally-run
+    `rclone authorize onedrive`, validates it, and does one Graph API call
+    to resolve the app folder's id/drive_id/drive_type - everything
+    sync_rclone_remote needs. No redirect/callback dance of our own since
+    the OAuth exchange already happened wherever the user ran that
+    command."""
+    data = request.get_json(force=True, silent=True) or {}
     try:
-        tokens = onedrive_oauth.exchange_code(
-            onedrive_cfg["client_id"], onedrive_cfg["client_secret"], _onedrive_redirect_uri(), code
-        )
-        approot = onedrive_oauth.approot_metadata(tokens["access_token"])
+        token_json, access_token = onedrive_oauth.parse_token_blob(data.get("token_blob", ""))
+        approot = onedrive_oauth.approot_metadata(access_token)
     except onedrive_oauth.OneDriveOAuthError as exc:
-        log.exception("onedrive oauth exchange failed")
-        return _onedrive_redirect_with_error(str(exc))
+        return jsonify({"error": str(exc)}), 400
 
-    onedrive_cfg["refresh_token"] = tokens["refresh_token"]
+    cfg = load_config()
+    onedrive_cfg = cfg["destinations"]["onedrive"]
+    onedrive_cfg["token"] = token_json
     onedrive_cfg["drive_id"] = approot["parentReference"]["driveId"]
     onedrive_cfg["drive_type"] = approot["parentReference"]["driveType"]
     onedrive_cfg["item_id"] = approot["id"]
     onedrive_cfg["enabled"] = True
     save_config(cfg)
-    destination_util.sync(cfg)
-    return redirect("/?onedrive=connected")
+    # force=True: this is an explicit (re)connect with a freshly pasted
+    # token, so it should win over whatever's already in rclone.conf -
+    # unlike the routine sync() path, which deliberately leaves an existing
+    # token alone (see sync_rclone_remote's docstring).
+    onedrive_oauth.sync_rclone_remote(onedrive_cfg, force=True)
+    return jsonify({"ok": True})
 
 
 @app.post("/api/destinations/onedrive/disconnect")
 def api_onedrive_disconnect():
     cfg = load_config()
     cfg["destinations"]["onedrive"].update({
-        "enabled": False, "refresh_token": "", "drive_id": "", "drive_type": "", "item_id": "",
+        "enabled": False, "token": "", "drive_id": "", "drive_type": "", "item_id": "",
     })
     save_config(cfg)
     destination_util.sync(cfg)

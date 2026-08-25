@@ -538,42 +538,44 @@ async function disconnectGdrive() {
 }
 
 // ----------------------------------------------------------- onedrive ----
-function onedriveRedirectUri() {
-  return `${window.location.origin}/api/destinations/onedrive/oauth/callback`;
-}
-
-async function connectOnedrive() {
-  // Same reasoning as connectGdrive: client_id/secret have to be saved
-  // before Microsoft will redirect back here with anything useful.
-  const resultEl = document.getElementById("save-result");
-  resultEl.textContent = "Saving before connecting...";
-  resultEl.className = "save-result";
-  try {
-    await apiFetch("/api/config", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(collectConfig()),
-    });
-    snapshotSettingsState();
-    window.location.href = "/api/destinations/onedrive/oauth/start";
-  } catch (e) {
-    resultEl.textContent = e.message;
-    resultEl.className = "save-result fail";
-    toast(`Could not save before connecting: ${e.message}`, "fail");
-  }
-}
-
 function updateOnedriveUI(onedriveCfg) {
   const statusEl = document.getElementById("onedrive-status");
   const connectBtn = document.getElementById("onedrive-connect-btn");
   const disconnectBtn = document.getElementById("onedrive-disconnect-btn");
+  const pasteField = document.getElementById("onedrive-paste-field");
   if (!statusEl) return;
-  const connected = !!onedriveCfg.refresh_token;
+  const connected = !!onedriveCfg.token;
   connectBtn.classList.toggle("hidden", connected);
   disconnectBtn.classList.toggle("hidden", !connected);
+  if (pasteField) pasteField.classList.toggle("hidden", connected);
   statusEl.textContent = connected
     ? "Connected - backing up to your OneDrive app folder (Apps/Backuparr)."
     : "Not connected yet.";
+}
+
+async function connectOnedrive() {
+  const input = document.getElementById("onedrive-token-input");
+  const btn = document.getElementById("onedrive-connect-btn");
+  const tokenBlob = input.value.trim();
+  if (!tokenBlob) {
+    toast("Paste the token `rclone authorize onedrive` printed first", "fail");
+    return;
+  }
+  btn.disabled = true;
+  try {
+    await apiFetch("/api/destinations/onedrive/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token_blob: tokenBlob }),
+    });
+    input.value = "";
+    toast("OneDrive connected", "ok");
+    await loadConfig();
+  } catch (e) {
+    toast(`Could not connect: ${e.message}`, "fail");
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 async function disconnectOnedrive() {
@@ -602,6 +604,15 @@ function openSetupGuide(destId) {
     const li = document.createElement("li");
     const text = typeof step === "string" ? step : step.text;
     li.appendChild(document.createTextNode(text));
+    const code = typeof step === "object" ? step.code : null;
+    if (code) {
+      const pre = document.createElement("pre");
+      pre.className = "guide-step-code";
+      const codeEl = document.createElement("code");
+      codeEl.textContent = code;
+      pre.appendChild(codeEl);
+      li.appendChild(pre);
+    }
     const checklist = typeof step === "object" ? step.checklist : null;
     if (checklist && checklist.length) {
       const ul = document.createElement("ul");
@@ -629,9 +640,6 @@ function openSetupGuide(destId) {
   const redirectBlock = document.getElementById("setup-guide-redirect");
   if (destId === "gdrive") {
     document.getElementById("setup-guide-redirect-input").value = gdriveRedirectUri();
-    redirectBlock.classList.remove("hidden");
-  } else if (destId === "onedrive") {
-    document.getElementById("setup-guide-redirect-input").value = onedriveRedirectUri();
     redirectBlock.classList.remove("hidden");
   } else {
     redirectBlock.classList.add("hidden");
@@ -1200,21 +1208,6 @@ function handleGdriveRedirect() {
   document.querySelector('.tab-btn[data-tab="settings"]').click();
 }
 
-function handleOnedriveRedirect() {
-  const params = new URLSearchParams(window.location.search);
-  const error = params.get("onedrive_error");
-  const connected = params.get("onedrive");
-  if (!error && !connected) return;
-
-  if (error) {
-    toast(`OneDrive: ${decodeURIComponent(error)}`, "fail");
-  } else if (connected === "connected") {
-    toast("OneDrive connected", "ok");
-  }
-  window.history.replaceState({}, "", window.location.pathname);
-  document.querySelector('.tab-btn[data-tab="settings"]').click();
-}
-
 async function init() {
   initTabs();
   initTheme();
@@ -1248,7 +1241,6 @@ async function init() {
   refreshRunStatus();
   loadOverview();
   handleGdriveRedirect();
-  handleOnedriveRedirect();
 }
 
 document.addEventListener("DOMContentLoaded", init);

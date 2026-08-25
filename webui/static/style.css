@@ -312,7 +312,8 @@ body {
 input[type="text"],
 input[type="password"],
 input[type="number"],
-select {
+select,
+textarea {
   width: 100%;
   font: inherit;
   padding: 8px 10px;
@@ -322,7 +323,13 @@ select {
   color: var(--text);
 }
 
-input:focus, select:focus {
+textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  resize: vertical;
+}
+
+input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
@@ -816,6 +823,17 @@ code {
   font-size: 14px;
   color: var(--text-muted);
   line-height: 1.5;
+}
+
+.guide-step-code {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  overflow-x: auto;
 }
 
 .guide-links {
