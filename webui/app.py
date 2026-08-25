@@ -82,10 +82,44 @@ app.config.update(
     PERMANENT_SESSION_LIFETIME=timedelta(days=30),
 )
 
+
+@app.after_request
+def _security_headers(response):
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "same-origin"
+    return response
+
 # Single in-flight OAuth attempt is all a personal, single-admin tool needs -
 # CSRF-protects the callback without a real session store. (state -> ts)
 _OAUTH_STATE = {}
 _OAUTH_STATE_TTL = 600
+
+# Throttles repeated /api/login attempts per source IP - Argon2id's own cost
+# adds some friction, but nothing else stops sustained guessing. In-memory,
+# same as _OAUTH_STATE above: ip -> (failure_count, last_failure_ts).
+_LOGIN_FAILURES = {}
+_LOGIN_FAILURE_TTL = 3600
+_LOGIN_LOCKOUT_THRESHOLD = 5
+_LOGIN_LOCKOUT_BASE_SECONDS = 5
+_LOGIN_LOCKOUT_MAX_SECONDS = 300
+
+
+def _login_lockout_remaining(ip):
+    now = time.time()
+    for key, (_, last_fail) in list(_LOGIN_FAILURES.items()):
+        if now - last_fail > _LOGIN_FAILURE_TTL:
+            del _LOGIN_FAILURES[key]
+    count, last_fail = _LOGIN_FAILURES.get(ip, (0, 0))
+    if count < _LOGIN_LOCKOUT_THRESHOLD:
+        return 0
+    lockout = min(_LOGIN_LOCKOUT_BASE_SECONDS * (2 ** (count - _LOGIN_LOCKOUT_THRESHOLD)), _LOGIN_LOCKOUT_MAX_SECONDS)
+    return max(0, lockout - (now - last_fail))
+
+
+def _login_record_failure(ip):
+    count, _ = _LOGIN_FAILURES.get(ip, (0, 0))
+    _LOGIN_FAILURES[ip] = (count + 1, time.time())
 
 
 # ---------------------------------------------------------------- auth ----
@@ -156,11 +190,18 @@ def login_page():
 
 @app.post("/api/login")
 def api_login():
+    ip = request.remote_addr or "unknown"
+    wait = _login_lockout_remaining(ip)
+    if wait:
+        return jsonify({"error": f"Too many failed attempts - try again in {int(wait) + 1}s"}), 429
+
     data = request.get_json(force=True, silent=True) or {}
     username = (data.get("username") or "").strip()
     password = data.get("password") or ""
     if not auth_store.verify_password(username, password):
+        _login_record_failure(ip)
         return jsonify({"error": "Incorrect username or password"}), 401
+    _LOGIN_FAILURES.pop(ip, None)
     session.permanent = True
     session["authed"] = True
     return jsonify({"ok": True})
