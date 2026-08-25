@@ -1,16 +1,3 @@
-# Add this service block into your existing stack's docker-compose.yml
-# (the same file that defines radarr/sonarr/bazarr/prowlarr/sabnzbd) rather
-# than running it as a separate project - it needs to be on the same
-# Compose network to reach the other containers by name. Tdarr is the one
-# exception if it runs with network_mode: host - address it by the host's
-# LAN IP instead of a container name in that case.
-#
-# Everything app-specific (URLs, API keys, which apps/destinations are
-# enabled, schedule) is configured through the web UI at :8990 the first
-# time you start this, not through env vars here - config.json on the
-# ./data volume is what persists it across restarts. Local storage works
-# out of the box with zero setup; Google Drive is connected from the
-# Settings tab itself (click Connect, no files to copy in by hand).
 services:
   backuparr:
     build: /path/to/backuparr
