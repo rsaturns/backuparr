@@ -1034,7 +1034,10 @@ let RESTORE_STATE = { app: null, file: null, servers: [] };
 function initRestoreAppOptions() {
   const select = document.getElementById("r-app");
   if (select.options.length) return;
-  APP_META.forEach((m) => {
+  // restore_supported defaults to true when absent - only apps that
+  // explicitly opt out (e.g. Profilarr, whose own restore has no public
+  // API) are left off this list.
+  APP_META.filter((m) => m.restore_supported !== false).forEach((m) => {
     const opt = document.createElement("option");
     opt.value = m.id;
     opt.textContent = m.label;

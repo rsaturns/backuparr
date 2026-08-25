@@ -22,6 +22,7 @@ import requests
 import destination_util
 import rclone_util
 from apps.bazarr import BazarrApp
+from apps.profilarr import ProfilarrApp
 from apps.prowlarr import ProwlarrApp
 from apps.radarr import RadarrApp
 from apps.sabnzbd import SabnzbdApp
@@ -72,6 +73,8 @@ def build_app(name, app_cfg):
         return SonarrApp(app_cfg["url"], app_cfg["api_key"])
     if name == "prowlarr":
         return ProwlarrApp(app_cfg["url"], app_cfg["api_key"])
+    if name == "profilarr":
+        return ProfilarrApp(app_cfg["url"], app_cfg["api_key"])
     if name == "bazarr":
         return BazarrApp(
             app_cfg["url"],

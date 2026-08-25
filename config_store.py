@@ -12,7 +12,7 @@ import secrets_crypto
 
 CONFIG_PATH = os.environ.get("BACKUPARR_CONFIG", "/config/backuparr/config.json")
 
-APP_NAMES = ["radarr", "sonarr", "prowlarr", "bazarr", "tdarr", "sabnzbd"]
+APP_NAMES = ["radarr", "sonarr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd"]
 
 DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "password": ""}
 
@@ -22,6 +22,19 @@ APP_META = [
     {"id": "radarr", "label": "Radarr", "icon": "radarr.svg", "key_required": True, "url_placeholder": "http://radarr:7878", "extra_fields": []},
     {"id": "sonarr", "label": "Sonarr", "icon": "sonarr.svg", "key_required": True, "url_placeholder": "http://sonarr:8989", "extra_fields": []},
     {"id": "prowlarr", "label": "Prowlarr", "icon": "prowlarr.svg", "key_required": True, "url_placeholder": "http://prowlarr:9696", "extra_fields": []},
+    {
+        "id": "profilarr",
+        "label": "Profilarr",
+        "icon": "profilarr.svg",
+        "key_required": True,
+        "url_placeholder": "http://profilarr:6868",
+        "extra_fields": [],
+        # Profilarr's own restore is a browser-session-only action that
+        # requires a container restart to apply - no public API for it, so
+        # Backuparr can back it up but can't offer a restore button. See
+        # the README's Profilarr note.
+        "restore_supported": False,
+    },
     {
         "id": "bazarr",
         "label": "Bazarr",
@@ -286,6 +299,10 @@ def enabled_apps(cfg):
 
 def key_required(name):
     return next((m["key_required"] for m in APP_META if m["id"] == name), True)
+
+
+def restore_supported(name):
+    return next((m.get("restore_supported", True) for m in APP_META if m["id"] == name), True)
 
 
 def enabled_destinations(cfg):
