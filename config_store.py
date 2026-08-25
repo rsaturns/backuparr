@@ -108,6 +108,7 @@ DESTINATION_META = [
     {
         "id": "local",
         "label": "Local storage",
+        "icon": "local.svg",
         "status": "available",
         "description": "Written straight to this container's own volume - nothing to connect. Download any backup from the History tab.",
         "setup_help": {

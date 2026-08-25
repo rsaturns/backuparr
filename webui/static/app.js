@@ -85,12 +85,50 @@ function destLabel(destId) {
   return m ? m.label : destId;
 }
 
+// Short enough to sit under a small icon without wrapping - destLabel()'s
+// full names ("Microsoft OneDrive") are too long for that spot.
+const SHORT_DEST_LABEL = { local: "Local", gdrive: "Google Drive", onedrive: "OneDrive", dropbox: "Dropbox" };
+
 function enabledDestinationIds(cfg) {
   // Order from DESTINATION_META (a stable, intentionally-ordered list), not
   // Object.keys(cfg.destinations) - Flask's jsonify() sorts object keys
   // alphabetically, which would put "gdrive" before "local" in the UI.
   const ids = DESTINATION_META.length ? DESTINATION_META.map((m) => m.id) : Object.keys(cfg.destinations || {});
   return ids.filter((id) => (cfg.destinations || {})[id] && cfg.destinations[id].enabled);
+}
+
+// One icon + short label per enabled destination, replacing what used to
+// be a plain comma-separated text list.
+function destinationsStat(destIds) {
+  const div = document.createElement("div");
+  div.className = "overview-stat";
+  const row = document.createElement("div");
+  row.className = "overview-dest-icons";
+  if (!destIds.length) {
+    row.textContent = "None configured";
+  } else {
+    destIds.forEach((id) => {
+      const m = DESTINATION_META.find((d) => d.id === id);
+      const item = document.createElement("div");
+      item.className = "overview-dest-icon";
+      if (m && m.icon) {
+        const img = document.createElement("img");
+        img.className = "app-icon";
+        img.src = `/static/icons/${m.icon}`;
+        img.alt = "";
+        item.appendChild(img);
+      }
+      const span = document.createElement("span");
+      span.textContent = SHORT_DEST_LABEL[id] || destLabel(id);
+      item.appendChild(span);
+      row.appendChild(item);
+    });
+  }
+  const label = document.createElement("div");
+  label.className = "stat-label";
+  label.textContent = "Destinations";
+  div.append(row, label);
+  return div;
 }
 
 async function loadOverview() {
@@ -132,13 +170,12 @@ async function loadOverview() {
     });
 
     summaryEl.innerHTML = "";
-    const stats = [
+    const textStats = [
       { label: "Enabled services", value: `${enabledIds.length} / ${allIds.length}` },
-      { label: "Destinations", value: destIds.length ? destIds.map(destLabel).join(", ") : "None configured" },
       { label: "Cron schedule", value: cfg.cron_schedule || "-" },
       { label: "Retention", value: `${cfg.retention_days || 7} days` },
     ];
-    stats.forEach((s) => {
+    const [enabledStat, cronStat, retentionStat] = textStats.map((s) => {
       const div = document.createElement("div");
       div.className = "overview-stat";
       const value = document.createElement("div");
@@ -148,8 +185,9 @@ async function loadOverview() {
       label.className = "stat-label";
       label.textContent = s.label;
       div.append(value, label);
-      summaryEl.appendChild(div);
+      return div;
     });
+    summaryEl.append(enabledStat, destinationsStat(destIds), cronStat, retentionStat);
 
     if (!enabledIds.length) {
       appsEl.innerHTML = '<p class="overview-empty">No services enabled yet - head to Settings to add one.</p>';
