@@ -247,20 +247,6 @@ pick the app, pick a backup (newest first), and confirm.
 - **Tautulli** - restores the database and config separately; Tautulli
   restarts itself once the config half is applied.
 
-The same operations are available from the CLI inside the container, e.g.
-for scripting:
-
-```sh
-docker compose exec -it backuparr python3 restore.py radarr
-docker compose exec -it backuparr python3 restore.py sabnzbd   # -it matters here, for the password prompts
-```
-
-If only one destination is enabled it's picked automatically; with more
-than one, pass `--destination local`, `--destination gdrive`, or
-`--destination onedrive`. `restore.py --help` documents the rest
-(`--file <name>` for a specific backup, `--yes` to skip
-confirmation/password prompts).
-
 ## Notifications
 
 Set **Notify URL** on the Settings tab (`notify_url` in config.json) to
