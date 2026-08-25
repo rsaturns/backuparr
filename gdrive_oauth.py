@@ -14,20 +14,24 @@ Once connected, this module keeps a single rclone remote (REMOTE_NAME) in
 sync with the stored refresh token, so backup.py/restore_actions.py/
 rclone_util.py don't need to know OAuth happened at all - they just see an
 ordinary rclone remote, the same way a hand-configured one would look.
+
+rclone.conf itself is encrypted (see entrypoint.sh) via rclone's own
+`rclone config encryption`, which means it can no longer be read/written
+directly with Python's configparser - only the rclone binary itself, given
+the RCLONE_CONFIG_PASS it was started with, can get at it. sync_rclone_remote
+below goes through rclone_util's `rclone config create/update/delete`
+wrappers instead.
 """
-import configparser
 import json
-import os
-import tempfile
 
 import requests
+
+import rclone_util
 
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 SCOPE = "https://www.googleapis.com/auth/drive.file"
 REMOTE_NAME = "backuparr-gdrive"
-
-RCLONE_CONFIG_PATH = os.environ.get("RCLONE_CONFIG", "/config/backuparr/rclone.conf")
 
 
 class GDriveOAuthError(RuntimeError):
@@ -114,56 +118,39 @@ def remote_root(dest_cfg):
 
 
 def sync_rclone_remote(dest_cfg):
-    """Writes (or removes) the REMOTE_NAME section of rclone.conf to match
+    """Writes (or removes) the REMOTE_NAME remote in rclone.conf to match
     the current destinations.gdrive config. Called before any rclone
     operation that might touch this destination, and right after connect/
-    disconnect, so the file on disk never drifts from config.json."""
-    parser = configparser.ConfigParser()
-    if os.path.exists(RCLONE_CONFIG_PATH):
-        parser.read(RCLONE_CONFIG_PATH)
+    disconnect, so the file on disk never drifts from config.json.
 
-    if dest_cfg.get("refresh_token"):
-        if not parser.has_section(REMOTE_NAME):
-            parser.add_section(REMOTE_NAME)
-        parser.set(REMOTE_NAME, "type", "drive")
-        parser.set(REMOTE_NAME, "client_id", dest_cfg.get("client_id", ""))
-        parser.set(REMOTE_NAME, "client_secret", dest_cfg.get("client_secret", ""))
-        parser.set(REMOTE_NAME, "scope", "drive.file")
-        if dest_cfg.get("folder_id"):
-            parser.set(REMOTE_NAME, "root_folder_id", dest_cfg["folder_id"])
-        elif parser.has_option(REMOTE_NAME, "root_folder_id"):
-            parser.remove_option(REMOTE_NAME, "root_folder_id")
-        # rclone refreshes this itself using client_id/client_secret once it
-        # expires - we don't need to keep it current from our side, just
-        # seed it with a token shaped the way rclone expects, dated already
-        # expired so it refreshes on first use. access_token must be
-        # non-empty (verified against a real rclone binary) - an empty
-        # string makes rclone discard the whole token as invalid instead of
-        # just treating it as expired, and it then reports "no refresh
-        # token" even though one's right there.
-        token_json = json.dumps({
-            "access_token": "placeholder",
-            "token_type": "Bearer",
-            "refresh_token": dest_cfg["refresh_token"],
-            "expiry": "1970-01-01T00:00:00Z",
-        })
-        parser.set(REMOTE_NAME, "token", token_json)
-    elif parser.has_section(REMOTE_NAME):
-        parser.remove_section(REMOTE_NAME)
+    Always force=True (a full rewrite via `rclone config create`, not an
+    incremental `update`) - safe here because Google's refresh tokens don't
+    rotate on use the way Microsoft's OneDrive ones do (contrast with
+    onedrive_oauth.sync_rclone_remote), so config.json's copy is always the
+    same value already in rclone.conf, never staler than it."""
+    if not dest_cfg.get("refresh_token"):
+        rclone_util.config_delete(REMOTE_NAME)
+        return
 
-    config_dir = os.path.dirname(RCLONE_CONFIG_PATH)
-    os.makedirs(config_dir, exist_ok=True)
-    # A uniquely-named tmp file (not a fixed "<path>.tmp") so concurrent
-    # requests - e.g. Overview fetching history for several destinations in
-    # parallel, each triggering a sync - can't collide on the same tmp path
-    # and have one request's os.replace() find another's tmp file already
-    # gone (reproduced: FileNotFoundError under concurrent load).
-    fd, tmp_path = tempfile.mkstemp(dir=config_dir, prefix=".rclone.conf.")
-    try:
-        with os.fdopen(fd, "w") as f:
-            parser.write(f)
-        os.chmod(tmp_path, 0o600)
-        os.replace(tmp_path, RCLONE_CONFIG_PATH)
-    except BaseException:
-        os.remove(tmp_path)
-        raise
+    # rclone refreshes this itself using client_id/client_secret once it
+    # expires - we don't need to keep it current from our side, just seed it
+    # with a token shaped the way rclone expects, dated already expired so
+    # it refreshes on first use. access_token must be non-empty (verified
+    # against a real rclone binary) - an empty string makes rclone discard
+    # the whole token as invalid instead of just treating it as expired, and
+    # it then reports "no refresh token" even though one's right there.
+    token_json = json.dumps({
+        "access_token": "placeholder",
+        "token_type": "Bearer",
+        "refresh_token": dest_cfg["refresh_token"],
+        "expiry": "1970-01-01T00:00:00Z",
+    })
+    fields = {
+        "client_id": dest_cfg.get("client_id", ""),
+        "client_secret": dest_cfg.get("client_secret", ""),
+        "scope": "drive.file",
+        "token": token_json,
+    }
+    if dest_cfg.get("folder_id"):
+        fields["root_folder_id"] = dest_cfg["folder_id"]
+    rclone_util.config_set(REMOTE_NAME, "drive", fields, force=True)

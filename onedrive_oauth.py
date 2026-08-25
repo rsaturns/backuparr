@@ -21,20 +21,24 @@ makes sense on that same machine) and pastes the result here.
 Scope is still personal-only in practice: rclone's built-in app is
 registered for "Personal Microsoft accounts only", same restriction our
 own app would have had.
+
+rclone.conf itself is encrypted (see entrypoint.sh) via rclone's own
+`rclone config encryption`, which means it can no longer be read/written
+directly with Python's configparser - only the rclone binary itself, given
+the RCLONE_CONFIG_PASS it was started with, can get at it. sync_rclone_remote
+below goes through rclone_util's `rclone config create/update/delete`
+wrappers instead.
 """
 import base64
 import binascii
-import configparser
 import json
-import os
 import re
-import tempfile
 
 import requests
 
-REMOTE_NAME = "backuparr-onedrive"
+import rclone_util
 
-RCLONE_CONFIG_PATH = os.environ.get("RCLONE_CONFIG", "/config/backuparr/rclone.conf")
+REMOTE_NAME = "backuparr-onedrive"
 
 _PASTE_MARKERS = re.compile(
     r"Paste the following into your remote machine\s*--->\s*(.*?)\s*<---\s*End paste",
@@ -112,46 +116,34 @@ def remote_root(dest_cfg):
 
 
 def sync_rclone_remote(dest_cfg, force=False):
-    """Writes (or removes) the REMOTE_NAME section of rclone.conf to match
+    """Writes (or removes) the REMOTE_NAME remote in rclone.conf to match
     the current destinations.onedrive config.
 
-    Deliberately does NOT overwrite an already-present section's token on
+    Deliberately does NOT overwrite an already-present remote's token on
     every call the way gdrive_oauth.sync_rclone_remote does, unless
     force=True (only passed by the connect route, right after a fresh
-    paste). Microsoft rotates OneDrive refresh tokens on every use - rclone
+    paste) or the remote doesn't exist yet at all (nothing to preserve).
+    Microsoft rotates OneDrive refresh tokens on every use - rclone
     refreshes and rewrites its own token back into this same file as it
     goes, so blindly replacing it here from our own (comparatively stale)
     config.json copy on every routine sync() call would eventually clobber
     a valid, already-rotated token with an invalidated one. config.json's
-    copy is only ever needed as the initial seed."""
-    parser = configparser.ConfigParser()
-    if os.path.exists(RCLONE_CONFIG_PATH):
-        parser.read(RCLONE_CONFIG_PATH)
+    copy is only ever needed as the initial seed. rclone_util.config_set's
+    own create-vs-update choice (force=force) keeps this consistent: a
+    fresh/forced write goes through `create` (a full rewrite, so the token
+    must be included whenever we're taking that path), a routine one goes
+    through `update` (which only touches the keys given - metadata only,
+    token untouched)."""
+    if not dest_cfg.get("token"):
+        rclone_util.config_delete(REMOTE_NAME)
+        return
 
-    if dest_cfg.get("token"):
-        section_exists = parser.has_section(REMOTE_NAME)
-        if not section_exists:
-            parser.add_section(REMOTE_NAME)
-        if force or not section_exists:
-            parser.set(REMOTE_NAME, "type", "onedrive")
-            parser.set(REMOTE_NAME, "token", dest_cfg["token"])
-        parser.set(REMOTE_NAME, "drive_id", dest_cfg.get("drive_id", ""))
-        parser.set(REMOTE_NAME, "drive_type", dest_cfg.get("drive_type", "personal"))
-        parser.set(REMOTE_NAME, "root_folder_id", dest_cfg.get("item_id", ""))
-    elif parser.has_section(REMOTE_NAME):
-        parser.remove_section(REMOTE_NAME)
-
-    config_dir = os.path.dirname(RCLONE_CONFIG_PATH)
-    os.makedirs(config_dir, exist_ok=True)
-    # Uniquely-named tmp file (not a fixed "<path>.tmp") - see
-    # gdrive_oauth.sync_rclone_remote for the concurrent-write collision this
-    # avoids (reproduced under load: FileNotFoundError on a shared tmp path).
-    fd, tmp_path = tempfile.mkstemp(dir=config_dir, prefix=".rclone.conf.")
-    try:
-        with os.fdopen(fd, "w") as f:
-            parser.write(f)
-        os.chmod(tmp_path, 0o600)
-        os.replace(tmp_path, RCLONE_CONFIG_PATH)
-    except BaseException:
-        os.remove(tmp_path)
-        raise
+    existing = REMOTE_NAME in rclone_util.config_dump()
+    fields = {
+        "drive_id": dest_cfg.get("drive_id", ""),
+        "drive_type": dest_cfg.get("drive_type", "personal"),
+        "root_folder_id": dest_cfg.get("item_id", ""),
+    }
+    if force or not existing:
+        fields["token"] = dest_cfg["token"]
+    rclone_util.config_set(REMOTE_NAME, "onedrive", fields, force=force)

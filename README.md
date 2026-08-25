@@ -193,9 +193,15 @@ on first run; override it with the `BACKUPARR_SECRETS_KEY` env var to keep
 the key off the volume entirely (a Docker secret, for instance) rather
 than trusting the auto-generated file next to everything it protects.
 
-This can't be tied to your login password: backups run unattended on a
-schedule, with nobody logged in to unlock anything, so the key has to be
-available on its own regardless of session state. That's also why a
+`rclone.conf` - which mirrors the same Google Drive/OneDrive secrets for
+rclone's own use - is encrypted too, using rclone's own built-in config
+encryption rather than reinventing it. Same pattern: an auto-generated
+password in its own file, `rclone.pass`, overridable with
+`RCLONE_CONFIG_PASS` directly.
+
+Neither key can be tied to your login password: backups run unattended on
+a schedule, with nobody logged in to unlock anything, so both have to be
+available on their own regardless of session state. That's also why a
 forgotten-password reset can't be a quiet, no-consequence action (see
 [Login](#login) above) - anyone who could reset the login without
 consequence would, by definition, still have everything the encryption is
@@ -254,12 +260,14 @@ if you'd rather):
 | `notify_url` | Optional: POST a plain-text summary here after every run (e.g. an ntfy.sh topic) |
 | `bazarr_backup_dir` | Local path to Bazarr's config/backup folder, for restores |
 
-One thing is still an env var, since it's deployment-level rather than
-app-level (set in `docker-compose.yml`):
+A few things are still env vars, since they're deployment-level rather
+than app-level (set in `docker-compose.yml`):
 
 | Env var | Purpose |
 |---|---|
 | `WEBUI_PORT` | Default `8990` |
+| `BACKUPARR_SECRETS_KEY` | Optional: overrides the auto-generated `secrets.key` used to encrypt config.json's secrets (see [Encryption at rest](#encryption-at-rest)) |
+| `RCLONE_CONFIG_PASS` | Optional: overrides the auto-generated `rclone.pass` used to encrypt rclone.conf |
 
 ## Credits
 

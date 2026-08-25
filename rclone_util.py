@@ -10,10 +10,52 @@ class RcloneError(RuntimeError):
 
 
 def _run(args):
-    proc = subprocess.run(["rclone", *args], capture_output=True, text=True)
+    # stdin explicitly closed, not just inherited - rclone's --non-interactive
+    # config commands are supposed to never need it (they return an
+    # informational JSON blob and stop instead of actually prompting), but an
+    # inherited stdin that happened to be a TTY (e.g. a manual docker exec)
+    # would let it hang waiting for input instead. Verified live against the
+    # actual bundled rclone binary that this closes cleanly either way.
+    proc = subprocess.run(["rclone", *args], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     if proc.returncode != 0:
         raise RcloneError(f"rclone {' '.join(args)} failed: {proc.stderr.strip()}")
     return proc.stdout
+
+
+def config_dump():
+    """Every remote currently in rclone.conf, as {name: {key: value, ...}}."""
+    return json.loads(_run(["config", "dump"]))
+
+
+def config_set(name, backend_type, fields, force=False):
+    """Creates or updates a remote so its fields match `fields` (a dict of
+    string->string). Uses `create` only for a brand-new remote, or when
+    force=True (an explicit reconnect) - `create` replaces a remote's whole
+    definition from scratch, discarding any field not passed this time, so a
+    routine resync must use `update` instead, which only touches the given
+    keys and leaves everything else alone (in particular, an already-rotated
+    OAuth refresh token - see onedrive_oauth.py's sync_rclone_remote for why
+    that matters).
+
+    Always adds config_refresh_token=false: without it, `update`/`create` on
+    an OAuth-capable backend (drive, onedrive) attempts its own token
+    refresh as a side effect of touching *any* field, even ones unrelated to
+    auth - confirmed live against the real rclone binary. Whether and when
+    to write a fresh token is sync_rclone_remote()'s call to make from
+    dest_cfg, not something rclone should decide on its own."""
+    existing = name in config_dump()
+    args = ["config", "create" if (force or not existing) else "update", name]
+    if force or not existing:
+        args.append(backend_type)
+    for key, value in fields.items():
+        args += [key, value]
+    args += ["config_refresh_token", "false", "--non-interactive"]
+    _run(args)
+
+
+def config_delete(name):
+    if name in config_dump():
+        _run(["config", "delete", name])
 
 
 def copyto(local_path, remote_path):
