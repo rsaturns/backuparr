@@ -5,16 +5,17 @@
 **Secure your Arrs.**
 
 Scheduled config/database backups for Radarr, Sonarr, Prowlarr, Profilarr,
-Bazarr, Tdarr, Sabnzbd, and Tautulli, sent to whichever destinations you
-enable - Local storage (zero setup, download straight from the History
-tab), Google Drive (click-through OAuth, no config files to hand-copy),
-and OneDrive (one-time `rclone authorize` paste, no Azure account needed)
-today, with Dropbox planned. Enable more than one and every backup gets a
-copy on each of them. If the host dies, the recovery path is: re-create the
-containers from your compose file, then restore each app's config from its
-latest backup. Everything - which apps to back up, their URLs/API keys,
-which destinations to use, the schedule, retention, and restores - is
-configured and triggered from a web UI, not env vars.
+Bazarr, Tdarr, Sabnzbd, and Tautulli (Seerr coming soon), sent to
+whichever destinations you enable - Local storage (zero setup, download
+straight from the History tab), Google Drive (click-through OAuth, no
+config files to hand-copy), and OneDrive (one-time `rclone authorize`
+paste, no Azure account needed) today, with Dropbox planned. Enable more
+than one and every backup gets a copy on each of them. If the host dies,
+the recovery path is: re-create the containers from your compose file,
+then restore each app's config from its latest backup. Everything - which
+apps to back up, their URLs/API keys, which destinations to use, the
+schedule, retention, and restores - is configured and triggered from a
+web UI, not env vars.
 
 Every app is backed up through **its own HTTP API** - this tool never reads
 an app's config volume directly. Each app has an official (or at least
@@ -48,6 +49,7 @@ instead of running rclone's full interactive config wizard yourself.
 | Tdarr | `POST /api/v2/cruddb` with `mode: getAll` for every internal DB collection (library settings, flows, global settings, node registrations, staged/output/statistics) | Fully API-driven both ways. Restore does `removeAll` then re-`insert`s each document per collection - destructive, asks for confirmation. |
 | Sabnzbd | `GET /sabnzbd/api?mode=get_config` to back up; `mode=set_config` per key to restore | SABnzbd's API hardcodes every password field (most importantly your Usenet server password) to `**********` on the way out - there's no API mode that returns the real value. Restore still automates everything else: it recreates each Usenet server (host/port/username/connections/ssl/priority/...) and every plain `misc`-style setting via the API, and interactively prompts you for each server's real password before sending it (verified against SABnzbd's own source - an existing server's fields not included in the API call are left untouched, so a skipped password doesn't get overwritten with a blank one). Categories, RSS feeds, and sorters use their own special-cased API shapes that aren't reverse-engineered here, so those aren't auto-restored. |
 | Tautulli | `GET /api/v2?cmd=download_database` and `cmd=download_config` - each streams a fresh copy directly, no trigger/poll step | The database comes back with Plex tokens nulled out; the config file is only lightly sanitized - see below. Restore uploads each back separately via `cmd=import_database` and `cmd=import_config` (multipart) - a config restore makes Tautulli restart itself. |
+| Seerr | *(none)* | Not implemented - Seerr has no backup/restore API at all. Its own docs recommend stopping the app and copying its data files directly, which conflicts with the API-only approach everything else here uses. Shown on the Settings tab as "Coming soon" for visibility only. |
 
 ### Profilarr backup note
 
@@ -303,6 +305,60 @@ than one, pass `--destination local`, `--destination gdrive`, or
 --help` documents the rest (`--file <name>` for a specific backup, `--yes`
 to skip confirmation/password prompts).
 
+## Notifications
+
+Set **Notify URL** on the Settings tab (`notify_url` in config.json) to
+get a one-line summary POSTed there after every run - something like
+`Backuparr OK: radarr, sonarr` or `Backuparr FAILED: radarr: couldn't
+connect | OK: sonarr`. Paste one URL and Backuparr sends the right kind
+of request automatically - it recognizes a few common webhook shapes by
+the URL itself, no separate "which service is this" setting needed.
+
+### Discord
+
+1. In the target channel: **Edit Channel > Integrations > Webhooks > New
+   Webhook**, then **Copy Webhook URL**.
+2. Paste that straight into **Notify URL**.
+
+### Slack
+
+1. Create an [incoming
+   webhook](https://api.slack.com/messaging/webhooks) for your
+   workspace and channel.
+2. Paste the resulting `https://hooks.slack.com/services/...` URL into
+   **Notify URL**.
+
+### Telegram
+
+1. Message [@BotFather](https://t.me/BotFather) to create a bot; it
+   gives you a token.
+2. Get your chat ID: message your new bot once, then visit
+   `https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser and
+   read `chat.id` from the JSON (for a group, add the bot to the group
+   first and use the group's chat ID instead, which is negative).
+3. Set **Notify URL** to:
+   ```
+   https://api.telegram.org/bot<TOKEN>/sendMessage?chat_id=<CHAT_ID>
+   ```
+
+### Gotify (self-hosted)
+
+1. In Gotify, create an application under **Apps** and copy its token.
+2. Set **Notify URL** to:
+   ```
+   https://<your-gotify-host>/message?token=<APP_TOKEN>
+   ```
+
+### ntfy.sh, Healthchecks.io, or anything else
+
+Any URL that doesn't match one of the shapes above gets the message sent
+as a plain-text `POST` body instead. That's [ntfy.sh](https://ntfy.sh)'s
+own native format - **Notify URL**: `https://ntfy.sh/your-topic-name`
+(a self-hosted ntfy server works the same way) - and it works equally
+well with a [healthchecks.io](https://healthchecks.io)-style ping URL,
+an Uptime Kuma push URL, or any simple webhook logger that just wants
+the raw text.
+
 ## Configuration reference
 
 Everything below lives in `config.json` (edited via the web UI, or by hand
@@ -319,7 +375,7 @@ if you'd rather):
 | `destinations.onedrive.token/drive_id/drive_type/item_id` | Set automatically by pasting a token from `rclone authorize onedrive` - don't hand-edit |
 | `retention_days` | Delete backups older than this, per app per destination (default 7) |
 | `cron_schedule` | Standard 5-field cron syntax (default `0 3 * * *`) |
-| `notify_url` | Optional: POST a plain-text summary here after every run (e.g. an ntfy.sh topic) |
+| `notify_url` | Optional: POST a summary here after every run - see [Notifications](#notifications) below |
 | `bazarr_backup_dir` | Local path to Bazarr's config/backup folder, for restores |
 
 A few things are still env vars, since they're deployment-level rather
@@ -328,6 +384,7 @@ than app-level (set in `docker-compose.yml`):
 | Env var | Purpose |
 |---|---|
 | `WEBUI_PORT` | Default `8990` |
+| `PUID` / `PGID` | User/group the container runs as instead of root (default `1000`/`1000`) - match your host user with `id` if you want files on `./data` owned by yourself; fixed up automatically on every start, so it's safe to change later too |
 | `BACKUPARR_SECRETS_KEY` | Optional: overrides the auto-generated `secrets.key` used to encrypt config.json's secrets (see [Encryption at rest](#encryption-at-rest)) |
 | `RCLONE_CONFIG_PASS` | Optional: overrides the auto-generated `rclone.pass` used to encrypt rclone.conf |
 
@@ -337,3 +394,9 @@ App icons (`webui/static/icons/`) are from the [selfh.st icon
 collection](https://selfh.st/icons/) ([selfhst/icons on
 GitHub](https://github.com/selfhst/icons)), licensed
 [CC BY 4.0](https://github.com/selfhst/icons/blob/main/LICENSE).
+
+## License
+
+[GNU AGPLv3](LICENSE) - if you run a modified version of this as a
+network service, that modified source needs to be available to its
+users too, not just to whoever redistributes the binary/image.
