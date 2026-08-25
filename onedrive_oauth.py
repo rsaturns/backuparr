@@ -122,18 +122,14 @@ def sync_rclone_remote(dest_cfg, force=False):
     Deliberately does NOT overwrite an already-present remote's token on
     every call the way gdrive_oauth.sync_rclone_remote does, unless
     force=True (only passed by the connect route, right after a fresh
-    paste) or the remote doesn't exist yet at all (nothing to preserve).
-    Microsoft rotates OneDrive refresh tokens on every use - rclone
-    refreshes and rewrites its own token back into this same file as it
-    goes, so blindly replacing it here from our own (comparatively stale)
-    config.json copy on every routine sync() call would eventually clobber
-    a valid, already-rotated token with an invalidated one. config.json's
-    copy is only ever needed as the initial seed. rclone_util.config_set's
-    own create-vs-update choice (force=force) keeps this consistent: a
-    fresh/forced write goes through `create` (a full rewrite, so the token
-    must be included whenever we're taking that path), a routine one goes
-    through `update` (which only touches the keys given - metadata only,
-    token untouched)."""
+    paste) or the remote doesn't exist yet. Microsoft rotates OneDrive
+    refresh tokens on every use, and rclone rewrites its own rotated token
+    back into this file as it goes - blindly replacing it from our
+    (comparatively stale) config.json copy on every routine sync() would
+    eventually clobber a valid token with an invalidated one. Handled by
+    rclone_util.config_set's create-vs-update choice: `create` (a full
+    rewrite, so the token must be included) on a fresh/forced write,
+    `update` (only touches the given keys, token left alone) otherwise."""
     if not dest_cfg.get("token"):
         rclone_util.config_delete(REMOTE_NAME)
         return

@@ -6,11 +6,11 @@ in the codebase needs to know this happens.
 
 The key is a Fernet key (AES-128-CBC + HMAC, authenticated), generated once
 and persisted in its own file - separate from config.json, and separate
-from auth.json/secret_key too, since backup.py runs unattended via cron
-with nobody logged in and still needs to decrypt these values on every
-run. There is no way to derive this key from the admin login password
-without breaking that (see auth_store.py's docstring for the same
-reasoning applied to session cookies).
+from auth.json/secret_key too, since scheduled backups run unattended with
+nobody logged in and still need to decrypt these values on every run.
+There is no way to derive this key from the admin login password without
+breaking that (see auth_store.py's docstring for the same reasoning
+applied to session cookies).
 
 This protects against a *partial* leak - config.json alone ending up in a
 support bundle, a misconfigured backup, or a repurposed drive - not a full

@@ -311,17 +311,10 @@ def _start_backup_run():
 
 
 # ------------------------------------------------------------ scheduler ----
-# Replaces an earlier crond/dcron-based scheduler entirely. That approach
-# had two confirmed problems: crond's own daemonizing double-fork zombified
-# once reparented to PID 1 (fixed separately by running crond in the
-# foreground), and - even once genuinely alive - dcron does not hot-reload
-# a changed crontab: both a live in-place edit of /etc/crontabs/root and a
-# SIGHUP to a live crond process were tested directly and neither caused a
-# schedule change made in Settings to take effect before a full container
-# restart. Running the scheduler as a loop inside this same long-lived
-# process instead removes the reload problem structurally - there is no
-# separate crontab file for anything to fail to notice, since cron_schedule
-# is re-read fresh from config.json on every tick.
+# Runs in-process instead of via an external cron daemon (see entrypoint.sh)
+# so a schedule change made in Settings takes effect on the next tick, not
+# the next restart - cron_schedule is re-read fresh from config.json every
+# time, with no separate crontab file to go stale.
 _SCHEDULER_INTERVAL_SECONDS = 20
 _scheduler_state = {"last_run_minute": None}
 
