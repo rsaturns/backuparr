@@ -1,9 +1,10 @@
 FROM python:3.12-alpine
 
-# Make sure the community repo (rclone lives there) is enabled.
+# Make sure the community repo (rclone lives there) is enabled. su-exec
+# drops from root to the PUID/PGID entrypoint.sh resolves at startup.
 RUN sed -i 's/^#\(.*community.*\)/\1/' /etc/apk/repositories \
     && apk update \
-    && apk add --no-cache bash rclone tzdata
+    && apk add --no-cache bash rclone tzdata su-exec
 
 WORKDIR /app
 COPY requirements.txt /app/

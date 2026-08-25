@@ -6,6 +6,13 @@ services:
     restart: unless-stopped
     environment:
       TZ: America/Los_Angeles
+      # Runs as this user/group instead of root - match the owner of
+      # ./data on the host (run `id` there) if you want the files this
+      # writes to be owned by your own user rather than the 1000:1000
+      # default. Safe to change any time; ownership is fixed up
+      # automatically on the next start either way.
+      PUID: 1000
+      PGID: 1000
       # The web UI creates its own admin account on first visit (a setup
       # screen) and requires logging in from then on - nothing to configure
       # here for that.

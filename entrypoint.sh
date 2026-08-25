@@ -3,6 +3,8 @@ set -euo pipefail
 
 WEBUI_PORT="${WEBUI_PORT:-8990}"
 RCLONE_CONFIG_PASS_FILE="${RCLONE_CONFIG_PASS_FILE:-/config/backuparr/rclone.pass}"
+PUID="${PUID:-1000}"
+PGID="${PGID:-1000}"
 
 # Password for rclone's own config-file encryption (protects the Google
 # Drive/OneDrive secrets rclone.conf mirrors from config.json). Separate
@@ -34,5 +36,29 @@ fi
 # external cron daemon - crond/dcron in this container couldn't reliably
 # stay alive as PID 1's child or hot-reload a changed crontab.
 
-echo "Backuparr: starting web UI on :${WEBUI_PORT}"
-exec waitress-serve --host=0.0.0.0 --port="${WEBUI_PORT}" --threads=6 webui.app:app
+# Drops from root (needed above for apk/rclone setup) to PUID:PGID before
+# the actual web server starts - same PUID/PGID env var convention as
+# LinuxServer.io images, so the container's files land on the host volume
+# owned by whichever user you already use for this kind of thing, instead
+# of root. Resolved dynamically rather than baked in at build time: this
+# runs on every start, so it also self-heals ownership on an existing
+# volume the first time you upgrade onto this image (everything under
+# /config/backuparr was root:root before), and again automatically if you
+# ever change PUID/PGID later. Idempotent - getent lookups mean re-running
+# this on a container that already has the right user/group is a no-op,
+# not a failure.
+if ! getent group "$PGID" >/dev/null 2>&1; then
+    addgroup -g "$PGID" backuparr
+fi
+GROUP_NAME="$(getent group "$PGID" | cut -d: -f1)"
+
+if ! getent passwd "$PUID" >/dev/null 2>&1; then
+    adduser -D -H -u "$PUID" -G "$GROUP_NAME" backuparr
+fi
+USER_NAME="$(getent passwd "$PUID" | cut -d: -f1)"
+
+mkdir -p "$(dirname "$BACKUPARR_CONFIG")" "$BACKUPARR_LOG_DIR"
+chown -R "$PUID:$PGID" "$(dirname "$BACKUPARR_CONFIG")" "$BACKUPARR_LOG_DIR"
+
+echo "Backuparr: starting web UI on :${WEBUI_PORT} (as ${USER_NAME}:${GROUP_NAME}, ${PUID}:${PGID})"
+exec su-exec "$PUID:$PGID" waitress-serve --host=0.0.0.0 --port="${WEBUI_PORT}" --threads=6 webui.app:app
