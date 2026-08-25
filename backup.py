@@ -49,6 +49,22 @@ except OSError:
     log.warning("could not open %s for writing, file logging disabled", LOG_FILE)
 
 
+def humanize_error(exc):
+    """Turns a raw requests exception into a short, human-readable message
+    instead of a Python exception repr - e.g. "No connection adapters were
+    found for 'radarr:7878/...'" (a URL missing its http:// scheme) or a
+    multi-line HTTPConnectionPool/Max retries dump (a connection timeout)
+    are meaningless to someone who just fat-fingered a URL or has an app
+    that's temporarily down. Anything that isn't a requests exception
+    (including the apps/*.py-specific *Error classes, which already read
+    fine on their own) passes through as str(exc) unchanged."""
+    if isinstance(exc, (requests.exceptions.MissingSchema, requests.exceptions.InvalidSchema, requests.exceptions.InvalidURL)):
+        return "that doesn't look like a valid URL - it should start with http:// or https://"
+    if isinstance(exc, (requests.exceptions.ConnectionError, requests.exceptions.Timeout)):
+        return "couldn't connect - check the URL and that it's reachable from this container"
+    return str(exc)
+
+
 def build_app(name, app_cfg):
     if name == "radarr":
         return RadarrApp(app_cfg["url"], app_cfg["api_key"])
@@ -162,7 +178,7 @@ def run_backup(cfg):
                     ok.append(name)
             except Exception as exc:
                 log.exception("%s: backup failed", name)
-                failed.append(f"{name}: {exc}")
+                failed.append(f"{name}: {humanize_error(exc)}")
             finally:
                 shutil.rmtree(work_dir, ignore_errors=True)
                 if os.path.exists(zip_path):

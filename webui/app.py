@@ -23,7 +23,7 @@ import onedrive_oauth
 import rclone_util
 import restore_actions as ra
 import secrets_crypto
-from backup import build_app, notify, run_backup
+from backup import build_app, humanize_error, notify, run_backup
 from config_store import (
     APP_META,
     APP_NAMES,
@@ -436,7 +436,7 @@ def api_test(app_name):
         message = instance.test_connection()
         return jsonify({"ok": True, "message": message})
     except Exception as exc:
-        return jsonify({"ok": False, "message": str(exc)})
+        return jsonify({"ok": False, "message": humanize_error(exc)})
 
 
 # --------------------------------------------------------- destinations ----
