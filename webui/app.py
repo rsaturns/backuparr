@@ -14,6 +14,7 @@ import time
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 
+from croniter import croniter
 from flask import Flask, after_this_request, jsonify, redirect, render_template, request, send_file, session
 
 import auth_store
@@ -50,10 +51,6 @@ try:
         VERSION = _f.read().strip()
 except OSError:
     VERSION = "dev"
-
-CRONTAB_PATH = "/etc/crontabs/root"
-CRON_MARKER_COMMENT = "# Backuparr schedule - managed by the web UI, do not edit by hand"
-
 
 def _load_or_create_secret_key():
     """Random bytes for signing session cookies - generated once, persisted
@@ -220,16 +217,6 @@ def api_reset():
     return jsonify({"ok": True})
 
 
-# ------------------------------------------------------------- crontab ----
-def write_crontab(schedule):
-    try:
-        with open(CRONTAB_PATH, "w") as f:
-            f.write(f"{CRON_MARKER_COMMENT}\n")
-            f.write(f"{schedule} cd /app && python3 backup.py >> /proc/1/fd/1 2>> /proc/1/fd/2\n")
-    except OSError as exc:
-        log.warning("failed to write crontab: %s", exc)
-
-
 # ---------------------------------------------------------- run state -----
 RUN_LOCK = threading.Lock()
 RUN_STATE = {"running": False, "started_at": None, "finished_at": None, "ok": [], "failed": [], "log": []}
@@ -268,6 +255,62 @@ def _do_run():
         RUN_STATE["finished_at"] = datetime.now(timezone.utc).isoformat()
 
 
+def _start_backup_run():
+    """Starts a backup run in a background thread unless one is already in
+    progress. Returns True if it started, False otherwise. Shared by the
+    manual "Run backup now" endpoint and the scheduler below, so both go
+    through the same lock/state bookkeeping."""
+    with RUN_LOCK:
+        if RUN_STATE["running"]:
+            return False
+        RUN_STATE.update(
+            {"running": True, "started_at": datetime.now(timezone.utc).isoformat(), "finished_at": None, "ok": [], "failed": [], "log": []}
+        )
+    threading.Thread(target=_do_run, daemon=True).start()
+    return True
+
+
+# ------------------------------------------------------------ scheduler ----
+# Replaces an earlier crond/dcron-based scheduler entirely. That approach
+# had two confirmed problems: crond's own daemonizing double-fork zombified
+# once reparented to PID 1 (fixed separately by running crond in the
+# foreground), and - even once genuinely alive - dcron does not hot-reload
+# a changed crontab: both a live in-place edit of /etc/crontabs/root and a
+# SIGHUP to a live crond process were tested directly and neither caused a
+# schedule change made in Settings to take effect before a full container
+# restart. Running the scheduler as a loop inside this same long-lived
+# process instead removes the reload problem structurally - there is no
+# separate crontab file for anything to fail to notice, since cron_schedule
+# is re-read fresh from config.json on every tick.
+_SCHEDULER_INTERVAL_SECONDS = 20
+_scheduler_state = {"last_run_minute": None}
+
+
+def _scheduler_loop():
+    while True:
+        try:
+            schedule = load_config().get("cron_schedule", "0 3 * * *")
+            now = datetime.now().replace(second=0, microsecond=0)
+            # Dedup guard: the ~20s poll interval means a single matching
+            # minute is seen on more than one tick, so only fire once per
+            # minute actually matched.
+            if (
+                _scheduler_state["last_run_minute"] != now
+                and croniter.is_valid(schedule)
+                and croniter.match(schedule, now)
+            ):
+                _scheduler_state["last_run_minute"] = now
+                if _start_backup_run():
+                    log.info("scheduler: starting backup run (schedule %r, %s)", schedule, now.isoformat())
+        except Exception:
+            log.exception("scheduler tick failed")
+        time.sleep(_SCHEDULER_INTERVAL_SECONDS)
+
+
+def start_scheduler():
+    threading.Thread(target=_scheduler_loop, daemon=True).start()
+
+
 # --------------------------------------------------------------- pages ----
 @app.get("/")
 def index():
@@ -293,8 +336,11 @@ def _validate_config(data, cfg):
         except (TypeError, ValueError):
             return "retention_days must be a number"
     if "cron_schedule" in data:
-        if len(str(data["cron_schedule"]).split()) != 5:
+        schedule = str(data["cron_schedule"])
+        if len(schedule.split()) != 5:
             return "cron_schedule must be 5 space-separated fields (minute hour day month weekday)"
+        if not croniter.is_valid(schedule):
+            return "cron_schedule is not a valid cron expression"
     for name, app_data in data.get("apps", {}).items():
         if name not in APP_NAMES:
             return f"unknown app: {name}"
@@ -336,7 +382,6 @@ def api_set_config():
             cfg["destinations"][name].update({k: v for k, v in incoming.items() if k in DEST_EDITABLE_FIELDS[name]})
 
     save_config(cfg)
-    write_crontab(cfg["cron_schedule"])
     destination_util.sync(cfg)
     return jsonify({"ok": True})
 
@@ -413,13 +458,8 @@ def api_test_destination(dest_id):
 # ------------------------------------------------------------- backups ----
 @app.post("/api/backup/run")
 def api_backup_run():
-    with RUN_LOCK:
-        if RUN_STATE["running"]:
-            return jsonify({"error": "a backup is already running"}), 409
-        RUN_STATE.update(
-            {"running": True, "started_at": datetime.now(timezone.utc).isoformat(), "finished_at": None, "ok": [], "failed": [], "log": []}
-        )
-    threading.Thread(target=_do_run, daemon=True).start()
+    if not _start_backup_run():
+        return jsonify({"error": "a backup is already running"}), 409
     return jsonify({"started": True})
 
 
@@ -757,12 +797,7 @@ def api_onedrive_disconnect():
 
 
 # ------------------------------------------------------------- startup ----
-def init():
-    cfg = load_config()
-    write_crontab(cfg.get("cron_schedule", "0 3 * * *"))
-
-
-init()
+start_scheduler()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("WEBUI_PORT", 8990)), debug=False)

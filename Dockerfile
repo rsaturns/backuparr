@@ -3,7 +3,7 @@ FROM python:3.12-alpine
 # Make sure the community repo (rclone lives there) is enabled.
 RUN sed -i 's/^#\(.*community.*\)/\1/' /etc/apk/repositories \
     && apk update \
-    && apk add --no-cache bash rclone dcron tzdata
+    && apk add --no-cache bash rclone tzdata
 
 WORKDIR /app
 COPY requirements.txt /app/

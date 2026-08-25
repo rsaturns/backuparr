@@ -3,3 +3,4 @@ flask>=3.0
 waitress>=3.0
 argon2-cffi>=23.1
 cryptography>=42.0
+croniter>=2.0
