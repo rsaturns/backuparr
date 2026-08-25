@@ -20,7 +20,7 @@ import os
 
 import requests
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(f"backuparr.{__name__}")
 
 MASKED = "*" * 10  # OptionPassword.get_stars(), see sabnzbd/config.py
 

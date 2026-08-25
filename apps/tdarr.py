@@ -17,7 +17,7 @@ import os
 
 import requests
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(f"backuparr.{__name__}")
 
 # All 8 known collections, including scan-state ones (FileJSONDB,
 # StatisticsJSONDB) since backing them up costs nothing extra.
