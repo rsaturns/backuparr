@@ -1,0 +1,77 @@
+name: Bug report
+description: Something isn't working as expected
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what actually happened.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: service
+    attributes:
+      label: Affected service
+      multiple: true
+      options:
+        - Radarr
+        - Sonarr
+        - Prowlarr
+        - Profilarr
+        - Bazarr
+        - Tdarr
+        - SABnzbd
+        - Tautulli
+        - Web UI / general
+        - Not app-specific
+    validations:
+      required: true
+
+  - type: dropdown
+    id: destination
+    attributes:
+      label: Affected destination (if relevant)
+      multiple: true
+      options:
+        - Local storage
+        - Google Drive
+        - OneDrive
+        - Not destination-specific
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: Backuparr version
+      description: Image tag or commit, e.g. `latest`, `v1.2.0`, or a commit hash.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Output of `docker compose logs backuparr`, with any API keys/tokens redacted.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant config.json fields
+      description: Only the relevant fields, not the whole file - redact API keys/secrets first.
+      render: json
+    validations:
+      required: false
+
+  - type: input
+    id: deployment
+    attributes:
+      label: Deployment
+      description: How you're running Backuparr, e.g. Docker Compose on Unraid, bare Docker on a Synology, etc.
+    validations:
+      required: false
