@@ -1,6 +1,4 @@
-<p align="center">
-  <img src="webui/static/logo.png" alt="Backuparr logo" width="160">
-</p>
+<img src="webui/static/logo.png" alt="Backuparr logo" width="160">
 
 # Backuparr
 
@@ -8,10 +6,11 @@
 
 Scheduled config/database backups for Radarr, Sonarr, Bazarr, Prowlarr,
 Tdarr, and Sabnzbd, sent to whichever destinations you enable - Local
-storage (zero setup, download straight from the History tab) and/or Google
-Drive (click-through OAuth, no config files to hand-copy) today, with
-Dropbox and OneDrive planned. Enable more than one and every backup gets a
-copy on each of them. If the host dies, the recovery path is: re-create the
+storage (zero setup, download straight from the History tab), Google Drive
+(click-through OAuth, no config files to hand-copy), and OneDrive (one-time
+`rclone authorize` paste, no Azure account needed) today, with Dropbox
+planned. Enable more than one and every backup gets a copy on each of
+them. If the host dies, the recovery path is: re-create the
 containers from your compose file, then restore each app's config from its
 latest backup. Everything - which apps to back up, their URLs/API keys,
 which destinations to use, the schedule, retention, and restores - is
@@ -31,8 +30,9 @@ this for Radarr/Sonarr/Prowlarr via S3. This tool extends the same idea
 (trigger the app's own backup API, download it, upload it) to Bazarr and
 Tdarr, which have their own equivalent mechanisms, and moves the storage
 side to a pick-your-destinations model built on [rclone](https://rclone.org/)
-under the hood - Local out of the box, Google Drive and OneDrive via an
-in-app "Connect" button instead of a terminal-based config wizard.
+under the hood - Local out of the box, Google Drive via an in-app
+"Connect" button, and OneDrive via a one-time `rclone authorize` paste,
+instead of running rclone's full interactive config wizard yourself.
 
 ## Per-app backup method (read this before deploying)
 
@@ -151,7 +151,8 @@ plaintext); every visit after that requires logging in. On the
    like Tdarr) and API key (from that app's Settings > General), then hit
    **Test connection** to confirm it's right before saving.
 2. Enable at least one destination - Local needs nothing further; see
-   [Destinations](#destinations) above for connecting Google Drive.
+   [Destinations](#destinations) above for connecting Google Drive or
+   OneDrive.
 3. Set retention and a backup schedule (Daily/Weekly/Every few hours, with
    a time picker) - or expand **Advanced** to enter a raw cron expression
    instead.
@@ -198,12 +199,13 @@ credentials in transit over plain HTTP on its own.
 
 ### Encryption at rest
 
-Every app's API key, Bazarr's basic-auth password, and Google Drive's
-client secret/refresh token are encrypted in `config.json` - not just the
-admin login. The key lives in its own file, `secrets.key`, auto-generated
-on first run; override it with the `BACKUPARR_SECRETS_KEY` env var to keep
-the key off the volume entirely (a Docker secret, for instance) rather
-than trusting the auto-generated file next to everything it protects.
+Every app's API key, Bazarr's basic-auth password, Google Drive's client
+secret/refresh token, and OneDrive's token are encrypted in `config.json` -
+not just the admin login. The key lives in its own file, `secrets.key`,
+auto-generated on first run; override it with the `BACKUPARR_SECRETS_KEY`
+env var to keep the key off the volume entirely (a Docker secret, for
+instance) rather than trusting the auto-generated file next to everything
+it protects.
 
 `rclone.conf` - which mirrors the same Google Drive/OneDrive secrets for
 rclone's own use - is encrypted too, using rclone's own built-in config
