@@ -2,37 +2,29 @@
 
 Profilarr (https://github.com/Dictionarry-Hub/profilarr) is a config
 management layer in front of Radarr/Sonarr (quality profiles, custom
-formats), not a media manager itself. Its REST API is documented as an
-OpenAPI spec at /api/v1/openapi.json; the parts used here:
+formats), not a media manager itself. REST API at /api/v1/openapi.json;
+the parts used here:
 
 - POST /backups triggers an async `backup.create` job and returns a
-  jobId - same "trigger, then poll for completion" shape as the Servarr
-  apps' /command endpoint, just with its own job queue instead.
+  jobId - trigger-then-poll, like the Servarr apps' /command endpoint.
 - GET /backups lists existing backups, newest first.
 - GET /backups/{filename} downloads one. Per Profilarr's own docs, this
-  download is DELIBERATELY SANITIZED: arr instance URLs/API keys, sync
-  configs, drift/rename history, notification webhook URLs and tokens,
-  user accounts and sessions, personal access tokens for linked
-  databases, and AI/TMDB API keys are all stripped before the file
-  reaches the client. The local copy on Profilarr's own server is not
-  affected - only what leaves over this endpoint. This is a Profilarr
-  design decision, not a Backuparr limitation, and it means a restored
-  instance will need those re-added by hand regardless of how the backup
-  got there.
-- DELETE /backups/{filename} removes a backup - used the same way as
-  Radarr/Sonarr/Prowlarr/Bazarr, to keep the app's own backup list clean
-  of copies Backuparr already pulled.
+  is DELIBERATELY SANITIZED: arr instance URLs/API keys, sync configs,
+  drift/rename history, notification webhook URLs and tokens, user
+  accounts and sessions, linked-database access tokens, and AI/TMDB API
+  keys are all stripped before the file reaches the client - a Profilarr
+  design decision, not a Backuparr limitation. A restored instance needs
+  those re-added by hand regardless of how the backup got there.
+- DELETE /backups/{filename} removes a backup, same as with
+  Radarr/Sonarr/Prowlarr/Bazarr, to keep Profilarr's own list clean.
 
-There is deliberately no restore() here. Profilarr's restore path
-(confirmed in its source, src/routes/settings/backups/+page.server.ts) is
-a SvelteKit form action gated by browser session cookie - not part of the
-versioned /api/v1 REST API at all - and even then it only stages a
-pending restore in a sentinel file; the actual swap happens at the next
-Profilarr container restart, which Backuparr has no way to trigger.
-POST /backups/upload exists in the API, but it only stores a file in
-Profilarr's backups folder - it doesn't stage or apply anything, so
-calling it wouldn't actually restore. See the README's Profilarr note for
-the manual restore steps this leaves you with.
+There is deliberately no restore() here. Profilarr's restore path is a
+SvelteKit form action gated by browser session cookie, not part of the
+/api/v1 REST API, and even then only stages a pending restore in a
+sentinel file - the actual swap happens at the next Profilarr container
+restart, which Backuparr can't trigger. POST /backups/upload exists but
+only stores a file; it doesn't stage or apply anything. See the README's
+Profilarr note for the manual restore steps this leaves you with.
 """
 import logging
 import os

@@ -1,34 +1,18 @@
 """Backup/restore driver for SABnzbd's config API.
 
-BACKUP LIMITATION: SABnzbd's only config-read API mode, get_config, masks
-every password field (most importantly your Usenet server password) to a
-literal "**********" before returning it - this is hardcoded in SABnzbd's
-own source for its public API and there is no API mode that returns the
-real value.
+BACKUP LIMITATION: get_config masks every password field (e.g. Usenet
+server passwords) as "**********" - there's no API mode that returns
+the real value.
 
-RESTORE: verified against SABnzbd's own source (sabnzbd/config.py,
-sabnzbd/api.py). Two mechanisms:
+RESTORE: plain sections (misc, logging, ...) restore key-by-key via
+mode=set_config. servers is special-cased: mode=set_config&section=
+servers&keyword=<name>&<field>=<value> only updates fields present in
+the call, so omitting "password" leaves the existing one untouched -
+that's what makes it safe to restore a server's non-secret fields
+without a password.
 
-- Plain sections (misc, logging, ...) are flat keyword: value maps; each
-  key is restored individually via mode=set_config&section=<s>&keyword=<k>
-  &value=<v>. Confirmed via ConfigCollection.set_config(): it looks up
-  exactly one Option by (section, keyword) and calls set_dict() on it,
-  which for a plain Option just does self.set(values["value"]).
-
-- servers is special-cased server side (handle_server_api in api.py):
-  mode=set_config&section=servers&keyword=<name>&<field>=<value> looks up
-  the existing ConfigServer by name and calls its set_dict(kwargs), which
-  updates only the fields present in kwargs (confirmed: Option.get_from_dict
-  raises KeyError for an absent field, and ConfigServer.set_dict() catches
-  that and just skips it - so omitting "password" from the call leaves
-  whatever password is already configured untouched, rather than clearing
-  it). That's what makes it safe to restore a server's non-secret fields
-  (host/port/username/connections/...) without a password, and to only
-  send "password" when we actually have a real value for it.
-
-categories/rss/sorters are also special-cased server side with their own
-(unverified) shapes and are deliberately not auto-restored here - they're
-usually small enough to recreate by hand.
+categories/rss/sorters use their own special-cased shapes and aren't
+auto-restored - usually small enough to recreate by hand.
 """
 import json
 import logging
@@ -40,8 +24,7 @@ logger = logging.getLogger(__name__)
 
 MASKED = "*" * 10  # OptionPassword.get_stars(), see sabnzbd/config.py
 
-# Section types that use a special server-side handler with a shape this
-# module doesn't attempt to reconstruct (see module docstring).
+# Special-cased server-side, not reconstructed here - see module docstring.
 UNHANDLED_SPECIAL_SECTIONS = {"categories", "rss", "sorters"}
 
 _WARNING = (
@@ -77,9 +60,7 @@ class SabnzbdApp:
         return data
 
     def test_connection(self):
-        # mode=version deliberately skips API-key checks in SABnzbd (used for
-        # the login page), so it can't tell us if the key is right - use
-        # get_config instead, which does enforce it.
+        # mode=version skips API-key checks; get_config enforces it.
         self.get_config()
         return "sabnzbd reachable, API key OK"
 

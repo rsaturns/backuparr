@@ -1,22 +1,14 @@
-"""Encrypts the actual secret values inside config.json at rest (app API
-keys, Bazarr's basic-auth password, Google Drive's OAuth client secret and
-refresh token, OneDrive's token blob) - transparently, at the
-load_config()/save_config() boundary in config_store.py, so nothing else
-in the codebase needs to know this happens.
+"""Encrypts secret values inside config.json at rest, transparently, at
+the load_config()/save_config() boundary in config_store.py.
 
-The key is a Fernet key (AES-128-CBC + HMAC, authenticated), generated once
-and persisted in its own file - separate from config.json, and separate
-from auth.json/secret_key too, since scheduled backups run unattended with
-nobody logged in and still need to decrypt these values on every run.
-There is no way to derive this key from the admin login password without
-breaking that (see auth_store.py's docstring for the same reasoning
-applied to session cookies).
+The key is a Fernet key, generated once and persisted in its own file -
+separate from config.json and auth.json/secret_key. It can't be derived
+from the admin login password: scheduled backups run unattended with
+nobody logged in and still need to decrypt these values.
 
-This protects against a *partial* leak - config.json alone ending up in a
-support bundle, a misconfigured backup, or a repurposed drive - not a full
-compromise of the same volume the key file also lives on. For that,
-override BACKUPARR_SECRETS_KEY with a key kept off the volume entirely
-(e.g. a Docker secret), instead of relying on the auto-generated file.
+Protects against a *partial* leak (config.json alone, without the key
+file). Override BACKUPARR_SECRETS_KEY to keep the key off the volume
+entirely for stronger protection.
 """
 import logging
 import os
@@ -62,9 +54,7 @@ def _get_fernet():
 
 
 def encrypt(value):
-    """Encrypts a single string for storage. Empty values are left as-is -
-    nothing to protect, and it keeps config.json from filling up with
-    encrypted-empty-string noise for every unused field."""
+    """Encrypts a single string for storage. Empty values pass through."""
     if not value:
         return value
     token = _get_fernet().encrypt(value.encode("utf-8")).decode("ascii")
@@ -72,16 +62,12 @@ def encrypt(value):
 
 
 def decrypt(value):
-    """Reverses encrypt(). A value without the enc:v1: prefix is treated as
-    legacy plaintext (written before this existed) and returned unchanged -
-    config_store.save_config() re-encrypts it the next time it runs, so
-    there's no separate migration step to run by hand.
+    """Reverses encrypt(). A value without the enc:v1: prefix is legacy
+    plaintext, returned unchanged - save_config() re-encrypts it next run.
 
-    If the key has changed (lost secrets.key, or BACKUPARR_SECRETS_KEY
-    pointed at a different key than whatever encrypted this value), the
-    field can't be recovered - logs a warning and returns "" rather than
-    crashing whatever request or cron run touched it, so a lost key locks
-    out only the specific fields it can't decrypt, not the whole app."""
+    If the key has changed, the field can't be recovered - logs a
+    warning and returns "" instead of crashing, so a lost key only locks
+    out the fields it can't decrypt."""
     if not value or not value.startswith(PREFIX):
         return value
     token = value[len(PREFIX):]

@@ -19,10 +19,8 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-# All 8 known collections. FileJSONDB and StatisticsJSONDB are more "scan
-# state" than configuration (they get rebuilt as libraries are rescanned),
-# but there's no extra cost to including them since it's the same call
-# shape for every collection.
+# All 8 known collections, including scan-state ones (FileJSONDB,
+# StatisticsJSONDB) since backing them up costs nothing extra.
 COLLECTIONS = [
     "LibrarySettingsJSONDB",
     "SettingsGlobalJSONDB",

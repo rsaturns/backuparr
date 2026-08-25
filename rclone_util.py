@@ -10,9 +10,7 @@ class RcloneError(RuntimeError):
 
 
 def _run(args):
-    # stdin explicitly closed, not just inherited - --non-interactive config
-    # commands shouldn't need it, but an inherited TTY stdin (e.g. a manual
-    # docker exec) would otherwise let a command hang waiting for input.
+    # stdin closed so an inherited TTY (e.g. manual docker exec) can't hang.
     proc = subprocess.run(["rclone", *args], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     if proc.returncode != 0:
         raise RcloneError(f"rclone {' '.join(args)} failed: {proc.stderr.strip()}")
@@ -25,21 +23,13 @@ def config_dump():
 
 
 def config_set(name, backend_type, fields, force=False):
-    """Creates or updates a remote so its fields match `fields` (a dict of
-    string->string). Uses `create` only for a brand-new remote, or when
-    force=True (an explicit reconnect) - `create` replaces a remote's whole
-    definition from scratch, discarding any field not passed this time, so a
-    routine resync must use `update` instead, which only touches the given
-    keys and leaves everything else alone (in particular, an already-rotated
-    OAuth refresh token - see onedrive_oauth.py's sync_rclone_remote for why
-    that matters).
+    """Creates or updates a remote to match `fields`. Uses `create` (full
+    rewrite) only for a new remote or force=True; otherwise `update`,
+    which only touches the given keys - preserves fields like an
+    already-rotated OAuth token that `create` would discard.
 
-    Always adds config_refresh_token=false: without it, `update`/`create` on
-    an OAuth-capable backend (drive, onedrive) attempts its own token
-    refresh as a side effect of touching *any* field, even ones unrelated to
-    auth. Whether and when to write a fresh token is sync_rclone_remote()'s
-    call to make from dest_cfg, not something rclone should decide on its
-    own."""
+    Always adds config_refresh_token=false, or rclone attempts its own
+    token refresh as a side effect of touching any field."""
     existing = name in config_dump()
     args = ["config", "create" if (force or not existing) else "update", name]
     if force or not existing:
@@ -60,8 +50,7 @@ def copyto(local_path, remote_path):
 
 
 def delete_file(remote_path):
-    """Deletes a single remote file (as opposed to `delete`, which targets a
-    directory) - used for manual per-backup deletion from the History tab."""
+    """Deletes a single remote file, unlike `delete` which targets a dir."""
     _run(["deletefile", remote_path])
 
 
@@ -74,8 +63,7 @@ def delete_older_than(remote_dir, min_age):
 
 
 def lsf(remote_dir):
-    """Returns [] instead of raising when the directory doesn't exist yet
-    (e.g. an app that's never had a successful backup) - same as lsjson."""
+    """Returns [] instead of raising when the directory doesn't exist yet."""
     try:
         out = _run(["lsf", remote_dir])
     except RcloneError:
@@ -84,8 +72,7 @@ def lsf(remote_dir):
 
 
 def lsjson(remote_dir):
-    """Returns [] instead of raising when the directory doesn't exist yet
-    (e.g. an app that's never had a successful backup)."""
+    """Returns [] instead of raising when the directory doesn't exist yet."""
     try:
         out = _run(["lsjson", remote_dir])
     except RcloneError:
@@ -94,11 +81,8 @@ def lsjson(remote_dir):
 
 
 def check_remote(remote_dir):
-    """Raises RcloneError if the remote can't be reached (bad remote name,
-    auth failure, etc.) - used to validate rclone_remote from the UI. Checks
-    just the remote root (e.g. "gdrive:"), not the configured subfolder,
-    since that subfolder may not exist yet on a first-ever setup - rclone
-    creates it lazily on first upload."""
+    """Raises RcloneError if the remote can't be reached. Checks just the
+    remote root, not the subfolder - rclone creates that lazily."""
     remote_root = remote_dir.split("/", 1)[0]
     if not remote_root.endswith(":"):
         remote_root += ":"

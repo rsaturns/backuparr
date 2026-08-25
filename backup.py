@@ -1,12 +1,7 @@
 """Trigger each configured app's own backup mechanism over its API, zip the
-result if needed, and upload it to the configured rclone remote (Google
-Drive). No app config volumes are read directly - everything goes through
-each app's HTTP API. Settings come from config_store (edited via the web UI
-or config.json directly), not environment variables.
-
-run_backup()/build_app() are imported directly by webui/app.py, which is
-the only caller now that scheduling happens in-process there instead of via
-a cron job shelling out to this file.
+result if needed, and upload it to the configured rclone remote. No app
+config volumes are read directly - everything goes through each app's
+HTTP API. Settings come from config_store, not environment variables.
 """
 import logging
 import logging.handlers
@@ -42,8 +37,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("backuparr")
 
-# So the web UI's status view can show the result of cron-triggered runs
-# too, not just ones it started itself in-process (see webui/app.py).
+# So the web UI's status view can show past run results too.
 try:
     os.makedirs(LOG_DIR, exist_ok=True)
     _file_handler = logging.handlers.RotatingFileHandler(LOG_FILE, maxBytes=1_000_000, backupCount=3)
@@ -55,13 +49,8 @@ except OSError:
 
 def humanize_error(exc):
     """Turns a raw requests exception into a short, human-readable message
-    instead of a Python exception repr - e.g. "No connection adapters were
-    found for 'radarr:7878/...'" (a URL missing its http:// scheme) or a
-    multi-line HTTPConnectionPool/Max retries dump (a connection timeout)
-    are meaningless to someone who just fat-fingered a URL or has an app
-    that's temporarily down. Anything that isn't a requests exception
-    (including the apps/*.py-specific *Error classes, which already read
-    fine on their own) passes through as str(exc) unchanged."""
+    instead of a Python exception repr. Anything else passes through as
+    str(exc) unchanged."""
     if isinstance(exc, (requests.exceptions.MissingSchema, requests.exceptions.InvalidSchema, requests.exceptions.InvalidURL)):
         return "that doesn't look like a valid URL - it should start with http:// or https://"
     if isinstance(exc, (requests.exceptions.ConnectionError, requests.exceptions.Timeout)):
@@ -102,23 +91,16 @@ def zip_dir(src_dir, zip_path):
                 zf.write(full, os.path.relpath(full, src_dir))
 
 
-# A bare `requests.post(url, data=message)` - the fallback below - is
-# exactly ntfy.sh/a generic webhook logger's native shape (plain text as
-# the whole request body), but Discord/Slack/Telegram/Gotify each expect
-# their own JSON envelope instead and would otherwise just reject a raw
-# text body (Gotify's own OpenAPI spec declares "consumes:
-# application/json" on POST /message - confirmed, not assumed). Matched
-# by URL shape so no separate "service type" setting is needed -
-# notify_url alone is still enough to configure any of these.
+# Discord/Slack/Telegram/Gotify each need their own JSON envelope, not
+# the plain-text body the fallback sends (ntfy.sh's native shape).
+# Matched by URL shape so notify_url alone still configures everything.
 _DISCORD_WEBHOOK_RE = re.compile(r"discord(?:app)?\.com/api/webhooks/")
 _SLACK_WEBHOOK_RE = re.compile(r"hooks\.slack\.com/services/")
 _TELEGRAM_RE = re.compile(r"api\.telegram\.org/bot")
 
 
 def _is_gotify_url(parsed):
-    # Gotify is self-hosted (no fixed domain to match), so this goes by
-    # its distinctive /message path + ?token= query param instead - the
-    # same shape Gotify's own docs show for a message-creation URL.
+    # Gotify is self-hosted, so match by shape: /message path + ?token=.
     return parsed.path.rstrip("/").endswith("/message") and "token" in parse_qs(parsed.query)
 
 
@@ -128,15 +110,11 @@ def notify(notify_url, message):
     parsed = urlparse(notify_url)
     try:
         if _DISCORD_WEBHOOK_RE.search(notify_url):
-            # 2000 chars is Discord's hard per-message limit - truncate
-            # rather than let it reject the whole notification.
-            requests.post(notify_url, json={"content": message[:2000]}, timeout=10)
+            requests.post(notify_url, json={"content": message[:2000]}, timeout=10)  # 2000 = Discord's limit
         elif _SLACK_WEBHOOK_RE.search(notify_url):
             requests.post(notify_url, json={"text": message}, timeout=10)
         elif _TELEGRAM_RE.search(notify_url):
-            # chat_id (and anything else) stays in notify_url's own query
-            # string - Telegram's sendMessage accepts that alongside a
-            # JSON body carrying just the parts that vary per call.
+            # chat_id stays in notify_url's own query string.
             requests.post(notify_url, json={"text": message}, timeout=10)
         elif _is_gotify_url(parsed):
             requests.post(notify_url, json={"title": "Backuparr", "message": message}, timeout=10)
@@ -147,11 +125,9 @@ def notify(notify_url, message):
 
 
 def run_backup(cfg):
-    """Run one backup pass for every enabled app in cfg, uploading each to
-    every enabled destination. Returns (ok, failed) - ok lists app names
-    that made it to every destination, failed lists "<app>: <message>"
-    strings (used both for per-app failures and destination-level ones, so
-    the Overview tab's app-id parsing keeps working either way)."""
+    """Run one backup pass for every enabled app, uploading to every
+    enabled destination. Returns (ok, failed) - failed entries are
+    "<app>: <message>" strings."""
     apps = enabled_apps(cfg)
     if not apps:
         log.error("No apps enabled - nothing to do")
@@ -200,8 +176,7 @@ def run_backup(cfg):
                 if result_path.is_dir():
                     zip_dir(result_path, zip_path)
                 else:
-                    # Already a zip produced by the app itself (Radarr/Sonarr/
-                    # Prowlarr/Bazarr) - just stage it under our naming scheme.
+                    # Already a zip from the app itself - just rename it.
                     shutil.copy(result_path, zip_path)
 
                 size = os.path.getsize(zip_path)

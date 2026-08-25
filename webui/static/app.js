@@ -8,11 +8,9 @@ let SETTINGS_SNAPSHOT = null;
 async function apiFetch(url, opts) {
   const res = await fetch(url, opts);
   if (res.status === 401) {
-    // Session expired mid-use (e.g. left a tab open past the cookie's
-    // lifetime) - bounce to the login page instead of surfacing a raw
-    // "authentication required" toast.
+    // Session expired - bounce to login instead of surfacing a raw 401 toast.
     window.location.href = "/login";
-    return new Promise(() => {}); // navigation is in flight - never resolve
+    return new Promise(() => {}); // navigation in flight, never resolve
   }
   let body = null;
   try {
@@ -85,20 +83,16 @@ function destLabel(destId) {
   return m ? m.label : destId;
 }
 
-// Short enough to sit under a small icon without wrapping - destLabel()'s
-// full names ("Microsoft OneDrive") are too long for that spot.
+// Short labels for the small icon row - destLabel()'s full names are too long there.
 const SHORT_DEST_LABEL = { local: "Local", gdrive: "Google Drive", onedrive: "OneDrive", dropbox: "Dropbox" };
 
 function enabledDestinationIds(cfg) {
-  // Order from DESTINATION_META (a stable, intentionally-ordered list), not
-  // Object.keys(cfg.destinations) - Flask's jsonify() sorts object keys
-  // alphabetically, which would put "gdrive" before "local" in the UI.
+  // Order from DESTINATION_META, not Object.keys - jsonify() sorts keys
+  // alphabetically, which would put "gdrive" before "local".
   const ids = DESTINATION_META.length ? DESTINATION_META.map((m) => m.id) : Object.keys(cfg.destinations || {});
   return ids.filter((id) => (cfg.destinations || {})[id] && cfg.destinations[id].enabled);
 }
 
-// One icon + short label per enabled destination, replacing what used to
-// be a plain comma-separated text list.
 function destinationsStat(destIds) {
   const div = document.createElement("div");
   div.className = "overview-stat";
@@ -144,10 +138,7 @@ async function loadOverview() {
       Promise.all(destIds.map((id) => apiFetch(`/api/history/${id}`).catch(() => ({})))),
       apiFetch("/api/backup/status"),
     ]);
-    // Per app, the single most recent backup across every enabled
-    // destination - "last backup happened at X" is meaningful regardless
-    // of where it landed, and with one destination this is just that
-    // destination's latest entry.
+    // Per app, the single most recent backup across every enabled destination.
     const latestByApp = {};
     histories.forEach((history, i) => {
       const destId = destIds[i];
@@ -255,9 +246,8 @@ async function loadOverview() {
 }
 
 // ------------------------------------------------------------- layout ----
-// Keeps the sticky Settings toolbar pinned just below the sticky topbar
-// instead of overlapping it, whatever the topbar's actual rendered height
-// (which varies with font size/zoom/wrapping).
+// Keeps the sticky Settings toolbar pinned below the sticky topbar at any
+// topbar height (varies with font size/zoom/wrapping).
 function syncTopbarHeight() {
   const topbar = document.querySelector(".topbar");
   if (topbar) document.documentElement.style.setProperty("--topbar-h", `${topbar.getBoundingClientRect().height}px`);
@@ -521,9 +511,7 @@ function gdriveRedirectUri() {
 }
 
 async function connectGdrive() {
-  // Client ID/secret have to be saved before Google will redirect back here
-  // with anything useful, so save the whole form first (same as clicking
-  // the header Save button) and only navigate away if that succeeds.
+  // Client ID/secret must be saved before the OAuth redirect can use them.
   const resultEl = document.getElementById("save-result");
   resultEl.textContent = "Saving before connecting...";
   resultEl.className = "save-result";
@@ -749,9 +737,7 @@ function initSetupGuideEvents() {
 }
 
 // -------------------------------------------------------- schedule picker ----
-// Writes into #s-cron_schedule, same as if it'd been typed directly - the
-// rest of Settings (collectConfig/save/dirty-check) never needs to know a
-// picker was involved.
+// Writes into #s-cron_schedule, same as if typed directly.
 function schedulePickerVisibility() {
   const freq = document.getElementById("sched-frequency").value;
   document.getElementById("sched-time").classList.toggle("hidden", freq === "hourly");
@@ -771,10 +757,8 @@ function applyPickerToCron() {
   document.getElementById("s-cron_schedule").value = cron;
 }
 
-// Best-effort: only recognizes the exact shapes the picker itself can
-// produce (daily/weekly at HH:MM, or every-N-hours). Anything else - a
-// schedule someone hand-wrote in the advanced field - is left untouched;
-// the picker just falls back to a default display without altering it.
+// Only recognizes shapes the picker itself produces (daily/weekly at HH:MM,
+// or every-N-hours); anything else is left untouched.
 function parseCronIntoPicker(cron) {
   const parts = (cron || "").trim().split(/\s+/);
   if (parts.length !== 5) return false;
@@ -819,9 +803,7 @@ function initSchedulePicker(cronValue) {
     if (!document.getElementById("sched-time").value) document.getElementById("sched-time").value = "03:00";
   }
   schedulePickerVisibility();
-  // Auto-expand the advanced field when the current schedule isn't
-  // something the simple picker can represent, so it's never silently
-  // hidden behind a picker state that doesn't actually match it.
+  // Auto-expand advanced when the schedule doesn't match a simple picker shape.
   setCronAdvancedExpanded(!matched);
 }
 
@@ -1077,9 +1059,7 @@ let RESTORE_STATE = { app: null, file: null, servers: [] };
 function initRestoreAppOptions() {
   const select = document.getElementById("r-app");
   if (select.options.length) return;
-  // restore_supported defaults to true when absent - only apps that
-  // explicitly opt out (e.g. Profilarr, whose own restore has no public
-  // API) are left off this list.
+  // restore_supported defaults to true; only explicit opt-outs (e.g. Profilarr) are excluded.
   APP_META.filter((m) => m.restore_supported !== false).forEach((m) => {
     const opt = document.createElement("option");
     opt.value = m.id;

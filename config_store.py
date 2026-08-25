@@ -1,8 +1,5 @@
-"""Persistent config for Backuparr, shared by backup.py, restore.py, and
-the web UI. Stored as a single JSON file on a volume so it survives
-container recreation, and so the web UI and the cron-triggered backup run
-are always looking at the same settings.
-"""
+"""Persistent config for Backuparr - a single JSON file on a volume,
+shared by backup.py, restore.py, and the web UI."""
 import copy
 import json
 import os
@@ -16,10 +13,8 @@ APP_NAMES = ["radarr", "sonarr", "prowlarr", "profilarr", "bazarr", "tdarr", "sa
 
 DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "password": ""}
 
-# Drives the web UI's forms generically instead of hardcoding per-app
-# knowledge in JS. "status": "coming_soon" ones render disabled with a
-# badge instead of a working card, same treatment as DESTINATION_META
-# below.
+# Drives the web UI's forms generically. "coming_soon" apps render
+# disabled with a badge, same as DESTINATION_META below.
 APP_META = [
     {"id": "radarr", "label": "Radarr", "icon": "radarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://radarr:7878", "extra_fields": []},
     {"id": "sonarr", "label": "Sonarr", "icon": "sonarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://sonarr:8989", "extra_fields": []},
@@ -32,10 +27,7 @@ APP_META = [
         "key_required": True,
         "url_placeholder": "http://profilarr:6868",
         "extra_fields": [],
-        # Profilarr's own restore is a browser-session-only action that
-        # requires a container restart to apply - no public API for it, so
-        # Backuparr can back it up but can't offer a restore button. See
-        # the README's Profilarr note.
+        # Profilarr's restore has no public API - see README.
         "restore_supported": False,
     },
     {
@@ -69,10 +61,7 @@ APP_META = [
         "label": "Seerr",
         "icon": "seerr.svg",
         "status": "coming_soon",
-        # Seerr has no backup/restore API at all - its own docs recommend
-        # stopping the app and copying its data folder directly, which
-        # conflicts with backing up over HTTP the way every other app
-        # here does. Not implemented; card shown for visibility only.
+        # No backup/restore API exists - card shown for visibility only.
         "key_required": True,
         "url_placeholder": "",
         "extra_fields": [],
@@ -81,9 +70,7 @@ APP_META = [
 
 DEST_NAMES = ["local", "gdrive", "onedrive", "dropbox"]
 
-# Where local-destination backups land by default if the user hasn't set a
-# custom path - a subdirectory of the same volume config.json already lives
-# on, so it survives container recreation with no extra mount needed.
+# Default local-destination backup path - same volume as config.json.
 DEFAULT_LOCAL_DIR = "/config/backuparr/backups"
 
 DEFAULT_DEST = {
@@ -106,11 +93,8 @@ DEFAULT_DEST = {
     },
 }
 
-# Fields the generic POST /api/config can write per destination. Notably
-# excludes gdrive's refresh_token/folder_id/folder_name and onedrive's
-# token/drive_id/drive_type/item_id - those are only ever set by the
-# dedicated OAuth/connect routes in webui/app.py, so a POST to the general
-# settings form can't forge a connected state.
+# Fields POST /api/config can write per destination - excludes OAuth
+# state (tokens, folder IDs), which only the dedicated connect routes set.
 DEST_EDITABLE_FIELDS = {
     "local": {"enabled", "path"},
     "gdrive": {"enabled", "client_id", "client_secret"},
@@ -118,10 +102,7 @@ DEST_EDITABLE_FIELDS = {
     "onedrive": {"enabled"},
 }
 
-# Drives the Settings > Destinations card generically. "coming_soon" ones
-# render disabled with a badge instead of a working toggle - the roadmap is
-# visible in the UI without us having built (or registered OAuth apps for)
-# the integration yet.
+# Drives the Settings > Destinations card generically.
 DESTINATION_META = [
     {
         "id": "local",
@@ -243,11 +224,8 @@ DEFAULTS = {
 }
 
 def _secret_fields(cfg):
-    """(container_dict, key) for every value that should be encrypted at
-    rest - an explicit allowlist, not "encrypt everything", so the rest of
-    config.json stays human-readable for debugging. Client IDs are excluded
-    on purpose (only the secret half of an OAuth credential is sensitive -
-    standard practice, client IDs are routinely embedded in public clients)."""
+    """(container_dict, key) for every value encrypted at rest - an
+    explicit allowlist, not "encrypt everything"."""
     fields = [(cfg["apps"][name], "api_key") for name in APP_NAMES]
     fields.append((cfg["apps"]["bazarr"], "password"))
     fields.append((cfg["destinations"]["gdrive"], "client_secret"))
@@ -274,11 +252,7 @@ def load_config():
     for name in DEST_NAMES:
         merged["destinations"][name].update(data.get("destinations", {}).get(name, {}))
 
-    # Decrypt secret fields in place, transparently, so every other caller
-    # keeps just reading cfg["apps"]["radarr"]["api_key"] etc. as always. A
-    # value still in plaintext (written before this existed) gets persisted
-    # back out encrypted immediately, once, rather than waiting for the next
-    # unrelated save - no separate migration step to run by hand.
+    # Decrypt in place; a legacy plaintext value gets re-saved encrypted.
     needs_migration = False
     for container, key in _secret_fields(merged):
         raw = container.get(key, "")
@@ -299,9 +273,7 @@ def save_config(cfg):
 
     config_dir = os.path.dirname(CONFIG_PATH)
     os.makedirs(config_dir, exist_ok=True)
-    # Unique tmp filename, not a fixed "<path>.tmp" - avoids two concurrent
-    # saves colliding on the same tmp path (see gdrive_oauth.sync_rclone_remote
-    # for a case where that raced in practice).
+    # Unique tmp filename avoids concurrent saves colliding.
     fd, tmp_path = tempfile.mkstemp(dir=config_dir, prefix=".config.json.")
     try:
         with os.fdopen(fd, "w") as f:
@@ -314,9 +286,8 @@ def save_config(cfg):
 
 
 def enabled_apps(cfg):
-    """Only ones with status "available" can ever be enabled - a coming_soon
-    id can't be flipped on client-side, but guard here too since config.json
-    can be hand-edited."""
+    """Only "available" ones can be enabled - guards against a
+    hand-edited config.json flipping on a coming_soon entry."""
     available = {m["id"] for m in APP_META if m["status"] == "available"}
     return [
         name for name in APP_NAMES
@@ -337,9 +308,8 @@ def app_meta(name):
 
 
 def enabled_destinations(cfg):
-    """Only ones with status "available" can ever be enabled - a coming_soon
-    id can't be flipped on client-side, but guard here too since config.json
-    can be hand-edited."""
+    """Only "available" ones can be enabled - guards against a
+    hand-edited config.json flipping on a coming_soon entry."""
     available = {m["id"] for m in DESTINATION_META if m["status"] == "available"}
     return [
         name for name in DEST_NAMES

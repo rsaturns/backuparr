@@ -28,10 +28,9 @@ COLOR = {
 }
 
 W = 1200
-# Vertical space reserved above the content for the caption, and below it
-# as a bottom margin - kept separate from centering math (rather than
-# just centering across the full canvas) so a longer SOURCES list doesn't
-# creep up and collide with the caption text.
+# Space reserved above/below content for the caption and bottom margin,
+# kept separate from centering math so a longer SOURCES list doesn't
+# collide with the caption.
 CONTENT_TOP = 90
 BOTTOM_MARGIN = 40
 
@@ -100,9 +99,7 @@ def icon(path, kind, x, y, size, max_px=128):
 def build():
     src_block_h = len(SOURCES) * CARD_H + (len(SOURCES) - 1) * CARD_GAP
     dest_block_h = len(DESTS) * DEST_H + (len(DESTS) - 1) * DEST_GAP
-    # All three columns share one common vertical center line (content_h/2
-    # below CONTENT_TOP), sized to whichever column is tallest - currently
-    # always the source list, but this stays correct if that changes.
+    # All three columns share one vertical center line, sized to the tallest.
     content_h = max(src_block_h, dest_block_h, HUB_H)
     H = CONTENT_TOP + content_h + BOTTOM_MARGIN
 
@@ -159,11 +156,8 @@ def build():
         parts.append(f'<text x="{ix + DEST_ICON + 16}" y="{y + DEST_H / 2 + 18}" font-size="12.5" fill="{COLOR["muted"]}">{sub}</text>')
         dest_anchor.append((RIGHT_X, y + DEST_H / 2))
 
-    # Converging source lines share one unified arrowhead at the merge
-    # point instead of each carrying its own marker-end - six overlapping
-    # arrowheads at slightly different angles reads as a jagged mess, not
-    # an arrow. The lines stop short of hub_in; a single triangle fills
-    # the gap.
+    # Converging lines share one arrowhead at the merge point instead of each
+    # carrying its own marker-end; lines stop short of hub_in for the gap.
     for ax, ay in src_anchor:
         bx, by = hub_in
         c1x, c2x = ax + (bx - ax) * 0.55, ax + (bx - ax) * 0.85

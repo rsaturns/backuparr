@@ -1,34 +1,29 @@
 """Backup/restore driver for Tautulli via its API v2.
 
-Tautulli's own database and config files have no dedicated "create then
-download a backup archive" flow the way the Servarr apps or Profilarr do -
-instead its API exposes two commands that generate and stream a live,
-sanitized copy on every call:
+Tautulli has no "create then download a backup archive" flow like the
+Servarr apps or Profilarr - instead its API exposes two commands that
+generate and stream a live, sanitized copy on every call:
 
 - `cmd=download_database` - a fresh copy of tautulli.db with Plex/server
-  tokens nulled out (`UPDATE users SET user_token = NULL, ...` server-side,
-  confirmed in Tautulli's own source, and empirically against a real
-  instance - 0 non-null tokens across 27 users) before it's streamed back.
+  tokens nulled server-side before it's streamed back.
 - `cmd=download_config` - a fresh copy of config.ini, but only
   `PMS_TOKEN`/`JWT_SECRET` are stripped (Tautulli's own
-  `_DO_NOT_DOWNLOAD_KEYS`, confirmed in its source and empirically - the
-  Tautulli API key itself, and any notification agent credentials stored
-  there, come through in plain text). See the README's Tautulli note.
+  `_DO_NOT_DOWNLOAD_KEYS`) - the Tautulli API key itself and any
+  notification agent credentials come through in plain text. See the
+  README's Tautulli note.
 
-Both are registered as ordinary `@addtoapi()` commands (confirmed in
-Tautulli's plexpy/webserve.py and plexpy/helpers.py), so they're reachable
-through the same apikey-authenticated `/api/v2?apikey=...&cmd=...` route
-as every other API call here - no separate session/cookie auth, and no
-"trigger a job, then poll it" step needed since each call already returns
-the finished file.
+Both are ordinary `@addtoapi()` commands, reachable through the same
+apikey-authenticated `/api/v2?apikey=...&cmd=...` route as every other
+call here - no separate session/cookie auth, and no trigger-then-poll
+step since each call already returns the finished file.
 
-Restore is genuinely two-part and API-driven too: `cmd=import_database`
-and `cmd=import_config` each accept a multipart file upload
+Restore is two-part and API-driven too: `cmd=import_database` and
+`cmd=import_config` each accept a multipart file upload
 (`database_file`/`config_file`) and apply it - Tautulli restarts itself
 after a config import. Both run as a background thread on Tautulli's side
-and return immediately once the file's accepted, so - like Radarr/Sonarr/
-Prowlarr/Bazarr's restore here - this confirms the upload was received,
-not that the import has finished.
+and return immediately once accepted, so - like Radarr/Sonarr/Prowlarr/
+Bazarr's restore here - this confirms the upload was received, not that
+the import has finished.
 """
 import logging
 import os

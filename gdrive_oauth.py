@@ -1,26 +1,13 @@
-"""Google Drive as a Backuparr destination, connected via a normal OAuth
-"Connect" button instead of the rclone CLI's interactive config wizard.
+"""Google Drive as a Backuparr destination, connected via an OAuth
+"Connect" button (see webui/app.py's /api/destinations/gdrive/* routes)
+instead of rclone's interactive config wizard. Scoped to drive.file -
+only files/folders this app created or the user picked via the Google
+Picker widget, not the whole Drive.
 
-The web UI drives the standard OAuth2 authorization-code flow (see
-webui/app.py's /api/destinations/gdrive/* routes): the user creates their
-own OAuth client in Google Cloud Console (unavoidable - every app talking to
-Google APIs needs one), pastes the client ID/secret into Settings, then
-clicks through Google's consent screen scoped to drive.file - narrower than
-the full `drive` scope most rclone Google Drive setups end up using, since
-it only ever grants access to files/folders this app created or the user
-explicitly picked via the Google Picker widget.
-
-Once connected, this module keeps a single rclone remote (REMOTE_NAME) in
-sync with the stored refresh token, so backup.py/restore_actions.py/
-rclone_util.py don't need to know OAuth happened at all - they just see an
-ordinary rclone remote, the same way a hand-configured one would look.
-
-rclone.conf itself is encrypted (see entrypoint.sh) via rclone's own
-`rclone config encryption`, which means it can no longer be read/written
-directly with Python's configparser - only the rclone binary itself, given
-the RCLONE_CONFIG_PASS it was started with, can get at it. sync_rclone_remote
-below goes through rclone_util's `rclone config create/update/delete`
-wrappers instead.
+Keeps a single rclone remote (REMOTE_NAME) in sync with the stored
+refresh token, so the rest of the codebase just sees an ordinary rclone
+remote. rclone.conf is encrypted (see entrypoint.sh), so it's written via
+rclone_util's `rclone config` wrappers, not configparser directly.
 """
 import json
 
@@ -96,10 +83,8 @@ def get_access_token(dest_cfg):
 
 
 def remote_root(dest_cfg):
-    """The rclone remote root to pass to rclone_util for this destination.
-    Which Drive folder that resolves to is set via the remote's own
-    root_folder_id config (written by sync_rclone_remote), not path syntax -
-    rclone has no `remote:{id}` shorthand for scoping to a folder by ID."""
+    """The rclone remote root for this destination. The target folder is
+    set via the remote's own root_folder_id, not path syntax."""
     if not dest_cfg.get("refresh_token"):
         raise GDriveOAuthError("Google Drive is not connected - go to Settings and click Connect.")
     return f"{REMOTE_NAME}:"
@@ -107,26 +92,14 @@ def remote_root(dest_cfg):
 
 def sync_rclone_remote(dest_cfg):
     """Writes (or removes) the REMOTE_NAME remote in rclone.conf to match
-    the current destinations.gdrive config. Called before any rclone
-    operation that might touch this destination, and right after connect/
-    disconnect, so the file on disk never drifts from config.json.
-
-    Always force=True (a full rewrite via `rclone config create`, not an
-    incremental `update`) - safe here because Google's refresh tokens don't
-    rotate on use the way Microsoft's OneDrive ones do (contrast with
-    onedrive_oauth.sync_rclone_remote), so config.json's copy is always the
-    same value already in rclone.conf, never staler than it."""
+    destinations.gdrive. Always force=True (full rewrite) - safe since,
+    unlike OneDrive, Google's refresh tokens don't rotate on use."""
     if not dest_cfg.get("refresh_token"):
         rclone_util.config_delete(REMOTE_NAME)
         return
 
-    # rclone refreshes this itself using client_id/client_secret once it
-    # expires - we don't need to keep it current from our side, just seed it
-    # with a token shaped the way rclone expects, dated already expired so
-    # it refreshes on first use. access_token must be non-empty (verified
-    # against a real rclone binary) - an empty string makes rclone discard
-    # the whole token as invalid instead of just treating it as expired, and
-    # it then reports "no refresh token" even though one's right there.
+    # access_token must be non-empty or rclone discards the token as
+    # invalid entirely - dated already-expired so rclone refreshes it.
     token_json = json.dumps({
         "access_token": "placeholder",
         "token_type": "Bearer",

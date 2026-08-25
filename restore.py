@@ -9,26 +9,22 @@ Usage:
     python restore.py sabnzbd
     python restore.py tautulli
 
-Radarr/Sonarr/Prowlarr restore purely over the API (multipart upload) - the
-app restarts itself once restored. Bazarr needs a local path to its own
-backup folder (see README); defaults to bazarr_backup_dir from config.json
-if set there. Tdarr wipes and repopulates its database collections over the
-API - this is destructive, so it asks for confirmation unless --yes is
-given. SABnzbd restores everything except categories/RSS/sorters over the
-API too, prompting interactively for each Usenet server's password
-(SABnzbd's API never returns the real value - see apps/sabnzbd.py); run
-this from a real terminal so the prompts work, or use --yes to skip both
-confirmation and password prompts (servers are then left without a
-password, to be set manually in Settings > Servers). Tautulli restores
-its database and config separately over the API, each as a multipart
-upload; a config restore makes Tautulli restart itself.
+Radarr/Sonarr/Prowlarr restore over the API (multipart upload); the app
+restarts itself. Bazarr needs a local path to its own backup folder (see
+README), defaulting to bazarr_backup_dir from config.json. Tdarr wipes and
+repopulates its database collections - destructive, asks for confirmation
+unless --yes. SABnzbd restores everything except categories/RSS/sorters,
+prompting interactively for each Usenet server's password (SABnzbd's API
+never returns the real value); run from a real terminal, or use --yes to
+skip prompts (servers are then left without a password). Tautulli restores
+its database and config separately, each as a multipart upload; a config
+restore makes Tautulli restart itself.
 
-Note: Profilarr is backed up but not restorable from here at all - its
-own restore has no public API. See the README's Profilarr note.
+Profilarr is backed up but not restorable from here - its own restore has
+no public API. See the README's Profilarr note.
 
-Settings (URLs, API keys, destinations) come from config.json - the same
-config the web UI edits - not environment variables. If more than one
-destination is enabled (e.g. both Local and Google Drive), pass
+Settings (URLs, API keys, destinations) come from config.json, not
+environment variables. If more than one destination is enabled, pass
 --destination to say which one to restore from.
 """
 import argparse

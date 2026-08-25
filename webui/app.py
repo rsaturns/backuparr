@@ -43,9 +43,7 @@ from config_store import (
 app = Flask(__name__)
 log = logging.getLogger("backuparr.webui")
 
-# Baked into the image at build time (see Dockerfile) - read once here
-# rather than on every page load, since it can't change for the lifetime of
-# a running container.
+# Read once - baked in at build time, can't change at runtime.
 _VERSION_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "VERSION")
 try:
     with open(_VERSION_PATH) as _f:
@@ -54,10 +52,7 @@ except OSError:
     VERSION = "dev"
 
 def _load_or_create_secret_key():
-    """Random bytes for signing session cookies - generated once, persisted
-    on the same volume as everything else so sessions survive container
-    restarts, not regenerated per-process (which would log everyone out on
-    every deploy)."""
+    """Session-signing key, persisted so sessions survive restarts."""
     path = os.environ.get("BACKUPARR_SECRET_KEY_PATH", "/config/backuparr/secret_key")
     if os.path.exists(path):
         with open(path, "rb") as f:
@@ -92,14 +87,11 @@ def _security_headers(response):
     response.headers["Referrer-Policy"] = "same-origin"
     return response
 
-# Single in-flight OAuth attempt is all a personal, single-admin tool needs -
-# CSRF-protects the callback without a real session store. (state -> ts)
+# CSRF state for the OAuth callback, no session store needed. state -> ts
 _OAUTH_STATE = {}
 _OAUTH_STATE_TTL = 600
 
-# Throttles repeated /api/login attempts per source IP - Argon2id's own cost
-# adds some friction, but nothing else stops sustained guessing. In-memory,
-# same as _OAUTH_STATE above: ip -> (failure_count, last_failure_ts).
+# Login lockout tracking. ip -> (failure_count, last_failure_ts)
 _LOGIN_FAILURES = {}
 _LOGIN_FAILURE_TTL = 3600
 _LOGIN_LOCKOUT_THRESHOLD = 5
@@ -125,12 +117,8 @@ def _login_record_failure(ip):
 
 
 # ---------------------------------------------------------------- auth ----
-# Login is required by default, via a session cookie set after a one-time
-# setup screen creates the single admin account (see auth_store.py). This
-# used to also support HTTP Basic Auth via WEBUI_USERNAME/WEBUI_PASSWORD env
-# vars as an alternative - removed once the setup screen existed, since it's
-# a strictly better path for everyone the env vars were meant to serve too
-# (no plaintext credential sitting in a compose file to manage/rotate).
+# Session-cookie login, single admin account created via the setup screen
+# (see auth_store.py).
 _PUBLIC_PATHS = {"/api/logout", "/api/reset"}
 
 
@@ -215,10 +203,8 @@ def api_logout():
     return jsonify({"ok": True})
 
 
-# Deliberately reachable with no auth at all - it's the recovery path for a
-# forgotten password, so it can't require the password to trigger. The typed
-# phrase (checked here, not just in the UI) is the only thing gating it, so
-# it can't be hit by a stray/blind POST.
+# Deliberately public - it's the forgot-password recovery path. Gated by
+# the typed phrase, checked server-side too.
 RESET_CONFIRM_PHRASE = "i-want-to-reset-and-delete-files"
 
 
@@ -228,14 +214,14 @@ def api_reset():
     if data.get("confirm") != RESET_CONFIRM_PHRASE:
         return jsonify({"error": "confirmation phrase didn't match"}), 400
 
-    # Resolve the local backup dir (which may be a custom path) before
-    # config.json - the only place that custom path is recorded - is gone.
+    # Resolve the local backup dir before config.json (which may record a
+    # custom path) is deleted.
     local_backup_dir = None
     try:
         cfg = load_config()
         local_backup_dir = destination_util.local_root(cfg["destinations"]["local"])
     except Exception:
-        pass  # no usable config yet - nothing to look up, that's fine
+        pass
 
     if local_backup_dir and os.path.isdir(local_backup_dir):
         shutil.rmtree(local_backup_dir, ignore_errors=True)
@@ -243,12 +229,7 @@ def api_reset():
     rclone_conf_path = os.environ.get("RCLONE_CONFIG", "/config/backuparr/rclone.conf")
     rclone_pass_path = os.environ.get("RCLONE_CONFIG_PASS_FILE", "/config/backuparr/rclone.pass")
     secret_key_path = os.environ.get("BACKUPARR_SECRET_KEY_PATH", "/config/backuparr/secret_key")
-    # secret_key too, not just auth.json - it signs session cookies, so
-    # deleting it invalidates any session that was already logged in at the
-    # moment of reset, not just the one that triggered it. secrets.key and
-    # rclone.pass too - config.json/rclone.conf are about to be deleted
-    # anyway, but leaving either encryption key behind would be a loose end
-    # if a stale copy of the file it protects ever resurfaces.
+    # secret_key too, so it invalidates any other already-logged-in session.
     for path in (CONFIG_PATH, rclone_conf_path, rclone_pass_path, auth_store.AUTH_PATH, secret_key_path, secrets_crypto.KEY_PATH):
         try:
             os.remove(path)
@@ -298,10 +279,8 @@ def _do_run():
 
 
 def _start_backup_run():
-    """Starts a backup run in a background thread unless one is already in
-    progress. Returns True if it started, False otherwise. Shared by the
-    manual "Run backup now" endpoint and the scheduler below, so both go
-    through the same lock/state bookkeeping."""
+    """Starts a backup run unless one's already in progress. Returns
+    whether it started. Shared by the manual endpoint and the scheduler."""
     with RUN_LOCK:
         if RUN_STATE["running"]:
             return False
@@ -313,10 +292,8 @@ def _start_backup_run():
 
 
 # ------------------------------------------------------------ scheduler ----
-# Runs in-process instead of via an external cron daemon (see entrypoint.sh)
-# so a schedule change made in Settings takes effect on the next tick, not
-# the next restart - cron_schedule is re-read fresh from config.json every
-# time, with no separate crontab file to go stale.
+# In-process, not an external cron daemon - re-reads cron_schedule from
+# config.json every tick, so a Settings change applies immediately.
 _SCHEDULER_INTERVAL_SECONDS = 20
 _scheduler_state = {"last_run_minute": None}
 
@@ -326,9 +303,7 @@ def _scheduler_loop():
         try:
             schedule = load_config().get("cron_schedule", "0 3 * * *")
             now = datetime.now().replace(second=0, microsecond=0)
-            # Dedup guard: the ~20s poll interval means a single matching
-            # minute is seen on more than one tick, so only fire once per
-            # minute actually matched.
+            # Dedup: a matching minute is seen on more than one ~20s tick.
             if (
                 _scheduler_state["last_run_minute"] != now
                 and croniter.is_valid(schedule)
@@ -539,9 +514,7 @@ def api_history(dest_id):
     if error:
         return error
     history = {}
-    # coming_soon apps (currently just Seerr) can never have produced a
-    # backup, so skip the rclone call for them entirely rather than
-    # listing a directory that will only ever come back empty.
+    # coming_soon apps can't have a backup - skip the rclone call.
     for name in APP_NAMES:
         if app_meta(name)["status"] != "available":
             continue
@@ -748,11 +721,8 @@ def api_gdrive_oauth_callback():
             gdrive_cfg["client_id"], gdrive_cfg["client_secret"], _gdrive_redirect_uri(), code
         )
     except Exception as exc:
-        # Broad on purpose: exchange_code() only wraps a non-200 response as
-        # GDriveOAuthError - a network failure reaching Google mid-exchange
-        # raises a raw requests exception instead, which would otherwise
-        # escape as an unhandled 500 rather than the friendly redirect this
-        # route exists to give.
+        # Broad on purpose: a network failure here raises a raw requests
+        # exception, not just GDriveOAuthError.
         log.exception("gdrive oauth exchange failed")
         return _redirect_with_error(humanize_error(exc))
 
@@ -806,12 +776,8 @@ def api_gdrive_disconnect():
 # --------------------------------------------------------- onedrive ----
 @app.post("/api/destinations/onedrive/connect")
 def api_onedrive_connect():
-    """Takes the token blob the user pasted from a locally-run
-    `rclone authorize onedrive`, validates it, and does one Graph API call
-    to resolve the app folder's id/drive_id/drive_type - everything
-    sync_rclone_remote needs. No redirect/callback dance of our own since
-    the OAuth exchange already happened wherever the user ran that
-    command."""
+    """Validates the pasted `rclone authorize onedrive` token and resolves
+    the app folder's drive_id/drive_type via one Graph API call."""
     data = request.get_json(force=True, silent=True) or {}
     try:
         token_json, access_token = onedrive_oauth.parse_token_blob(data.get("token_blob", ""))
@@ -827,10 +793,7 @@ def api_onedrive_connect():
     onedrive_cfg["item_id"] = approot["id"]
     onedrive_cfg["enabled"] = True
     save_config(cfg)
-    # force=True: this is an explicit (re)connect with a freshly pasted
-    # token, so it should win over whatever's already in rclone.conf -
-    # unlike the routine sync() path, which deliberately leaves an existing
-    # token alone (see sync_rclone_remote's docstring).
+    # force=True: fresh token should win over whatever's already stored.
     onedrive_oauth.sync_rclone_remote(onedrive_cfg, force=True)
     return jsonify({"ok": True})
 

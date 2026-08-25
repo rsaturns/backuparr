@@ -20,11 +20,9 @@ from apps.tdarr import TdarrApp
 
 UPLOAD_RESTORE_APPS = {"radarr": RadarrApp, "sonarr": SonarrApp, "prowlarr": ProwlarrApp}
 
-# Backup filenames are always generated as <app>_<timestamp>.zip (see
-# backup.py). filename can come straight from a request body (the web UI's
-# restore routes), so reject anything that doesn't look like that instead of
-# letting it reach a local path.join() or a remote rclone path - both would
-# otherwise honor "..' traversal.
+# Backup filenames are always <app>_<timestamp>.zip. filename can come
+# straight from a request body, so reject anything else to block path
+# traversal into a local path.join() or remote rclone path.
 SAFE_FILENAME = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
@@ -50,10 +48,8 @@ def fetch_backup(rclone_remote, app_name, filename=None):
 
 
 def extract_zip(local_zip, dest_dir):
-    """zipfile has no built-in Zip-Slip protection (unlike tarfile's
-    `filter="data"` from PEP 706 - there's no zipfile equivalent, in any
-    Python version), so member paths are checked by hand: every entry must
-    resolve to somewhere inside dest_dir before anything is extracted."""
+    """zipfile has no built-in Zip-Slip protection, so member paths are
+    checked by hand before anything is extracted."""
     os.makedirs(dest_dir, exist_ok=True)
     dest_root = os.path.realpath(dest_dir)
     with zipfile.ZipFile(local_zip) as zf:
