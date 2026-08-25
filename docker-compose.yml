@@ -22,9 +22,11 @@ services:
       # Set to "true" to run one backup immediately on container start, in
       # addition to whatever's configured in the UI's cron schedule.
       RUN_ON_START: "false"
-      # Recommended: protects the web UI (which holds every app's API key)
-      # with HTTP Basic auth. Left unset, it's open to anyone who can reach
-      # the port - fine on a trusted LAN, not otherwise.
+      # The web UI creates its own admin account on first visit (a setup
+      # screen, no env vars needed) and requires logging in from then on.
+      # Setting both of these switches the whole app to HTTP Basic auth
+      # instead - useful for scripting/CI, or if you'd rather manage the
+      # credential here than through the setup screen.
       # WEBUI_USERNAME: ""
       # WEBUI_PASSWORD: ""
     ports:

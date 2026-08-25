@@ -844,3 +844,32 @@ code {
 }
 
 .guide-links a { color: var(--accent); }
+
+/* ------------------------------------------------------------- auth ---- */
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 360px;
+}
+
+.auth-brand {
+  margin-bottom: 20px;
+}
+
+.auth-card h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+
+.auth-forgot {
+  margin: 16px 0 0;
+  text-align: center;
+}

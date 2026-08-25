@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Backuparr - secure your Arrs">
+<title>Backuparr</title>
+<script>
+(function () {
+  try {
+    var t = localStorage.getItem("backuparr-theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  } catch (e) {}
+})();
+</script>
+<link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<main class="auth-page">
+  <div class="auth-card card">
+    <div class="brand auth-brand">
+      <img class="brand-mark" src="{{ url_for('static', filename='logo.png') }}" alt="">
+      <span class="brand-text">
+        <span class="brand-name">Backuparr</span>
+        <span class="brand-tagline">Secure your Arrs</span>
+      </span>
+    </div>
+    <h2>Create an admin account</h2>
+    <p class="hint">One-time setup - this is what protects Backuparr's web UI from here on. There's no email or recovery flow: if you forget it, delete <code>auth.json</code> on the config volume and restart the container to set up a new one.</p>
+    <label class="field">
+      <span class="field-label">Username</span>
+      <input type="text" id="su-username" autocomplete="username">
+    </label>
+    <label class="field">
+      <span class="field-label">Password <span class="muted">(at least 8 characters)</span></span>
+      <input type="password" id="su-password" autocomplete="new-password">
+    </label>
+    <label class="field">
+      <span class="field-label">Confirm password</span>
+      <input type="password" id="su-password2" autocomplete="new-password">
+    </label>
+    <div class="save-row">
+      <button type="button" class="btn btn-primary" id="setup-submit-btn">Create account</button>
+      <span id="setup-result" class="save-result"></span>
+    </div>
+  </div>
+</main>
+<script src="{{ url_for('static', filename='setup.js') }}"></script>
+</body>
+</html>

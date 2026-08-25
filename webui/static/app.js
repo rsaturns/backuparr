@@ -7,6 +7,13 @@ let SETTINGS_SNAPSHOT = null;
 
 async function apiFetch(url, opts) {
   const res = await fetch(url, opts);
+  if (res.status === 401) {
+    // Session expired mid-use (e.g. left a tab open past the cookie's
+    // lifetime) - bounce to the login page instead of surfacing a raw
+    // "authentication required" toast.
+    window.location.href = "/login";
+    return new Promise(() => {}); // navigation is in flight - never resolve
+  }
   let body = null;
   try {
     body = await res.json();
@@ -241,6 +248,21 @@ function initTheme() {
       localStorage.setItem("backuparr-theme", next);
     } catch (e) {}
     applyThemeButton();
+  });
+}
+
+// -------------------------------------------------------------- logout ----
+function initLogout() {
+  const btn = document.getElementById("logout-btn");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    if (!confirm("Log out?")) return;
+    try {
+      await apiFetch("/api/logout", { method: "POST" });
+    } catch (e) {
+      // Best-effort - redirecting to /login is correct either way.
+    }
+    window.location.href = "/login";
   });
 }
 
@@ -1211,6 +1233,7 @@ function handleGdriveRedirect() {
 async function init() {
   initTabs();
   initTheme();
+  initLogout();
   initSettingsEvents();
   initRunEvents();
   initHistoryEvents();

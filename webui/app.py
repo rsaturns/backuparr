@@ -3,6 +3,7 @@ history, and restore - all from the browser instead of editing
 docker-compose env vars by hand.
 """
 import copy
+import hmac
 import logging
 import os
 import re
@@ -12,10 +13,11 @@ import tempfile
 import threading
 import time
 import urllib.parse
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from flask import Flask, after_this_request, jsonify, redirect, render_template, request, send_file
+from flask import Flask, after_this_request, jsonify, redirect, render_template, request, send_file, session
 
+import auth_store
 import destination_util
 import gdrive_oauth
 import onedrive_oauth
@@ -51,6 +53,38 @@ except OSError:
 CRONTAB_PATH = "/etc/crontabs/root"
 CRON_MARKER_COMMENT = "# Backuparr schedule - managed by the web UI, do not edit by hand"
 
+
+def _load_or_create_secret_key():
+    """Random bytes for signing session cookies - generated once, persisted
+    on the same volume as everything else so sessions survive container
+    restarts, not regenerated per-process (which would log everyone out on
+    every deploy)."""
+    path = os.environ.get("BACKUPARR_SECRET_KEY_PATH", "/config/backuparr/secret_key")
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            return f.read()
+    key = secrets.token_bytes(32)
+    key_dir = os.path.dirname(path)
+    os.makedirs(key_dir, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(dir=key_dir, prefix=".secret_key.")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(key)
+        os.chmod(tmp_path, 0o600)
+        os.replace(tmp_path, path)
+    except BaseException:
+        os.remove(tmp_path)
+        raise
+    return key
+
+
+app.secret_key = _load_or_create_secret_key()
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    PERMANENT_SESSION_LIFETIME=timedelta(days=30),
+)
+
 # Single in-flight OAuth attempt is all a personal, single-admin tool needs -
 # CSRF-protects the callback without a real session store. (state -> ts)
 _OAUTH_STATE = {}
@@ -58,18 +92,99 @@ _OAUTH_STATE_TTL = 600
 
 
 # ---------------------------------------------------------------- auth ----
-def _auth_required():
-    return bool(os.environ.get("WEBUI_USERNAME")) and bool(os.environ.get("WEBUI_PASSWORD"))
+# Login is required by default, via a session cookie set after a one-time
+# setup screen creates the single admin account (see auth_store.py). Setting
+# WEBUI_USERNAME/WEBUI_PASSWORD instead switches the whole app to HTTP Basic
+# Auth - kept for anyone already using it, or scripting/CI access where a
+# session cookie isn't practical - and takes priority whenever both are set.
+_PUBLIC_PATHS = {"/api/logout"}
 
 
 @app.before_request
 def _check_auth():
-    if not _auth_required():
+    if request.path.startswith("/static/"):
         return None
-    auth = request.authorization
-    if not auth or auth.username != os.environ["WEBUI_USERNAME"] or auth.password != os.environ["WEBUI_PASSWORD"]:
-        return ("Unauthorized", 401, {"WWW-Authenticate": 'Basic realm="Backuparr"'})
+
+    env_user = os.environ.get("WEBUI_USERNAME")
+    env_pass = os.environ.get("WEBUI_PASSWORD")
+    if env_user and env_pass:
+        auth = request.authorization
+        valid = (
+            auth is not None
+            and hmac.compare_digest(auth.username, env_user)
+            and hmac.compare_digest(auth.password, env_pass)
+        )
+        if not valid:
+            return ("Unauthorized", 401, {"WWW-Authenticate": 'Basic realm="Backuparr"'})
+        return None
+
+    if request.path in _PUBLIC_PATHS:
+        return None
+
+    has_creds = auth_store.has_credentials()
+
+    if request.path in ("/setup", "/api/setup"):
+        if has_creds:
+            return redirect("/login") if request.path == "/setup" else (jsonify({"error": "already set up"}), 403)
+        return None
+
+    if request.path in ("/login", "/api/login"):
+        if not has_creds:
+            return redirect("/setup") if request.path == "/login" else (jsonify({"error": "not set up yet"}), 400)
+        if request.path == "/login" and session.get("authed"):
+            return redirect("/")
+        return None
+
+    if not has_creds:
+        return redirect("/setup")
+    if not session.get("authed"):
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "authentication required"}), 401
+        return redirect("/login")
     return None
+
+
+@app.get("/setup")
+def setup_page():
+    return render_template("setup.html", version=VERSION)
+
+
+@app.post("/api/setup")
+def api_setup():
+    data = request.get_json(force=True, silent=True) or {}
+    username = (data.get("username") or "").strip()
+    password = data.get("password") or ""
+    if not username or not password:
+        return jsonify({"error": "Username and password are required"}), 400
+    if len(password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters"}), 400
+    auth_store.set_credentials(username, password)
+    session.permanent = True
+    session["authed"] = True
+    return jsonify({"ok": True})
+
+
+@app.get("/login")
+def login_page():
+    return render_template("login.html", version=VERSION)
+
+
+@app.post("/api/login")
+def api_login():
+    data = request.get_json(force=True, silent=True) or {}
+    username = (data.get("username") or "").strip()
+    password = data.get("password") or ""
+    if not auth_store.verify_password(username, password):
+        return jsonify({"error": "Incorrect username or password"}), 401
+    session.permanent = True
+    session["authed"] = True
+    return jsonify({"ok": True})
+
+
+@app.post("/api/logout")
+def api_logout():
+    session.clear()
+    return jsonify({"ok": True})
 
 
 # ------------------------------------------------------------- crontab ----

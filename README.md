@@ -136,7 +136,10 @@ name.
 docker compose up -d --build backuparr
 ```
 
-Then open `http://<host>:8990` and, on the **Settings** tab:
+Then open `http://<host>:8990` - the first visit is a one-time setup screen
+to create an admin username/password (stored as a salted hash, not
+plaintext); every visit after that requires logging in. On the
+**Settings** tab:
 
 1. For each app you want backed up: flip it on, fill in its URL (container
    name + internal port if it's on the same Compose network, e.g.
@@ -159,10 +162,21 @@ happen live, **History** to see what's on each destination per app (and
 download or delete any backup from there), and **Restore** for disaster
 recovery (see below).
 
-If this is reachable beyond your own LAN, set `WEBUI_USERNAME`/
-`WEBUI_PASSWORD` in `docker-compose.yml` first - the UI holds every app's
-API key and can trigger destructive restores, and is unauthenticated by
-default.
+### Login
+
+The setup screen's admin account is all that's required by default - no
+env vars to set. If you'd rather manage the credential outside the app
+(scripting/CI, or just preference), set both `WEBUI_USERNAME` and
+`WEBUI_PASSWORD` in `docker-compose.yml`: this switches the whole app to
+HTTP Basic auth instead, and takes priority over the setup-screen account
+whenever both are set. Forgot the setup-screen password? Delete
+`auth.json` on the `./data` volume and restart the container - it'll show
+the setup screen again on next visit.
+
+Either way, this only authenticates the app itself - if it's reachable
+beyond your own LAN, put it behind your own reverse proxy for TLS the same
+way you likely already do for Radarr/Sonarr, since neither method encrypts
+credentials in transit over plain HTTP on its own.
 
 ## Restoring after a disaster
 
@@ -221,7 +235,7 @@ app-level (set in `docker-compose.yml`):
 | Env var | Purpose |
 |---|---|
 | `RUN_ON_START` | `true` to run one backup immediately on container start |
-| `WEBUI_USERNAME`, `WEBUI_PASSWORD` | Basic auth for the web UI - recommended if it's reachable beyond your LAN |
+| `WEBUI_USERNAME`, `WEBUI_PASSWORD` | Optional - switches the web UI from its own login to HTTP Basic auth instead (see [Login](#login)) |
 | `WEBUI_PORT` | Default `8990` |
 
 If you're upgrading from a pre-web-UI deployment that used env vars like
