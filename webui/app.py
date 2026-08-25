@@ -242,7 +242,17 @@ def api_reset():
 
 # ---------------------------------------------------------- run state -----
 RUN_LOCK = threading.Lock()
-RUN_STATE = {"running": False, "started_at": None, "finished_at": None, "ok": [], "failed": [], "log": []}
+RUN_STATE = {
+    "running": False,
+    "started_at": None,
+    "finished_at": None,
+    "ok": [],
+    "failed": [],
+    "log": [],
+    "current_app": None,
+    "current_index": 0,
+    "total_apps": 0,
+}
 
 
 class _ListLogHandler(logging.Handler):
@@ -259,9 +269,14 @@ def _do_run():
     handler = _ListLogHandler(RUN_STATE["log"])
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
     backup_logger.addHandler(handler)
+    def _progress(index, total, name):
+        RUN_STATE["current_app"] = name
+        RUN_STATE["current_index"] = index
+        RUN_STATE["total_apps"] = total
+
     try:
         cfg = load_config()
-        ok, failed = run_backup(cfg)
+        ok, failed = run_backup(cfg, on_progress=_progress)
         RUN_STATE["ok"] = ok
         RUN_STATE["failed"] = failed
         notify(cfg.get("notify_url"), format_run_message(ok, failed))
@@ -281,7 +296,17 @@ def _start_backup_run():
         if RUN_STATE["running"]:
             return False
         RUN_STATE.update(
-            {"running": True, "started_at": datetime.now(timezone.utc).isoformat(), "finished_at": None, "ok": [], "failed": [], "log": []}
+            {
+                "running": True,
+                "started_at": datetime.now(timezone.utc).isoformat(),
+                "finished_at": None,
+                "ok": [],
+                "failed": [],
+                "log": [],
+                "current_app": None,
+                "current_index": 0,
+                "total_apps": 0,
+            }
         )
     threading.Thread(target=_do_run, daemon=True).start()
     return True

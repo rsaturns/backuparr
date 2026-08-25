@@ -894,6 +894,8 @@ function renderRunState(state) {
   const summary = document.getElementById("run-summary");
   const logView = document.getElementById("run-log");
   const runBtn = document.getElementById("run-btn");
+  const progress = document.getElementById("run-progress");
+  const progressBar = document.getElementById("run-progress-bar");
 
   runBtn.disabled = !!state.running;
   runBtn.textContent = state.running ? "Running..." : "Run backup now";
@@ -914,12 +916,22 @@ function renderRunState(state) {
   };
   if (state.running) {
     addPart("Running", `since ${fmtTime(state.started_at)}`);
+    if (state.total_apps) {
+      addPart(null, `- backing up ${state.current_app} (${state.current_index} of ${state.total_apps})`);
+    }
   } else if (state.finished_at) {
     addPart(null, `Last run finished ${fmtTime(state.finished_at)}`);
     addPart("OK:", (state.ok || []).join(", ") || "none");
     if ((state.failed || []).length) {
       addPart("Failed:", state.failed.join("; "), true);
     }
+  }
+
+  if (state.running && state.total_apps) {
+    progress.classList.remove("hidden");
+    progressBar.style.width = `${((state.current_index - 1) / state.total_apps) * 100}%`;
+  } else {
+    progress.classList.add("hidden");
   }
 
   const lines = state.running ? state.log : state.log_tail;

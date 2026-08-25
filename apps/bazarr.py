@@ -21,7 +21,7 @@ import time
 
 import requests
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(f"backuparr.{__name__}")
 
 
 class BazarrError(RuntimeError):
@@ -63,9 +63,11 @@ class BazarrApp:
     def backup(self, dest_dir, poll_interval=2, timeout_s=180):
         before = {b["filename"] for b in self.list_backups()}
         self.trigger_backup()
+        logger.info("bazarr: backup triggered, waiting for the file to appear...")
 
         deadline = time.time() + timeout_s
         new_filename = None
+        waited = 0
         while time.time() < deadline:
             after = {b["filename"] for b in self.list_backups()}
             new = after - before
@@ -73,6 +75,9 @@ class BazarrApp:
                 new_filename = sorted(new)[-1]
                 break
             time.sleep(poll_interval)
+            waited += poll_interval
+            if waited % 10 == 0:
+                logger.info("bazarr: still waiting on the backup file (%ds)...", waited)
         if not new_filename:
             raise BazarrError("bazarr: backup job did not produce a new file in time")
 

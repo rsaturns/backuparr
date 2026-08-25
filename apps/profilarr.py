@@ -32,7 +32,7 @@ import time
 
 import requests
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(f"backuparr.{__name__}")
 
 
 class ProfilarrError(RuntimeError):
@@ -61,8 +61,10 @@ class ProfilarrApp:
         res = self.session.post(self._api("/backups"), timeout=self.timeout)
         res.raise_for_status()
         job_id = res.json()["jobId"]
+        logger.info("profilarr: backup job %s started, waiting for it to finish...", job_id)
 
         deadline = time.time() + timeout_s
+        waited = 0
         while time.time() < deadline:
             res = self.session.get(self._api(f"/jobs/{job_id}"), timeout=self.timeout)
             res.raise_for_status()
@@ -72,6 +74,9 @@ class ProfilarrApp:
             if status in ("failed", "cancelled"):
                 raise ProfilarrError(f"profilarr: backup job {status}")
             time.sleep(poll_interval)
+            waited += poll_interval
+            if waited % 10 == 0:
+                logger.info("profilarr: still waiting on the backup job (%ds)...", waited)
         raise ProfilarrError(f"profilarr: backup job timed out after {timeout_s}s")
 
     def list_backups(self):

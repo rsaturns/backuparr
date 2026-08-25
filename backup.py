@@ -136,10 +136,13 @@ def format_run_message(ok, failed):
     return "\n".join(lines)
 
 
-def run_backup(cfg):
+def run_backup(cfg, on_progress=None):
     """Run one backup pass for every enabled app, uploading to every
     enabled destination. Returns (ok, failed) - failed entries are
-    "<app>: <message>" strings."""
+    "<app>: <message>" strings.
+
+    on_progress(index, total, name), if given, is called right before each
+    app starts - lets a caller (e.g. the web UI) show "app N of M"."""
     apps = enabled_apps(cfg)
     if not apps:
         log.error("No apps enabled - nothing to do")
@@ -171,7 +174,9 @@ def run_backup(cfg):
     run_tmp = tempfile.mkdtemp(prefix="backuparr-run-")
 
     try:
-        for name in apps:
+        for i, name in enumerate(apps, start=1):
+            if on_progress:
+                on_progress(i, len(apps), name)
             log.info("=== %s ===", name)
             app_cfg = cfg["apps"][name]
 
@@ -195,6 +200,7 @@ def run_backup(cfg):
                 dest_failures = []
                 for dest_id, root in dest_roots.items():
                     remote_dest = f"{root}/{name}/{zip_name}"
+                    log.info("%s: uploading to %s...", name, dest_id)
                     try:
                         rclone_util.copyto(zip_path, remote_dest)
                         log.info("%s: uploaded -> %s (%d bytes)", name, remote_dest, size)
