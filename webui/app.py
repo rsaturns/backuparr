@@ -428,6 +428,9 @@ def api_set_config():
 def api_test(app_name):
     if app_name not in APP_NAMES:
         return jsonify({"ok": False, "message": "unknown app"}), 404
+    meta = app_meta(app_name)
+    if meta["status"] != "available":
+        return jsonify({"ok": False, "message": f"{meta['label']} isn't available yet"})
     data = request.get_json(force=True, silent=True) or {}
     if not data.get("url"):
         return jsonify({"ok": False, "message": "URL is required"}), 400
@@ -536,7 +539,12 @@ def api_history(dest_id):
     if error:
         return error
     history = {}
+    # coming_soon apps (currently just Seerr) can never have produced a
+    # backup, so skip the rclone call for them entirely rather than
+    # listing a directory that will only ever come back empty.
     for name in APP_NAMES:
+        if app_meta(name)["status"] != "available":
+            continue
         entries = rclone_util.lsjson(f"{root}/{name}/")
         history[name] = sorted(
             [{"name": e["Name"], "size": e["Size"], "mod_time": e["ModTime"]} for e in entries],
@@ -561,7 +569,7 @@ def api_history_delete(dest_id, app_name, filename):
     try:
         rclone_util.delete_file(f"{root}/{app_name}/{filename}")
     except rclone_util.RcloneError as exc:
-        return jsonify({"error": str(exc)}), 500
+        return jsonify({"error": humanize_error(exc)}), 500
     return jsonify({"ok": True})
 
 
@@ -583,7 +591,7 @@ def api_history_download(dest_id, app_name, filename):
         rclone_util.copyto(f"{root}/{app_name}/{filename}", local_path)
     except rclone_util.RcloneError as exc:
         shutil.rmtree(tmp_dir, ignore_errors=True)
-        return jsonify({"error": str(exc)}), 500
+        return jsonify({"error": humanize_error(exc)}), 500
 
     @after_this_request
     def _cleanup(response):
@@ -603,7 +611,7 @@ def api_restore_backups(dest_id, app_name):
     try:
         files = ra.list_backups(root, app_name)
     except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
+        return jsonify({"error": humanize_error(exc)}), 500
     return jsonify({"files": list(reversed(files))})
 
 
@@ -621,7 +629,7 @@ def api_restore_sabnzbd_preview(dest_id):
         servers = ra.sabnzbd_server_summary(config)
         return jsonify({"file": filename, "servers": servers})
     except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
+        return jsonify({"error": humanize_error(exc)}), 500
     finally:
         if tmp_dir:
             shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -681,7 +689,7 @@ def api_restore(dest_id, app_name):
 
     except Exception as exc:
         log.exception("restore failed for %s", app_name)
-        return jsonify({"error": str(exc)}), 500
+        return jsonify({"error": humanize_error(exc)}), 500
     finally:
         if tmp_dir:
             shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -739,9 +747,14 @@ def api_gdrive_oauth_callback():
         tokens = gdrive_oauth.exchange_code(
             gdrive_cfg["client_id"], gdrive_cfg["client_secret"], _gdrive_redirect_uri(), code
         )
-    except gdrive_oauth.GDriveOAuthError as exc:
+    except Exception as exc:
+        # Broad on purpose: exchange_code() only wraps a non-200 response as
+        # GDriveOAuthError - a network failure reaching Google mid-exchange
+        # raises a raw requests exception instead, which would otherwise
+        # escape as an unhandled 500 rather than the friendly redirect this
+        # route exists to give.
         log.exception("gdrive oauth exchange failed")
-        return _redirect_with_error(str(exc))
+        return _redirect_with_error(humanize_error(exc))
 
     gdrive_cfg["refresh_token"] = tokens["refresh_token"]
     gdrive_cfg["enabled"] = True
@@ -756,8 +769,8 @@ def api_gdrive_access_token():
     try:
         token = gdrive_oauth.get_access_token(cfg["destinations"]["gdrive"])
         return jsonify({"access_token": token})
-    except gdrive_oauth.GDriveOAuthError as exc:
-        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": humanize_error(exc)}), 400
 
 
 @app.post("/api/destinations/gdrive/folder")
@@ -803,8 +816,8 @@ def api_onedrive_connect():
     try:
         token_json, access_token = onedrive_oauth.parse_token_blob(data.get("token_blob", ""))
         approot = onedrive_oauth.approot_metadata(access_token)
-    except onedrive_oauth.OneDriveOAuthError as exc:
-        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": humanize_error(exc)}), 400
 
     cfg = load_config()
     onedrive_cfg = cfg["destinations"]["onedrive"]
