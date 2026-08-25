@@ -6,23 +6,18 @@
 
 Scheduled config/database backups for Radarr, Sonarr, Prowlarr, Profilarr,
 Bazarr, Tdarr, Sabnzbd, and Tautulli (Seerr coming soon), sent to
-whichever destinations you enable - Local storage (zero setup, download
-straight from the History tab), Google Drive (click-through OAuth, no
-config files to hand-copy), and OneDrive (one-time `rclone authorize`
-paste, no Azure account needed) today, with Dropbox planned. Enable more
-than one and every backup gets a copy on each of them. If the host dies,
-the recovery path is: re-create the containers from your compose file,
-then restore each app's config from its latest backup. Everything - which
-apps to back up, their URLs/API keys, which destinations to use, the
-schedule, retention, and restores - is configured and triggered from a
-web UI, not env vars.
+whichever destinations you enable - Local storage, Google Drive, and
+OneDrive today, with Dropbox planned. Enable more than one and every
+backup gets a copy on each of them. Everything - which apps to back up,
+their URLs/API keys, which destinations to use, the schedule, retention,
+and restores - is configured and triggered from a web UI, not env vars.
 
-Every app is backed up through **its own HTTP API** - this tool never reads
-an app's config volume directly. Each app has an official (or at least
-supported) way to export/import its own state, and using that instead of
-copying files means every backup is internally consistent (no risk of
-grabbing a database mid-write) and restores go through the app's own
-validated restore path instead of a raw file overwrite.
+Every app is backed up through **its own HTTP API**, never by reading its
+config volume directly.
+
+To recover after a host failure: re-create the containers from your
+compose file, then restore each app's config from its latest backup (see
+[Restoring after a disaster](#restoring-after-a-disaster)).
 
 ## Architecture
 
@@ -43,51 +38,45 @@ instead of running rclone's full interactive config wizard yourself.
 
 | App | Method | Notes |
 |---|---|---|
-| Radarr / Sonarr / Prowlarr | `POST .../system/backup` to trigger, download the result, `DELETE` it server-side | Same official backup zip the apps use for manual backups. Restore is a genuine multipart upload to `.../system/backup/restore/upload` - fully automated, no filesystem access. |
+| Radarr / Sonarr / Prowlarr | `POST .../system/backup` to trigger, download the result, `DELETE` it server-side | Same official backup zip the apps use for manual backups. Restore is a multipart upload to `.../system/backup/restore/upload` - fully automated, no filesystem access. |
 | Profilarr | `POST /api/v1/backups` to trigger (async job, polled via `GET /api/v1/jobs/{id}`), download the newest result, `DELETE` it server-side | Backup only - see below, Profilarr's own restore has no public API. |
-| Bazarr | `POST /api/system/backups` to trigger, poll `GET` until the new file appears, download it, `DELETE` it server-side | The download route (`/system/backup/download/<file>`) is gated by Bazarr's own web-auth setting, **not** the API key - see below. Restore needs one local file write into Bazarr's own backup folder (no upload-restore endpoint exists), then an API call triggers the actual restore + restart. |
+| Bazarr | `POST /api/system/backups` to trigger, poll `GET` until the new file appears, download it, `DELETE` it server-side | The download route (`/system/backup/download/<file>`) is gated by Bazarr's own web-auth setting, **not** the API key - see below. Restore writes one local file into Bazarr's own backup folder (no upload-restore endpoint exists), then an API call triggers the restore + restart. |
 | Tdarr | `POST /api/v2/cruddb` with `mode: getAll` for every internal DB collection (library settings, flows, global settings, node registrations, staged/output/statistics) | Fully API-driven both ways. Restore does `removeAll` then re-`insert`s each document per collection - destructive, asks for confirmation. |
-| Sabnzbd | `GET /sabnzbd/api?mode=get_config` to back up; `mode=set_config` per key to restore | SABnzbd's API hardcodes every password field (most importantly your Usenet server password) to `**********` on the way out - there's no API mode that returns the real value. Restore still automates everything else: it recreates each Usenet server (host/port/username/connections/ssl/priority/...) and every plain `misc`-style setting via the API, and interactively prompts you for each server's real password before sending it (verified against SABnzbd's own source - an existing server's fields not included in the API call are left untouched, so a skipped password doesn't get overwritten with a blank one). Categories, RSS feeds, and sorters use their own special-cased API shapes that aren't reverse-engineered here, so those aren't auto-restored. |
+| Sabnzbd | `GET /sabnzbd/api?mode=get_config` to back up; `mode=set_config` per key to restore | SABnzbd's API returns every password field (e.g. Usenet server password) as `**********` - there's no API mode that returns the real value. Restore recreates each Usenet server (host/port/username/connections/ssl/priority/...) and every plain `misc`-style setting via the API, prompting interactively for each server's real password (an existing server's fields not included in the API call are left untouched, so a skipped password isn't overwritten with a blank one). Categories, RSS feeds, and sorters aren't auto-restored. |
 | Tautulli | `GET /api/v2?cmd=download_database` and `cmd=download_config` - each streams a fresh copy directly, no trigger/poll step | The database comes back with Plex tokens nulled out; the config file is only lightly sanitized - see below. Restore uploads each back separately via `cmd=import_database` and `cmd=import_config` (multipart) - a config restore makes Tautulli restart itself. |
-| Seerr | *(none)* | Not implemented - Seerr has no backup/restore API at all. Its own docs recommend stopping the app and copying its data files directly, which conflicts with the API-only approach everything else here uses. Shown on the Settings tab as "Coming soon" for visibility only. |
+| Seerr | *(none)* | Not implemented - Seerr has no backup/restore API. Shown on the Settings tab as "Coming soon" for visibility only. |
 
 ### Profilarr backup note
 
-Profilarr's own [OpenAPI spec](https://github.com/Dictionarry-Hub/profilarr)
-documents two things worth knowing before you rely on this:
+The downloaded backup is sanitized by Profilarr itself before it leaves the
+server: arr instance URLs/API keys, sync configs, notification webhook
+URLs/tokens, user accounts and sessions, personal access tokens for linked
+databases, and AI/TMDB API keys are all stripped. Restoring on a different
+host means re-adding those by hand.
 
-- **The downloaded backup is sanitized by Profilarr itself.** Arr instance
-  URLs/API keys, sync configs, notification webhook URLs/tokens, user
-  accounts and sessions, personal access tokens for linked databases, and
-  AI/TMDB API keys are all stripped before the file leaves the server -
-  Profilarr's design, not something Backuparr can change. Restoring on a
-  different host means re-adding those by hand regardless of how the
-  backup got there.
-- **Restore isn't automated here on purpose.** Profilarr's own restore
-  action is a browser-session-only form (not part of its versioned
-  `/api/v1` REST API), and even then it only *stages* a pending restore -
-  the actual swap happens at the next Profilarr container restart, which
-  Backuparr has no way to trigger. So Profilarr won't show up as an option
-  on the **Restore** tab. To restore by hand: download the backup from
-  Backuparr's **History** tab, upload it in Profilarr's own
-  **Settings > Backups**, restore it there, then restart the Profilarr
-  container and re-add whatever was stripped above.
+Restore isn't automated here - Profilarr's own restore action is a
+browser-session-only form, not part of its `/api/v1` REST API, and even
+then it only stages a pending restore; the actual swap happens at the
+next Profilarr container restart. Profilarr won't show up on the
+**Restore** tab. To restore by hand:
+
+1. Download the backup from Backuparr's **History** tab.
+2. Upload it in Profilarr's own **Settings > Backups** and restore it there.
+3. Restart the Profilarr container and re-add whatever was stripped above.
 
 ### Tautulli backup note
 
-Tautulli's `download_database` command nulls out Plex user/server tokens
-server-side before streaming the file back - confirmed both in its source
-and empirically against a real instance. `download_config`, however, only
-strips `PMS_TOKEN`/`JWT_SECRET` (Tautulli's own hardcoded list) - **the
-Tautulli API key itself, and any notification agent credentials stored in
-config.ini (webhook URLs, tokens, etc.), come through in the backup in
-plain text.** This isn't a Backuparr limitation, it's what Tautulli's API
-actually strips - just narrower than "sanitized" might imply. Since
-config.json's secrets are already encrypted at rest (see [Encryption at
-rest](#encryption-at-rest)), the practical takeaway is: treat wherever
-your Tautulli backups land (local disk, Google Drive, OneDrive) as
-holding a live, usable Tautulli API key, and rotate it in Tautulli's own
-Settings if that destination is ever compromised.
+`download_database` nulls out Plex user/server tokens server-side before
+streaming the file back. `download_config` only strips
+`PMS_TOKEN`/`JWT_SECRET` - **the Tautulli API key itself, and any
+notification agent credentials stored in config.ini (webhook URLs,
+tokens, etc.), come through in the backup in plain text.**
+
+`config.json`'s secrets are encrypted at rest (see [Encryption at
+rest](#encryption-at-rest)) - treat wherever your Tautulli backups land
+(local disk, Google Drive, OneDrive) as holding a live, usable Tautulli
+API key, and rotate it in Tautulli's own Settings if that destination is
+ever compromised.
 
 ### Bazarr auth note
 
@@ -103,8 +92,7 @@ Security**, not your API key:
 
 If you've enabled an API auth token in Tdarr's server settings, put it in
 the (optional) API key field on Tdarr's card - it's sent as `Authorization:
-Bearer <key>`. This header format isn't formally documented by Tdarr, so
-verify it actually works for your version with the "Test connection"
+Bearer <key>`. Verify it works for your version with the "Test connection"
 button; leave it blank if Tdarr has no auth configured (the default).
 
 ## Destinations
@@ -116,60 +104,45 @@ them.
 ### Local storage
 
 Works with zero setup. Backups land in `/config/backuparr/backups` inside
-the container, which is on the same `./data` volume as `config.json`, so
-they survive container recreation without any extra mount. Download or
-delete any of them straight from the **History** tab. Set a custom path on
-the Local card in Settings if you'd rather point it at a different mounted
-volume (e.g. a NAS share).
+the container, on the same `./data` volume as `config.json`, so they
+survive container recreation without any extra mount. Download or delete
+any of them from the **History** tab. Set a custom path on the Local card
+in Settings to point it at a different mounted volume (e.g. a NAS share).
 
 ### Google Drive
 
 Connected entirely from the web UI - no `rclone config`, no files to copy
-onto the host. There's one unavoidable one-time step: Google requires every
-app to have its own registered OAuth client (~5 minutes, all in a browser).
-On the Google Drive card in **Settings**:
+onto the host. On the Google Drive card in **Settings**:
 
-1. Click **Setup guide** - it walks through creating a Google Cloud project,
-   enabling the Drive API, and creating an OAuth client, and shows the exact
-   redirect URI to register (computed from whatever host/port you're
-   reaching Backuparr on).
+1. Click **Setup guide** - it walks through creating a Google Cloud
+   project, enabling the Drive API, and creating an OAuth client, and
+   shows the exact redirect URI to register.
 2. Paste the Client ID and Client Secret it gives you into the two fields,
    then **Save settings**.
-3. Click **Connect Google Drive** and approve the consent screen - Backuparr
-   only ever requests the `drive.file` scope, so it can only see files/
-   folders it created or that you explicitly pick, not your whole Drive.
+3. Click **Connect Google Drive** and approve the consent screen -
+   Backuparr requests only the `drive.file` scope (files/folders it
+   created or you explicitly picked, not your whole Drive).
 4. Click **Choose folder** to pick (or create) the Drive folder backups
-   should go in, via Google's own folder picker.
-
-Behind the scenes this generates an rclone remote from the OAuth token (the
-same shape `rclone config`'s own Drive wizard would produce) and keeps it in
-sync automatically - rclone still does the actual upload/download/list/
-delete work, you just never have to touch its config file.
+   should go in.
 
 ### OneDrive
 
-Uses rclone's own built-in Microsoft app instead of a Backuparr-hosted OAuth
-flow - Microsoft has required every *new* app registration to live in a
-directory since June 2024, which most personal Microsoft accounts (and not
-everyone qualifies for the free ways to get one) don't have. rclone's app
-predates that requirement, so there's no Azure account or app registration
-needed at all. Scoped to **personal** Microsoft accounts only, not
-work/school (Microsoft 365) ones.
+Uses rclone's own built-in Microsoft app - no Azure account or app
+registration needed. Personal Microsoft accounts only, not work/school
+(Microsoft 365) ones.
 
-1. On any computer with a web browser - your own laptop is fine, it doesn't
-   need to be wherever Backuparr runs - [download rclone](https://rclone.org/downloads/)
-   (a single binary, no install) and run `rclone authorize onedrive`.
-2. It opens/prints a link - sign in with your personal Microsoft account and
-   approve access.
-3. Copy the block rclone prints starting with "Paste the following into your
-   remote machine --->" and paste it into the OneDrive card in **Settings**,
-   then click **Connect OneDrive**.
+1. On any computer with a web browser (doesn't need to be wherever
+   Backuparr runs) - [download rclone](https://rclone.org/downloads/) (a
+   single binary, no install) and run `rclone authorize onedrive`.
+2. It opens/prints a link - sign in with your personal Microsoft account
+   and approve access.
+3. Copy the block rclone prints starting with "Paste the following into
+   your remote machine --->" and paste it into the OneDrive card in
+   **Settings**, then click **Connect OneDrive**.
 
-There's no folder picker: Backuparr requests the `Files.ReadWrite.AppFolder`
-scope, which Microsoft Graph resolves to a single dedicated app folder
-(`Apps/Backuparr` in your OneDrive) created automatically on first connect -
-narrower than requesting access to your whole OneDrive, at the cost of not
-being able to choose a different folder.
+There's no folder picker: backups go to a single dedicated app folder
+(`Apps/Backuparr` in your OneDrive), created automatically on first
+connect.
 
 ### Dropbox
 
@@ -186,10 +159,9 @@ name.
 docker compose up -d --build backuparr
 ```
 
-Then open `http://<host>:8990` - the first visit is a one-time setup screen
-to create an admin username/password (stored as a salted hash, not
-plaintext); every visit after that requires logging in. On the
-**Settings** tab:
+Then open `http://<host>:8990` - the first visit is a one-time setup
+screen to create an admin username/password; every visit after that
+requires logging in. On the **Settings** tab:
 
 1. For each app you want backed up: flip it on, fill in its URL (container
    name + internal port if it's on the same Compose network, e.g.
@@ -205,7 +177,7 @@ plaintext); every visit after that requires logging in. On the
 4. **Save settings.**
 
 Everything is written to `config.json` on the `./data` volume, so it
-survives container recreation - and the cron schedule inside the container
+survives container recreation - the cron schedule inside the container
 picks up changes automatically the next time you save, no restart needed.
 
 Use the **Run & Status** tab to trigger a backup immediately and watch it
@@ -215,57 +187,37 @@ recovery (see below).
 
 ### Login
 
-The setup screen's admin account is required by default - nothing to
-configure, the first visit walks you through creating it. Forgot the
-password? Click **Reset Backuparr** on the login screen - after confirming
-a warning (it explains exactly what this deletes: every app's API key,
-both destinations' connections, this admin account, and local backup
-files - anything already uploaded to Google Drive/OneDrive is untouched)
-and typing a confirmation phrase, it wipes local state back to a fresh
-install and shows the setup screen again. There's no lighter-weight
-recovery on purpose - see [Encryption at rest](#encryption-at-rest) below
-for why.
+The setup screen's admin account is required by default. Forgot the
+password? Click **Reset Backuparr** on the login screen - after
+confirming a warning and typing a confirmation phrase, it wipes local
+state (every app's API key, both destinations' connections, this admin
+account, and local backup files - anything already uploaded to Google
+Drive/OneDrive is untouched) back to a fresh install and shows the setup
+screen again.
 
-**The reset endpoint is intentionally reachable without logging in** (a
-locked-out admin has no session to present), gated only by that typed
-confirmation phrase - which is fixed and visible in this project's source
-(`webui/static/login.js`), not a per-install secret. Anyone who can reach
-the web UI's network address can trigger it, no credentials required. This
-is fine on a trusted LAN behind your own firewall (the normal deployment
-model this README assumes throughout), but **do not expose port 8990 to
-an untrusted network** (the open internet, a shared/guest network, etc.)
-without putting a login of your own in front of it at the reverse-proxy
-layer - the same TLS-terminating proxy recommended just below should also
-gate access to this port entirely, not only encrypt it.
+**The reset endpoint is reachable without logging in**, gated only by a
+fixed confirmation phrase visible in this project's source
+(`webui/static/login.js`), not a per-install secret. This is fine on a
+trusted LAN behind your own firewall, but **do not expose port 8990 to an
+untrusted network** without putting a login of your own in front of it at
+the reverse-proxy layer.
 
 This only authenticates the app itself - if it's reachable beyond your own
 LAN, put it behind your own reverse proxy for TLS the same way you likely
-already do for Radarr/Sonarr, since a login page doesn't encrypt
-credentials in transit over plain HTTP on its own.
+already do for Radarr/Sonarr.
 
 ### Encryption at rest
 
 Every app's API key, Bazarr's basic-auth password, Google Drive's client
-secret/refresh token, and OneDrive's token are encrypted in `config.json` -
-not just the admin login. The key lives in its own file, `secrets.key`,
-auto-generated on first run; override it with the `BACKUPARR_SECRETS_KEY`
-env var to keep the key off the volume entirely (a Docker secret, for
-instance) rather than trusting the auto-generated file next to everything
-it protects.
+secret/refresh token, and OneDrive's token are encrypted in `config.json`.
+The key lives in its own file, `secrets.key`, auto-generated on first run;
+override it with the `BACKUPARR_SECRETS_KEY` env var to keep the key off
+the volume entirely (e.g. a Docker secret).
 
-`rclone.conf` - which mirrors the same Google Drive/OneDrive secrets for
-rclone's own use - is encrypted too, using rclone's own built-in config
-encryption rather than reinventing it. Same pattern: an auto-generated
-password in its own file, `rclone.pass`, overridable with
-`RCLONE_CONFIG_PASS` directly.
-
-Neither key can be tied to your login password: backups run unattended on
-a schedule, with nobody logged in to unlock anything, so both have to be
-available on their own regardless of session state. That's also why a
-forgotten-password reset can't be a quiet, no-consequence action (see
-[Login](#login) above) - anyone who could reset the login without
-consequence would, by definition, still have everything the encryption is
-meant to protect sitting right there decrypted.
+`rclone.conf` (which mirrors the same Google Drive/OneDrive secrets for
+rclone's own use) is encrypted too, using rclone's own built-in config
+encryption. Same pattern: an auto-generated password in its own file,
+`rclone.pass`, overridable with `RCLONE_CONFIG_PASS` directly.
 
 Encryption is on unconditionally - nothing to enable.
 
@@ -301,9 +253,9 @@ docker compose exec -it backuparr python3 restore.py sabnzbd   # -it matters her
 
 If only one destination is enabled it's picked automatically; with more
 than one, pass `--destination local`, `--destination gdrive`, or
-`--destination onedrive`. `restore.py
---help` documents the rest (`--file <name>` for a specific backup, `--yes`
-to skip confirmation/password prompts).
+`--destination onedrive`. `restore.py --help` documents the rest
+(`--file <name>` for a specific backup, `--yes` to skip
+confirmation/password prompts).
 
 ## Notifications
 
@@ -312,7 +264,7 @@ get a one-line summary POSTed there after every run - something like
 `Backuparr OK: radarr, sonarr` or `Backuparr FAILED: radarr: couldn't
 connect | OK: sonarr`. Paste one URL and Backuparr sends the right kind
 of request automatically - it recognizes a few common webhook shapes by
-the URL itself, no separate "which service is this" setting needed.
+the URL itself.
 
 ### Discord
 
@@ -352,12 +304,11 @@ the URL itself, no separate "which service is this" setting needed.
 ### ntfy.sh, Healthchecks.io, or anything else
 
 Any URL that doesn't match one of the shapes above gets the message sent
-as a plain-text `POST` body instead. That's [ntfy.sh](https://ntfy.sh)'s
-own native format - **Notify URL**: `https://ntfy.sh/your-topic-name`
-(a self-hosted ntfy server works the same way) - and it works equally
-well with a [healthchecks.io](https://healthchecks.io)-style ping URL,
-an Uptime Kuma push URL, or any simple webhook logger that just wants
-the raw text.
+as a plain-text `POST` body instead - [ntfy.sh](https://ntfy.sh)'s own
+native format. **Notify URL**: `https://ntfy.sh/your-topic-name` (a
+self-hosted ntfy server works the same way). Also works with a
+[healthchecks.io](https://healthchecks.io)-style ping URL, an Uptime Kuma
+push URL, or any simple webhook logger that just wants the raw text.
 
 ## Configuration reference
 
@@ -375,7 +326,7 @@ if you'd rather):
 | `destinations.onedrive.token/drive_id/drive_type/item_id` | Set automatically by pasting a token from `rclone authorize onedrive` - don't hand-edit |
 | `retention_days` | Delete backups older than this, per app per destination (default 7) |
 | `cron_schedule` | Standard 5-field cron syntax (default `0 3 * * *`) |
-| `notify_url` | Optional: POST a summary here after every run - see [Notifications](#notifications) below |
+| `notify_url` | Optional: POST a summary here after every run - see [Notifications](#notifications) above |
 | `bazarr_backup_dir` | Local path to Bazarr's config/backup folder, for restores |
 
 A few things are still env vars, since they're deployment-level rather
@@ -384,7 +335,7 @@ than app-level (set in `docker-compose.yml`):
 | Env var | Purpose |
 |---|---|
 | `WEBUI_PORT` | Default `8990` |
-| `PUID` / `PGID` | User/group the container runs as instead of root (default `1000`/`1000`) - match your host user with `id` if you want files on `./data` owned by yourself; fixed up automatically on every start, so it's safe to change later too |
+| `PUID` / `PGID` | User/group the container runs as instead of root (default `1000`/`1000`) - match your host user with `id` if you want files on `./data` owned by yourself; fixed up automatically on every start |
 | `BACKUPARR_SECRETS_KEY` | Optional: overrides the auto-generated `secrets.key` used to encrypt config.json's secrets (see [Encryption at rest](#encryption-at-rest)) |
 | `RCLONE_CONFIG_PASS` | Optional: overrides the auto-generated `rclone.pass` used to encrypt rclone.conf |
 
@@ -399,4 +350,4 @@ GitHub](https://github.com/selfhst/icons)), licensed
 
 [GNU AGPLv3](LICENSE) - if you run a modified version of this as a
 network service, that modified source needs to be available to its
-users too, not just to whoever redistributes the binary/image.
+users too.
