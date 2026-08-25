@@ -179,6 +179,18 @@ install and shows the setup screen again. There's no lighter-weight
 recovery on purpose - see [Encryption at rest](#encryption-at-rest) below
 for why.
 
+**The reset endpoint is intentionally reachable without logging in** (a
+locked-out admin has no session to present), gated only by that typed
+confirmation phrase - which is fixed and visible in this project's source
+(`webui/static/login.js`), not a per-install secret. Anyone who can reach
+the web UI's network address can trigger it, no credentials required. This
+is fine on a trusted LAN behind your own firewall (the normal deployment
+model this README assumes throughout), but **do not expose port 8990 to
+an untrusted network** (the open internet, a shared/guest network, etc.)
+without putting a login of your own in front of it at the reverse-proxy
+layer - the same TLS-terminating proxy recommended just below should also
+gate access to this port entirely, not only encrypt it.
+
 This only authenticates the app itself - if it's reachable beyond your own
 LAN, put it behind your own reverse proxy for TLS the same way you likely
 already do for Radarr/Sonarr, since a login page doesn't encrypt
