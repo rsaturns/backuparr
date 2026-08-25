@@ -142,10 +142,17 @@ def build():
         parts.append(f'<text x="{ix + DEST_ICON + 16}" y="{y + DEST_H / 2 + 18}" font-size="12.5" fill="{COLOR["muted"]}">{sub}</text>')
         dest_anchor.append((RIGHT_X, y + DEST_H / 2))
 
+    # Converging source lines share one unified arrowhead at the merge
+    # point instead of each carrying its own marker-end - six overlapping
+    # arrowheads at slightly different angles reads as a jagged mess, not
+    # an arrow. The lines stop short of hub_in; a single triangle fills
+    # the gap.
     for ax, ay in src_anchor:
         bx, by = hub_in
         c1x, c2x = ax + (bx - ax) * 0.55, ax + (bx - ax) * 0.85
-        parts.append(f'<path d="M{ax},{ay} C{c1x},{ay} {c2x},{by} {bx - 6},{by}" fill="none" stroke="{COLOR["accent"]}" stroke-width="2.2" stroke-opacity="0.55" marker-end="url(#arrow)"/>')
+        parts.append(f'<path d="M{ax},{ay} C{c1x},{ay} {c2x},{by} {bx - 14},{by}" fill="none" stroke="{COLOR["accent"]}" stroke-width="2.2" stroke-opacity="0.55"/>')
+    hx, hy = hub_in
+    parts.append(f'<path d="M{hx - 14},{hy - 7} L{hx},{hy} L{hx - 14},{hy + 7} Z" fill="{COLOR["accent"]}"/>')
 
     for ax, ay in dest_anchor:
         bx, by = hub_out
