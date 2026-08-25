@@ -4,6 +4,10 @@
 
 **Secure your Arrs.**
 
+> **AI disclosure:** This project was built with substantial assistance
+> from Claude (Anthropic) - code, documentation, and commit history
+> included. Reviewed and maintained by a human.
+
 Scheduled config/database backups for Radarr, Sonarr, Prowlarr, Profilarr,
 Bazarr, Tdarr, Sabnzbd, and Tautulli (Seerr coming soon), sent to
 whichever destinations you enable - Local storage, Google Drive, and
