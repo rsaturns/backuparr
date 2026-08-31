@@ -40,6 +40,14 @@ from config_store import (
     save_config,
 )
 
+# Fields an override in the restore request is allowed to replace for a given
+# app - url/api_key plus whatever that app's own extra_fields declare (e.g.
+# bazarr's basic-auth username/password). Never lets an override touch
+# anything outside this set.
+def _restore_override_fields(app_name):
+    meta = app_meta(app_name) or {}
+    return {"url", "api_key"} | {f["name"] for f in meta.get("extra_fields", [])}
+
 app = Flask(__name__)
 log = logging.getLogger("backuparr.webui")
 
@@ -631,6 +639,109 @@ def api_history_download(dest_id, app_name, filename):
 
 
 # ------------------------------------------------------------- restore ----
+# Mirrors the backup run-state machinery above: the actual restore work runs
+# in a background thread so the UI can poll for live log output + a spinner
+# instead of blocking on one long request.
+RESTORE_LOCK = threading.Lock()
+RESTORE_RUN_STATE = {
+    "running": False,
+    "app": None,
+    "file": None,
+    "started_at": None,
+    "finished_at": None,
+    "ok": False,
+    "message": None,
+    "summary": None,
+    "error": None,
+    "log": [],
+}
+
+
+def _do_restore(app_name, root, app_cfg, data, bazarr_backup_dir):
+    restore_logger = logging.getLogger("backuparr")
+    handler = _ListLogHandler(RESTORE_RUN_STATE["log"])
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    restore_logger.addHandler(handler)
+    tmp_dir = None
+    try:
+        log.info("restore: fetching %s backup...", app_name)
+        tmp_dir, local_zip, filename = ra.fetch_backup(root, app_name, data.get("file"))
+        RESTORE_RUN_STATE["file"] = filename
+
+        if app_name in ra.UPLOAD_RESTORE_APPS:
+            log.info("restore: uploading backup to %s, it will restart...", app_name)
+            ra.restore_upload_app(app_name, app_cfg, local_zip)
+            RESTORE_RUN_STATE["message"] = f"{app_name} restore uploaded, app is restarting"
+
+        elif app_name == "bazarr":
+            log.info("restore: triggering bazarr restore...")
+            ra.restore_bazarr(app_cfg, local_zip, bazarr_backup_dir)
+            RESTORE_RUN_STATE["message"] = "bazarr restore triggered, app is restarting"
+
+        elif app_name == "tdarr":
+            log.info("restore: restoring tdarr collections...")
+            ra.restore_tdarr(app_cfg, tmp_dir, local_zip)
+            RESTORE_RUN_STATE["message"] = "tdarr restore complete"
+
+        elif app_name == "tautulli":
+            log.info("restore: restoring tautulli...")
+            RESTORE_RUN_STATE["summary"] = ra.restore_tautulli(app_cfg, tmp_dir, local_zip)
+            RESTORE_RUN_STATE["message"] = "tautulli restore uploaded"
+
+        elif app_name == "sabnzbd":
+            config = ra.load_sabnzbd_config(tmp_dir, local_zip)
+            passwords = data.get("passwords", {})
+
+            def password_prompt(name, _server):
+                return passwords.get(name) or None
+
+            log.info("restore: restoring sabnzbd config...")
+            RESTORE_RUN_STATE["summary"] = ra.restore_sabnzbd(app_cfg, config, password_prompt)
+            RESTORE_RUN_STATE["message"] = "sabnzbd restore complete"
+
+        RESTORE_RUN_STATE["ok"] = True
+    except Exception as exc:
+        log.exception("restore failed for %s", app_name)
+        RESTORE_RUN_STATE["error"] = humanize_error(exc)
+    finally:
+        restore_logger.removeHandler(handler)
+        if tmp_dir:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+        RESTORE_RUN_STATE["running"] = False
+        RESTORE_RUN_STATE["finished_at"] = datetime.now(timezone.utc).isoformat()
+
+
+def _start_restore_run(app_name, root, app_cfg, data, bazarr_backup_dir):
+    """Starts a restore run unless one's already in progress. Returns
+    whether it started."""
+    with RESTORE_LOCK:
+        if RESTORE_RUN_STATE["running"]:
+            return False
+        RESTORE_RUN_STATE.update(
+            {
+                "running": True,
+                "app": app_name,
+                "file": None,
+                "started_at": datetime.now(timezone.utc).isoformat(),
+                "finished_at": None,
+                "ok": False,
+                "message": None,
+                "summary": None,
+                "error": None,
+                "log": [],
+            }
+        )
+    threading.Thread(
+        target=_do_restore, args=(app_name, root, app_cfg, data, bazarr_backup_dir), daemon=True
+    ).start()
+    return True
+
+
+@app.get("/api/restore/status")
+def api_restore_status():
+    return jsonify(RESTORE_RUN_STATE)
+
+
 @app.get("/api/restore/<dest_id>/<app_name>/backups")
 def api_restore_backups(dest_id, app_name):
     cfg = load_config()
@@ -680,48 +791,31 @@ def api_restore(dest_id, app_name):
     if error:
         return error
     app_cfg = cfg["apps"].get(app_name, {})
+
+    # One-off target override for this restore only - never written back to
+    # config.json. Lets you point a restore at a throwaway/test instance
+    # without touching the app's configured connection in Settings.
+    override = data.get("override")
+    if override:
+        allowed = _restore_override_fields(app_name)
+        app_cfg = dict(app_cfg)
+        for field in allowed:
+            value = override.get(field)
+            if value:
+                app_cfg[field] = value
+
     if not app_cfg.get("url") or (key_required(app_name) and not app_cfg.get("api_key")):
         return jsonify({"error": f"{app_name} is not configured"}), 400
 
-    tmp_dir = None
-    try:
-        tmp_dir, local_zip, filename = ra.fetch_backup(root, app_name, data.get("file"))
+    bazarr_backup_dir = None
+    if app_name == "bazarr":
+        bazarr_backup_dir = data.get("bazarr_backup_dir") or cfg.get("bazarr_backup_dir")
+        if not bazarr_backup_dir:
+            return jsonify({"error": "bazarr_backup_dir is not configured"}), 400
 
-        if app_name in ra.UPLOAD_RESTORE_APPS:
-            ra.restore_upload_app(app_name, app_cfg, local_zip)
-            return jsonify({"ok": True, "message": f"{app_name} restore uploaded, app is restarting", "file": filename})
-
-        if app_name == "bazarr":
-            backup_dir = data.get("bazarr_backup_dir") or cfg.get("bazarr_backup_dir")
-            if not backup_dir:
-                return jsonify({"error": "bazarr_backup_dir is not configured"}), 400
-            ra.restore_bazarr(app_cfg, local_zip, backup_dir)
-            return jsonify({"ok": True, "message": "bazarr restore triggered, app is restarting", "file": filename})
-
-        if app_name == "tdarr":
-            ra.restore_tdarr(app_cfg, tmp_dir, local_zip)
-            return jsonify({"ok": True, "message": "tdarr restore complete", "file": filename})
-
-        if app_name == "tautulli":
-            summary = ra.restore_tautulli(app_cfg, tmp_dir, local_zip)
-            return jsonify({"ok": True, "message": "tautulli restore uploaded", "file": filename, "summary": summary})
-
-        if app_name == "sabnzbd":
-            config = ra.load_sabnzbd_config(tmp_dir, local_zip)
-            passwords = data.get("passwords", {})
-
-            def password_prompt(name, _server):
-                return passwords.get(name) or None
-
-            summary = ra.restore_sabnzbd(app_cfg, config, password_prompt)
-            return jsonify({"ok": True, "file": filename, "summary": summary})
-
-    except Exception as exc:
-        log.exception("restore failed for %s", app_name)
-        return jsonify({"error": humanize_error(exc)}), 500
-    finally:
-        if tmp_dir:
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+    if not _start_restore_run(app_name, root, app_cfg, data, bazarr_backup_dir):
+        return jsonify({"error": "a restore is already running"}), 409
+    return jsonify({"started": True})
 
 
 # ------------------------------------------------------- gdrive oauth ----

@@ -293,6 +293,11 @@
         <span class="field-label">Backup file</span>
         <select id="r-file"></select>
       </div>
+      <label class="field checkbox-field">
+        <input type="checkbox" id="r-override-toggle">
+        <span>Restore to a different target (override the URL / API key configured in Settings, for this restore only)</span>
+      </label>
+      <div id="r-override" class="hidden"></div>
       <div id="r-extra"></div>
       <label class="field checkbox-field">
         <input type="checkbox" id="r-confirm">
@@ -302,6 +307,8 @@
         <button type="button" class="btn btn-danger" id="restore-btn">Restore</button>
         <span id="restore-result" class="save-result"></span>
       </div>
+      <div id="restore-summary" class="run-summary hidden"></div>
+      <pre id="restore-log" class="log-view hidden"></pre>
     </div>
   </section>
 

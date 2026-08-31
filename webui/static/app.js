@@ -3,6 +3,7 @@
 let APP_META = [];
 let DESTINATION_META = [];
 let RUN_POLL_TIMER = null;
+let RESTORE_POLL_TIMER = null;
 let SETTINGS_SNAPSHOT = null;
 
 async function apiFetch(url, opts) {
@@ -1131,6 +1132,56 @@ function initRestoreAppOptions() {
   });
 }
 
+function renderRestoreOverride() {
+  const appId = document.getElementById("r-app").value;
+  const meta = APP_META.find((m) => m.id === appId);
+  const root = document.getElementById("r-override");
+  root.innerHTML = "";
+  if (!meta) return;
+
+  const block = document.createElement("div");
+  block.className = "extra-field-block";
+
+  const urlLabel = document.createElement("label");
+  urlLabel.className = "field";
+  urlLabel.innerHTML = `<span class="field-label">URL</span><input type="text" id="r-ovr-url" placeholder="${meta.url_placeholder || ""}" autocomplete="off">`;
+  block.appendChild(urlLabel);
+
+  const keyLabel = document.createElement("label");
+  keyLabel.className = "field";
+  const keyHint = !meta.key_required ? `<span class="muted">(optional${meta.key_help ? ` &mdash; ${meta.key_help}` : ""})</span>` : "";
+  keyLabel.innerHTML = `<span class="field-label">API key ${keyHint}</span><input type="password" id="r-ovr-api_key" autocomplete="off">`;
+  block.appendChild(keyLabel);
+
+  (meta.extra_fields || []).forEach((f) => {
+    const label = document.createElement("label");
+    label.className = "field";
+    const help = f.help ? `<span class="muted">(${f.help})</span>` : "";
+    label.innerHTML = `<span class="field-label">${f.label} ${help}</span><input type="${f.type}" class="r-ovr-extra" data-field="${f.name}" autocomplete="off">`;
+    block.appendChild(label);
+  });
+
+  root.appendChild(block);
+}
+
+function updateRestoreOverrideVisibility() {
+  const checked = document.getElementById("r-override-toggle").checked;
+  document.getElementById("r-override").classList.toggle("hidden", !checked);
+  if (checked) renderRestoreOverride();
+}
+
+function readRestoreOverride() {
+  if (!document.getElementById("r-override-toggle").checked) return null;
+  const override = {
+    url: document.getElementById("r-ovr-url").value.trim(),
+    api_key: document.getElementById("r-ovr-api_key").value.trim(),
+  };
+  document.querySelectorAll("#r-override .r-ovr-extra").forEach((input) => {
+    override[input.dataset.field] = input.value.trim();
+  });
+  return override;
+}
+
 async function loadRestoreFiles() {
   const destId = document.getElementById("r-destination").value;
   const appId = document.getElementById("r-app").value;
@@ -1253,6 +1304,15 @@ async function doRestore() {
   }
 
   const payload = { file, confirm: true };
+  const override = readRestoreOverride();
+  if (override) {
+    if (!override.url) {
+      resultEl.textContent = "Enter a target URL for the override.";
+      resultEl.className = "save-result fail";
+      return;
+    }
+    payload.override = override;
+  }
   if (appId === "bazarr") {
     const dirInput = document.getElementById("r-bazarr-dir");
     if (dirInput && dirInput.value.trim()) payload.bazarr_backup_dir = dirInput.value.trim();
@@ -1265,24 +1325,17 @@ async function doRestore() {
     payload.passwords = passwords;
   }
 
-  resultEl.textContent = "Restoring...";
+  resultEl.textContent = "";
   resultEl.className = "save-result";
+  document.getElementById("restore-log").textContent = "";
+  document.getElementById("restore-log").classList.add("hidden");
   try {
-    const res = await apiFetch(`/api/restore/${destId}/${appId}`, {
+    await apiFetch(`/api/restore/${destId}/${appId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    if (res.summary) {
-      const s = res.summary;
-      resultEl.textContent =
-        `Restored ${s.servers_restored.length} server(s), ${s.misc_keys_restored.length} setting(s).` +
-        (s.servers_missing_password.length ? ` No password set for: ${s.servers_missing_password.join(", ")}.` : "");
-    } else {
-      resultEl.textContent = res.message || "Restore complete.";
-    }
-    resultEl.className = "save-result ok";
-    toast("Restore complete", "ok");
+    refreshRestoreStatus();
   } catch (e) {
     resultEl.textContent = e.message;
     resultEl.className = "save-result fail";
@@ -1290,16 +1343,81 @@ async function doRestore() {
   }
 }
 
+function renderRestoreState(state) {
+  const resultEl = document.getElementById("restore-result");
+  const summaryEl = document.getElementById("restore-summary");
+  const logEl = document.getElementById("restore-log");
+  const btn = document.getElementById("restore-btn");
+
+  btn.disabled = !!state.running;
+  btn.textContent = state.running ? "Restoring..." : "Restore";
+
+  summaryEl.classList.toggle("hidden", !state.running);
+  summaryEl.innerHTML = "";
+  if (state.running) {
+    summaryEl.appendChild(document.createTextNode(`Restoring ${state.app || ""}...`));
+    const spinner = document.createElement("span");
+    spinner.className = "spinner";
+    summaryEl.appendChild(spinner);
+  }
+
+  logEl.classList.toggle("hidden", !(state.log && state.log.length));
+  if (state.log && state.log.length) {
+    logEl.textContent = state.log.join("\n");
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  if (!state.running && state.finished_at) {
+    if (state.error) {
+      resultEl.textContent = state.error;
+      resultEl.className = "save-result fail";
+    } else {
+      if (state.summary) {
+        const s = state.summary;
+        resultEl.textContent =
+          `Restored ${s.servers_restored.length} server(s), ${s.misc_keys_restored.length} setting(s).` +
+          (s.servers_missing_password.length ? ` No password set for: ${s.servers_missing_password.join(", ")}.` : "");
+      } else {
+        resultEl.textContent = state.message || "Restore complete.";
+      }
+      resultEl.className = "save-result ok";
+    }
+  }
+}
+
+async function refreshRestoreStatus() {
+  try {
+    const state = await apiFetch("/api/restore/status");
+    renderRestoreState(state);
+    if (state.running && !RESTORE_POLL_TIMER) {
+      RESTORE_POLL_TIMER = setInterval(async () => {
+        const s = await apiFetch("/api/restore/status");
+        renderRestoreState(s);
+        if (!s.running) {
+          clearInterval(RESTORE_POLL_TIMER);
+          RESTORE_POLL_TIMER = null;
+          toast(s.error ? `Restore failed: ${s.error}` : "Restore complete", s.error ? "fail" : "ok");
+        }
+      }, 1000);
+    }
+  } catch (e) {
+    // transient poll error - next tick (or the next tab visit) will retry
+  }
+}
+
 async function initRestoreTab() {
   initRestoreAppOptions();
   await populateDestinationSelect(document.getElementById("r-destination"));
   loadRestoreFiles();
+  refreshRestoreStatus();
 }
 
 function initRestoreEvents() {
   document.getElementById("r-destination").addEventListener("change", loadRestoreFiles);
   document.getElementById("r-app").addEventListener("change", loadRestoreFiles);
+  document.getElementById("r-app").addEventListener("change", updateRestoreOverrideVisibility);
   document.getElementById("r-file").addEventListener("change", renderRestoreExtra);
+  document.getElementById("r-override-toggle").addEventListener("change", updateRestoreOverrideVisibility);
   document.getElementById("restore-btn").addEventListener("click", doRestore);
 }
 
