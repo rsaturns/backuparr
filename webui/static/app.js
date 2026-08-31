@@ -1372,11 +1372,17 @@ function renderRestoreState(state) {
       resultEl.textContent = state.error;
       resultEl.className = "save-result fail";
     } else {
-      if (state.summary) {
-        const s = state.summary;
+      const s = state.summary;
+      if (s && Array.isArray(s.servers_restored)) {
         resultEl.textContent =
           `Restored ${s.servers_restored.length} server(s), ${s.misc_keys_restored.length} setting(s).` +
           (s.servers_missing_password.length ? ` No password set for: ${s.servers_missing_password.join(", ")}.` : "");
+      } else if (s && (s.database || s.database_skipped || s.config)) {
+        const parts = [];
+        if (s.database) parts.push("database restored");
+        if (s.database_skipped) parts.push(`database not restored (${s.database_skipped})`);
+        if (s.config) parts.push("config restored");
+        resultEl.textContent = parts.join(", ") + ".";
       } else {
         resultEl.textContent = state.message || "Restore complete.";
       }
