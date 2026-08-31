@@ -97,9 +97,28 @@ class ServarrApp:
     def restore_upload(self, file_path):
         """Restore via POST /system/backup/restore/upload - a genuine multipart
         upload endpoint, so no filesystem access to the app's config volume
-        is required at all."""
+        is required at all.
+
+        The upload only stages the db/config for restore and responds
+        {"RestartRequired": true} - it does nothing further on its own. The
+        app's startup routine is what actually swaps the staged files in, so
+        a restart has to be triggered here or the "restore" silently never
+        applies.
+        """
         with open(file_path, "rb") as f:
             files = {"file": (os.path.basename(file_path), f, "application/zip")}
             res = self.session.post(self._api("/system/backup/restore/upload"), files=files, timeout=120)
         res.raise_for_status()
-        return res.json()
+        result = res.json()
+        self.restart()
+        return result
+
+    def restart(self):
+        try:
+            res = self.session.post(self._api("/system/restart"), timeout=10)
+            res.raise_for_status()
+        except requests.exceptions.ConnectionError:
+            # The app tears its connections down as it restarts - seeing
+            # that happen right after a 200 here is the expected outcome,
+            # not a failure.
+            logger.info("%s: restart request sent (connection dropped as expected)", self.name)
