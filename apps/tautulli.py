@@ -65,7 +65,12 @@ class TautulliApp:
         res = self.session.get(self._api_url(), params=payload, timeout=timeout or self.timeout)
         if res.status_code == 401:
             raise TautulliError("tautulli: unauthorized - check the API key")
-        res.raise_for_status()
+        try:
+            res.raise_for_status()
+        except requests.exceptions.HTTPError as exc:
+            # Don't let requests' default message through - it embeds the
+            # full request URL, apikey included.
+            raise TautulliError(f"tautulli: HTTP {res.status_code} calling {cmd}") from exc
         return res
 
     def test_connection(self):
@@ -99,7 +104,10 @@ class TautulliApp:
             except ValueError:
                 data = {}
             raise TautulliError(f"tautulli: {data.get('message') or res.text or 'import failed'}")
-        res.raise_for_status()
+        try:
+            res.raise_for_status()
+        except requests.exceptions.HTTPError as exc:
+            raise TautulliError(f"tautulli: HTTP {res.status_code} calling {cmd}") from exc
         data = res.json().get("response", {})
         if data.get("result") != "success":
             raise TautulliError(f"tautulli: {data.get('message') or 'import failed'}")

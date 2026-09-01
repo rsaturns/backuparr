@@ -86,7 +86,7 @@ class BazarrApp:
             after = {b["filename"] for b in self.list_backups()}
             new = after - before
             if new:
-                new_filename = sorted(new)[-1]
+                new_filename = os.path.basename(sorted(new)[-1])
                 break
             time.sleep(poll_interval)
             waited += poll_interval

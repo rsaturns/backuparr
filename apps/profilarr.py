@@ -88,7 +88,7 @@ class ProfilarrApp:
         backups = self.list_backups()
         if not backups:
             raise ProfilarrError("profilarr: no backup found after trigger")
-        filename = backups[0]["filename"]  # API returns newest first
+        filename = os.path.basename(backups[0]["filename"])  # API returns newest first
 
         res = self.session.get(self._api(f"/backups/{filename}"), timeout=self.timeout)
         res.raise_for_status()

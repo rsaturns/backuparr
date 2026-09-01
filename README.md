@@ -328,6 +328,7 @@ than app-level (set in `docker-compose.yml`):
 | `PUID` / `PGID` | User/group the container runs as instead of root (default `1000`/`1000`) - match your host user with `id` if you want files on `./data` owned by yourself; fixed up automatically on every start |
 | `BACKUPARR_SECRETS_KEY` | Optional: overrides the auto-generated `secrets.key` used to encrypt config.json's secrets (see [Encryption at rest](#encryption-at-rest)) |
 | `RCLONE_CONFIG_PASS` | Optional: overrides the auto-generated `rclone.pass` used to encrypt rclone.conf |
+| `BACKUPARR_FORCE_HTTPS` | Optional: set to `true` to mark the session cookie `Secure` (only sent over HTTPS) - only if Backuparr sits behind your own TLS-terminating reverse proxy. Leave unset for the default plain-HTTP-on-LAN deployment, or login will silently fail. |
 
 ## Credits
 

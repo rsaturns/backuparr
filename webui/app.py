@@ -84,6 +84,10 @@ app.secret_key = _load_or_create_secret_key()
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
+    # Off by default - the documented deployment is plain HTTP on a trusted
+    # LAN, where a Secure-only cookie would just break login. Set this if
+    # Backuparr sits behind your own TLS-terminating reverse proxy.
+    SESSION_COOKIE_SECURE=os.environ.get("BACKUPARR_FORCE_HTTPS", "").lower() in ("1", "true", "yes"),
     PERMANENT_SESSION_LIFETIME=timedelta(days=30),
 )
 

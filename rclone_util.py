@@ -9,11 +9,18 @@ class RcloneError(RuntimeError):
     pass
 
 
-def _run(args):
+SENSITIVE_FIELDS = {"client_secret", "token", "password", "pass"}
+
+
+def _run(args, redact=()):
     # stdin closed so an inherited TTY (e.g. manual docker exec) can't hang.
     proc = subprocess.run(["rclone", *args], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     if proc.returncode != 0:
-        raise RcloneError(f"rclone {' '.join(args)} failed: {proc.stderr.strip()}")
+        message = f"rclone {' '.join(args)} failed: {proc.stderr.strip()}"
+        for secret in redact:
+            if secret:
+                message = message.replace(secret, "***")
+        raise RcloneError(message)
     return proc.stdout
 
 
@@ -30,19 +37,18 @@ def config_set(name, backend_type, fields, force=False):
 
     Always adds config_refresh_token=false, or rclone attempts its own
     token refresh as a side effect of touching any field."""
-    existing = name in config_dump()
+    existing = False if force else name in config_dump()
     args = ["config", "create" if (force or not existing) else "update", name]
     if force or not existing:
         args.append(backend_type)
     for key, value in fields.items():
         args += [key, value]
     args += ["config_refresh_token", "false", "--non-interactive"]
-    _run(args)
+    _run(args, redact=[v for k, v in fields.items() if k in SENSITIVE_FIELDS])
 
 
 def config_delete(name):
-    if name in config_dump():
-        _run(["config", "delete", name])
+    _run(["config", "delete", name])
 
 
 def copyto(local_path, remote_path):
