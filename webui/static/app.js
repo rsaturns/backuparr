@@ -1238,11 +1238,9 @@ function renderRestoreExtra() {
     const block = document.createElement("div");
     block.className = "extra-field-block";
     block.id = "r-sabnzbd-block";
-    block.innerHTML =
-      '<button type="button" class="btn btn-ghost btn-sm" id="r-sabnzbd-preview-btn">Load Usenet servers</button>' +
-      '<div id="r-sabnzbd-servers"></div>';
+    block.innerHTML = '<div id="r-sabnzbd-servers">Loading Usenet servers...</div>';
     extraRoot.appendChild(block);
-    document.getElementById("r-sabnzbd-preview-btn").addEventListener("click", loadSabnzbdPreview);
+    loadSabnzbdPreview();
   }
 }
 

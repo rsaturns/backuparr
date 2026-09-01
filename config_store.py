@@ -65,6 +65,7 @@ APP_META = [
         "key_required": True,
         "url_placeholder": "",
         "extra_fields": [],
+        "restore_supported": False,
     },
 ]
 
