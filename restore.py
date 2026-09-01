@@ -85,7 +85,7 @@ def main():
             if not confirm(f"Restore {args.app} from {filename}? This restarts {args.app}.", args.yes):
                 print("Aborted.")
                 return 1
-            ra.restore_upload_app(args.app, app_cfg, local_zip)
+            ra.restore_app(args.app, app_cfg, tmp_dir, local_zip)
             print(f"{args.app}: restore uploaded successfully, app is restarting.")
 
         elif args.app == "bazarr":
@@ -98,7 +98,7 @@ def main():
             if not confirm(f"Restore bazarr from {filename}? This restarts bazarr.", args.yes):
                 print("Aborted.")
                 return 1
-            ra.restore_bazarr(app_cfg, local_zip, backup_dir)
+            ra.restore_app(args.app, app_cfg, tmp_dir, local_zip, bazarr_backup_dir=backup_dir)
             print("bazarr: restore triggered successfully, app is restarting.")
 
         elif args.app == "tdarr":
@@ -108,15 +108,15 @@ def main():
             ):
                 print("Aborted.")
                 return 1
-            ra.restore_tdarr(app_cfg, tmp_dir, local_zip)
+            ra.restore_app(args.app, app_cfg, tmp_dir, local_zip)
             print("tdarr: restore complete.")
 
         elif args.app == "tautulli":
             if not confirm(f"Restore tautulli from {filename}? This restarts tautulli if config.ini is included.", args.yes):
                 print("Aborted.")
                 return 1
-            summary = ra.restore_tautulli(app_cfg, tmp_dir, local_zip)
-            for part, message in summary.items():
+            result = ra.restore_app(args.app, app_cfg, tmp_dir, local_zip)
+            for part, message in result["summary"].items():
                 print(f"tautulli: {part} restored - {message}")
 
         elif args.app == "sabnzbd":
@@ -142,7 +142,10 @@ def main():
                     print()
                     return None
 
-            summary = ra.restore_sabnzbd(app_cfg, config, prompt_password)
+            result = ra.restore_app(
+                args.app, app_cfg, tmp_dir, local_zip, sabnzbd_config=config, sabnzbd_password_prompt=prompt_password
+            )
+            summary = result["summary"]
 
             print(
                 f"sabnzbd: restored {len(summary['servers_restored'])} server(s): "

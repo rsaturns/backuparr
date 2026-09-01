@@ -697,33 +697,34 @@ def _restore_work(app_name, root, app_cfg, data, bazarr_backup_dir):
 
         if app_name in ra.UPLOAD_RESTORE_APPS:
             log.info("restore: uploading backup to %s, it will restart...", app_name)
-            ra.restore_upload_app(app_name, app_cfg, local_zip)
+            ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
             RESTORE_RUN_STATE["message"] = f"{app_name} restore uploaded, app is restarting"
 
         elif app_name == "bazarr":
             log.info("restore: triggering bazarr restore...")
-            ra.restore_bazarr(app_cfg, local_zip, bazarr_backup_dir)
+            ra.restore_app(app_name, app_cfg, tmp_dir, local_zip, bazarr_backup_dir=bazarr_backup_dir)
             RESTORE_RUN_STATE["message"] = "bazarr restore triggered, app is restarting"
 
         elif app_name == "tdarr":
             log.info("restore: restoring tdarr collections...")
-            ra.restore_tdarr(app_cfg, tmp_dir, local_zip)
+            ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
             RESTORE_RUN_STATE["message"] = "tdarr restore complete"
 
         elif app_name == "tautulli":
             log.info("restore: restoring tautulli...")
-            RESTORE_RUN_STATE["summary"] = ra.restore_tautulli(app_cfg, tmp_dir, local_zip)
+            result = ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
+            RESTORE_RUN_STATE["summary"] = result["summary"]
             RESTORE_RUN_STATE["message"] = "tautulli restore uploaded"
 
         elif app_name == "sabnzbd":
-            config = ra.load_sabnzbd_config(tmp_dir, local_zip)
             passwords = data.get("passwords", {})
 
             def password_prompt(name, _server):
                 return passwords.get(name) or None
 
             log.info("restore: restoring sabnzbd config...")
-            RESTORE_RUN_STATE["summary"] = ra.restore_sabnzbd(app_cfg, config, password_prompt)
+            result = ra.restore_app(app_name, app_cfg, tmp_dir, local_zip, sabnzbd_password_prompt=password_prompt)
+            RESTORE_RUN_STATE["summary"] = result["summary"]
             RESTORE_RUN_STATE["message"] = "sabnzbd restore complete"
 
         RESTORE_RUN_STATE["ok"] = True

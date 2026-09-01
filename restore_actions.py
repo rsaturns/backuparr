@@ -102,3 +102,43 @@ def sabnzbd_server_summary(config):
 def restore_sabnzbd(app_cfg, config, password_prompt):
     app = SabnzbdApp(app_cfg["url"], app_cfg["api_key"])
     return app.restore(config, password_prompt)
+
+
+def restore_app(app_name, app_cfg, tmp_dir, local_zip, *, bazarr_backup_dir=None, sabnzbd_config=None, sabnzbd_password_prompt=None):
+    """The single place that maps an app name to its restore action - both
+    restore.py's CLI and the web UI call this instead of each keeping their
+    own copy of this branch. Each caller still owns its own UX around the
+    call (confirmation prompts, progress reporting) and any app-specific
+    prep (e.g. loading sabnzbd's config early to show a server count before
+    confirming) - only the "which restore_actions function for this app"
+    decision lives here.
+
+    bazarr_backup_dir is required for bazarr. sabnzbd_password_prompt is
+    required for sabnzbd; sabnzbd_config can be passed pre-loaded (the CLI
+    needs it before this call anyway, to build its confirmation prompt) or
+    left out to have it loaded here.
+
+    Returns a small dict describing what happened, shaped per app:
+      {"kind": "upload"} - radarr/sonarr/prowlarr
+      {"kind": "bazarr"} / {"kind": "tdarr"}
+      {"kind": "tautulli", "summary": {...}} / {"kind": "sabnzbd", "summary": {...}}
+    """
+    if app_name in UPLOAD_RESTORE_APPS:
+        restore_upload_app(app_name, app_cfg, local_zip)
+        return {"kind": "upload"}
+    if app_name == "bazarr":
+        if not bazarr_backup_dir:
+            raise ValueError("bazarr restore requires bazarr_backup_dir")
+        restore_bazarr(app_cfg, local_zip, bazarr_backup_dir)
+        return {"kind": "bazarr"}
+    if app_name == "tdarr":
+        restore_tdarr(app_cfg, tmp_dir, local_zip)
+        return {"kind": "tdarr"}
+    if app_name == "tautulli":
+        return {"kind": "tautulli", "summary": restore_tautulli(app_cfg, tmp_dir, local_zip)}
+    if app_name == "sabnzbd":
+        if sabnzbd_password_prompt is None:
+            raise ValueError("sabnzbd restore requires sabnzbd_password_prompt")
+        config = sabnzbd_config if sabnzbd_config is not None else load_sabnzbd_config(tmp_dir, local_zip)
+        return {"kind": "sabnzbd", "summary": restore_sabnzbd(app_cfg, config, sabnzbd_password_prompt)}
+    raise ValueError(f"no restore action for {app_name!r}")
