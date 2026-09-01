@@ -278,11 +278,47 @@ class _ListLogHandler(logging.Handler):
         self.sink.append(self.format(record))
 
 
-def _do_run():
-    backup_logger = logging.getLogger("backuparr")
-    handler = _ListLogHandler(RUN_STATE["log"])
+def _run_tracked(state, work, *args):
+    """Runs work(*args) with a temporary log handler feeding state["log"],
+    then marks the run finished. `state["running"]` must already be True -
+    only _start_tracked_run() (which sets it under a lock) should trigger
+    this, via the background thread it starts."""
+    runner_logger = logging.getLogger("backuparr")
+    handler = _ListLogHandler(state["log"])
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
-    backup_logger.addHandler(handler)
+    runner_logger.addHandler(handler)
+    try:
+        work(*args)
+    finally:
+        runner_logger.removeHandler(handler)
+        state["running"] = False
+        state["finished_at"] = datetime.now(timezone.utc).isoformat()
+
+
+def _start_tracked_run(state, lock, reset_fields, work, *args, before_start=None):
+    """Starts work(*args) in a background thread unless state["running"] is
+    already True. reset_fields is applied to `state` right before the
+    thread starts (only once we know a run will actually happen);
+    before_start, if given, runs under the same lock just before that -
+    for setup that must not fire when a run is already in progress (e.g.
+    clearing a cancel flag that might belong to that other run). Returns
+    whether it started."""
+    with lock:
+        if state["running"]:
+            return False
+        if before_start:
+            before_start()
+        state.update(reset_fields)
+        state["running"] = True
+        state["started_at"] = datetime.now(timezone.utc).isoformat()
+        state["finished_at"] = None
+    threading.Thread(target=_run_tracked, args=(state, work, *args), daemon=True).start()
+    return True
+
+
+def _backup_work():
+    backup_logger = logging.getLogger("backuparr")
+
     def _progress(index, total, name):
         RUN_STATE["current_app"] = name
         RUN_STATE["current_index"] = index
@@ -297,35 +333,26 @@ def _do_run():
     except Exception as exc:  # unexpected crash, not a per-app failure
         RUN_STATE["failed"] = [f"unexpected error: {exc}"]
         backup_logger.exception("backup run crashed")
-    finally:
-        backup_logger.removeHandler(handler)
-        RUN_STATE["running"] = False
-        RUN_STATE["finished_at"] = datetime.now(timezone.utc).isoformat()
 
 
 def _start_backup_run():
     """Starts a backup run unless one's already in progress. Returns
     whether it started. Shared by the manual endpoint and the scheduler."""
-    with RUN_LOCK:
-        if RUN_STATE["running"]:
-            return False
-        RUN_CANCEL_EVENT.clear()
-        RUN_STATE.update(
-            {
-                "running": True,
-                "started_at": datetime.now(timezone.utc).isoformat(),
-                "finished_at": None,
-                "ok": [],
-                "failed": [],
-                "log": [],
-                "current_app": None,
-                "current_index": 0,
-                "total_apps": 0,
-                "cancel_requested": False,
-            }
-        )
-    threading.Thread(target=_do_run, daemon=True).start()
-    return True
+    return _start_tracked_run(
+        RUN_STATE,
+        RUN_LOCK,
+        {
+            "ok": [],
+            "failed": [],
+            "log": [],
+            "current_app": None,
+            "current_index": 0,
+            "total_apps": 0,
+            "cancel_requested": False,
+        },
+        _backup_work,
+        before_start=RUN_CANCEL_EVENT.clear,
+    )
 
 
 def _cancel_backup_run():
@@ -643,9 +670,9 @@ def api_history_download(dest_id, app_name, filename):
 
 
 # ------------------------------------------------------------- restore ----
-# Mirrors the backup run-state machinery above: the actual restore work runs
-# in a background thread so the UI can poll for live log output + a spinner
-# instead of blocking on one long request.
+# Shares _start_tracked_run()/_run_tracked() with the backup run state above:
+# a lock guarding one-at-a-time, a background thread, and live log output the
+# UI polls for instead of blocking on one long request.
 RESTORE_LOCK = threading.Lock()
 RESTORE_RUN_STATE = {
     "running": False,
@@ -661,11 +688,7 @@ RESTORE_RUN_STATE = {
 }
 
 
-def _do_restore(app_name, root, app_cfg, data, bazarr_backup_dir):
-    restore_logger = logging.getLogger("backuparr")
-    handler = _ListLogHandler(RESTORE_RUN_STATE["log"])
-    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
-    restore_logger.addHandler(handler)
+def _restore_work(app_name, root, app_cfg, data, bazarr_backup_dir):
     tmp_dir = None
     try:
         log.info("restore: fetching %s backup...", app_name)
@@ -708,37 +731,32 @@ def _do_restore(app_name, root, app_cfg, data, bazarr_backup_dir):
         log.exception("restore failed for %s", app_name)
         RESTORE_RUN_STATE["error"] = humanize_error(exc)
     finally:
-        restore_logger.removeHandler(handler)
         if tmp_dir:
             shutil.rmtree(tmp_dir, ignore_errors=True)
-        RESTORE_RUN_STATE["running"] = False
-        RESTORE_RUN_STATE["finished_at"] = datetime.now(timezone.utc).isoformat()
 
 
 def _start_restore_run(app_name, root, app_cfg, data, bazarr_backup_dir):
     """Starts a restore run unless one's already in progress. Returns
     whether it started."""
-    with RESTORE_LOCK:
-        if RESTORE_RUN_STATE["running"]:
-            return False
-        RESTORE_RUN_STATE.update(
-            {
-                "running": True,
-                "app": app_name,
-                "file": None,
-                "started_at": datetime.now(timezone.utc).isoformat(),
-                "finished_at": None,
-                "ok": False,
-                "message": None,
-                "summary": None,
-                "error": None,
-                "log": [],
-            }
-        )
-    threading.Thread(
-        target=_do_restore, args=(app_name, root, app_cfg, data, bazarr_backup_dir), daemon=True
-    ).start()
-    return True
+    return _start_tracked_run(
+        RESTORE_RUN_STATE,
+        RESTORE_LOCK,
+        {
+            "app": app_name,
+            "file": None,
+            "ok": False,
+            "message": None,
+            "summary": None,
+            "error": None,
+            "log": [],
+        },
+        _restore_work,
+        app_name,
+        root,
+        app_cfg,
+        data,
+        bazarr_backup_dir,
+    )
 
 
 @app.get("/api/restore/status")
