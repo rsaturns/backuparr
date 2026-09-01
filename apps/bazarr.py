@@ -13,11 +13,25 @@ protect it at the reverse-proxy layer instead).
 Restore is the other wrinkle: Bazarr only restores from a file already
 sitting in its own backup folder (there's no upload-restore endpoint), so
 restore_from_file() takes the *local path to that mounted folder* and places
-the file there itself before calling the restore API.
+the file there itself before calling the restore API. Bazarr also only
+accepts a restore filename matching its own naming convention
+(bazarr_backup_v<anything>.zip, see utilities/backup.py's
+_BACKUP_FILENAME_RE) - anything else, including our own bazarr_<timestamp>
+storage name, gets refused with a 500. restore_from_file() writes the copy
+under a name that fits instead of reusing the source filename.
+
+A third wrinkle in backup(): the filename appears in Bazarr's listing the
+moment the file is created, before a multi-MB db backup is done being
+written - downloading right then silently returns a truncated, unreadable
+zip (no error; the response's Content-Length just matches whatever was on
+disk at that instant). Fine for a small backup, hit reliably for a real
+production-sized one. backup() re-downloads until the zip actually
+validates.
 """
 import logging
 import os
 import time
+import zipfile
 
 import requests
 
@@ -81,19 +95,37 @@ class BazarrApp:
         if not new_filename:
             raise BazarrError("bazarr: backup job did not produce a new file in time")
 
-        download_url = f"{self.url}/system/backup/download/{new_filename}"
-        res = self.session.get(download_url, auth=self.download_auth, timeout=self.timeout)
-        if res.status_code == 401:
-            raise BazarrError(
-                "bazarr: download unauthorized - if Settings > General > Security is set to "
-                "'Forms', switch it to 'None' or 'Basic' (and set BAZARR_USERNAME/BAZARR_PASSWORD) "
-                "for automated backups to work"
-            )
-        res.raise_for_status()
-
         dest = os.path.join(dest_dir, new_filename)
-        with open(dest, "wb") as f:
-            f.write(res.content)
+        download_url = f"{self.url}/system/backup/download/{new_filename}"
+
+        # The filename appears in the listing the moment Bazarr creates the
+        # file, before it's done writing a multi-MB db backup - downloading
+        # right then silently returns a truncated, unreadable zip (no
+        # error: the response's Content-Length just matches whatever was on
+        # disk at that instant). Small backups write fast enough this never
+        # shows up; a real production-sized one hits it reliably. Keep
+        # re-downloading until the zip actually validates.
+        while True:
+            res = self.session.get(download_url, auth=self.download_auth, timeout=self.timeout)
+            if res.status_code == 401:
+                raise BazarrError(
+                    "bazarr: download unauthorized - if Settings > General > Security is set to "
+                    "'Forms', switch it to 'None' or 'Basic' (and set BAZARR_USERNAME/BAZARR_PASSWORD) "
+                    "for automated backups to work"
+                )
+            res.raise_for_status()
+
+            with open(dest, "wb") as f:
+                f.write(res.content)
+
+            try:
+                zipfile.ZipFile(dest).testzip()
+                break
+            except (zipfile.BadZipFile, OSError):
+                if time.time() >= deadline:
+                    raise BazarrError(f"bazarr: {new_filename} never finished writing on the server in time")
+                logger.info("bazarr: backup file still being written, retrying download...")
+                time.sleep(poll_interval)
 
         try:
             self.delete_backup(new_filename)
@@ -105,15 +137,32 @@ class BazarrApp:
     def restore_from_file(self, local_zip_path, bazarr_backup_dir):
         """Place `local_zip_path` into Bazarr's own backup folder (as seen on
         the local filesystem, e.g. a bind-mounted /config/backup) and trigger
-        the restore. Bazarr restarts itself once the restore completes."""
-        filename = os.path.basename(local_zip_path)
-        target = os.path.join(bazarr_backup_dir, filename)
-        if os.path.abspath(target) != os.path.abspath(local_zip_path):
-            with open(local_zip_path, "rb") as src, open(target, "wb") as dst:
-                dst.write(src.read())
+        the restore. Bazarr restarts itself once the restore completes.
 
-        res = self.session.patch(
-            f"{self.url}/api/system/backups", params={"filename": filename}, timeout=self.timeout
-        )
+        Bazarr's restore endpoint only accepts filenames matching its own
+        naming convention (utilities/backup.py's _BACKUP_FILENAME_RE:
+        ^bazarr_backup_v[\\w.\\-]+\\.zip$) - anything else gets refused with
+        a 500 ("Invalid backup filename refused for restore" in Bazarr's
+        log), which is what our own bazarr_<timestamp>.zip storage name
+        hits. So the copy is written under a name that fits the pattern
+        rather than reusing the source filename as-is.
+        """
+        stem = os.path.splitext(os.path.basename(local_zip_path))[0]
+        filename = f"bazarr_backup_v{stem}.zip"
+        target = os.path.join(bazarr_backup_dir, filename)
+        with open(local_zip_path, "rb") as src, open(target, "wb") as dst:
+            dst.write(src.read())
+
+        try:
+            res = self.session.patch(
+                f"{self.url}/api/system/backups", params={"filename": filename}, timeout=self.timeout
+            )
+        except requests.exceptions.ConnectionError:
+            # Bazarr restores and restarts within this same request - the
+            # process tearing itself down before the response finishes
+            # sending is the expected outcome of a successful restore, not
+            # a failure.
+            logger.info("bazarr: connection dropped as expected during restart")
+            return None
         res.raise_for_status()
         return res
