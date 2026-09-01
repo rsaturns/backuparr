@@ -13,6 +13,47 @@ release event.
 
 _Nothing yet._
 
+## [1.0.0-beta] - 2026-09-01
+
+### Added
+
+- Added a GitHub Actions CI/CD pipeline: every PR is gated on the test
+  suite passing and a clean multi-arch (`linux/amd64`/`linux/arm64`)
+  Docker build; merges to `main` and version tags automatically publish
+  to Docker Hub, with tag pushes also creating a GitHub Release with
+  notes pulled from this changelog.
+- Added a pytest suite (24 tests) covering the security-critical code
+  paths: the path-traversal filename allowlist, zip-slip containment,
+  secrets encrypt/decrypt round-trip, config load/save round-trip, and
+  rclone secret redaction.
+- Added Dependabot configuration for pip, Docker, and GitHub Actions
+  updates, and enabled its automated security-fix PRs.
+- Published the project to Docker Hub (`rsaturns/backuparr`, both
+  `linux/amd64` and `linux/arm64`) with a description, overview, and
+  category, and documented deploying the published image in the README.
+- Added SECURITY.md (private vulnerability reporting) and a CODEOWNERS
+  file.
+
+### Changed
+
+- rclone now installs from its own official GitHub release
+  (checksum-verified against its published `SHA256SUMS`) instead of
+  Alpine's `apk` package, which lagged upstream and carried 53 CVEs
+  baked into its bundled Go dependencies - cut the full image's
+  vulnerability count from 57 to 15.
+- Bumped the Docker base image from `python:3.12-alpine` to
+  `python:3.14-alpine`, every Python dependency floor (croniter,
+  cryptography, waitress, argon2-cffi, requests) past known CVEs, and
+  every pinned GitHub Action past GitHub's Node 20 deprecation.
+
+### Security
+
+- Made the GitHub repository public, protected by a repository ruleset
+  on `main`: pull requests required, one approval from a CODEOWNERS
+  reviewer, the CI check must pass and be up to date with `main`, and
+  no force-pushes or branch deletion.
+- Enabled secret scanning and push protection.
+
 ## [0.9.0-beta] - 2026-09-01
 
 ### Added
