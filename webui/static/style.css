@@ -784,9 +784,17 @@ code {
 .overview-download-link:hover { text-decoration: underline; }
 
 .overview-empty {
+  grid-column: 1 / -1;
+  max-width: 420px;
+  margin: 12px auto;
+  padding: 24px 20px;
+  text-align: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
   color: var(--text-muted);
   font-size: 15px;
-  padding: 4px 0;
 }
 
 /* ---------------------------------------------------------- icon button --- */
