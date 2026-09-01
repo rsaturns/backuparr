@@ -1510,7 +1510,7 @@ async function openWhatsChanged() {
       tag.textContent = release.tag_name || release.name || "Untitled release";
       const date = document.createElement("span");
       date.className = "release-date";
-      date.textContent = fmtTime(release.published_at);
+      date.textContent = release.published_at ? new Date(release.published_at).toLocaleDateString() : "-";
       head.appendChild(tag);
       head.appendChild(date);
       item.appendChild(head);
