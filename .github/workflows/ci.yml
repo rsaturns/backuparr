@@ -1,0 +1,57 @@
+name: CI
+
+# PR gate: every PR targeting main must pass tests and a clean multi-arch
+# Docker build before it can merge. The push-to-main trigger is a safety
+# net for anything that lands on main outside a PR (it doesn't replace
+# branch protection - that's configured separately on the repo).
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+# Cancel superseded runs on the same PR/branch so we're not burning
+# minutes on a commit nobody cares about anymore.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Job name is referenced by branch protection as a required status
+  # check - keep it stable.
+  test-and-build:
+    name: test-and-build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run test suite
+        run: pytest -q
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Validates the Dockerfile builds cleanly on both target
+      # architectures. Nothing is pushed anywhere from this workflow.
+      - name: Build Docker image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
