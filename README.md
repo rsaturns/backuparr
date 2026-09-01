@@ -9,7 +9,7 @@
 > included. Reviewed and maintained by a human.
 
 Scheduled config/database backups for Radarr, Sonarr, Prowlarr, Profilarr,
-Bazarr, Tdarr, Sabnzbd, and Tautulli (Seerr coming soon), sent to
+Bazarr, Tdarr, SABnzbd, and Tautulli (Seerr coming soon), sent to
 whichever destinations you enable - Local storage, Google Drive, and
 OneDrive today, with Dropbox planned. Enable more than one and every
 backup gets a copy on each of them. Everything - which apps to back up,
@@ -45,8 +45,8 @@ instead of running rclone's full interactive config wizard yourself.
 | Radarr / Sonarr / Prowlarr | `POST .../system/backup` to trigger, download the result, `DELETE` it server-side | Same official backup zip the apps use for manual backups. Restore is a multipart upload to `.../system/backup/restore/upload` - fully automated, no filesystem access. |
 | Profilarr | `POST /api/v1/backups` to trigger (async job, polled via `GET /api/v1/jobs/{id}`), download the newest result, `DELETE` it server-side | Backup only - see below, Profilarr's own restore has no public API. |
 | Bazarr | `POST /api/system/backups` to trigger, poll `GET` until the new file appears, download it, `DELETE` it server-side | The download route (`/system/backup/download/<file>`) is gated by Bazarr's own web-auth setting, **not** the API key - see below. Restore writes one local file into Bazarr's own backup folder (no upload-restore endpoint exists), then an API call triggers the restore + restart. |
-| Tdarr | `POST /api/v2/cruddb` with `mode: getAll` for every internal DB collection (library settings, flows, global settings, node registrations, staged/output/statistics) | Fully API-driven both ways. Restore does `removeAll` then re-`insert`s each document per collection - destructive, asks for confirmation. |
-| Sabnzbd | `GET /sabnzbd/api?mode=get_config` to back up; `mode=set_config` per key to restore | SABnzbd's API returns every password field (e.g. Usenet server password) as `**********` - there's no API mode that returns the real value. Restore recreates each Usenet server (host/port/username/connections/ssl/priority/...) and every plain `misc`-style setting via the API, prompting interactively for each server's real password (an existing server's fields not included in the API call are left untouched, so a skipped password isn't overwritten with a blank one). Categories, RSS feeds, and sorters aren't auto-restored. |
+| Tdarr | `POST /api/v2/cruddb` with `mode: getAll` for every internal DB collection (library settings, flows, global settings, node registrations, staged/output/statistics) | Fully API-driven both ways. Restore does `removeAll` then re-`insert`s each document per collection, one at a time (Tdarr's API has no bulk-insert mode) - destructive, asks for confirmation. |
+| SABnzbd | `GET /sabnzbd/api?mode=get_config` to back up; `mode=set_config` per key to restore | SABnzbd's API returns every password field (e.g. Usenet server password) as `**********` - there's no API mode that returns the real value. Restore recreates each Usenet server (host/port/username/connections/ssl/priority/...) and every plain `misc`-style setting via the API, prompting interactively for each server's real password (an existing server's fields not included in the API call are left untouched, so a skipped password isn't overwritten with a blank one). Categories, RSS feeds, and sorters aren't auto-restored. |
 | Tautulli | `GET /api/v2?cmd=download_database` and `cmd=download_config` - each streams a fresh copy directly, no trigger/poll step | The database comes back with Plex tokens nulled out; the config file is only lightly sanitized - see below. Restore uploads each back separately via `cmd=import_database` and `cmd=import_config` (multipart) - a config restore makes Tautulli restart itself. |
 | Seerr | *(none)* | Not implemented - Seerr has no backup/restore API. Shown on the Settings tab as "Coming soon" for visibility only. |
 
@@ -229,21 +229,30 @@ Encryption is on unconditionally - nothing to enable.
 
 Re-create the app containers from your compose file first (config volumes
 will be empty/fresh), then use the **Restore** tab: pick the source,
-pick the app, pick a backup (newest first), and confirm.
+pick the app, pick a backup (newest first), and confirm. Like a backup
+run, the restore shows live progress and a log instead of just blocking
+on a spinner.
+
+Every restorable app also has a **"Restore to a different target"**
+checkbox, which lets you override just that app's URL/API key (and any
+extra fields it has, e.g. Bazarr's Basic auth username/password) for this
+one restore only - nothing is written back to Settings. Useful for
+restoring onto a rebuilt or renamed instance, or for testing a restore
+against a throwaway copy before trusting it against the real thing.
 
 - **Radarr/Sonarr/Prowlarr** - fully automated, the app restarts itself.
 - **Profilarr** - not available here; see the [Profilarr backup
   note](#profilarr-backup-note) above for the manual restore steps.
 - **Bazarr** - needs a local path to its own config/backup folder; fill in
-  the override field if you didn't already set `bazarr_backup_dir` in
-  Settings (this needs that path mounted into the backuparr container,
-  see the commented-out volume in `docker-compose.yml`).
+  the "Bazarr backup folder" field if you didn't already set
+  `bazarr_backup_dir` in Settings (this needs that path mounted into the
+  backuparr container, see the commented-out volume in `docker-compose.yml`).
 - **Tdarr** - destructive (wipes each DB collection before repopulating) -
   the UI warns about this before you confirm.
-- **Sabnzbd** - click "Load Usenet servers" to see which ones need a
-  password (SABnzbd's API never returns the real value - see the table
-  above), type them in, then restore. Leave any blank to set that server's
-  password manually in SABnzbd's Settings afterward instead.
+- **SABnzbd** - picking a backup file auto-loads its Usenet server list, showing
+  which ones need a password (SABnzbd's API never returns the real value -
+  see the table above); type them in, then restore. Leave any blank to set
+  that server's password manually in SABnzbd's Settings afterward instead.
 - **Tautulli** - restores the database and config separately; Tautulli
   restarts itself once the config half is applied.
 
@@ -319,16 +328,44 @@ if you'd rather):
 | `notify_url` | Optional: POST a summary here after every run - see [Notifications](#notifications) above |
 | `bazarr_backup_dir` | Local path to Bazarr's config/backup folder, for restores |
 
-A few things are still env vars, since they're deployment-level rather
-than app-level (set in `docker-compose.yml`):
+A few deployment-level settings live outside `config.json` entirely, as
+env vars in `docker-compose.yml` - see [Environment
+variables](#environment-variables) below.
 
-| Env var | Purpose |
-|---|---|
-| `WEBUI_PORT` | Default `8990` |
-| `PUID` / `PGID` | User/group the container runs as instead of root (default `1000`/`1000`) - match your host user with `id` if you want files on `./data` owned by yourself; fixed up automatically on every start |
-| `BACKUPARR_SECRETS_KEY` | Optional: overrides the auto-generated `secrets.key` used to encrypt config.json's secrets (see [Encryption at rest](#encryption-at-rest)) |
-| `RCLONE_CONFIG_PASS` | Optional: overrides the auto-generated `rclone.pass` used to encrypt rclone.conf |
-| `BACKUPARR_FORCE_HTTPS` | Optional: set to `true` to mark the session cookie `Secure` (only sent over HTTPS) - only if Backuparr sits behind your own TLS-terminating reverse proxy. Leave unset for the default plain-HTTP-on-LAN deployment, or login will silently fail. |
+## Environment variables
+
+Everything app-level - which apps to back up, their URLs/API keys,
+destinations, schedule, retention, restores - is set from the web UI and
+lives in `config.json` (see [Configuration
+reference](#configuration-reference) above), not env vars. The ones below
+are the deployment-level settings that exist outside it, set in
+`docker-compose.yml`'s `environment:` block.
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `WEBUI_PORT` | `8990` | Port the web UI listens on inside the container |
+| `PUID` / `PGID` | `1000` / `1000` | User/group the container runs as instead of root - match your host user (`id`) if you want files on `./data` owned by yourself; re-applied on every start |
+| `TZ` | UTC (Alpine default) | Standard timezone env var - determines what local time the cron schedule (the Daily/Weekly/Every-few-hours time picker on Settings) actually fires at, and the timestamps in `backup.log` |
+| `LOG_LEVEL` | `INFO` | Python logging level for backup/restore runs - e.g. `DEBUG` for more detail while troubleshooting a connector |
+| `BACKUPARR_SECRETS_KEY` | *(auto-generated)* | Overrides the auto-generated `secrets.key` value used to encrypt `config.json`'s secrets (see [Encryption at rest](#encryption-at-rest)) - set this to keep the key off the volume entirely, e.g. a Docker secret |
+| `RCLONE_CONFIG_PASS` | *(auto-generated)* | Overrides the auto-generated password used to encrypt `rclone.conf` |
+| `BACKUPARR_FORCE_HTTPS` | `false` | Set to `true` to mark the session cookie `Secure` (HTTPS-only) - only if Backuparr sits behind your own TLS-terminating reverse proxy. Leave unset for the default plain-HTTP-on-LAN deployment, or login will silently fail. |
+
+### Advanced: file locations
+
+Only relevant if you're remapping the volume layout away from the default
+single `./data:/config/backuparr` mount - every path below already lives
+inside that one mount by default, so most deployments never need these.
+
+| Env var | Default | What it is |
+|---|---|---|
+| `BACKUPARR_CONFIG` | `/config/backuparr/config.json` | The main config file |
+| `RCLONE_CONFIG` | `/config/backuparr/rclone.conf` | rclone's own remotes config |
+| `RCLONE_CONFIG_PASS_FILE` | `/config/backuparr/rclone.pass` | Where the auto-generated `rclone.conf` encryption password is stored (ignored if `RCLONE_CONFIG_PASS` is set directly) |
+| `BACKUPARR_SECRETS_KEY_PATH` | `/config/backuparr/secrets.key` | Where the auto-generated config-encryption key is stored (ignored if `BACKUPARR_SECRETS_KEY` is set directly) |
+| `BACKUPARR_SECRET_KEY_PATH` | `/config/backuparr/secret_key` | Flask's session-signing key file - **not** the same file as `secrets.key` above (this one signs login sessions; that one encrypts config.json's secret fields) |
+| `BACKUPARR_AUTH` | `/config/backuparr/auth.json` | The admin username/password hash created by the setup screen |
+| `BACKUPARR_LOG_DIR` | `/var/log/backuparr` | Where `backup.log` (shown on the Run & Status tab) is written |
 
 ## Credits
 
