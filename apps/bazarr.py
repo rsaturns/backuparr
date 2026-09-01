@@ -98,13 +98,8 @@ class BazarrApp:
         dest = os.path.join(dest_dir, new_filename)
         download_url = f"{self.url}/system/backup/download/{new_filename}"
 
-        # The filename appears in the listing the moment Bazarr creates the
-        # file, before it's done writing a multi-MB db backup - downloading
-        # right then silently returns a truncated, unreadable zip (no
-        # error: the response's Content-Length just matches whatever was on
-        # disk at that instant). Small backups write fast enough this never
-        # shows up; a real production-sized one hits it reliably. Keep
-        # re-downloading until the zip actually validates.
+        # See the module docstring's third wrinkle - keep re-downloading
+        # until the zip actually validates.
         while True:
             res = self.session.get(download_url, auth=self.download_auth, timeout=self.timeout)
             if res.status_code == 401:
@@ -139,13 +134,9 @@ class BazarrApp:
         the local filesystem, e.g. a bind-mounted /config/backup) and trigger
         the restore. Bazarr restarts itself once the restore completes.
 
-        Bazarr's restore endpoint only accepts filenames matching its own
-        naming convention (utilities/backup.py's _BACKUP_FILENAME_RE:
-        ^bazarr_backup_v[\\w.\\-]+\\.zip$) - anything else gets refused with
-        a 500 ("Invalid backup filename refused for restore" in Bazarr's
-        log), which is what our own bazarr_<timestamp>.zip storage name
-        hits. So the copy is written under a name that fits the pattern
-        rather than reusing the source filename as-is.
+        See the module docstring's second wrinkle for why the copy is
+        written under a renamed bazarr_backup_v<stem>.zip rather than
+        reusing the source filename as-is.
         """
         stem = os.path.splitext(os.path.basename(local_zip_path))[0]
         filename = f"bazarr_backup_v{stem}.zip"
