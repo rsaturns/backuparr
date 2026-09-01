@@ -316,7 +316,11 @@
 
 <footer class="site-footer">
   <span class="site-footer-name">Backuparr</span>
-  <span class="site-footer-version">v{{ version }}</span>
+  <span class="site-footer-version" data-version="{{ version }}">v{{ version }}</span>
+  <span id="version-check" class="version-check hidden">
+    <span class="status-dot" id="version-check-dot"></span>
+    <span id="version-check-text"></span>
+  </span>
 </footer>
 
 <div id="setup-guide-modal" class="modal-overlay hidden">

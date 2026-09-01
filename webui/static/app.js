@@ -1442,6 +1442,44 @@ function handleGdriveRedirect() {
   document.querySelector('.tab-btn[data-tab="settings"]').click();
 }
 
+// Compares the running version against GitHub's latest published Release.
+// Plain fetch (not apiFetch) - this is an external, unauthenticated call,
+// not one of Backuparr's own API routes. Fails silently (leaves the
+// footer's version-check dot hidden) on any error - offline, GitHub
+// unreachable, rate-limited, or the repo not being public yet.
+async function checkForUpdate() {
+  const versionEl = document.querySelector(".site-footer-version");
+  let latest;
+  try {
+    const res = await fetch("https://api.github.com/repos/rsaturns/backuparr/releases/latest");
+    if (!res.ok) return;
+    const data = await res.json();
+    latest = (data.tag_name || "").replace(/^v/, "");
+  } catch (e) {
+    return;
+  }
+  if (!latest) return;
+
+  const dot = document.getElementById("version-check-dot");
+  const text = document.getElementById("version-check-text");
+  if (latest === versionEl.dataset.version) {
+    dot.dataset.state = "ok";
+    text.className = "version-check-text ok";
+    text.textContent = "Current Version";
+  } else {
+    dot.dataset.state = "fail";
+    text.className = "version-check-text fail";
+    text.innerHTML = "";
+    const link = document.createElement("a");
+    link.href = "https://github.com/rsaturns/backuparr";
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = "Update Available";
+    text.appendChild(link);
+  }
+  document.getElementById("version-check").classList.remove("hidden");
+}
+
 async function init() {
   initTabs();
   initTheme();
@@ -1476,6 +1514,7 @@ async function init() {
   refreshRunStatus();
   loadOverview();
   handleGdriveRedirect();
+  checkForUpdate();
 }
 
 document.addEventListener("DOMContentLoaded", init);

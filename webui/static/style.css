@@ -186,6 +186,17 @@ body {
 
 .site-footer-version { margin-left: 6px; }
 
+.version-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 6px;
+}
+
+.version-check-text.ok { color: var(--ok); }
+.version-check-text.fail { color: var(--danger); }
+.version-check-text a { color: inherit; }
+
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
 
