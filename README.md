@@ -2,7 +2,7 @@
 
 # Backuparr
 
-**Secure your Arrs.**
+**Backup your Arrs.**
 
 > **AI disclosure:** This project was built with substantial assistance
 > from Claude (Anthropic) - code, documentation, and commit history
