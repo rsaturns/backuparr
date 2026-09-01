@@ -23,6 +23,36 @@ To recover after a host failure: re-create the containers from your
 compose file, then restore each app's config from its latest backup (see
 [Restoring after a disaster](#restoring-after-a-disaster)).
 
+## Table of contents
+
+- [Architecture](#architecture)
+- [Why not reuse an existing tool?](#why-not-reuse-an-existing-tool)
+- [Per-app backup method](#per-app-backup-method-read-this-before-deploying)
+  - [Profilarr backup note](#profilarr-backup-note)
+  - [Tautulli backup note](#tautulli-backup-note)
+  - [Bazarr auth note](#bazarr-auth-note)
+  - [Tdarr auth note](#tdarr-auth-note)
+- [Destinations](#destinations)
+  - [Local storage](#local-storage)
+  - [Google Drive](#google-drive)
+  - [OneDrive](#onedrive)
+  - [Dropbox](#dropbox)
+- [Deploying](#deploying)
+  - [Login](#login)
+  - [Encryption at rest](#encryption-at-rest)
+- [Restoring after a disaster](#restoring-after-a-disaster)
+- [Notifications](#notifications)
+  - [Discord](#discord)
+  - [Slack](#slack)
+  - [Telegram](#telegram)
+  - [Gotify (self-hosted)](#gotify-self-hosted)
+  - [ntfy.sh, Healthchecks.io, or anything else](#ntfysh-healthchecksio-or-anything-else)
+- [Configuration reference](#configuration-reference)
+- [Environment variables](#environment-variables)
+  - [Advanced: file locations](#advanced-file-locations)
+- [Credits](#credits)
+- [License](#license)
+
 ## Architecture
 
 <img src="webui/static/architecture-diagram.svg" alt="Radarr, Sonarr, Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, and Tautulli each feed Backuparr over their own HTTP API; Backuparr uploads each backup via rclone to Local storage, Google Drive, and Microsoft OneDrive" width="100%">
@@ -43,11 +73,11 @@ instead of running rclone's full interactive config wizard yourself.
 | App | Method | Notes |
 |---|---|---|
 | Radarr / Sonarr / Prowlarr | `POST .../system/backup` to trigger, download the result, `DELETE` it server-side | Same official backup zip the apps use for manual backups. Restore is a multipart upload to `.../system/backup/restore/upload` - fully automated, no filesystem access. |
-| Profilarr | `POST /api/v1/backups` to trigger (async job, polled via `GET /api/v1/jobs/{id}`), download the newest result, `DELETE` it server-side | Backup only - see below, Profilarr's own restore has no public API. |
-| Bazarr | `POST /api/system/backups` to trigger, poll `GET` until the new file appears, download it, `DELETE` it server-side | The download route (`/system/backup/download/<file>`) is gated by Bazarr's own web-auth setting, **not** the API key - see below. Restore writes one local file into Bazarr's own backup folder (no upload-restore endpoint exists), then an API call triggers the restore + restart. |
+| Profilarr | `POST /api/v1/backups` to trigger (async job, polled via `GET /api/v1/jobs/{id}`), download the newest result, `DELETE` it server-side | Backup only - see the [Profilarr backup note](#profilarr-backup-note), Profilarr's own restore has no public API. |
+| Bazarr | `POST /api/system/backups` to trigger, poll `GET` until the new file appears, download it, `DELETE` it server-side | The download route (`/system/backup/download/<file>`) is gated by Bazarr's own web-auth setting, **not** the API key - see the [Bazarr auth note](#bazarr-auth-note). Restore writes one local file into Bazarr's own backup folder (no upload-restore endpoint exists), then an API call triggers the restore + restart. |
 | Tdarr | `POST /api/v2/cruddb` with `mode: getAll` for every internal DB collection (library settings, flows, global settings, node registrations, staged/output/statistics) | Fully API-driven both ways. Restore does `removeAll` then re-`insert`s each document per collection, one at a time (Tdarr's API has no bulk-insert mode) - destructive, asks for confirmation. |
 | SABnzbd | `GET /sabnzbd/api?mode=get_config` to back up; `mode=set_config` per key to restore | SABnzbd's API returns every password field (e.g. Usenet server password) as `**********` - there's no API mode that returns the real value. Restore recreates each Usenet server (host/port/username/connections/ssl/priority/...) and every plain `misc`-style setting via the API, prompting interactively for each server's real password (an existing server's fields not included in the API call are left untouched, so a skipped password isn't overwritten with a blank one). Categories, RSS feeds, and sorters aren't auto-restored. |
-| Tautulli | `GET /api/v2?cmd=download_database` and `cmd=download_config` - each streams a fresh copy directly, no trigger/poll step | The database comes back with Plex tokens nulled out; the config file is only lightly sanitized - see below. Restore uploads each back separately via `cmd=import_database` and `cmd=import_config` (multipart) - a config restore makes Tautulli restart itself. |
+| Tautulli | `GET /api/v2?cmd=download_database` and `cmd=download_config` - each streams a fresh copy directly, no trigger/poll step | The database comes back with Plex tokens nulled out; the config file is only lightly sanitized - see the [Tautulli backup note](#tautulli-backup-note). Restore uploads each back separately via `cmd=import_database` and `cmd=import_config` (multipart) - a config restore makes Tautulli restart itself. |
 | Seerr | *(none)* | Not implemented - Seerr has no backup/restore API. Shown on the Settings tab as "Coming soon" for visibility only. |
 
 ### Profilarr backup note
