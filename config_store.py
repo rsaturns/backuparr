@@ -286,14 +286,15 @@ def save_config(cfg):
         raise
 
 
-def enabled_apps(cfg):
-    """Only "available" ones can be enabled - guards against a
+def _enabled(names, meta, cfg_section):
+    """Only "available" entries can be enabled - guards against a
     hand-edited config.json flipping on a coming_soon entry."""
-    available = {m["id"] for m in APP_META if m["status"] == "available"}
-    return [
-        name for name in APP_NAMES
-        if name in available and cfg["apps"].get(name, {}).get("enabled")
-    ]
+    available = {m["id"] for m in meta if m["status"] == "available"}
+    return [name for name in names if name in available and cfg_section.get(name, {}).get("enabled")]
+
+
+def enabled_apps(cfg):
+    return _enabled(APP_NAMES, APP_META, cfg["apps"])
 
 
 def key_required(name):
@@ -309,13 +310,7 @@ def app_meta(name):
 
 
 def enabled_destinations(cfg):
-    """Only "available" ones can be enabled - guards against a
-    hand-edited config.json flipping on a coming_soon entry."""
-    available = {m["id"] for m in DESTINATION_META if m["status"] == "available"}
-    return [
-        name for name in DEST_NAMES
-        if name in available and cfg["destinations"].get(name, {}).get("enabled")
-    ]
+    return _enabled(DEST_NAMES, DESTINATION_META, cfg["destinations"])
 
 
 def destination_meta(name):
