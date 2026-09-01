@@ -42,6 +42,8 @@ See [CHANGELOG.md](CHANGELOG.md) for release history.
   - [OneDrive](#onedrive)
   - [Dropbox](#dropbox)
 - [Deploying](#deploying)
+  - [Pull the published image (recommended)](#pull-the-published-image-recommended)
+  - [Or build from source](#or-build-from-source)
   - [Login](#login)
   - [Encryption at rest](#encryption-at-rest)
 - [Restoring after a disaster](#restoring-after-a-disaster)
@@ -221,10 +223,55 @@ Shown on the Settings tab as "Coming soon" - not wired up yet.
 
 ## Deploying
 
-Add the `backuparr` service block from `docker-compose.yml` into your
-**existing** compose file (the one that already defines radarr/sonarr/etc.)
-so it shares that stack's network and can reach the other containers by
-name.
+Add a `backuparr` service to your **existing** compose file (the one that
+already defines radarr/sonarr/etc.) so it shares that stack's network and
+can reach the other containers by name.
+
+### Pull the published image (recommended)
+
+```yaml
+services:
+  backuparr:
+    image: rsaturns/backuparr:latest
+    container_name: backuparr
+    restart: unless-stopped
+    environment:
+      TZ: America/Los_Angeles
+      # User/group the container runs as. Match ./data's owner (run `id`
+      # there) if you want its files owned by you instead of 1000:1000.
+      PUID: 1000
+      PGID: 1000
+    ports:
+      - "8990:8990"
+    volumes:
+      # config.json, rclone.conf, and local-destination backups.
+      - ./data:/config/backuparr
+```
+
+```sh
+docker compose up -d
+```
+
+Or without Compose:
+
+```sh
+docker run -d --name backuparr --restart unless-stopped \
+  -e TZ=America/Los_Angeles -e PUID=1000 -e PGID=1000 \
+  -p 8990:8990 \
+  -v ./data:/config/backuparr \
+  rsaturns/backuparr:latest
+```
+
+Published for both `linux/amd64` and `linux/arm64`. `latest` tracks the
+most recent commit to `main`; pin a specific version instead (e.g.
+`rsaturns/backuparr:0.9.0-beta`) if you'd rather control upgrades
+yourself - see [Docker Hub](https://hub.docker.com/r/rsaturns/backuparr)
+for available tags.
+
+### Or build from source
+
+Clone this repo, then use its own `docker-compose.yml` (swap the `image:`
+line above for `build: .`) instead:
 
 ```sh
 docker compose up -d --build backuparr
