@@ -442,68 +442,60 @@ async function saveSettings() {
   }
 }
 
-async function testApp(appId) {
-  const card = appCard(appId);
-  const dot = card.querySelector(".status-dot");
-  const resultEl = card.querySelector(".test-result");
-  const btn = card.querySelector(".test-btn");
-  const payload = readAppCard(appId);
-
+// Shared by testApp/testDestination/testNotifyUrl: disable the button, show
+// a pending message, run `request()`, render ok/fail into resultEl (+ a
+// status dot's state where the card has one), then re-enable the button.
+async function runTest({ btn, resultEl, dot, pendingText, request }) {
   btn.disabled = true;
-  resultEl.textContent = "Testing...";
+  resultEl.textContent = pendingText;
   resultEl.className = "test-result";
-  dot.dataset.state = "idle";
+  if (dot) dot.dataset.state = "idle";
   try {
-    const res = await apiFetch(`/api/test/${appId}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (res.ok) {
-      resultEl.textContent = res.message;
-      resultEl.className = "test-result ok";
-      dot.dataset.state = "ok";
-    } else {
-      resultEl.textContent = res.message;
-      resultEl.className = "test-result fail";
-      dot.dataset.state = "fail";
-    }
+    const res = await request();
+    resultEl.textContent = res.message;
+    resultEl.className = `test-result ${res.ok ? "ok" : "fail"}`;
+    if (dot) dot.dataset.state = res.ok ? "ok" : "fail";
   } catch (e) {
     resultEl.textContent = e.message;
     resultEl.className = "test-result fail";
-    dot.dataset.state = "fail";
+    if (dot) dot.dataset.state = "fail";
   } finally {
     btn.disabled = false;
   }
 }
 
+async function testApp(appId) {
+  const card = appCard(appId);
+  const payload = readAppCard(appId);
+  await runTest({
+    btn: card.querySelector(".test-btn"),
+    resultEl: card.querySelector(".test-result"),
+    dot: card.querySelector(".status-dot"),
+    pendingText: "Testing...",
+    request: () =>
+      apiFetch(`/api/test/${appId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+  });
+}
+
 async function testDestination(destId) {
   const card = destCard(destId);
-  const dot = card.querySelector(".status-dot");
-  const resultEl = card.querySelector(".test-result");
-  const btn = card.querySelector(".test-dest-btn");
   const payload = readDestCard(destId);
-
-  btn.disabled = true;
-  resultEl.textContent = "Testing...";
-  resultEl.className = "test-result";
-  dot.dataset.state = "idle";
-  try {
-    const res = await apiFetch(`/api/test-destination/${destId}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    resultEl.textContent = res.message;
-    resultEl.className = `test-result ${res.ok ? "ok" : "fail"}`;
-    dot.dataset.state = res.ok ? "ok" : "fail";
-  } catch (e) {
-    resultEl.textContent = e.message;
-    resultEl.className = "test-result fail";
-    dot.dataset.state = "fail";
-  } finally {
-    btn.disabled = false;
-  }
+  await runTest({
+    btn: card.querySelector(".test-dest-btn"),
+    resultEl: card.querySelector(".test-result"),
+    dot: card.querySelector(".status-dot"),
+    pendingText: "Testing...",
+    request: () =>
+      apiFetch(`/api/test-destination/${destId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+  });
 }
 
 async function testNotifyUrl() {
@@ -515,23 +507,17 @@ async function testNotifyUrl() {
     resultEl.className = "test-result fail";
     return;
   }
-  btn.disabled = true;
-  resultEl.textContent = "Sending...";
-  resultEl.className = "test-result";
-  try {
-    const res = await apiFetch("/api/test-notify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notify_url: notifyUrl }),
-    });
-    resultEl.textContent = res.message;
-    resultEl.className = `test-result ${res.ok ? "ok" : "fail"}`;
-  } catch (e) {
-    resultEl.textContent = e.message;
-    resultEl.className = "test-result fail";
-  } finally {
-    btn.disabled = false;
-  }
+  await runTest({
+    btn,
+    resultEl,
+    pendingText: "Sending...",
+    request: () =>
+      apiFetch("/api/test-notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notify_url: notifyUrl }),
+      }),
+  });
 }
 
 // ------------------------------------------------------------ gdrive ----
@@ -948,23 +934,44 @@ function renderRunState(state) {
   logView.scrollTop = logView.scrollHeight;
 }
 
-async function refreshRunStatus() {
+// Shared by refreshRunStatus/refreshRestoreStatus: fetch+render status once,
+// then - if it's running and no poll is already active - keep polling on an
+// interval, rendering each tick, until the status reports not-running.
+async function pollWhileRunning({ getTimer, setTimer, fetchStatus, render, intervalMs, onStopped, onError }) {
   try {
-    const state = await apiFetch("/api/backup/status");
-    renderRunState(state);
-    if (state.running && !RUN_POLL_TIMER) {
-      RUN_POLL_TIMER = setInterval(async () => {
-        const s = await apiFetch("/api/backup/status");
-        renderRunState(s);
-        if (!s.running) {
-          clearInterval(RUN_POLL_TIMER);
-          RUN_POLL_TIMER = null;
-        }
-      }, 1500);
+    const state = await fetchStatus();
+    render(state);
+    if (state.running && !getTimer()) {
+      setTimer(
+        setInterval(async () => {
+          const s = await fetchStatus();
+          render(s);
+          if (!s.running) {
+            clearInterval(getTimer());
+            setTimer(null);
+            if (onStopped) onStopped(s);
+          }
+        }, intervalMs)
+      );
     }
   } catch (e) {
-    document.getElementById("run-log").textContent = `Error loading status: ${e.message}`;
+    if (onError) onError(e);
   }
+}
+
+async function refreshRunStatus() {
+  await pollWhileRunning({
+    getTimer: () => RUN_POLL_TIMER,
+    setTimer: (t) => {
+      RUN_POLL_TIMER = t;
+    },
+    fetchStatus: () => apiFetch("/api/backup/status"),
+    render: renderRunState,
+    intervalMs: 1500,
+    onError: (e) => {
+      document.getElementById("run-log").textContent = `Error loading status: ${e.message}`;
+    },
+  });
 }
 
 async function runBackupNow() {
@@ -1390,23 +1397,17 @@ function renderRestoreState(state) {
 }
 
 async function refreshRestoreStatus() {
-  try {
-    const state = await apiFetch("/api/restore/status");
-    renderRestoreState(state);
-    if (state.running && !RESTORE_POLL_TIMER) {
-      RESTORE_POLL_TIMER = setInterval(async () => {
-        const s = await apiFetch("/api/restore/status");
-        renderRestoreState(s);
-        if (!s.running) {
-          clearInterval(RESTORE_POLL_TIMER);
-          RESTORE_POLL_TIMER = null;
-          toast(s.error ? `Restore failed: ${s.error}` : "Restore complete", s.error ? "fail" : "ok");
-        }
-      }, 1000);
-    }
-  } catch (e) {
-    // transient poll error - next tick (or the next tab visit) will retry
-  }
+  await pollWhileRunning({
+    getTimer: () => RESTORE_POLL_TIMER,
+    setTimer: (t) => {
+      RESTORE_POLL_TIMER = t;
+    },
+    fetchStatus: () => apiFetch("/api/restore/status"),
+    render: renderRestoreState,
+    intervalMs: 1000,
+    onStopped: (s) => toast(s.error ? `Restore failed: ${s.error}` : "Restore complete", s.error ? "fail" : "ok"),
+    // no onError - a transient poll error just waits for the next tick (or tab visit) to retry
+  });
 }
 
 async function initRestoreTab() {
