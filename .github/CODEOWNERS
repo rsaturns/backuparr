@@ -1,0 +1,4 @@
+# Requests review from the maintainer on every PR, regardless of which
+# files it touches. Pairs with branch protection's "Require review from
+# Code Owners" once enabled.
+* @rsaturns
