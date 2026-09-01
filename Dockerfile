@@ -1,4 +1,4 @@
-FROM python:3.12-alpine
+FROM python:3.14-alpine
 
 # Make sure the community repo (rclone lives there) is enabled. su-exec
 # drops from root to the PUID/PGID entrypoint.sh resolves at startup.
