@@ -27,35 +27,37 @@ See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## Table of contents
 
-- [Architecture](#architecture)
-- [Why not reuse an existing tool?](#why-not-reuse-an-existing-tool)
-- [Per-app backup method](#per-app-backup-method-read-this-before-deploying)
-  - [Profilarr backup note](#profilarr-backup-note)
-  - [Tautulli backup note](#tautulli-backup-note)
-  - [Bazarr auth note](#bazarr-auth-note)
-  - [Tdarr auth note](#tdarr-auth-note)
-- [Environment variables](#environment-variables)
-  - [Advanced: file locations](#advanced-file-locations)
-- [Destinations](#destinations)
-  - [Local storage](#local-storage)
-  - [Google Drive](#google-drive)
-  - [OneDrive](#onedrive)
-  - [Dropbox](#dropbox)
-- [Deploying](#deploying)
-  - [Pull the published image (recommended)](#pull-the-published-image-recommended)
-  - [Or build from source](#or-build-from-source)
-  - [Login](#login)
-  - [Encryption at rest](#encryption-at-rest)
-- [Restoring after a disaster](#restoring-after-a-disaster)
-- [Notifications](#notifications)
-  - [Discord](#discord)
-  - [Slack](#slack)
-  - [Telegram](#telegram)
-  - [Gotify (self-hosted)](#gotify-self-hosted)
-  - [ntfy.sh, Healthchecks.io, or anything else](#ntfysh-healthchecksio-or-anything-else)
-- [Configuration reference](#configuration-reference)
-- [Credits](#credits)
-- [License](#license)
+- [Backuparr](#backuparr)
+  - [Table of contents](#table-of-contents)
+  - [Architecture](#architecture)
+  - [Why not reuse an existing tool?](#why-not-reuse-an-existing-tool)
+  - [Per-app backup method (read this before deploying)](#per-app-backup-method-read-this-before-deploying)
+    - [Profilarr backup note](#profilarr-backup-note)
+    - [Tautulli backup note](#tautulli-backup-note)
+    - [Bazarr auth note](#bazarr-auth-note)
+    - [Tdarr auth note](#tdarr-auth-note)
+  - [Environment variables](#environment-variables)
+    - [Advanced: file locations](#advanced-file-locations)
+  - [Destinations](#destinations)
+    - [Local storage](#local-storage)
+    - [Google Drive](#google-drive)
+    - [OneDrive](#onedrive)
+    - [Dropbox](#dropbox)
+  - [Deploying](#deploying)
+    - [Pull the published image (recommended)](#pull-the-published-image-recommended)
+    - [Or build from source](#or-build-from-source)
+    - [Login](#login)
+    - [Encryption at rest](#encryption-at-rest)
+  - [Restoring after a disaster](#restoring-after-a-disaster)
+  - [Notifications](#notifications)
+    - [Discord](#discord)
+    - [Slack](#slack)
+    - [Telegram](#telegram)
+    - [Gotify (self-hosted)](#gotify-self-hosted)
+    - [ntfy.sh, Healthchecks.io, or anything else](#ntfysh-healthchecksio-or-anything-else)
+  - [Configuration reference](#configuration-reference)
+  - [Credits](#credits)
+  - [License](#license)
 
 ## Architecture
 
@@ -236,18 +238,16 @@ services:
     container_name: backuparr
     restart: unless-stopped
     environment:
-      TZ: America/Los_Angeles
-      # User/group the container runs as. Match ./data's owner (run `id`
-      # there) if you want its files owned by you instead of 1000:1000.
-      PUID: 1000
-      PGID: 1000
+      - TZ=America/Los_Angeles
+      - PUID=1000
+      - PGID=1000
     ports:
       - "8990:8990"
     volumes:
       # config.json, rclone.conf, and local-destination backups.
-      - ./data:/config/backuparr
+      - /share/Container/backuparr:/config/backuparr
       # Optional: needed only to restore Bazarr - path to its config/backup folder.
-      # - /share/Container/bazarr/backup:/mnt/bazarr-backup
+      #- /share/Container/bazarr/backup:/mnt/bazarr-backup
 ```
 
 ```sh
@@ -260,7 +260,7 @@ Or without Compose:
 docker run -d --name backuparr --restart unless-stopped \
   -e TZ=America/Los_Angeles -e PUID=1000 -e PGID=1000 \
   -p 8990:8990 \
-  -v ./data:/config/backuparr \
+  -v /share/Container/backuparr:/config/backuparr \
   rsaturns/backuparr:latest
 ```
 
