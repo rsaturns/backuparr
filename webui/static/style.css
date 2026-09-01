@@ -938,6 +938,39 @@ code {
 
 .guide-links a { color: var(--accent); }
 
+.release-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.release-item + .release-item {
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.release-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.release-tag { font-weight: 600; font-size: 17px; }
+.release-date { font-size: 14.5px; color: var(--text-muted); white-space: nowrap; }
+
+.release-body {
+  margin: 8px 0 0;
+  font: inherit;
+  font-size: 15.5px;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.whats-changed-error { font-size: 16px; color: var(--danger); }
+
 /* ------------------------------------------------------------- auth ---- */
 .auth-page {
   min-height: 100vh;
