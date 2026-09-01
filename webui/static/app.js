@@ -1481,6 +1481,65 @@ async function checkForUpdate() {
 }
 
 // ------------------------------------------------------------ what's changed ----
+// Renders the small subset of Markdown CHANGELOG.md actually uses (##/###
+// headers, "- " bullets whose text wraps onto indented continuation lines,
+// inline `code`, **bold**) into HTML - not general-purpose Markdown, no
+// library needed for content this project controls itself.
+function renderChangelogMarkdown(md) {
+  const escapeHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const inlineFormat = (s) =>
+    escapeHtml(s)
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+
+  const html = [];
+  let list = null; // accumulated <li> strings for the list currently being built
+  let item = null; // text of the list item currently accumulating continuation lines
+
+  const flushItem = () => {
+    if (item !== null) {
+      list.push(`<li>${inlineFormat(item.trim())}</li>`);
+      item = null;
+    }
+  };
+  const flushList = () => {
+    flushItem();
+    if (list) {
+      html.push(`<ul>${list.join("")}</ul>`);
+      list = null;
+    }
+  };
+
+  for (const line of md.split("\n")) {
+    const heading = line.match(/^(#{1,6})\s+(.*)$/);
+    if (heading) {
+      flushList();
+      const level = heading[1].length;
+      html.push(`<h${level}>${inlineFormat(heading[2])}</h${level}>`);
+      continue;
+    }
+    const bullet = line.match(/^-\s+(.*)$/);
+    if (bullet) {
+      flushItem();
+      if (!list) list = [];
+      item = bullet[1];
+      continue;
+    }
+    if (item !== null && /^\s+\S/.test(line)) {
+      item += " " + line.trim();
+      continue;
+    }
+    if (line.trim() === "") {
+      flushList();
+      continue;
+    }
+    flushList();
+    html.push(`<p>${inlineFormat(line.trim())}</p>`);
+  }
+  flushList();
+  return html.join("");
+}
+
 // Lazily fetches the last 3 GitHub Releases and shows them in a modal. Only
 // reachable via the "What's Changed" button, which lives inside #version-check
 // and is therefore only visible once checkForUpdate() has already confirmed
@@ -1515,9 +1574,9 @@ async function openWhatsChanged() {
       head.appendChild(date);
       item.appendChild(head);
 
-      const notes = document.createElement("pre");
+      const notes = document.createElement("div");
       notes.className = "release-body";
-      notes.textContent = release.body || "No release notes provided.";
+      notes.innerHTML = release.body ? renderChangelogMarkdown(release.body) : "<p>No release notes provided.</p>";
       item.appendChild(notes);
 
       list.appendChild(item);

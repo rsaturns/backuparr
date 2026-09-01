@@ -961,13 +961,31 @@ code {
 
 .release-body {
   margin: 8px 0 0;
-  font: inherit;
   font-size: 15.5px;
   line-height: 1.5;
   color: var(--text);
-  white-space: pre-wrap;
   word-wrap: break-word;
 }
+
+.release-body h1,
+.release-body h2,
+.release-body h3,
+.release-body h4 {
+  margin: 14px 0 6px;
+  font-size: 15.5px;
+  font-weight: 600;
+}
+
+.release-body :first-child { margin-top: 0; }
+
+.release-body p { margin: 8px 0; }
+
+.release-body ul {
+  margin: 4px 0 12px;
+  padding-left: 20px;
+}
+
+.release-body li { margin: 4px 0; }
 
 .whats-changed-error { font-size: 16px; color: var(--danger); }
 
