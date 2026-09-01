@@ -13,7 +13,7 @@ import rclone_util
 from apps.bazarr import BazarrApp
 from apps.prowlarr import ProwlarrApp
 from apps.radarr import RadarrApp
-from apps.sabnzbd import SabnzbdApp
+from apps.sabnzbd import MASKED, SabnzbdApp
 from apps.sonarr import SonarrApp
 from apps.tautulli import TautulliApp
 from apps.tdarr import TdarrApp
@@ -94,7 +94,7 @@ def sabnzbd_server_summary(config):
     """Servers needing a password, for the UI/CLI to prompt for."""
     servers = config.get("config", {}).get("servers", [])
     return [
-        {"name": s.get("name"), "host": s.get("host"), "needs_password": s.get("password") == "*" * 10}
+        {"name": s.get("name"), "host": s.get("host"), "needs_password": s.get("password") == MASKED}
         for s in servers
     ]
 

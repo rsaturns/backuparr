@@ -209,8 +209,8 @@ def run_backup(cfg, on_progress=None, should_cancel=None):
                 if result_path.is_dir():
                     zip_dir(result_path, zip_path)
                 else:
-                    # Already a zip from the app itself - just rename it.
-                    shutil.copy(result_path, zip_path)
+                    # Already a zip from the app itself - just move it.
+                    shutil.move(result_path, zip_path)
 
                 size = os.path.getsize(zip_path)
                 dest_failures = []
@@ -248,9 +248,8 @@ def run_backup(cfg, on_progress=None, should_cancel=None):
         failed.append("run cancelled")
         return ok, failed
 
-    log.info("Applying retention (%sd) per app per destination", retention_days)
+    log.info("Applying retention (%sd) per destination", retention_days)
     for root in dest_roots.values():
-        for name in apps:
-            rclone_util.delete_older_than(f"{root}/{name}/", f"{retention_days}d")
+        rclone_util.delete_older_than(root, f"{retention_days}d")
 
     return ok, failed

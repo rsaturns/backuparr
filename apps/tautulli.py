@@ -118,15 +118,8 @@ class TautulliApp:
         and/or config.ini) - either or both may be present, since a user
         could restore an older backup taken before this pairing existed.
 
-        Database import is best-effort: Tautulli's own /api/v2 dispatcher
-        (api2.py's _api_validate) unconditionally pops any "app" parameter
-        for its unrelated mobile-app-auth flag before the command handler
-        ever runs - see _import()'s "app" field. import_database requires
-        app="tautulli"/"plexwatch"/"plexivity" to know what it's importing,
-        so that parameter can never actually arrive over the public API.
-        This is a genuine upstream bug, not something a request shape on
-        our end can work around - confirmed by tracing api2.py's source. If
-        it ever gets fixed upstream, this simply stops triggering.
+        Database import is best-effort - see the module docstring for why
+        it currently always fails upstream.
         """
         summary = {}
         db_path = os.path.join(extract_dir, "tautulli.db")
@@ -138,9 +131,8 @@ class TautulliApp:
             except TautulliError as exc:
                 if "No app specified for import" in str(exc):
                     logger.warning(
-                        "tautulli: database import skipped - Tautulli's own API strips the "
-                        "required 'app' parameter before import_database runs (upstream bug, "
-                        "not fixable from here). Restore tautulli.db by hand: Settings > "
+                        "tautulli: database import skipped - see module docstring "
+                        "(upstream api2.py bug). Restore tautulli.db by hand: Settings > "
                         "Import & Backup > Import Database."
                     )
                     summary["database_skipped"] = "not restorable via API - see README"
