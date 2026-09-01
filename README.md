@@ -23,6 +23,8 @@ To recover after a host failure: re-create the containers from your
 compose file, then restore each app's config from its latest backup (see
 [Restoring after a disaster](#restoring-after-a-disaster)).
 
+See [CHANGELOG.md](CHANGELOG.md) for release history.
+
 ## Table of contents
 
 - [Architecture](#architecture)
@@ -32,6 +34,8 @@ compose file, then restore each app's config from its latest backup (see
   - [Tautulli backup note](#tautulli-backup-note)
   - [Bazarr auth note](#bazarr-auth-note)
   - [Tdarr auth note](#tdarr-auth-note)
+- [Environment variables](#environment-variables)
+  - [Advanced: file locations](#advanced-file-locations)
 - [Destinations](#destinations)
   - [Local storage](#local-storage)
   - [Google Drive](#google-drive)
@@ -48,8 +52,6 @@ compose file, then restore each app's config from its latest backup (see
   - [Gotify (self-hosted)](#gotify-self-hosted)
   - [ntfy.sh, Healthchecks.io, or anything else](#ntfysh-healthchecksio-or-anything-else)
 - [Configuration reference](#configuration-reference)
-- [Environment variables](#environment-variables)
-  - [Advanced: file locations](#advanced-file-locations)
 - [Credits](#credits)
 - [License](#license)
 
@@ -128,6 +130,41 @@ If you've enabled an API auth token in Tdarr's server settings, put it in
 the (optional) API key field on Tdarr's card - it's sent as `Authorization:
 Bearer <key>`. Verify it works for your version with the "Test connection"
 button; leave it blank if Tdarr has no auth configured (the default).
+
+## Environment variables
+
+Everything app-level - which apps to back up, their URLs/API keys,
+destinations, schedule, retention, restores - is set from the web UI and
+lives in `config.json` (see [Configuration
+reference](#configuration-reference) above), not env vars. The ones below
+are the deployment-level settings that exist outside it, set in
+`docker-compose.yml`'s `environment:` block.
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `WEBUI_PORT` | `8990` | Port the web UI listens on inside the container |
+| `PUID` / `PGID` | `1000` / `1000` | User/group the container runs as instead of root - match your host user (`id`) if you want files on `./data` owned by yourself; re-applied on every start |
+| `TZ` | UTC (Alpine default) | Standard timezone env var - determines what local time the cron schedule (the Daily/Weekly/Every-few-hours time picker on Settings) actually fires at, and the timestamps in `backup.log` |
+| `LOG_LEVEL` | `INFO` | Python logging level for backup/restore runs - e.g. `DEBUG` for more detail while troubleshooting a connector |
+| `BACKUPARR_SECRETS_KEY` | *(auto-generated)* | Overrides the auto-generated `secrets.key` value used to encrypt `config.json`'s secrets (see [Encryption at rest](#encryption-at-rest)) - set this to keep the key off the volume entirely, e.g. a Docker secret |
+| `RCLONE_CONFIG_PASS` | *(auto-generated)* | Overrides the auto-generated password used to encrypt `rclone.conf` |
+| `BACKUPARR_FORCE_HTTPS` | `false` | Set to `true` to mark the session cookie `Secure` (HTTPS-only) - only if Backuparr sits behind your own TLS-terminating reverse proxy. Leave unset for the default plain-HTTP-on-LAN deployment, or login will silently fail. |
+
+### Advanced: file locations
+
+Only relevant if you're remapping the volume layout away from the default
+single `./data:/config/backuparr` mount - every path below already lives
+inside that one mount by default, so most deployments never need these.
+
+| Env var | Default | What it is |
+|---|---|---|
+| `BACKUPARR_CONFIG` | `/config/backuparr/config.json` | The main config file |
+| `RCLONE_CONFIG` | `/config/backuparr/rclone.conf` | rclone's own remotes config |
+| `RCLONE_CONFIG_PASS_FILE` | `/config/backuparr/rclone.pass` | Where the auto-generated `rclone.conf` encryption password is stored (ignored if `RCLONE_CONFIG_PASS` is set directly) |
+| `BACKUPARR_SECRETS_KEY_PATH` | `/config/backuparr/secrets.key` | Where the auto-generated config-encryption key is stored (ignored if `BACKUPARR_SECRETS_KEY` is set directly) |
+| `BACKUPARR_SECRET_KEY_PATH` | `/config/backuparr/secret_key` | Flask's session-signing key file - **not** the same file as `secrets.key` above (this one signs login sessions; that one encrypts config.json's secret fields) |
+| `BACKUPARR_AUTH` | `/config/backuparr/auth.json` | The admin username/password hash created by the setup screen |
+| `BACKUPARR_LOG_DIR` | `/var/log/backuparr` | Where `backup.log` (shown on the Run & Status tab) is written |
 
 ## Destinations
 
@@ -360,42 +397,7 @@ if you'd rather):
 
 A few deployment-level settings live outside `config.json` entirely, as
 env vars in `docker-compose.yml` - see [Environment
-variables](#environment-variables) below.
-
-## Environment variables
-
-Everything app-level - which apps to back up, their URLs/API keys,
-destinations, schedule, retention, restores - is set from the web UI and
-lives in `config.json` (see [Configuration
-reference](#configuration-reference) above), not env vars. The ones below
-are the deployment-level settings that exist outside it, set in
-`docker-compose.yml`'s `environment:` block.
-
-| Env var | Default | Purpose |
-|---|---|---|
-| `WEBUI_PORT` | `8990` | Port the web UI listens on inside the container |
-| `PUID` / `PGID` | `1000` / `1000` | User/group the container runs as instead of root - match your host user (`id`) if you want files on `./data` owned by yourself; re-applied on every start |
-| `TZ` | UTC (Alpine default) | Standard timezone env var - determines what local time the cron schedule (the Daily/Weekly/Every-few-hours time picker on Settings) actually fires at, and the timestamps in `backup.log` |
-| `LOG_LEVEL` | `INFO` | Python logging level for backup/restore runs - e.g. `DEBUG` for more detail while troubleshooting a connector |
-| `BACKUPARR_SECRETS_KEY` | *(auto-generated)* | Overrides the auto-generated `secrets.key` value used to encrypt `config.json`'s secrets (see [Encryption at rest](#encryption-at-rest)) - set this to keep the key off the volume entirely, e.g. a Docker secret |
-| `RCLONE_CONFIG_PASS` | *(auto-generated)* | Overrides the auto-generated password used to encrypt `rclone.conf` |
-| `BACKUPARR_FORCE_HTTPS` | `false` | Set to `true` to mark the session cookie `Secure` (HTTPS-only) - only if Backuparr sits behind your own TLS-terminating reverse proxy. Leave unset for the default plain-HTTP-on-LAN deployment, or login will silently fail. |
-
-### Advanced: file locations
-
-Only relevant if you're remapping the volume layout away from the default
-single `./data:/config/backuparr` mount - every path below already lives
-inside that one mount by default, so most deployments never need these.
-
-| Env var | Default | What it is |
-|---|---|---|
-| `BACKUPARR_CONFIG` | `/config/backuparr/config.json` | The main config file |
-| `RCLONE_CONFIG` | `/config/backuparr/rclone.conf` | rclone's own remotes config |
-| `RCLONE_CONFIG_PASS_FILE` | `/config/backuparr/rclone.pass` | Where the auto-generated `rclone.conf` encryption password is stored (ignored if `RCLONE_CONFIG_PASS` is set directly) |
-| `BACKUPARR_SECRETS_KEY_PATH` | `/config/backuparr/secrets.key` | Where the auto-generated config-encryption key is stored (ignored if `BACKUPARR_SECRETS_KEY` is set directly) |
-| `BACKUPARR_SECRET_KEY_PATH` | `/config/backuparr/secret_key` | Flask's session-signing key file - **not** the same file as `secrets.key` above (this one signs login sessions; that one encrypts config.json's secret fields) |
-| `BACKUPARR_AUTH` | `/config/backuparr/auth.json` | The admin username/password hash created by the setup screen |
-| `BACKUPARR_LOG_DIR` | `/var/log/backuparr` | Where `backup.log` (shown on the Run & Status tab) is written |
+variables](#environment-variables) above.
 
 ## Credits
 
