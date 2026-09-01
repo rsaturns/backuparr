@@ -246,6 +246,8 @@ services:
     volumes:
       # config.json, rclone.conf, and local-destination backups.
       - ./data:/config/backuparr
+      # Optional: needed only to restore Bazarr - path to its config/backup folder.
+      # - /share/Container/bazarr/backup:/mnt/bazarr-backup
 ```
 
 ```sh

@@ -1,10 +1,25 @@
 FROM python:3.14-alpine
 
-# Make sure the community repo (rclone lives there) is enabled. su-exec
-# drops from root to the PUID/PGID entrypoint.sh resolves at startup.
+# rclone from its own GitHub release, not apk - apk's build lags
+# upstream and carries known CVEs in its bundled Go dependencies.
+ARG RCLONE_VERSION=1.75.0
+ARG TARGETARCH
+
+# Make sure the community repo (bash, su-exec live there) is enabled.
+# su-exec drops from root to the PUID/PGID entrypoint.sh resolves at
+# startup. rclone's zip is checksum-verified against its own SHA256SUMS.
 RUN sed -i 's/^#\(.*community.*\)/\1/' /etc/apk/repositories \
     && apk update \
-    && apk add --no-cache bash rclone tzdata su-exec
+    && apk add --no-cache bash tzdata su-exec \
+    && cd /tmp \
+    && wget -q "https://downloads.rclone.org/v${RCLONE_VERSION}/rclone-v${RCLONE_VERSION}-linux-${TARGETARCH}.zip" \
+    && wget -q "https://downloads.rclone.org/v${RCLONE_VERSION}/SHA256SUMS" \
+    && grep " rclone-v${RCLONE_VERSION}-linux-${TARGETARCH}.zip\$" SHA256SUMS > rclone.sha256 \
+    && sha256sum -c rclone.sha256 \
+    && python3 -m zipfile -e "rclone-v${RCLONE_VERSION}-linux-${TARGETARCH}.zip" . \
+    && mv "rclone-v${RCLONE_VERSION}-linux-${TARGETARCH}/rclone" /usr/local/bin/rclone \
+    && chmod +x /usr/local/bin/rclone \
+    && cd / && rm -rf /tmp/*
 
 WORKDIR /app
 COPY requirements.txt /app/
