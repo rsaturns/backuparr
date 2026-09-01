@@ -1480,10 +1480,78 @@ async function checkForUpdate() {
   document.getElementById("version-check").classList.remove("hidden");
 }
 
+// ------------------------------------------------------------ what's changed ----
+// Lazily fetches the last 3 GitHub Releases and shows them in a modal. Only
+// reachable via the "What's Changed" button, which lives inside #version-check
+// and is therefore only visible once checkForUpdate() has already confirmed
+// GitHub is reachable - no extra eager fetch just to decide whether to show it.
+async function openWhatsChanged() {
+  const body = document.getElementById("whats-changed-body");
+  body.innerHTML = "";
+  document.getElementById("whats-changed-modal").classList.remove("hidden");
+  try {
+    const res = await fetch("https://api.github.com/repos/rsaturns/backuparr/releases?per_page=3");
+    if (!res.ok) throw new Error(`GitHub returned ${res.status}`);
+    const releases = await res.json();
+    if (!releases.length) {
+      body.innerHTML = '<p class="hint">No releases found.</p>';
+      return;
+    }
+    const list = document.createElement("div");
+    list.className = "release-list";
+    releases.forEach((release) => {
+      const item = document.createElement("div");
+      item.className = "release-item";
+
+      const head = document.createElement("div");
+      head.className = "release-head";
+      const tag = document.createElement("span");
+      tag.className = "release-tag";
+      tag.textContent = release.tag_name || release.name || "Untitled release";
+      const date = document.createElement("span");
+      date.className = "release-date";
+      date.textContent = fmtTime(release.published_at);
+      head.appendChild(tag);
+      head.appendChild(date);
+      item.appendChild(head);
+
+      const notes = document.createElement("pre");
+      notes.className = "release-body";
+      notes.textContent = release.body || "No release notes provided.";
+      item.appendChild(notes);
+
+      list.appendChild(item);
+    });
+    body.appendChild(list);
+  } catch (e) {
+    body.innerHTML = "";
+    const err = document.createElement("p");
+    err.className = "whats-changed-error";
+    err.textContent = `Could not load release notes: ${e.message}`;
+    body.appendChild(err);
+  }
+}
+
+function closeWhatsChanged() {
+  document.getElementById("whats-changed-modal").classList.add("hidden");
+}
+
+function initWhatsChangedEvents() {
+  document.getElementById("whats-changed-btn").addEventListener("click", openWhatsChanged);
+  document.getElementById("whats-changed-close").addEventListener("click", closeWhatsChanged);
+  document.getElementById("whats-changed-modal").addEventListener("click", (e) => {
+    if (e.target.id === "whats-changed-modal") closeWhatsChanged();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeWhatsChanged();
+  });
+}
+
 async function init() {
   initTabs();
   initTheme();
   initLogout();
+  initWhatsChangedEvents();
   initSettingsEvents();
   initRunEvents();
   initHistoryEvents();
