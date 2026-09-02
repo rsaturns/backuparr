@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 from croniter import croniter
 from flask import Flask, after_this_request, jsonify, redirect, render_template, request, send_file, session
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 import auth_store
 import destination_util
@@ -80,14 +81,22 @@ def _load_or_create_secret_key():
     return key
 
 
+# Off by default - the documented deployment is plain HTTP on a trusted
+# LAN, where a Secure-only cookie would just break login. Set this if
+# Backuparr sits behind your own TLS-terminating reverse proxy - it also
+# makes the app trust that proxy's X-Forwarded-Proto/-For, so redirect
+# URIs built for OAuth (Google Drive) come out https:// instead of the
+# http:// this container actually listens on, and login-lockout tracking
+# sees the real client IP instead of the proxy's.
+_BEHIND_HTTPS_PROXY = os.environ.get("BACKUPARR_FORCE_HTTPS", "").lower() in ("1", "true", "yes")
+if _BEHIND_HTTPS_PROXY:
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_for=1)
+
 app.secret_key = _load_or_create_secret_key()
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
-    # Off by default - the documented deployment is plain HTTP on a trusted
-    # LAN, where a Secure-only cookie would just break login. Set this if
-    # Backuparr sits behind your own TLS-terminating reverse proxy.
-    SESSION_COOKIE_SECURE=os.environ.get("BACKUPARR_FORCE_HTTPS", "").lower() in ("1", "true", "yes"),
+    SESSION_COOKIE_SECURE=_BEHIND_HTTPS_PROXY,
     PERMANENT_SESSION_LIFETIME=timedelta(days=30),
 )
 

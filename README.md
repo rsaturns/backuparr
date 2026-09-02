@@ -152,7 +152,7 @@ are the deployment-level settings that exist outside it, set in
 | `LOG_LEVEL` | `INFO` | Python logging level for backup/restore runs - e.g. `DEBUG` for more detail while troubleshooting a connector |
 | `BACKUPARR_SECRETS_KEY` | *(auto-generated)* | Overrides the auto-generated `secrets.key` value used to encrypt `config.json`'s secrets (see [Encryption at rest](#encryption-at-rest)) - set this to keep the key off the volume entirely, e.g. a Docker secret |
 | `RCLONE_CONFIG_PASS` | *(auto-generated)* | Overrides the auto-generated password used to encrypt `rclone.conf` |
-| `BACKUPARR_FORCE_HTTPS` | `false` | Set to `true` to mark the session cookie `Secure` (HTTPS-only) - only if Backuparr sits behind your own TLS-terminating reverse proxy. Leave unset for the default plain-HTTP-on-LAN deployment, or login will silently fail. |
+| `BACKUPARR_FORCE_HTTPS` | `false` | Set to `true` if Backuparr sits behind your own TLS-terminating reverse proxy - marks the session cookie `Secure` (HTTPS-only) and trusts that proxy's `X-Forwarded-Proto`/`X-Forwarded-For` headers, so OAuth redirect URIs (Google Drive) come out `https://` and login-lockout tracking sees real client IPs instead of the proxy's. Leave unset for the default plain-HTTP-on-LAN deployment, or login will silently fail. |
 
 ### Advanced: file locations
 
