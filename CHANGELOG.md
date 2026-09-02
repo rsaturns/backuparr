@@ -11,7 +11,13 @@ release event.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+
+- Corrected the Google Drive Setup guide: Google Cloud now requires
+  enabling the Google Picker API (separately from the Drive API) and
+  requires an API key to have at least one API restriction - the guide
+  previously said to leave API restrictions unset, which is no longer
+  an option in Google Cloud Console.
 
 ## [1.0.1-beta] - 2026-09-02
 

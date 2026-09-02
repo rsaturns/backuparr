@@ -145,6 +145,10 @@ DESTINATION_META = [
                     "link": {"label": "Enable the Google Drive API", "url": "https://console.cloud.google.com/apis/library/drive.googleapis.com"},
                 },
                 {
+                    "text": "Also enable the Google Picker API - it's what the \"Choose folder\" button uses, separately from the Drive API above, and it must be enabled before you can restrict an API key to it in a later step.",
+                    "link": {"label": "Enable the Google Picker API", "url": "https://console.cloud.google.com/apis/library/picker.googleapis.com"},
+                },
+                {
                     "text": "Set up the Google Auth Platform: click \"Get started\", fill in an app name and your support email under App Information, then choose External under Audience (this just means anyone with a Google account can be added as a tester - it does not make the app public).",
                     "link": {"label": "Google Auth Platform - Branding", "url": "https://console.cloud.google.com/auth/branding"},
                 },
@@ -170,7 +174,11 @@ DESTINATION_META = [
                     "link": {"label": "Credentials", "url": "https://console.cloud.google.com/apis/credentials"},
                 },
                 {
-                    "text": "Optionally restrict the key to your own site under Application restrictions > Websites - but if you do, also add https://docs.google.com/* to the allowed list. The folder picker itself runs in an iframe hosted on docs.google.com, not your domain, so leaving that one out reproduces the same broken picker this step exists to avoid. Leave API restrictions unset.",
+                    "text": "Google Cloud now requires picking at least one API restriction for a new key - under API restrictions, choose \"Restrict key\" and select Google Picker API (only - the picker's calls are attributed to this API, not Drive API, so Drive API doesn't need to be added here).",
+                    "link": None,
+                },
+                {
+                    "text": "Optionally also restrict the key to your own site under Application restrictions > Websites - but if you do, also add https://docs.google.com/* to the allowed list. The folder picker itself runs in an iframe hosted on docs.google.com, not your domain, so leaving that one out reproduces the same broken picker this step exists to avoid.",
                     "link": None,
                 },
                 {
