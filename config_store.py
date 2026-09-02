@@ -179,7 +179,7 @@ DESTINATION_META = [
                     "link": None,
                 },
                 {
-                    "text": "Optionally also restrict the key to your own site under Application restrictions > Websites - but if you do, also add https://docs.google.com/* to the allowed list. The folder picker itself runs in an iframe hosted on docs.google.com, not your domain, so leaving that one out reproduces the same broken picker this step exists to avoid.",
+                    "text": "Leave Application restrictions set to None. Google's own docs say restricting by Websites works if you also allow https://docs.google.com/* (the picker itself runs in an iframe hosted there) - but in practice this can still fail with a cryptic \"The API developer key is invalid\" error, since the picker's internal request doesn't always carry a referrer your browser will send. The API restriction above already limits this key to the Picker API, so an unrestricted key here is a reasonable tradeoff.",
                     "link": None,
                 },
                 {
