@@ -11,6 +11,22 @@ release event.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.0.3-beta] - 2026-09-02
+
+### Fixed
+
+- Fixed Google Drive OAuth still failing with `redirect_uri_mismatch`
+  behind a reverse proxy even after 1.0.2-beta's fix. That fix taught
+  Flask (via `ProxyFix`) to trust a proxy's `X-Forwarded-Proto` header,
+  but missed a layer underneath it: waitress, the actual production
+  server, silently discards incoming `X-Forwarded-Proto`/`-For`/`-Host`
+  headers unless it's explicitly told which proxy to trust - so Flask
+  never saw the header at all. `BACKUPARR_FORCE_HTTPS` now also passes
+  `--trusted-proxy`/`--trusted-proxy-headers` to waitress, so the header
+  actually reaches the app.
+
 ### Changed
 
 - The Docker Hub publish workflow now runs only on a version tag push
