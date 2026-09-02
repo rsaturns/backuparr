@@ -11,7 +11,12 @@ release event.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed
+
+- The Docker Hub publish workflow now runs only on a version tag push
+  (a formal release), not on every merge to `main` - `:latest` and the
+  versioned tag now both update together on release, instead of
+  `:latest` tracking every merge independently.
 
 ## [1.0.2-beta] - 2026-09-02
 

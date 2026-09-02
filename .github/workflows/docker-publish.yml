@@ -1,14 +1,11 @@
 name: Docker Publish
 
-# Deploy step: runs on every push to main (the "merge to main -> deploy"
-# path) and on every v* tag push (formal version releases). Both paths
-# re-run the test suite - direct pushes and tag pushes don't go through
-# ci.yml's pull_request gate, so this is belt-and-suspenders, not
-# redundant.
+# Deploy step: runs only on a v* tag push (a formal version release) -
+# merging to main does not publish an image. Re-runs the test suite even
+# though tag pushes don't go through ci.yml's pull_request gate, so this
+# is belt-and-suspenders, not redundant.
 on:
   push:
-    branches:
-      - main
     tags:
       - "v*"
 
@@ -22,8 +19,7 @@ jobs:
   publish:
     name: publish
     runs-on: ubuntu-latest
-    # contents: write is needed for the GitHub Release step (v* tags
-    # only); harmless on plain main pushes, where that step is skipped.
+    # contents: write is needed for the GitHub Release step below.
     permissions:
       contents: write
     steps:
@@ -53,20 +49,17 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Tagging scheme:
-      #   - push to main            -> DOCKERHUB_USERNAME/backuparr:latest
-      #   - push of tag vX.Y.Z(-…)  -> DOCKERHUB_USERNAME/backuparr:X.Y.Z(-…)
-      # Only one of these two rules is ever enabled for a given run,
-      # since a push event's ref is either a branch ref or a tag ref,
-      # never both - so exactly one tag is produced per run.
+      # Every run is a vX.Y.Z(-…) tag push (see the `on:` trigger above),
+      # so each release produces both the version tag and an updated
+      # :latest.
       - name: Extract Docker image metadata
         id: meta
         uses: docker/metadata-action@v6
         with:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/backuparr
           tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=match,pattern=v(.*),group=1,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=latest
+            type=match,pattern=v(.*),group=1
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v7
@@ -79,10 +72,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Everything below only runs on a v* tag push, not a plain main
-      # push.
       - name: Extract version from tag
-        if: startsWith(github.ref, 'refs/tags/v')
         id: version
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
 
@@ -91,7 +81,6 @@ jobs:
       # next "## [" header (or end of file), with the header line itself
       # stripped.
       - name: Extract release notes from CHANGELOG.md
-        if: startsWith(github.ref, 'refs/tags/v')
         id: changelog
         env:
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
@@ -120,7 +109,6 @@ jobs:
       # place if one already exists (e.g. a manually-created release for
       # the same tag) rather than failing on a duplicate.
       - name: Create or update GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
