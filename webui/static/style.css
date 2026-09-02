@@ -892,6 +892,8 @@ code {
 
 .guide-steps li { font-size: 17px; line-height: 1.6; }
 
+.guide-steps .field { margin: 8px 0 0; }
+
 .guide-step-link {
   display: block;
   margin-top: 4px;

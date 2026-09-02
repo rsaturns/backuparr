@@ -157,12 +157,13 @@ DESTINATION_META = [
                     "link": {"label": "Google Auth Platform - Audience", "url": "https://console.cloud.google.com/auth/audience"},
                 },
                 {
-                    "text": "On the Data access tab, click \"Add or remove scopes\", filter by API = \"Google Drive API\", and check the row for this scope (not .../auth/drive, which is full access) - its description reads \"See, edit, create, and delete only the specific Google Drive files you use with this app\". Then click \"Update\" at the bottom of the panel:",
+                    "text": "On the Data access tab, click \"Add or remove scopes\", filter by API = \"Google Drive API\", and check the row for this scope (not .../auth/drive, which is full access) - its description reads \"See, edit, create, and delete only the specific Google Drive files you use with this app\". It's classified as a non-sensitive scope, so it'll show up under \"Your non-sensitive scopes\" in the panel, not Sensitive or Restricted. Then click \"Update\" at the bottom of the panel:",
                     "code": "https://www.googleapis.com/auth/drive.file",
                     "link": {"label": "Google Auth Platform - Data access", "url": "https://console.cloud.google.com/auth/scopes"},
                 },
                 {
                     "text": "On the Clients tab, click Create Client, choose Web application, and add the redirect URI shown below to Authorized redirect URIs, exactly as shown.",
+                    "redirect_uri": True,
                     "link": {"label": "Google Auth Platform - Clients", "url": "https://console.cloud.google.com/auth/clients"},
                 },
                 {

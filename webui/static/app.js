@@ -680,6 +680,9 @@ function openSetupGuide(destId) {
   document.getElementById("setup-guide-title").textContent = help.title;
   document.getElementById("setup-guide-intro").textContent = help.intro || "";
 
+  const redirectBlock = document.getElementById("setup-guide-redirect");
+  redirectBlock.classList.add("hidden");
+
   const stepsEl = document.getElementById("setup-guide-steps");
   stepsEl.innerHTML = "";
   (help.steps || []).forEach((step) => {
@@ -706,6 +709,11 @@ function openSetupGuide(destId) {
       });
       li.appendChild(ul);
     }
+    if (typeof step === "object" && step.redirect_uri) {
+      document.getElementById("setup-guide-redirect-input").value = gdriveRedirectUri();
+      li.appendChild(redirectBlock);
+      redirectBlock.classList.remove("hidden");
+    }
     const link = typeof step === "object" ? step.link : null;
     if (link) {
       const a = document.createElement("a");
@@ -718,14 +726,6 @@ function openSetupGuide(destId) {
     }
     stepsEl.appendChild(li);
   });
-
-  const redirectBlock = document.getElementById("setup-guide-redirect");
-  if (destId === "gdrive") {
-    document.getElementById("setup-guide-redirect-input").value = gdriveRedirectUri();
-    redirectBlock.classList.remove("hidden");
-  } else {
-    redirectBlock.classList.add("hidden");
-  }
 
   const linksEl = document.getElementById("setup-guide-links");
   linksEl.innerHTML = "";
