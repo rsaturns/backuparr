@@ -11,13 +11,20 @@ release event.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.0.2-beta] - 2026-09-02
+
 ### Fixed
 
 - Corrected the Google Drive Setup guide: Google Cloud now requires
   enabling the Google Picker API (separately from the Drive API) and
   requires an API key to have at least one API restriction - the guide
   previously said to leave API restrictions unset, which is no longer
-  an option in Google Cloud Console.
+  an option in Google Cloud Console. Also clarified that the
+  `drive.file` scope shows up under "Your non-sensitive scopes" in the
+  Data access panel, and moved the redirect URI copy box to sit inline
+  under the step that asks for it instead of after the whole guide.
 - Fixed Google Drive OAuth failing with `redirect_uri_mismatch` when
   Backuparr runs behind a TLS-terminating reverse proxy. The redirect
   URI was built from the raw request Backuparr receives (`http://`,
