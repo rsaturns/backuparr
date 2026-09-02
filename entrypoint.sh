@@ -40,5 +40,16 @@ USER_NAME="$(getent passwd "$PUID" | cut -d: -f1)"
 mkdir -p "$(dirname "$BACKUPARR_CONFIG")" "$BACKUPARR_LOG_DIR"
 chown -R "$PUID:$PGID" "$(dirname "$BACKUPARR_CONFIG")" "$BACKUPARR_LOG_DIR"
 
+WAITRESS_ARGS=(--host=0.0.0.0 --port="${WEBUI_PORT}" --threads=6)
+
+# Same opt-in as webui/app.py's ProxyFix wrapping (BACKUPARR_FORCE_HTTPS).
+# Without --trusted-proxy, waitress silently drops incoming
+# X-Forwarded-Proto/-For/-Host headers before the WSGI app ever sees them
+# - ProxyFix alone isn't enough, since it never gets a header to read.
+FORCE_HTTPS_LOWER="$(printf '%s' "${BACKUPARR_FORCE_HTTPS:-}" | tr '[:upper:]' '[:lower:]')"
+if [ "$FORCE_HTTPS_LOWER" = "1" ] || [ "$FORCE_HTTPS_LOWER" = "true" ] || [ "$FORCE_HTTPS_LOWER" = "yes" ]; then
+    WAITRESS_ARGS+=(--trusted-proxy="*" --trusted-proxy-headers="x-forwarded-proto x-forwarded-for x-forwarded-host")
+fi
+
 echo "Backuparr: starting web UI on :${WEBUI_PORT} (as ${USER_NAME}:${GROUP_NAME}, ${PUID}:${PGID})"
-exec su-exec "$PUID:$PGID" waitress-serve --host=0.0.0.0 --port="${WEBUI_PORT}" --threads=6 webui.app:app
+exec su-exec "$PUID:$PGID" waitress-serve "${WAITRESS_ARGS[@]}" webui.app:app
