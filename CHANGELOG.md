@@ -11,7 +11,15 @@ release event.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+
+- Corrected the Google Drive Setup guide: no longer suggests restricting
+  the API key to your own website (+ `docs.google.com`) - confirmed live
+  that this can still fail with a cryptic "The API developer key is
+  invalid" error even set up exactly as Google's docs describe, since
+  the picker's internal request doesn't reliably carry a referrer.
+  Recommends leaving Application restrictions unset instead, relying on
+  the existing API restriction (Picker API only) to scope the key.
 
 ## [1.0.3-beta] - 2026-09-02
 
