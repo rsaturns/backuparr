@@ -11,6 +11,10 @@ release event.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.0.4-beta] - 2026-09-02
+
 ### Fixed
 
 - Corrected the Google Drive Setup guide: no longer suggests restricting
