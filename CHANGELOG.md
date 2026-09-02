@@ -18,6 +18,14 @@ release event.
   requires an API key to have at least one API restriction - the guide
   previously said to leave API restrictions unset, which is no longer
   an option in Google Cloud Console.
+- Fixed Google Drive OAuth failing with `redirect_uri_mismatch` when
+  Backuparr runs behind a TLS-terminating reverse proxy. The redirect
+  URI was built from the raw request Backuparr receives (`http://`,
+  since the proxy talks to it in plain HTTP), not the `https://` URL
+  the browser and Google actually used. `BACKUPARR_FORCE_HTTPS` now
+  also makes Backuparr trust that proxy's `X-Forwarded-Proto` (and
+  `X-Forwarded-For`, fixing login-lockout tracking seeing the proxy's
+  IP instead of the real client's) via Werkzeug's `ProxyFix`.
 
 ## [1.0.1-beta] - 2026-09-02
 
