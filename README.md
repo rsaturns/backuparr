@@ -340,8 +340,9 @@ already do for Radarr/Sonarr.
 ### Encryption at rest
 
 Every app's API key, Bazarr's basic-auth password, Google Drive's client
-secret/API key/refresh token, and OneDrive's token are encrypted in
-`config.json`.
+secret/API key/refresh token, OneDrive's token, and the notification
+Notify URL (it can embed a Telegram bot token or webhook secret) are
+encrypted in `config.json`.
 The key lives in its own file, `secrets.key`, auto-generated on first run;
 override it with the `BACKUPARR_SECRETS_KEY` env var to keep the key off
 the volume entirely (e.g. a Docker secret).

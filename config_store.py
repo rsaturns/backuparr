@@ -256,6 +256,7 @@ def _secret_fields(cfg):
     fields.append((cfg["destinations"]["gdrive"], "developer_key"))
     fields.append((cfg["destinations"]["gdrive"], "refresh_token"))
     fields.append((cfg["destinations"]["onedrive"], "token"))
+    fields.append((cfg, "notify_url"))
     return fields
 
 

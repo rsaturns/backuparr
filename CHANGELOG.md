@@ -13,6 +13,17 @@ release event.
 
 _Nothing yet._
 
+## [1.0.5-beta] - 2026-09-02
+
+### Security
+
+- The notification `notify_url` setting is now encrypted at rest in
+  `config.json`, matching every other credential-bearing field - it can
+  embed a Telegram bot token or a Discord/Slack/Gotify webhook secret,
+  which were previously stored in plaintext. An existing plaintext value
+  is migrated to encrypted automatically on next load, same as the
+  original app API key migration.
+
 ## [1.0.4-beta] - 2026-09-02
 
 ### Fixed
