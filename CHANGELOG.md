@@ -13,6 +13,18 @@ release event.
 
 _Nothing yet._
 
+## [1.0.1-beta] - 2026-09-02
+
+### Fixed
+
+- Fixed the Google Drive "Choose folder" picker showing a blank white
+  dialog instead of a folder list. Google's Picker API requires an API
+  key (`setDeveloperKey`) and a Cloud project ID (`setAppId`) in
+  addition to the OAuth token already in use - without them the picker
+  fails silently inside its own iframe. Added an API key field to the
+  Google Drive destination (encrypted at rest, like the client secret)
+  and updated the in-app Setup guide and README with the extra step.
+
 ## [1.0.0-beta] - 2026-09-01
 
 ### Added
