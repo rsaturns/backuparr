@@ -553,10 +553,22 @@ function loadGooglePickerApi() {
   });
 }
 
+// OAuth client IDs are "<cloud project number>-xxxx.apps.googleusercontent.com" -
+// the numeric prefix is the same project number Picker's setAppId wants, so
+// it doesn't need its own field.
+function gdriveAppIdFromClientId(clientId) {
+  const match = /^(\d+)-/.exec(clientId || "");
+  return match ? match[1] : null;
+}
+
 async function openGooglePicker() {
   const btn = document.getElementById("gdrive-folder-btn");
   btn.disabled = true;
   try {
+    const gdriveCfg = readDestCard("gdrive");
+    if (!gdriveCfg.developer_key) {
+      throw new Error('Add an API key in the Google Drive settings first (see "Setup guide")');
+    }
     const [{ access_token: accessToken }] = await Promise.all([
       apiFetch("/api/destinations/gdrive/access-token", { method: "POST" }),
       loadGooglePickerApi(),
@@ -564,13 +576,15 @@ async function openGooglePicker() {
     const view = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
       .setSelectFolderEnabled(true)
       .setIncludeFolders(true);
-    const picker = new google.picker.PickerBuilder()
+    const builder = new google.picker.PickerBuilder()
       .addView(view)
       .setTitle("Choose a folder for Backuparr's backups")
       .setOAuthToken(accessToken)
-      .setCallback(gdrivePickerCallback)
-      .build();
-    picker.setVisible(true);
+      .setDeveloperKey(gdriveCfg.developer_key)
+      .setCallback(gdrivePickerCallback);
+    const appId = gdriveAppIdFromClientId(gdriveCfg.client_id);
+    if (appId) builder.setAppId(appId);
+    builder.build().setVisible(true);
   } catch (e) {
     toast(`Could not open the folder picker: ${e.message}`, "fail");
   } finally {

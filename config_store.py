@@ -80,6 +80,7 @@ DEFAULT_DEST = {
         "enabled": False,
         "client_id": "",
         "client_secret": "",
+        "developer_key": "",
         "refresh_token": "",
         "folder_id": "",
         "folder_name": "",
@@ -98,7 +99,7 @@ DEFAULT_DEST = {
 # state (tokens, folder IDs), which only the dedicated connect routes set.
 DEST_EDITABLE_FIELDS = {
     "local": {"enabled", "path"},
-    "gdrive": {"enabled", "client_id", "client_secret"},
+    "gdrive": {"enabled", "client_id", "client_secret", "developer_key"},
     "dropbox": {"enabled"},
     "onedrive": {"enabled"},
 }
@@ -161,13 +162,26 @@ DESTINATION_META = [
                     "link": {"label": "Google Auth Platform - Clients", "url": "https://console.cloud.google.com/auth/clients"},
                 },
                 {
-                    "text": "Click Create. Google only shows the Client Secret once, at this moment - copy both the Client ID and Client Secret now, paste them into the fields below, save, then click \"Connect Google Drive\".",
+                    "text": "Click Create. Google only shows the Client Secret once, at this moment - copy both the Client ID and Client Secret now.",
+                    "link": None,
+                },
+                {
+                    "text": "Also create an API key - the \"Choose folder\" button needs one even though you're already signed in, since Google's folder-picker widget calls the Drive API separately from the OAuth token. Click Create Credentials > API key.",
+                    "link": {"label": "Credentials", "url": "https://console.cloud.google.com/apis/credentials"},
+                },
+                {
+                    "text": "Optionally restrict the key to your own site under Application restrictions > Websites - but if you do, also add https://docs.google.com/* to the allowed list. The folder picker itself runs in an iframe hosted on docs.google.com, not your domain, so leaving that one out reproduces the same broken picker this step exists to avoid. Leave API restrictions unset.",
+                    "link": None,
+                },
+                {
+                    "text": "Copy the API key, then paste the Client ID, Client Secret, and API key into the fields below, save, then click \"Connect Google Drive\".",
                     "link": None,
                 },
             ],
             "links": [
                 {"label": "Google Auth Platform - Clients", "url": "https://console.cloud.google.com/auth/clients"},
                 {"label": "Google's guide to creating OAuth credentials", "url": "https://developers.google.com/identity/protocols/oauth2/web-server#creatingcred"},
+                {"label": "Credentials - API keys", "url": "https://console.cloud.google.com/apis/credentials"},
             ],
         },
     },
@@ -230,6 +244,7 @@ def _secret_fields(cfg):
     fields = [(cfg["apps"][name], "api_key") for name in APP_NAMES]
     fields.append((cfg["apps"]["bazarr"], "password"))
     fields.append((cfg["destinations"]["gdrive"], "client_secret"))
+    fields.append((cfg["destinations"]["gdrive"], "developer_key"))
     fields.append((cfg["destinations"]["gdrive"], "refresh_token"))
     fields.append((cfg["destinations"]["onedrive"], "token"))
     return fields

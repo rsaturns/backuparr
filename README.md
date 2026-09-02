@@ -190,10 +190,12 @@ Connected entirely from the web UI - no `rclone config`, no files to copy
 onto the host. On the Google Drive card in **Settings**:
 
 1. Click **Setup guide** - it walks through creating a Google Cloud
-   project, enabling the Drive API, and creating an OAuth client, and
-   shows the exact redirect URI to register.
-2. Paste the Client ID and Client Secret it gives you into the two fields,
-   then **Save settings**.
+   project, enabling the Drive API, creating an OAuth client, and
+   creating an API key, and shows the exact redirect URI to register.
+2. Paste the Client ID, Client Secret, and API key it gives you into the
+   three fields, then **Save settings**. The API key is separate from the
+   OAuth client - it's what the **Choose folder** picker widget itself
+   uses to talk to Drive, and without it the picker window loads blank.
 3. Click **Connect Google Drive** and approve the consent screen -
    Backuparr requests only the `drive.file` scope (files/folders it
    created or you explicitly picked, not your whole Drive).
@@ -329,7 +331,8 @@ already do for Radarr/Sonarr.
 ### Encryption at rest
 
 Every app's API key, Bazarr's basic-auth password, Google Drive's client
-secret/refresh token, and OneDrive's token are encrypted in `config.json`.
+secret/API key/refresh token, and OneDrive's token are encrypted in
+`config.json`.
 The key lives in its own file, `secrets.key`, auto-generated on first run;
 override it with the `BACKUPARR_SECRETS_KEY` env var to keep the key off
 the volume entirely (e.g. a Docker secret).
@@ -435,7 +438,7 @@ if you'd rather):
 | `apps.<name>.enabled/url/api_key` | Per app, as shown in the Settings tab |
 | `apps.bazarr.username/password` | Only if Bazarr's web auth is set to `Basic` |
 | `destinations.local.enabled/path` | Local storage - path defaults to `/config/backuparr/backups` if blank |
-| `destinations.gdrive.enabled/client_id/client_secret` | Google Drive OAuth client, set via the Setup guide |
+| `destinations.gdrive.enabled/client_id/client_secret/developer_key` | Google Drive OAuth client + API key, set via the Setup guide |
 | `destinations.gdrive.refresh_token/folder_id/folder_name` | Set automatically by the Connect/Choose folder buttons - don't hand-edit |
 | `destinations.onedrive.enabled` | Whether the destination is active |
 | `destinations.onedrive.token/drive_id/drive_type/item_id` | Set automatically by pasting a token from `rclone authorize onedrive` - don't hand-edit |
