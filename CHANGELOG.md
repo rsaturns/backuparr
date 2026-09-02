@@ -11,6 +11,10 @@ release event.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.0.5-beta] - 2026-09-02
+
 ### Security
 
 - The notification `notify_url` setting is now encrypted at rest in
