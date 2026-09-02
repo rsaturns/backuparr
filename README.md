@@ -243,6 +243,14 @@ services:
       - TZ=America/Los_Angeles
       - PUID=1000
       - PGID=1000
+      # Everything below is optional - shown so you know it exists. See
+      # the README's Environment variables section for what each does.
+      #- LOG_LEVEL=INFO
+      #- BACKUPARR_FORCE_HTTPS=true
+      #- BACKUPARR_SECRETS_KEY=
+      #- RCLONE_CONFIG_PASS=
+      # Changing this also means updating the ports: mapping below.
+      #- WEBUI_PORT=8990
     ports:
       - "8990:8990"
     volumes:
@@ -267,9 +275,10 @@ docker run -d --name backuparr --restart unless-stopped \
 ```
 
 Published for both `linux/amd64` and `linux/arm64`. `latest` tracks the
-most recent commit to `main`; pin a specific version instead (e.g.
-`rsaturns/backuparr:0.9.0-beta`) if you'd rather control upgrades
-yourself - see [Docker Hub](https://hub.docker.com/r/rsaturns/backuparr)
+most recent tagged release, not every commit to `main`; pin a specific
+version instead (e.g. `rsaturns/backuparr:0.9.0-beta`) if you'd rather
+control upgrades yourself - see [Docker
+Hub](https://hub.docker.com/r/rsaturns/backuparr)
 for available tags.
 
 ### Or build from source
