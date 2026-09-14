@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import subprocess
 
 logger = logging.getLogger(__name__)
@@ -11,12 +12,33 @@ class RcloneError(RuntimeError):
 
 SENSITIVE_FIELDS = {"client_secret", "token", "password", "pass"}
 
+# rclone logs one timestamped line per retry attempt (default 3 retries) on
+# failure, each repeating the same underlying cause and often wrapping a
+# full, unbroken API request URL - unreadable once shown as a single failed
+# app's status line. "2026/09/14 03:02:00 ERROR : " / "... NOTICE: " prefix.
+_LOG_PREFIX_RE = re.compile(r"^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}\s+(?:[A-Z]+\s*:\s*)?")
+_URL_RE = re.compile(r'"https?://[^"]*"')
+
+
+def _clean_stderr(stderr):
+    """Collapses rclone's raw stderr into the single most useful line: the
+    last one, since rclone always ends a failed command with its most
+    complete NOTICE/Fatal summary line (earlier lines are just the same
+    error repeated per retry attempt). Strips that line's timestamp/level
+    prefix and collapses any embedded request URL, which carries no useful
+    information for a human and is often long enough to overflow the UI."""
+    lines = [line.strip() for line in stderr.strip().splitlines() if line.strip()]
+    if not lines:
+        return "(no output)"
+    last = _LOG_PREFIX_RE.sub("", lines[-1], count=1)
+    return _URL_RE.sub('"<url>"', last)
+
 
 def _run(args, redact=()):
     # stdin closed so an inherited TTY (e.g. manual docker exec) can't hang.
     proc = subprocess.run(["rclone", *args], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     if proc.returncode != 0:
-        message = f"rclone {' '.join(args)} failed: {proc.stderr.strip()}"
+        message = f"rclone {' '.join(args)} failed: {_clean_stderr(proc.stderr)}"
         for secret in redact:
             if secret:
                 message = message.replace(secret, "***")

@@ -39,6 +39,47 @@ def test_run_without_redact_leaves_message_unredacted():
     assert secret in str(exc_info.value)
 
 
+def test_run_collapses_repeated_retry_lines_to_the_last_one():
+    # Real shape of rclone's stderr on a failed copyto: one timestamped
+    # ERROR line per retry attempt, then a final NOTICE summary line -
+    # all three attempts repeat the same underlying cause.
+    fake_result = MagicMock()
+    fake_result.returncode = 1
+    fake_result.stderr = (
+        '2026/09/14 03:02:00 ERROR : Attempt 1/3 failed with 1 errors and: couldn\'t fetch token: invalid_grant\n'
+        '2026/09/14 03:02:00 ERROR : Attempt 2/3 failed with 1 errors and: couldn\'t fetch token: invalid_grant\n'
+        '2026/09/14 03:02:00 ERROR : Attempt 3/3 failed with 1 errors and: couldn\'t fetch token: invalid_grant\n'
+        '2026/09/14 03:02:00 NOTICE: Failed to copyto: couldn\'t fetch token: invalid_grant: maybe token expired?'
+    )
+
+    with patch("rclone_util.subprocess.run", return_value=fake_result):
+        with pytest.raises(rclone_util.RcloneError) as exc_info:
+            rclone_util._run(["copyto", "a.zip", "gdrive:a.zip"])
+
+    message = str(exc_info.value)
+    assert message.count("Attempt") == 0
+    assert message.count("invalid_grant") == 1
+    assert "Failed to copyto: couldn't fetch token: invalid_grant: maybe token expired?" in message
+
+
+def test_run_collapses_embedded_request_url():
+    fake_result = MagicMock()
+    fake_result.returncode = 1
+    fake_result.stderr = (
+        '2026/09/14 03:02:00 NOTICE: Failed to copyto: couldn\'t list directory: '
+        'Get "https://www.googleapis.com/drive/v3/files?alt=json&fields=id%2Cname&pageSize=1000": '
+        "couldn't fetch token: invalid_grant"
+    )
+
+    with patch("rclone_util.subprocess.run", return_value=fake_result):
+        with pytest.raises(rclone_util.RcloneError) as exc_info:
+            rclone_util._run(["copyto", "a.zip", "gdrive:a.zip"])
+
+    message = str(exc_info.value)
+    assert "googleapis.com" not in message
+    assert '"<url>"' in message
+
+
 def test_config_set_redacts_sensitive_fields_via_run(monkeypatch):
     secret = "super-secret-client-secret-value"
     fake_result = MagicMock()

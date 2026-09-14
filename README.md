@@ -191,14 +191,21 @@ onto the host. On the Google Drive card in **Settings**:
 
 1. Click **Setup guide** - it walks through creating a Google Cloud
    project, enabling the Drive API, creating an OAuth client, and
-   creating an API key, and shows the exact redirect URI to register.
+   creating an API key, and shows the exact redirect URI to register. It
+   also has you publish the OAuth app (Audience tab > **Publish App**) -
+   don't skip that part, since a project left in Testing status has Google
+   auto-expire its refresh tokens after 7 days, which silently breaks the
+   Google Drive connection weekly until reconnected.
 2. Paste the Client ID, Client Secret, and API key it gives you into the
    three fields, then **Save settings**. The API key is separate from the
    OAuth client - it's what the **Choose folder** picker widget itself
    uses to talk to Drive, and without it the picker window loads blank.
 3. Click **Connect Google Drive** and approve the consent screen -
    Backuparr requests only the `drive.file` scope (files/folders it
-   created or you explicitly picked, not your whole Drive).
+   created or you explicitly picked, not your whole Drive). Because the
+   app is published but unverified, Google shows a "Google hasn't
+   verified this app" warning here - that's expected for your own app;
+   click **Advanced**, then **Go to (your app name) (unsafe)** to continue.
 4. Click **Choose folder** to pick (or create) the Drive folder backups
    should go in.
 

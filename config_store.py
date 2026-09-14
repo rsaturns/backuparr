@@ -153,7 +153,11 @@ DESTINATION_META = [
                     "link": {"label": "Google Auth Platform - Branding", "url": "https://console.cloud.google.com/auth/branding"},
                 },
                 {
-                    "text": "On the Audience tab, add your own Google account (and anyone else who should have access) under Test users - this is what keeps the app private with no Google review needed.",
+                    "text": "On the Audience tab, add your own Google account (and anyone else who should have access) under Test users - this keeps the app private with no Google review needed. Leave Publishing status as Testing for now; the next step changes that.",
+                    "link": {"label": "Google Auth Platform - Audience", "url": "https://console.cloud.google.com/auth/audience"},
+                },
+                {
+                    "text": "Still on the Audience tab, click \"Publish App\" under Publishing status and confirm. This is the important step: while a project stays in Testing, Google auto-expires every refresh token 7 days after it's issued, so Backuparr's Google Drive connection (and every other Testing-status app) would silently die and need reconnecting weekly. Publishing removes that 7-day limit. It does not require Google's review/verification process here, since drive.file is a non-sensitive scope and this app stays well under Google's 100-user threshold for requiring it - clicking Publish App just flips the status immediately.",
                     "link": {"label": "Google Auth Platform - Audience", "url": "https://console.cloud.google.com/auth/audience"},
                 },
                 {
@@ -183,7 +187,7 @@ DESTINATION_META = [
                     "link": None,
                 },
                 {
-                    "text": "Copy the API key, then paste the Client ID, Client Secret, and API key into the fields below, save, then click \"Connect Google Drive\".",
+                    "text": "Copy the API key, then paste the Client ID, Client Secret, and API key into the fields below, save, then click \"Connect Google Drive\". Since the app is published but unverified, Google shows a \"Google hasn't verified this app\" warning on the consent screen - that's expected for your own app; click Advanced, then \"Go to (your app name) (unsafe)\" to continue.",
                     "link": None,
                 },
             ],

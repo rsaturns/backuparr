@@ -762,6 +762,7 @@ code {
 .overview-app-last {
   font-size: 14.5px;
   color: var(--text-muted);
+  overflow-wrap: anywhere;
 }
 
 .overview-app-last .filename {
