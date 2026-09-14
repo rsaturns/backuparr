@@ -13,6 +13,31 @@ release event.
 
 _Nothing yet._
 
+## [1.0.6-beta] - 2026-09-14
+
+### Fixed
+
+- A Google Drive upload failure (e.g. an expired/revoked OAuth token) on
+  the Overview page showed as an unreadable wall of text: rclone logs one
+  timestamped line per retry attempt (3 by default), each repeating the
+  same cause and wrapping a long, unbroken Google API request URL that
+  overflowed its app card into the next one. rclone failures are now
+  collapsed to their single most useful line, with any embedded request
+  URL replaced by `<url>` - the Overview page's failure text also wraps
+  within its card as a defense-in-depth measure against future long
+  messages.
+
+### Docs
+
+- The Google Drive Setup guide (in-app and README) now has you publish
+  the OAuth app right after adding yourself as a test user, and explains
+  why: a Google Cloud project left in Testing status has Google
+  auto-expire its refresh tokens 7 days after they're issued, which was
+  silently breaking the Google Drive connection on a weekly cycle until
+  manually reconnected. No Google verification review is needed for
+  this, since `drive.file` is a non-sensitive scope and usage stays well
+  under the 100-user threshold that would require it.
+
 ## [1.0.5-beta] - 2026-09-02
 
 ### Security
