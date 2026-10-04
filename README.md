@@ -337,7 +337,9 @@ requires logging in. On the **Settings** tab:
    key. Discovery runs when you finish editing those fields, or click
    **Discover services** to run it again. It finds Radarr, Sonarr and
    SABnzbd configured in Prowlarr, fills empty forms with their URLs and
-   API keys, and offers a choice when multiple instances exist. Existing
+   API keys, and offers a choice when multiple instances exist. Discovery
+   opens each detected app's existing settings card; instance selection
+   appears there, and missing-key errors appear at its API key field. Existing
    values and edits made during discovery are kept; replacing them is an
    explicit action. Prowlarr backup does not need to be enabled to discover
    its services. Enable each app you want backed up and use **Test

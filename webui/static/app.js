@@ -309,7 +309,7 @@ function appCard(appId) {
 
 function setAppCardExpanded(card, expanded) {
   const body = card.querySelector(".app-card-body");
-  if (body) body.classList.toggle("hidden", !expanded && card.dataset.app !== "prowlarr");
+  if (body) body.classList.toggle("hidden", !expanded && card.dataset.app !== "prowlarr" && !card.dataset.discovered);
 }
 
 function fillAppCard(appId, cfg) {
@@ -359,16 +359,22 @@ function queueDiscovery() {
   DISCOVERY_TIMER = setTimeout(() => discoverServices(false), 600);
 }
 
-function markDiscovered(appId, missingKey) {
+function markDiscovered(appId) {
   const card = appCard(appId);
-  let note = card.querySelector(".discovery-origin");
-  if (!note) {
-    note = document.createElement("p");
-    note.className = "discovery-origin";
-    card.querySelector(".app-card-body").appendChild(note);
-  }
-  note.textContent = `Found via Prowlarr — review and save settings.${missingKey ? " Enter the API key manually." : ""}`;
+  card.dataset.discovered = "true";
+  card.querySelector(".discovery-origin").classList.remove("hidden");
   setAppCardExpanded(card, true);
+}
+
+function clearDiscoveryResults() {
+  document.getElementById("discovery-results").replaceChildren();
+  document.querySelectorAll(".app-discovery").forEach((panel) => {
+    panel.replaceChildren();
+    panel.onpointerover = null;
+    panel.classList.add("hidden");
+    delete panel.closest(".app-card").dataset.discovered;
+  });
+  document.querySelectorAll(".discovery-origin, .discovery-key-status").forEach((note) => note.classList.add("hidden"));
 }
 
 function applyDiscoveredService(candidate, keyOnly = false) {
@@ -376,14 +382,14 @@ function applyDiscoveredService(candidate, keyOnly = false) {
   if (!keyOnly) card.querySelector(".f-url").value = candidate.url;
   card.querySelector(".f-api_key").value = candidate.api_key || "";
   // Finding a service does not opt it in to scheduled backups.
-  markDiscovered(candidate.app, !candidate.api_key);
+  markDiscovered(candidate.app);
   card.querySelector(".status-dot").dataset.state = "idle";
   card.querySelector(".test-result").textContent = "";
 }
 
 function renderDiscoveryResults(result, initial) {
   const root = document.getElementById("discovery-results");
-  root.replaceChildren();
+  clearDiscoveryResults();
   const groups = new Map();
   result.candidates.forEach((candidate) => {
     if (!groups.has(candidate.app)) groups.set(candidate.app, []);
@@ -392,6 +398,9 @@ function renderDiscoveryResults(result, initial) {
 
   let filled = 0;
   groups.forEach((candidates, appId) => {
+    const card = appCard(appId);
+    const panel = card.querySelector(".app-discovery");
+    markDiscovered(appId);
     const current = readAppCard(appId);
     // Check both the original and current form: user edits made while a
     // backup is being created must not be overwritten by its delayed result.
@@ -407,46 +416,46 @@ function renderDiscoveryResults(result, initial) {
       filled += 1;
     }
 
-    const row = document.createElement("div");
-    row.className = "discovery-service";
-    const title = document.createElement("strong");
-    title.textContent = appLabel(appId);
-    row.appendChild(title);
     const description = document.createElement("p");
     description.className = "hint";
-    description.textContent = automatic
-        ? keyOnly ? "Missing API key filled in for your existing URL. Review and save settings." : "Filled in below. Review the details and enable backups if wanted."
-        : candidates.length > 1
-          ? "Multiple instances found. Choose one; Backuparr supports one instance per app."
-          : "Your existing settings were kept. You can explicitly use the discovered service below.";
-    row.appendChild(description);
+    panel.appendChild(description);
 
     let selected = candidates.length === 1 ? candidates[0] : null;
     let select = null;
-    const details = document.createElement("p");
-    details.className = "discovery-status";
+    const keyStatus = card.querySelector(".discovery-key-status");
     if (candidates.length > 1) {
       select = document.createElement("select");
       select.setAttribute("aria-label", `Choose ${appLabel(appId)} instance`);
       select.add(new Option("Choose an instance...", ""));
       candidates.forEach((candidate, index) => select.add(new Option(`${candidate.name} — ${candidate.url}`, String(index))));
-      row.appendChild(select);
+      panel.appendChild(select);
     }
-    row.appendChild(details);
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "btn btn-ghost btn-sm";
     const update = () => {
       btn.disabled = !selected;
       if (!selected) {
-        details.textContent = "";
+        description.textContent = "Multiple instances found in Prowlarr. Choose the one you want to configure.";
+        keyStatus.classList.add("hidden");
+        panel.classList.remove("hidden");
+        btn.classList.remove("hidden");
         btn.textContent = "Use selected service";
         return;
       }
-      details.textContent = `${selected.name} — ${selected.url} · ${selected.api_key ? "API key available" : "API key unavailable"}`;
-      if (!selected.api_key) details.textContent += ` — ${selected.api_key_error || "Prowlarr's backup did not supply this key."}`;
       const fields = readAppCard(appId);
-      const replaces = (fields.url && fields.url !== selected.url) || (fields.api_key && fields.api_key !== selected.api_key);
+      const sameService = fields.url.replace(/\/+$/, "") === selected.url.replace(/\/+$/, "");
+      const inUse = sameService && (!selected.api_key || fields.api_key === selected.api_key);
+      keyStatus.textContent = selected.api_key ? "" : `Discovery API key unavailable — ${selected.api_key_error || "Prowlarr's backup did not supply this key."}`;
+      keyStatus.classList.toggle("hidden", !!selected.api_key);
+      description.textContent = candidates.length > 1
+        ? inUse ? "Selected instance filled in. Review and save settings." : "Choose an instance and apply its settings below."
+        : sameService
+          ? "Prowlarr found an API key for this URL. Your existing settings were kept."
+          : `${selected.name} found at ${selected.url}. Your existing settings were kept.`;
+      panel.classList.toggle("hidden", candidates.length === 1 && inUse);
+      btn.classList.toggle("hidden", inUse);
+      const replaces = (fields.url && !sameService) || (fields.api_key && fields.api_key !== selected.api_key);
       btn.textContent = replaces
         ? "Replace URL and API key"
         : "Use this service";
@@ -456,19 +465,18 @@ function renderDiscoveryResults(result, initial) {
       update();
     });
     // Keep the action label accurate if the user edits the form afterwards.
-    row.addEventListener("pointerover", update);
+    panel.onpointerover = update;
     btn.addEventListener("focus", update);
     btn.addEventListener("click", () => {
       if (!selected) return;
       applyDiscoveredService(selected);
-      description.textContent = "Filled in below. Review and save settings.";
       update();
     });
     update();
-    row.appendChild(btn);
-    root.appendChild(row);
+    panel.appendChild(btn);
   });
-  result.warnings.forEach((warning) => {
+  const keyErrors = new Set(result.candidates.map((candidate) => candidate.api_key_error).filter(Boolean));
+  result.warnings.filter((warning) => !keyErrors.has(warning) && !warning.startsWith("Some API keys are unavailable.")).forEach((warning) => {
     const note = document.createElement("p");
     note.className = "discovery-warning";
     note.textContent = warning;
@@ -491,7 +499,7 @@ async function discoverServices(manual = true) {
   updateDiscoveryButton();
   const status = document.getElementById("discovery-status");
   status.textContent = "Connecting to Prowlarr...";
-  document.getElementById("discovery-results").replaceChildren();
+  clearDiscoveryResults();
   const initial = {};
   ["radarr", "sonarr", "sabnzbd"].forEach((appId) => {
     initial[appId] = { ...readAppCard(appId), revision: APP_CREDENTIAL_EDIT_REVISION.get(appId) || 0 };
@@ -1071,7 +1079,9 @@ function initSettingsEvents() {
       const card = input.closest(".app-card");
       APP_CREDENTIAL_EDIT_REVISION.set(card.dataset.app, (APP_CREDENTIAL_EDIT_REVISION.get(card.dataset.app) || 0) + 1);
       const origin = card.querySelector(".discovery-origin");
-      if (origin) origin.remove();
+      if (origin) origin.classList.add("hidden");
+      const keyStatus = card.querySelector(".discovery-key-status");
+      if (keyStatus) keyStatus.classList.add("hidden");
     });
   });
   document.querySelectorAll(".test-btn").forEach((btn) => {

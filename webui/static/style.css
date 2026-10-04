@@ -292,15 +292,14 @@ body {
 .discovery-intro { margin: 12px 0 0; }
 .discovery-help { margin: 0; }
 .discovery-status { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
-.discovery-service { border-top: 1px solid var(--border); padding: 12px 0; }
-.discovery-service p { margin: 5px 0 8px; overflow-wrap: anywhere; }
-.discovery-service select { width: 100%; margin: 0 0 8px; }
-.discovery-service .btn { white-space: normal; text-align: left; }
-.discovery-origin { margin: 0; color: var(--accent); font-size: 13px; }
+.app-discovery { display: grid; gap: 8px; }
+.app-discovery p { margin: 0; overflow-wrap: anywhere; }
+.app-discovery .btn { justify-self: start; white-space: normal; text-align: left; }
+.discovery-key-status { display: block; margin-top: 6px; color: var(--danger); font-size: 13px; font-weight: 400; overflow-wrap: anywhere; }
 .discovery-warning { font-size: 13px; color: var(--text-muted); overflow-wrap: anywhere; }
 
 @media (max-width: 480px) {
-  .prowlarr-discovery-card .app-card-head { flex-wrap: wrap; }
+  .app-card-head { flex-wrap: wrap; }
   .prowlarr-discovery-card .app-card-actions { flex-wrap: wrap; }
 }
 

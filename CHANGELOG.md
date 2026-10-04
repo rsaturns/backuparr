@@ -27,6 +27,9 @@ release event.
 
 ### Fixed
 
+- Discovery results use each app's existing settings card, with instance
+  selection inside that card and missing-key diagnostics at its API key
+  field. Prowlarr shows the progress, summary and general warnings.
 - Discovery fills missing API keys for matching existing service URLs,
   reports how many keys were obtained and gives specific backup download
   errors directly beside the affected service. Bazarr is configured

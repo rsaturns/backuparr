@@ -75,6 +75,7 @@
               <img class="app-icon" src="{{ url_for('static', filename='icons/' ~ m.icon) }}" alt="" width="22" height="22">
               <h3>{{ m.label }}</h3>
               {% if m.id == 'prowlarr' %}<span class="discovery-badge">Start here</span>{% endif %}
+              {% if m.id in ('radarr', 'sonarr', 'sabnzbd') %}<span class="discovery-badge discovery-origin hidden">From Prowlarr</span>{% endif %}
               {% if m.status != 'available' %}<span class="badge-soon">Coming soon</span>{% endif %}
               <span class="status-dot" data-state="idle"></span>
             </div>
@@ -83,6 +84,7 @@
             <p class="hint discovery-intro">Enter Prowlarr's URL and API key to discover Radarr, Sonarr and SABnzbd. Prowlarr backup does not need to be enabled.</p>
             {% endif %}
             <div class="app-card-body{% if m.id != 'prowlarr' %} hidden{% endif %}">
+              {% if m.id in ('radarr', 'sonarr', 'sabnzbd') %}<div class="app-discovery hidden"></div>{% endif %}
               <label class="field">
                 <span class="field-label">URL</span>
                 <input type="text" class="f-url" placeholder="{{ m.url_placeholder }}" autocomplete="off">
@@ -93,6 +95,7 @@
                   {% if not m.key_required %}<span class="muted">(optional{% if m.key_help %} &mdash; {{ m.key_help }}{% endif %})</span>{% endif %}
                 </span>
                 <input type="password" class="f-api_key" autocomplete="off">
+                {% if m.id in ('radarr', 'sonarr', 'sabnzbd') %}<span class="discovery-key-status hidden" role="status"></span>{% endif %}
               </label>
               {% for f in m.extra_fields %}
               <label class="field">
