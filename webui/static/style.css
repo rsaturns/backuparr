@@ -291,8 +291,6 @@ body {
 
 .discovery-intro { margin: 12px 0 0; }
 .discovery-help { margin: 0; }
-.backup-auth summary { color: var(--text-muted); cursor: pointer; font-size: 14px; }
-.backup-auth[open] summary { margin-bottom: 10px; }
 .discovery-status { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
 .app-discovery { display: grid; gap: 8px; }
 .app-discovery p { margin: 0; overflow-wrap: anywhere; }

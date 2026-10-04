@@ -29,9 +29,10 @@ release event.
 
 - Discovery runs only with Discover services; editing credentials and Test
   connection do not start it. Clicking Discover services enables Prowlarr.
-- Prowlarr, Radarr and Sonarr backup downloads support optional web login
-  credentials, stored encrypted, and local file redirects. Login pages and
-  invalid ZIP responses are rejected with an actionable error.
+- Prowlarr, Radarr and Sonarr use only URL and API key. Backup downloads
+  follow local file redirects and reject login pages or invalid ZIPs with
+  an actionable error about internal access and the web backup route.
+  Web login credentials from the previous preview are removed on config load.
 - Discovery results use each app's existing settings card, with instance
   selection inside that card and missing-key diagnostics at its API key
   field. Prowlarr shows the progress, summary and general warnings.

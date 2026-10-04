@@ -15,15 +15,10 @@ DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "pass
 
 # Drives the web UI's forms generically. "coming_soon" apps render
 # disabled with a badge, same as DESTINATION_META below.
-BACKUP_AUTH_FIELDS = [
-    {"name": "username", "label": "Web UI username", "type": "text"},
-    {"name": "password", "label": "Web UI password", "type": "password"},
-]
-
 APP_META = [
-    {"id": "radarr", "label": "Radarr", "icon": "radarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://radarr:7878", "extra_fields": BACKUP_AUTH_FIELDS},
-    {"id": "sonarr", "label": "Sonarr", "icon": "sonarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://sonarr:8989", "extra_fields": BACKUP_AUTH_FIELDS},
-    {"id": "prowlarr", "label": "Prowlarr", "icon": "prowlarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://prowlarr:9696", "extra_fields": BACKUP_AUTH_FIELDS},
+    {"id": "radarr", "label": "Radarr", "icon": "radarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://radarr:7878", "extra_fields": []},
+    {"id": "sonarr", "label": "Sonarr", "icon": "sonarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://sonarr:8989", "extra_fields": []},
+    {"id": "prowlarr", "label": "Prowlarr", "icon": "prowlarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://prowlarr:9696", "extra_fields": []},
     {
         "id": "profilarr",
         "label": "Profilarr",
@@ -260,13 +255,23 @@ def _secret_fields(cfg):
     """(container_dict, key) for every value encrypted at rest - an
     explicit allowlist, not "encrypt everything"."""
     fields = [(cfg["apps"][name], "api_key") for name in APP_NAMES]
-    fields.extend((cfg["apps"][name], "password") for name in ("radarr", "sonarr", "prowlarr", "bazarr"))
+    fields.append((cfg["apps"]["bazarr"], "password"))
     fields.append((cfg["destinations"]["gdrive"], "client_secret"))
     fields.append((cfg["destinations"]["gdrive"], "developer_key"))
     fields.append((cfg["destinations"]["gdrive"], "refresh_token"))
     fields.append((cfg["destinations"]["onedrive"], "token"))
     fields.append((cfg, "notify_url"))
     return fields
+
+
+def _clear_removed_backup_credentials(cfg):
+    changed = False
+    for name in ("radarr", "sonarr", "prowlarr"):
+        for key in ("username", "password"):
+            if cfg["apps"][name].get(key):
+                changed = True
+                cfg["apps"][name][key] = ""
+    return changed
 
 
 def load_config():
@@ -288,7 +293,7 @@ def load_config():
         merged["destinations"][name].update(data.get("destinations", {}).get(name, {}))
 
     # Decrypt in place; a legacy plaintext value gets re-saved encrypted.
-    needs_migration = False
+    needs_migration = _clear_removed_backup_credentials(merged)
     for container, key in _secret_fields(merged):
         raw = container.get(key, "")
         if raw and not raw.startswith(secrets_crypto.PREFIX):
@@ -303,6 +308,7 @@ def load_config():
 
 def save_config(cfg):
     to_write = copy.deepcopy(cfg)
+    _clear_removed_backup_credentials(to_write)
     for container, key in _secret_fields(to_write):
         container[key] = secrets_crypto.encrypt(container.get(key, ""))
 

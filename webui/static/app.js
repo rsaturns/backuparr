@@ -341,8 +341,8 @@ function readAppCard(appId) {
 }
 
 function prowlarrCredentials() {
-  const { url, api_key, username, password } = readAppCard("prowlarr");
-  return { url, api_key, username, password };
+  const { url, api_key } = readAppCard("prowlarr");
+  return { url, api_key };
 }
 
 function updateDiscoveryButton() {

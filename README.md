@@ -380,16 +380,17 @@ and reverse proxy access to Prowlarr's `/backup/` route. A missing key is
 also filled in automatically when your existing URL matches the single
 discovered instance and you have not edited its fields during discovery.
 
-**Backup download authentication:** Prowlarr, Radarr and Sonarr can require
-their web login for `/backup/` downloads even when API access succeeds.
-Expand this optional section in the app's card and enter that app's web UI
-username and password. Backuparr signs in when needed and stores the
-password encrypted. These credentials are also used for regular backups;
-they are not discovered from Prowlarr. An external login proxy such as
-Authelia or Authentik requires an internal service URL or a proxy rule
-allowing Backuparr to access the backup route. Backuparr follows file
-redirects within the app's backup route and rejects login pages instead
-of storing them as ZIP backups.
+Prowlarr, Radarr and Sonarr use only their URL and API key in Backuparr.
+Their `/backup/` downloads can still require web login even when API access
+succeeds: the API key does not authenticate the web download route. Use an
+internal service URL if the app's existing authentication policy permits
+local access. With an external login proxy such as Authelia or Authentik,
+the proxy must allow Backuparr to access the backup route. Backuparr does
+not collect web login credentials or change the app's authentication
+settings. If downloads remain protected, discovery keeps the URLs and
+explains why their masked API keys cannot be read from the backup.
+File redirects within the app's backup route are supported; login pages
+are rejected instead of being stored as ZIP backups.
 
 **Bazarr:** Prowlarr does not store its URL or API key, so it is not
 part of Prowlarr discovery. Configure Bazarr and other unsupported

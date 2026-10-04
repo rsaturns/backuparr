@@ -57,17 +57,42 @@ def test_save_and_load_roundtrip_plain_and_encrypted_fields():
 
 
 @pytest.mark.parametrize("name", ["radarr", "sonarr", "prowlarr"])
-def test_backup_login_password_is_encrypted_and_passed_to_driver(name):
+@pytest.mark.parametrize("encrypted", [False, True])
+def test_removed_web_credentials_are_cleared_on_load(name, encrypted):
+    import json
     from backup import build_app
 
     cfg = config_store.load_config()
-    cfg["apps"][name].update(url=f"http://{name}:9999", api_key="key",
-                             username="demo", password=" password with spaces ")
+    cfg["apps"][name].update(url=f"http://{name}:9999", api_key="retained-api-key")
     config_store.save_config(cfg)
     with open(config_store.CONFIG_PATH) as source:
-        assert "password with spaces" not in source.read()
+        old = json.load(source)
+    obsolete_password = secrets_crypto.encrypt("obsolete-login-password") if encrypted else "obsolete-login-password"
+    old["apps"][name].update(username="obsolete-user", password=obsolete_password)
+    with open(config_store.CONFIG_PATH, "w") as target:
+        json.dump(old, target)
+
     reloaded = config_store.load_config()
+    assert reloaded["apps"][name]["username"] == ""
+    assert reloaded["apps"][name]["password"] == ""
+    assert reloaded["apps"][name]["api_key"] == "retained-api-key"
+    with open(config_store.CONFIG_PATH) as source:
+        disk = source.read()
+    assert "obsolete-user" not in disk and obsolete_password not in disk
     instance = build_app(name, reloaded["apps"][name])
-    assert instance.username == "demo"
-    assert instance.password == " password with spaces "
+    assert not hasattr(instance, "username") and not hasattr(instance, "password")
     instance.session.close()
+
+
+def test_save_drops_removed_credentials_and_preserves_bazarr_login():
+    cfg = config_store.load_config()
+    for name in ("radarr", "sonarr", "prowlarr"):
+        cfg["apps"][name].update(username="unused-user", password="unused-password")
+    cfg["apps"]["bazarr"].update(username="bazarr-user", password="bazarr-password")
+    config_store.save_config(cfg)
+    reloaded = config_store.load_config()
+    assert reloaded["apps"]["bazarr"]["username"] == "bazarr-user"
+    assert reloaded["apps"]["bazarr"]["password"] == "bazarr-password"
+    with open(config_store.CONFIG_PATH) as source:
+        disk = source.read()
+    assert all(value not in disk for value in ("unused-user", "unused-password", "bazarr-password"))

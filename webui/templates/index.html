@@ -97,18 +97,12 @@
                 <input type="password" class="f-api_key" autocomplete="off">
                 {% if m.id in ('radarr', 'sonarr', 'sabnzbd') %}<span class="discovery-key-status hidden" role="status"></span>{% endif %}
               </label>
-              {% if m.id in ('radarr', 'sonarr', 'prowlarr') %}
-              <details class="backup-auth">
-                <summary>Backup download authentication (optional)</summary>
-                <p class="hint">If downloading a backup redirects to the app's login, enter its own web UI credentials here. For an external login proxy, use an internal URL or allow Backuparr to access the backup route.</p>
-              {% endif %}
               {% for f in m.extra_fields %}
               <label class="field">
                 <span class="field-label">{{ f.label }} {% if f.help %}<span class="muted">({{ f.help }})</span>{% endif %}</span>
                 <input type="{{ f.type }}" class="f-extra" data-field="{{ f.name }}" autocomplete="off">
               </label>
               {% endfor %}
-              {% if m.id in ('radarr', 'sonarr', 'prowlarr') %}</details>{% endif %}
               {% if m.id == 'bazarr' %}
               <label class="field">
                 <span class="field-label">Backup folder <span class="muted">(local path, only needed to restore Bazarr)</span></span>
@@ -122,6 +116,7 @@
               </div>
               {% if m.id == 'prowlarr' %}
               <p class="hint discovery-help">Discover services enables Prowlarr and uses a temporary backup to read masked API keys. Review the results, choose which other apps to back up, then save settings. Test connection only checks API access.</p>
+              <p class="hint discovery-help">If backup downloads redirect to login, use Prowlarr's internal URL where local access is already permitted. Its API key does not authenticate the web backup route.</p>
               <p id="discovery-status" class="discovery-status" role="status" aria-live="polite"></p>
               <div id="discovery-results"></div>
               {% endif %}
