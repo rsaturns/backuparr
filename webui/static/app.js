@@ -665,6 +665,7 @@ async function runTest({ btn, resultEl, dot, pendingText, request }) {
     resultEl.textContent = res.message;
     resultEl.className = `test-result ${res.ok ? "ok" : "fail"}`;
     if (dot) dot.dataset.state = res.ok ? "ok" : "fail";
+    return res;
   } catch (e) {
     resultEl.textContent = e.message;
     resultEl.className = "test-result fail";
@@ -677,10 +678,12 @@ async function runTest({ btn, resultEl, dot, pendingText, request }) {
 async function testApp(appId) {
   const card = appCard(appId);
   const payload = readAppCard(appId);
-  await runTest({
+  const resultEl = card.querySelector(".test-result");
+  const dot = card.querySelector(".status-dot");
+  const res = await runTest({
     btn: card.querySelector(".test-btn"),
-    resultEl: card.querySelector(".test-result"),
-    dot: card.querySelector(".status-dot"),
+    resultEl,
+    dot,
     pendingText: "Testing...",
     request: () =>
       apiFetch(`/api/test/${appId}`, {
@@ -689,6 +692,20 @@ async function testApp(appId) {
         body: JSON.stringify(payload),
       }),
   });
+  if (!res) return;
+  // A delayed test must not enable settings edited since the request began.
+  // Include the checkbox so a user can still turn an app off during its test.
+  if (JSON.stringify(readAppCard(appId)) !== JSON.stringify(payload)) {
+    resultEl.textContent = "Settings changed; test the connection again.";
+    resultEl.className = "test-result";
+    dot.dataset.state = "idle";
+    return;
+  }
+  if (res.ok) {
+    card.querySelector(".f-enabled").checked = true;
+    setAppCardExpanded(card, true);
+    if (!payload.enabled) resultEl.textContent += " Enabled; save settings to apply.";
+  }
 }
 
 async function testDestination(destId) {

@@ -63,7 +63,7 @@
     <div class="grid">
       <div class="card apps-card">
         <h2>Apps</h2>
-        <p class="hint">Connect Prowlarr first to fill in linked services, or configure each app manually. Check the apps you want backed up.</p>
+        <p class="hint">Connect Prowlarr first to fill in linked services, or configure each app manually. A successful connection test enables the app. Review the switches and save settings to apply.</p>
         <div id="app-list">
           {% for m in app_meta %}
           <div class="app-card{% if m.id == 'prowlarr' %} prowlarr-discovery-card{% endif %}{% if m.status != 'available' %} card-soon{% endif %}" data-app="{{ m.id }}">
@@ -115,7 +115,7 @@
                 <span class="test-result"></span>
               </div>
               {% if m.id == 'prowlarr' %}
-              <p class="hint discovery-help">Discover services enables Prowlarr and uses a temporary backup to read masked API keys. Review the results, choose which other apps to back up, then save settings. Test connection only checks API access.</p>
+              <p class="hint discovery-help">Discover services enables Prowlarr and uses a temporary backup to read masked API keys. Review the results, test the services you want to enable, then save settings. Test connection checks API access and enables Prowlarr on success.</p>
               <p class="hint discovery-help">If backup downloads redirect to login, use Prowlarr's internal URL where local access is already permitted. Its API key does not authenticate the web backup route.</p>
               <p id="discovery-status" class="discovery-status" role="status" aria-live="polite"></p>
               <div id="discovery-results"></div>
