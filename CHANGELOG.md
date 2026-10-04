@@ -11,6 +11,10 @@ release event.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.0.7-beta] - 2026-10-04
+
 ### Added
 
 - `BACKUPARR_DISABLE_AUTH=true` skips local account setup and login for
@@ -18,6 +22,8 @@ release event.
   Authelia. Local authentication is enabled by default. In this mode,
   local authentication and forgot-password reset APIs are disabled, and
   the logout button is hidden. Existing admin credentials are preserved.
+  A startup warning is logged whenever auth is disabled. Thanks to
+  @vladimir-aubrecht for the contribution (#34).
 
 ## [1.0.6-beta] - 2026-09-14
 
