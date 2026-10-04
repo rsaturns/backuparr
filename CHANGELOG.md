@@ -29,7 +29,8 @@ release event.
 
 - Discovery fills missing API keys for matching existing service URLs,
   reports how many keys were obtained and gives specific backup download
-  errors. Bazarr is configured manually and is not suggested by discovery.
+  errors directly beside the affected service. Bazarr is configured
+  manually and is not suggested by discovery.
 - Discovery preserves backups from commands Prowlarr was already running,
   survives concurrent session refreshes and retries transient polling errors.
   Settings added during an in-flight save remain marked as unsaved.

@@ -166,6 +166,7 @@ def test_postgres_backup_preserves_urls_and_reports_missing_keys():
     assert result["candidates"][0]["api_key"] == ""
     assert result["candidates"][0]["url"] == "https://radarr.example/radarr"
     assert any("PostgreSQL" in message for message in result["warnings"])
+    assert "PostgreSQL" in result["candidates"][0]["api_key_error"]
     assert instance.deleted == [2]
 
 
@@ -175,6 +176,7 @@ def test_changed_provider_does_not_receive_key_for_old_url(tmp_path):
     })])
     result = discovery.discover_prowlarr(FakeProwlarr([provider()], archive=archive))
     assert result["candidates"][0]["api_key"] == ""
+    assert "URL in the backup differs" in result["candidates"][0]["api_key_error"]
 
 
 @pytest.mark.parametrize("failure", ["download", "invalid-zip", "delete"])
@@ -223,6 +225,7 @@ def test_backup_download_failure_reports_stage_without_secrets(status):
     result = discovery.discover_prowlarr(instance)
     assert result["candidates"][0]["api_key"] == ""
     assert any(f"HTTP {status}" in warning and "/backup/" in warning for warning in result["warnings"])
+    assert f"HTTP {status}" in result["candidates"][0]["api_key_error"]
     assert "sensitive response data" not in str(result)
     assert instance.deleted == [2]
 
@@ -232,6 +235,22 @@ def test_html_login_page_instead_of_backup_has_actionable_warning():
     result = discovery.discover_prowlarr(instance)
     assert any("valid ZIP" in warning and "reverse proxy" in warning for warning in result["warnings"])
     assert "secret login page" not in str(result)
+
+
+@pytest.mark.parametrize("rows, reason", [
+    ([], "no matching settings"),
+    ([("Applications", 10, "Radarr", {"baseUrl": "https://radarr.example/radarr", "apiKey": ""})], "no readable API key"),
+])
+def test_missing_key_reason_is_attached_to_affected_service(tmp_path, rows, reason):
+    archive = archive_with_settings(tmp_path, rows)
+    result = discovery.discover_prowlarr(FakeProwlarr([
+        provider(), provider("Sonarr", 11, "http://sonarr:8989", key="existing-sonarr-key"),
+    ], archive=archive))
+    radarr, sonarr = result["candidates"]
+    assert reason in radarr["api_key_error"]
+    assert radarr["api_key"] == ""
+    assert sonarr["api_key"] == "existing-sonarr-key"
+    assert "api_key_error" not in sonarr
 
 
 def test_interrupted_backup_keeps_urls_and_reports_possible_leftover(monkeypatch):

@@ -181,7 +181,7 @@ def _backup_settings(instance, progress, warnings):
                 except sqlite3.Error:
                     raise DiscoveryError("Could not read service settings from Prowlarr's backup database. Its SQLite database may be corrupt or use an unsupported schema.") from None
                 warnings.extend(backup_warnings)
-                return settings
+                return settings, backup_warnings
         finally:
             if owned:
                 try:
@@ -222,19 +222,34 @@ def discover_prowlarr(instance, progress=lambda message: None):
         })
 
     if any(not candidate["api_key"] for candidate in candidates):
+        key_error = ""
         try:
-            saved = _backup_settings(instance, progress, warnings)
+            saved, backup_warnings = _backup_settings(instance, progress, warnings)
             for candidate in candidates:
+                if candidate["api_key"]:
+                    continue
                 settings = saved.get((candidate["app"], candidate["provider_id"]), {})
                 # A changed provider must not receive credentials from an old URL.
-                if not candidate["api_key"] and _service_url(candidate["app"], settings) == candidate["url"]:
+                matches_url = _service_url(candidate["app"], settings) == candidate["url"]
+                if matches_url:
                     candidate["api_key"] = _real_key(settings.get("apikey"))
-                if not candidate["api_key"] and settings:
-                    warnings.append(f"The {candidate['app']} settings in the backup did not match its discovered URL or had no API key. Run discovery again after checking its settings in Prowlarr.")
+                if not candidate["api_key"]:
+                    if not settings:
+                        reason = backup_warnings[0] if backup_warnings else "The Prowlarr backup has no matching settings for this service. Run discovery again after checking the application in Prowlarr."
+                    elif not matches_url:
+                        reason = "The service URL in the backup differs from its current Prowlarr URL. Run discovery again after checking the application in Prowlarr."
+                    else:
+                        reason = "The Prowlarr backup has no readable API key for this service. Check the application's API key in Prowlarr."
+                    candidate["api_key_error"] = reason
         except DiscoveryError as exc:
-            warnings.append(str(exc))
+            key_error = str(exc)
         except (requests.RequestException, OSError, sqlite3.Error, zipfile.BadZipFile, RuntimeError):
-            warnings.append("Could not read API keys from a temporary Prowlarr backup. Enter missing API keys manually.")
+            key_error = "Could not read API keys from a temporary Prowlarr backup. Enter missing API keys manually."
+        if key_error:
+            warnings.append(key_error)
+            for candidate in candidates:
+                if not candidate["api_key"]:
+                    candidate["api_key_error"] = key_error
 
     unique = {}
     for candidate in candidates:

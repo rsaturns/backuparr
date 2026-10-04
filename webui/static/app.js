@@ -443,7 +443,8 @@ function renderDiscoveryResults(result, initial) {
         btn.textContent = "Use selected service";
         return;
       }
-      details.textContent = `${selected.name} — ${selected.url} · ${selected.api_key ? "API key available" : "API key unavailable — enter manually"}`;
+      details.textContent = `${selected.name} — ${selected.url} · ${selected.api_key ? "API key available" : "API key unavailable"}`;
+      if (!selected.api_key) details.textContent += ` — ${selected.api_key_error || "Prowlarr's backup did not supply this key."}`;
       const fields = readAppCard(appId);
       const replaces = (fields.url && fields.url !== selected.url) || (fields.api_key && fields.api_key !== selected.api_key);
       btn.textContent = replaces
