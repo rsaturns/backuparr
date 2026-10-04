@@ -65,7 +65,9 @@ def test_auth_enabled_by_default_and_non_opt_in_values(webui):
 
 
 @pytest.mark.parametrize("webui", ["true", "TRUE", "1", "yes"], indirect=True)
-def test_disabled_auth_fresh_install(webui):
+def test_disabled_auth_fresh_install(webui, monkeypatch):
+    # Saving config syncs rclone remotes; CI runners have no rclone binary.
+    monkeypatch.setattr(destination_util, "sync", lambda *a, **k: None)
     client = webui.app.test_client()
     page = client.get("/")
     body = page.get_data(as_text=True)
