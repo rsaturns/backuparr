@@ -33,6 +33,7 @@ RUN chmod +x /app/entrypoint.sh
 ENV RCLONE_CONFIG=/config/backuparr/rclone.conf \
     BACKUPARR_CONFIG=/config/backuparr/config.json \
     BACKUPARR_LOG_DIR=/var/log/backuparr \
+    WEBUI_HOST=0.0.0.0 \
     WEBUI_PORT=8990 \
     PYTHONUNBUFFERED=1
 
