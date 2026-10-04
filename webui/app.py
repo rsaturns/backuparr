@@ -91,6 +91,10 @@ def _load_or_create_secret_key():
 _BEHIND_HTTPS_PROXY = os.environ.get("BACKUPARR_FORCE_HTTPS", "").lower() in ("1", "true", "yes")
 # Deployment setting: read at startup, never controlled by a request or config.json.
 _AUTH_DISABLED = os.environ.get("BACKUPARR_DISABLE_AUTH", "").lower() in ("1", "true", "yes")
+if _AUTH_DISABLED:
+    log.warning("BACKUPARR_DISABLE_AUTH is set: local authentication is DISABLED. "
+                "Anyone who can reach this port has full access - make sure an "
+                "authenticating reverse proxy protects it and direct access is blocked.")
 if _BEHIND_HTTPS_PROXY:
     app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_for=1)
 
@@ -143,6 +147,9 @@ def _login_record_failure(ip):
 # Session-cookie login, single admin account created via the setup screen
 # (see auth_store.py).
 _PUBLIC_PATHS = {"/api/logout", "/api/reset"}
+# Every local-auth API route. Keep in sync with the /api/setup, /api/login,
+# /api/logout and /api/reset routes: any listed here is refused with 403 when
+# auth is disabled, and an auth route missing from this set would stay reachable.
 _AUTH_API_PATHS = {"/api/setup", "/api/login", "/api/logout", "/api/reset"}
 
 
