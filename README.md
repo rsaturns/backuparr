@@ -342,8 +342,8 @@ services:
 Merge this into your existing Compose service and apply it with
 `docker compose up -d --force-recreate backuparr`. For a locally built
 image, build it first with `docker compose build backuparr`.
-Use an image built from a revision containing this feature; changing
-this fork does not update the upstream `rsaturns/backuparr:latest` image.
+Use an image built from a revision containing this feature; older images
+ignore this environment variable.
 
 With this setting, the main UI and operational API work without a local
 account or login session, including on a fresh install. The `/login`
