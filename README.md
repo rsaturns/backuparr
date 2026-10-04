@@ -364,20 +364,23 @@ the newly created backup on Prowlarr. Existing backups are preserved. The
 temporary backup is not uploaded to Backuparr's destinations. If it cannot
 be identified safely because another manual backup appeared at the same
 time, discovery leaves it alone and reports this so you can check
-Prowlarr's backup list. If deletion fails, discovery also reports it.
+Prowlarr's backup list. If Prowlarr joins a backup command that was already
+running, discovery reads its archive but preserves it. If deletion fails,
+discovery also reports it.
 Discovery results stay in memory, are private to the initiating login
 session and expire after ten minutes; they are saved only with **Save
 settings**, using the existing encryption for API keys. If the backup is
 unavailable or Prowlarr uses PostgreSQL (whose database is not included
 in its official backup), discovery can still fill in URLs; enter the
-missing API keys manually.
+missing API keys manually. The results show how many API keys were obtained
+and report backup download failures separately, including HTTP status codes
+and reverse proxy access to Prowlarr's `/backup/` route. A missing key is
+also filled in automatically when your existing URL matches the single
+discovered instance and you have not edited its fields during discovery.
 
-**Bazarr:** Prowlarr does not store its URL or API key. Discovery offers
-an explicitly unverified URL suggestion using a discovered Radarr/Sonarr
-host with port `6767`. It does not fill this suggestion automatically or
-copy another app's key. Container addresses, ports, TLS and reverse proxy
-paths may differ: review the suggestion, enter Bazarr's own API key and
-test the connection. Other services remain manually configured.
+**Bazarr:** Prowlarr does not store its URL or API key, so it is not
+part of Prowlarr discovery. Configure Bazarr and other unsupported
+services manually.
 
 Use the **Run & Status** tab to trigger a backup immediately and watch it
 happen live, **History** to see what's on each destination per app (and

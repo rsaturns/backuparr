@@ -79,6 +79,28 @@ def test_concurrent_discovery_is_rejected(webui):
     assert response.status_code == 409
 
 
+def test_late_session_refresh_cannot_erase_discovery_access(webui):
+    client = client_for(webui)
+    with client.session_transaction() as session:
+        session.permanent = True
+    older_reader = webui.app.test_client()
+    older_reader.set_cookie("session", client.get_cookie("session").value)
+    stale_response = older_reader.get("/api/meta")
+    assert "Set-Cookie" in stale_response.headers
+    response = client.post("/api/discovery/prowlarr", json={"url": "http://prowlarr:9696", "api_key": "key"})
+    client.set_cookie("session", older_reader.get_cookie("session").value)
+    path = "/api/discovery/prowlarr/" + response.json["job_id"]
+    assert client.get(path).json["result"]["candidates"][0]["api_key"] == "test-secret"
+
+
+def test_logout_discards_discovery_cookie(webui):
+    client = client_for(webui)
+    response = client.post("/api/discovery/prowlarr", json={"url": "http://prowlarr:9696", "api_key": "key"})
+    assert client.get_cookie(webui.DISCOVERY_OWNER_COOKIE)
+    assert client.post("/api/logout").status_code == 200
+    assert client.get_cookie(webui.DISCOVERY_OWNER_COOKIE) is None
+
+
 def test_remote_errors_do_not_expose_secrets_and_allow_retry(webui, monkeypatch, caplog):
     def fail(instance, progress):
         raise requests.HTTPError("http://server?apikey=do-not-leak-key")

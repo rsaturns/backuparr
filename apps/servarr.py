@@ -41,8 +41,8 @@ class ServarrApp:
         info = res.json()
         return f"{self.name} {info.get('version', '?')} reachable"
 
-    def trigger_backup(self, poll_interval=2, timeout_s=300):
-        res = self.session.post(self._api("/command"), json={"name": "Backup"}, timeout=self.timeout)
+    def trigger_backup(self, poll_interval=2, timeout_s=300, request_headers=None):
+        res = self.session.post(self._api("/command"), json={"name": "Backup"}, timeout=self.timeout, headers=request_headers)
         res.raise_for_status()
         command_id = res.json()["id"]
 
@@ -50,9 +50,10 @@ class ServarrApp:
         while time.time() < deadline:
             res = self.session.get(self._api(f"/command/{command_id}"), timeout=self.timeout)
             res.raise_for_status()
-            status = res.json().get("status")
+            command = res.json()
+            status = command.get("status")
             if status == "completed":
-                return
+                return command
             if status in ("failed", "aborted"):
                 raise ServarrError(f"{self.name}: backup command {status}")
             time.sleep(poll_interval)

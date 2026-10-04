@@ -145,7 +145,7 @@ def _backup_settings(instance, progress, warnings):
         before = {backup["id"] for backup in instance.list_backups()}
         progress("Creating a temporary Prowlarr backup to read API keys...")
         try:
-            instance.trigger_backup()
+            owned = instance.trigger_discovery_backup()
             created = [
                 backup for backup in instance.list_backups()
                 if backup.get("type") == "manual" and backup.get("id") not in before
@@ -162,7 +162,9 @@ def _backup_settings(instance, progress, warnings):
                 path = backup.get("path")
                 if not isinstance(path, str) or not path.startswith("/") or path.startswith("//"):
                     raise DiscoveryError("Prowlarr returned an invalid backup path.")
-                with instance.session.get(instance.url + path, timeout=30, stream=True) as response:
+                with instance.session.get(instance.url + path, timeout=30, stream=True, allow_redirects=False) as response:
+                    if response.status_code != 200:
+                        raise DiscoveryError(f"Could not download the Prowlarr backup (HTTP {response.status_code}). Check authentication and reverse proxy access to Prowlarr's /backup/ route.")
                     response.raise_for_status()
                     size = 0
                     with open(archive_path, "xb") as target:
@@ -172,14 +174,22 @@ def _backup_settings(instance, progress, warnings):
                             if size > MAX_BACKUP_BYTES:
                                 raise DiscoveryError("The Prowlarr backup is too large to download.")
                             target.write(chunk)
-                settings, backup_warnings = read_backup_settings(archive_path)
+                try:
+                    settings, backup_warnings = read_backup_settings(archive_path)
+                except zipfile.BadZipFile:
+                    raise DiscoveryError("Prowlarr's backup download did not return a valid ZIP archive. Check authentication and reverse proxy access to its /backup/ route.") from None
+                except sqlite3.Error:
+                    raise DiscoveryError("Could not read service settings from Prowlarr's backup database. Its SQLite database may be corrupt or use an unsupported schema.") from None
                 warnings.extend(backup_warnings)
                 return settings
         finally:
-            try:
-                instance.delete_backup(backup["id"])
-            except requests.RequestException:
-                warnings.append("Could not remove the temporary discovery backup from Prowlarr. Remove it in Prowlarr's System > Backup.")
+            if owned:
+                try:
+                    instance.delete_backup(backup["id"])
+                except requests.RequestException:
+                    warnings.append("Could not remove the temporary discovery backup from Prowlarr. Remove it in Prowlarr's System > Backup.")
+            else:
+                warnings.append("Prowlarr reused an existing backup command. Its backup was read but left in Prowlarr's System > Backup.")
 
 
 def discover_prowlarr(instance, progress=lambda message: None):
@@ -219,6 +229,8 @@ def discover_prowlarr(instance, progress=lambda message: None):
                 # A changed provider must not receive credentials from an old URL.
                 if not candidate["api_key"] and _service_url(candidate["app"], settings) == candidate["url"]:
                     candidate["api_key"] = _real_key(settings.get("apikey"))
+                if not candidate["api_key"] and settings:
+                    warnings.append(f"The {candidate['app']} settings in the backup did not match its discovered URL or had no API key. Run discovery again after checking its settings in Prowlarr.")
         except DiscoveryError as exc:
             warnings.append(str(exc))
         except (requests.RequestException, OSError, sqlite3.Error, zipfile.BadZipFile, RuntimeError):

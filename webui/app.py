@@ -240,7 +240,9 @@ def api_login():
 @app.post("/api/logout")
 def api_logout():
     session.clear()
-    return jsonify({"ok": True})
+    response = jsonify({"ok": True})
+    response.delete_cookie(DISCOVERY_OWNER_COOKIE)
+    return response
 
 
 # Deliberately public - it's the forgot-password recovery path. Gated by
@@ -533,6 +535,7 @@ DISCOVERY_RUN_LOCK = threading.Lock()
 DISCOVERY_JOBS_LOCK = threading.Lock()
 DISCOVERY_JOBS = {}
 DISCOVERY_RESULT_TTL = 600
+DISCOVERY_OWNER_COOKIE = "backuparr_discovery"
 
 
 def _forget_discovery(job_id):
@@ -588,7 +591,9 @@ def api_discovery_prowlarr():
         return _discovery_response({"error": "Prowlarr's API key is required."}, 400)
     if not DISCOVERY_RUN_LOCK.acquire(blocking=False):
         return _discovery_response({"error": "Discovery is already running. Try again when it finishes."}, 409)
-    owner = session.setdefault("discovery_owner", secrets.token_urlsafe(24))
+    # Keep ownership outside Flask's refreshing session cookie: a concurrent
+    # read response carrying an older session must not erase discovery access.
+    owner = request.cookies.get(DISCOVERY_OWNER_COOKIE) or secrets.token_urlsafe(24)
     job_id = secrets.token_urlsafe(24)
     with DISCOVERY_JOBS_LOCK:
         DISCOVERY_JOBS[job_id] = {"owner": owner, "state": "running", "message": "Connecting to Prowlarr..."}
@@ -598,14 +603,17 @@ def api_discovery_prowlarr():
         _forget_discovery(job_id)
         DISCOVERY_RUN_LOCK.release()
         return _discovery_response({"error": "Could not start discovery. Try again."}, 503)
-    return _discovery_response({"job_id": job_id}, 202)
+    response = _discovery_response({"job_id": job_id}, 202)
+    response.set_cookie(DISCOVERY_OWNER_COOKIE, owner, httponly=True,
+                        secure=app.config["SESSION_COOKIE_SECURE"], samesite="Strict")
+    return response
 
 
 @app.route("/api/discovery/prowlarr/<job_id>", methods=["GET", "DELETE"])
 def api_discovery_status(job_id):
     with DISCOVERY_JOBS_LOCK:
         job = DISCOVERY_JOBS.get(job_id)
-        if not job or job["owner"] != session.get("discovery_owner"):
+        if not job or job["owner"] != request.cookies.get(DISCOVERY_OWNER_COOKIE):
             return _discovery_response({"error": "Discovery results expired. Run discovery again."}, 404)
         if request.method == "DELETE":
             if job["state"] == "running":

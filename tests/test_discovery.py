@@ -49,6 +49,7 @@ class FakeProwlarr:
         self.download_status = 200
         self.extra_backups = []
         self.fail_delete = False
+        self.owns_backup = True
 
     def _api(self, path):
         return self.url + "/api/v1" + path
@@ -70,6 +71,10 @@ class FakeProwlarr:
 
     def trigger_backup(self):
         self.created = True
+
+    def trigger_discovery_backup(self):
+        self.trigger_backup()
+        return self.owns_backup
 
     def delete_backup(self, backup_id):
         self.deleted.append(backup_id)
@@ -199,6 +204,36 @@ def test_concurrent_external_backup_does_not_delete_an_ambiguous_backup():
     assert any("identified safely" in message for message in result["warnings"])
 
 
+def test_joined_external_backup_recovers_keys_without_deleting_it(tmp_path):
+    archive = archive_with_settings(tmp_path, [("Applications", 10, "Radarr", {
+        "baseUrl": "https://radarr.example/radarr", "apiKey": "key",
+    })])
+    instance = FakeProwlarr([provider()], archive=archive)
+    instance.owns_backup = False
+    result = discovery.discover_prowlarr(instance)
+    assert result["candidates"][0]["api_key"] == "key"
+    assert not instance.deleted
+    assert any("reused an existing backup command" in warning for warning in result["warnings"])
+
+
+@pytest.mark.parametrize("status", [302, 401, 403, 404, 500])
+def test_backup_download_failure_reports_stage_without_secrets(status):
+    instance = FakeProwlarr([provider()])
+    instance.download_status = status
+    result = discovery.discover_prowlarr(instance)
+    assert result["candidates"][0]["api_key"] == ""
+    assert any(f"HTTP {status}" in warning and "/backup/" in warning for warning in result["warnings"])
+    assert "sensitive response data" not in str(result)
+    assert instance.deleted == [2]
+
+
+def test_html_login_page_instead_of_backup_has_actionable_warning():
+    instance = FakeProwlarr([provider()], archive=b"<html>secret login page</html>")
+    result = discovery.discover_prowlarr(instance)
+    assert any("valid ZIP" in warning and "reverse proxy" in warning for warning in result["warnings"])
+    assert "secret login page" not in str(result)
+
+
 def test_interrupted_backup_keeps_urls_and_reports_possible_leftover(monkeypatch):
     instance = FakeProwlarr([provider()])
 
@@ -215,7 +250,7 @@ def test_interrupted_backup_keeps_urls_and_reports_possible_leftover(monkeypatch
 
 
 def test_empty_or_unsupported_providers_do_not_create_a_backup():
-    instance = FakeProwlarr([provider("Lidarr"), provider(url="file:///etc/passwd")])
+    instance = FakeProwlarr([provider("Lidarr"), provider("Bazarr"), provider(url="file:///etc/passwd")])
     result = discovery.discover_prowlarr(instance)
     assert result["candidates"] == []
     assert not instance.created
@@ -273,3 +308,19 @@ def test_prowlarr_normal_backups_hold_the_discovery_lock(monkeypatch):
     monkeypatch.setattr(ServarrApp, "backup", backup)
     assert ProwlarrApp("http://prowlarr:9696", "key").backup("destination") == "backup.zip"
     assert not lock.locked()
+
+
+@pytest.mark.parametrize("joined", [False, True])
+def test_discovery_backup_ownership_uses_original_command_user_agent(monkeypatch, joined):
+    from apps.prowlarr import ProwlarrApp
+
+    instance = ProwlarrApp("http://prowlarr:9696", "key")
+    def post(url, json, timeout, headers):
+        assert json == {"name": "Backup"}
+        marker = "external-browser" if joined else headers["User-Agent"]
+        instance.command = {"id": 7, "status": "completed", "body": {"clientUserAgent": marker}}
+        return Response({"id": 7})
+
+    monkeypatch.setattr(instance.session, "post", post)
+    monkeypatch.setattr(instance.session, "get", lambda *args, **kwargs: Response(instance.command))
+    assert instance.trigger_discovery_backup() is (not joined)

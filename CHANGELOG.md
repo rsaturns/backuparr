@@ -21,11 +21,18 @@ release event.
   works without enabling Prowlarr backup and does not enable or save apps
   automatically. Missing keys can be entered manually, including when
   Prowlarr uses PostgreSQL.
-- Optional, unverified Bazarr URL suggestions based on discovered hosts
-  and port 6767; Bazarr's own API key is entered manually.
 - A dedicated GitHub Actions workflow publishes amd64/arm64 discovery
   previews to GHCR from `test/prowlarr-discovery`. A separate test Compose
   file uses port 8991 and its own data directory.
+
+### Fixed
+
+- Discovery fills missing API keys for matching existing service URLs,
+  reports how many keys were obtained and gives specific backup download
+  errors. Bazarr is configured manually and is not suggested by discovery.
+- Discovery preserves backups from commands Prowlarr was already running,
+  survives concurrent session refreshes and retries transient polling errors.
+  Settings added during an in-flight save remain marked as unsaved.
 
 ## [1.0.7-beta] - 2026-10-04
 
