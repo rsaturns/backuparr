@@ -9,6 +9,8 @@ import shutil
 import sqlite3
 import tempfile
 import zipfile
+
+from apps.servarr import ServarrError
 from urllib.parse import urlsplit
 
 import requests
@@ -160,20 +162,10 @@ def _backup_settings(instance, progress, warnings):
             with tempfile.TemporaryDirectory(prefix="backuparr-discovery-") as tmp:
                 archive_path = os.path.join(tmp, "backup.zip")
                 path = backup.get("path")
-                if not isinstance(path, str) or not path.startswith("/") or path.startswith("//"):
-                    raise DiscoveryError("Prowlarr returned an invalid backup path.")
-                with instance.session.get(instance.url + path, timeout=30, stream=True, allow_redirects=False) as response:
-                    if response.status_code != 200:
-                        raise DiscoveryError(f"Could not download the Prowlarr backup (HTTP {response.status_code}). Check authentication and reverse proxy access to Prowlarr's /backup/ route.")
-                    response.raise_for_status()
-                    size = 0
-                    with open(archive_path, "xb") as target:
-                        os.chmod(archive_path, 0o600)
-                        for chunk in response.iter_content(chunk_size=1024 * 1024):
-                            size += len(chunk)
-                            if size > MAX_BACKUP_BYTES:
-                                raise DiscoveryError("The Prowlarr backup is too large to download.")
-                            target.write(chunk)
+                try:
+                    instance.download_backup(path, archive_path, max_bytes=MAX_BACKUP_BYTES)
+                except ServarrError as exc:
+                    raise DiscoveryError(str(exc)) from None
                 try:
                     settings, backup_warnings = read_backup_settings(archive_path)
                 except zipfile.BadZipFile:

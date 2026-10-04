@@ -59,12 +59,10 @@ def humanize_error(exc):
 
 
 def build_app(name, app_cfg):
-    if name == "radarr":
-        return RadarrApp(app_cfg["url"], app_cfg["api_key"])
-    if name == "sonarr":
-        return SonarrApp(app_cfg["url"], app_cfg["api_key"])
-    if name == "prowlarr":
-        return ProwlarrApp(app_cfg["url"], app_cfg["api_key"])
+    if name in ("radarr", "sonarr", "prowlarr"):
+        driver = {"radarr": RadarrApp, "sonarr": SonarrApp, "prowlarr": ProwlarrApp}[name]
+        return driver(app_cfg["url"], app_cfg["api_key"],
+                      username=app_cfg.get("username"), password=app_cfg.get("password"))
     if name == "profilarr":
         return ProfilarrApp(app_cfg["url"], app_cfg["api_key"])
     if name == "bazarr":

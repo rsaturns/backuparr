@@ -543,7 +543,7 @@ def _forget_discovery(job_id):
         DISCOVERY_JOBS.pop(job_id, None)
 
 
-def _discovery_work(job_id, url, api_key):
+def _discovery_work(job_id, url, api_key, username="", password=""):
     def progress(message):
         with DISCOVERY_JOBS_LOCK:
             if job_id in DISCOVERY_JOBS:
@@ -551,7 +551,7 @@ def _discovery_work(job_id, url, api_key):
 
     instance = None
     try:
-        instance = ProwlarrApp(url, api_key)
+        instance = ProwlarrApp(url, api_key, username=username, password=password)
         result = discovery.discover_prowlarr(instance, progress)
         outcome = {"state": "completed", "message": "Discovery complete.", "result": result}
     except discovery.DiscoveryError as exc:
@@ -589,6 +589,10 @@ def api_discovery_prowlarr():
     api_key = data.get("api_key")
     if not isinstance(api_key, str) or not api_key.strip():
         return _discovery_response({"error": "Prowlarr's API key is required."}, 400)
+    username, password = data.get("username", ""), data.get("password", "")
+    if (not isinstance(username, str) or not isinstance(password, str)
+            or bool(username.strip()) != bool(password)):
+        return _discovery_response({"error": "Fill in both the web UI username and password, or leave both empty."}, 400)
     if not DISCOVERY_RUN_LOCK.acquire(blocking=False):
         return _discovery_response({"error": "Discovery is already running. Try again when it finishes."}, 409)
     # Keep ownership outside Flask's refreshing session cookie: a concurrent
@@ -598,7 +602,7 @@ def api_discovery_prowlarr():
     with DISCOVERY_JOBS_LOCK:
         DISCOVERY_JOBS[job_id] = {"owner": owner, "state": "running", "message": "Connecting to Prowlarr..."}
     try:
-        threading.Thread(target=_discovery_work, args=(job_id, data["url"].strip(), api_key.strip()), daemon=True).start()
+        threading.Thread(target=_discovery_work, args=(job_id, data["url"].strip(), api_key.strip(), username.strip(), password), daemon=True).start()
     except Exception:
         _forget_discovery(job_id)
         DISCOVERY_RUN_LOCK.release()

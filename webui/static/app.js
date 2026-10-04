@@ -7,8 +7,6 @@ let RUN_POLL_TIMER = null;
 let RESTORE_POLL_TIMER = null;
 let SETTINGS_SNAPSHOT = null;
 let DISCOVERY_RUNNING = false;
-let DISCOVERY_TIMER = null;
-let DISCOVERY_LAST_ATTEMPT = null;
 const APP_CREDENTIAL_EDIT_REVISION = new Map();
 
 async function apiFetch(url, opts) {
@@ -343,8 +341,8 @@ function readAppCard(appId) {
 }
 
 function prowlarrCredentials() {
-  const { url, api_key } = readAppCard("prowlarr");
-  return { url, api_key };
+  const { url, api_key, username, password } = readAppCard("prowlarr");
+  return { url, api_key, username, password };
 }
 
 function updateDiscoveryButton() {
@@ -352,11 +350,6 @@ function updateDiscoveryButton() {
   const details = prowlarrCredentials();
   btn.disabled = DISCOVERY_RUNNING || !details.url || !details.api_key;
   btn.textContent = DISCOVERY_RUNNING ? "Discovering..." : "Discover services";
-}
-
-function queueDiscovery() {
-  clearTimeout(DISCOVERY_TIMER);
-  DISCOVERY_TIMER = setTimeout(() => discoverServices(false), 600);
 }
 
 function markDiscovered(appId) {
@@ -489,12 +482,13 @@ function renderDiscoveryResults(result, initial) {
     : "No supported services found. Add Radarr, Sonarr or SABnzbd to Prowlarr, or configure them manually below.";
 }
 
-async function discoverServices(manual = true) {
-  clearTimeout(DISCOVERY_TIMER);
+async function discoverServices() {
   const credentials = prowlarrCredentials();
   const signature = JSON.stringify(credentials);
-  if (DISCOVERY_RUNNING || !credentials.url || !credentials.api_key || (!manual && DISCOVERY_LAST_ATTEMPT === signature)) return;
-  DISCOVERY_LAST_ATTEMPT = signature;
+  if (DISCOVERY_RUNNING || !credentials.url || !credentials.api_key) return;
+  const prowlarr = appCard("prowlarr");
+  prowlarr.querySelector(".f-enabled").checked = true;
+  setAppCardExpanded(prowlarr, true);
   DISCOVERY_RUNNING = true;
   updateDiscoveryButton();
   const status = document.getElementById("discovery-status");
@@ -546,7 +540,6 @@ async function discoverServices(manual = true) {
     }
     DISCOVERY_RUNNING = false;
     updateDiscoveryButton();
-    if (signature !== JSON.stringify(prowlarrCredentials())) queueDiscovery();
   }
 }
 
@@ -1072,7 +1065,6 @@ function initSettingsEvents() {
   const prowlarr = appCard("prowlarr");
   prowlarr.querySelectorAll(".f-url, .f-api_key").forEach((input) => {
     input.addEventListener("input", updateDiscoveryButton);
-    input.addEventListener("change", queueDiscovery);
   });
   document.querySelectorAll(".app-card[data-app] .f-url, .app-card[data-app] .f-api_key").forEach((input) => {
     input.addEventListener("input", () => {

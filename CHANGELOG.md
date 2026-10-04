@@ -13,13 +13,13 @@ release event.
 
 ### Added
 
-- Prowlarr appears first in Settings with automatic discovery of configured
+- Prowlarr appears first in Settings with discovery of configured
   Radarr, Sonarr and SABnzbd services. Empty forms receive their URLs and
   API keys; multiple instances offer a choice and existing edits are kept.
   API keys masked by Prowlarr are read from a temporary official backup,
   which is removed afterwards without touching existing backups. Discovery
-  works without enabling Prowlarr backup and does not enable or save apps
-  automatically. Missing keys can be entered manually, including when
+  enables Prowlarr when explicitly requested; other apps and saving settings
+  remain user choices. Missing keys can be entered manually, including when
   Prowlarr uses PostgreSQL.
 - A dedicated GitHub Actions workflow publishes amd64/arm64 discovery
   previews to GHCR from `test/prowlarr-discovery`. A separate test Compose
@@ -27,6 +27,11 @@ release event.
 
 ### Fixed
 
+- Discovery runs only with Discover services; editing credentials and Test
+  connection do not start it. Clicking Discover services enables Prowlarr.
+- Prowlarr, Radarr and Sonarr backup downloads support optional web login
+  credentials, stored encrypted, and local file redirects. Login pages and
+  invalid ZIP responses are rejected with an actionable error.
 - Discovery results use each app's existing settings card, with instance
   selection inside that card and missing-key diagnostics at its API key
   field. Prowlarr shows the progress, summary and general warnings.

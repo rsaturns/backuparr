@@ -54,3 +54,20 @@ def test_save_and_load_roundtrip_plain_and_encrypted_fields():
         raw_on_disk = f.read()
     assert "plain-radarr-key" not in raw_on_disk
     assert secrets_crypto.PREFIX in raw_on_disk
+
+
+@pytest.mark.parametrize("name", ["radarr", "sonarr", "prowlarr"])
+def test_backup_login_password_is_encrypted_and_passed_to_driver(name):
+    from backup import build_app
+
+    cfg = config_store.load_config()
+    cfg["apps"][name].update(url=f"http://{name}:9999", api_key="key",
+                             username="demo", password=" password with spaces ")
+    config_store.save_config(cfg)
+    with open(config_store.CONFIG_PATH) as source:
+        assert "password with spaces" not in source.read()
+    reloaded = config_store.load_config()
+    instance = build_app(name, reloaded["apps"][name])
+    assert instance.username == "demo"
+    assert instance.password == " password with spaces "
+    instance.session.close()

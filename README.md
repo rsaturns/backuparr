@@ -334,16 +334,16 @@ screen to create an admin username/password; every visit after that
 requires logging in. On the **Settings** tab:
 
 1. Start with the highlighted **Prowlarr** card: enter its URL and API
-   key. Discovery runs when you finish editing those fields, or click
-   **Discover services** to run it again. It finds Radarr, Sonarr and
+   key, then click **Discover services**. It finds Radarr, Sonarr and
    SABnzbd configured in Prowlarr, fills empty forms with their URLs and
    API keys, and offers a choice when multiple instances exist. Discovery
    opens each detected app's existing settings card; instance selection
    appears there, and missing-key errors appear at its API key field. Existing
    values and edits made during discovery are kept; replacing them is an
-   explicit action. Prowlarr backup does not need to be enabled to discover
-   its services. Enable each app you want backed up and use **Test
-   connection** to check reachability from Backuparr before saving.
+   explicit action. Clicking **Discover services** enables Prowlarr's
+   backup switch; other apps stay off until you enable them. **Test
+   connection** checks only API access and never starts discovery.
+   Enable each app you want backed up before saving.
    You can also configure every app manually with its URL (container name
    + internal port on the same Compose network, e.g. `http://radarr:7878`,
    or a LAN IP:port) and API key from that app's Settings > General.
@@ -379,6 +379,17 @@ and report backup download failures separately, including HTTP status codes
 and reverse proxy access to Prowlarr's `/backup/` route. A missing key is
 also filled in automatically when your existing URL matches the single
 discovered instance and you have not edited its fields during discovery.
+
+**Backup download authentication:** Prowlarr, Radarr and Sonarr can require
+their web login for `/backup/` downloads even when API access succeeds.
+Expand this optional section in the app's card and enter that app's web UI
+username and password. Backuparr signs in when needed and stores the
+password encrypted. These credentials are also used for regular backups;
+they are not discovered from Prowlarr. An external login proxy such as
+Authelia or Authentik requires an internal service URL or a proxy rule
+allowing Backuparr to access the backup route. Backuparr follows file
+redirects within the app's backup route and rejects login pages instead
+of storing them as ZIP backups.
 
 **Bazarr:** Prowlarr does not store its URL or API key, so it is not
 part of Prowlarr discovery. Configure Bazarr and other unsupported

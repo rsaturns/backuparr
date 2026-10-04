@@ -9,7 +9,10 @@ restore) upload a zip straight back in. No filesystem/volume access at all.
 """
 import logging
 import os
+import tempfile
 import time
+from urllib.parse import urljoin, urlsplit
+import zipfile
 
 import requests
 
@@ -23,10 +26,12 @@ class ServarrError(RuntimeError):
 class ServarrApp:
     api_version = "v3"
 
-    def __init__(self, name, url, api_key, timeout=30):
+    def __init__(self, name, url, api_key, timeout=30, username=None, password=None):
         self.name = name
         self.url = url.rstrip("/")
         self.timeout = timeout
+        self.username = username or ""
+        self.password = password or ""
         self.session = requests.Session()
         self.session.headers.update({"X-Api-Key": api_key, "Accept": "application/json"})
 
@@ -64,6 +69,93 @@ class ServarrApp:
         res.raise_for_status()
         return res.json()
 
+    def _local_download_url(self, url):
+        """Only send session credentials to the configured app's origin."""
+        try:
+            base, target = urlsplit(self.url), urlsplit(url)
+            origin = lambda value: (value.scheme, value.hostname, value.port or (443 if value.scheme == "https" else 80))
+            return (origin(base) == origin(target) and not target.username
+                    and not target.password and not target.fragment)
+        except ValueError:
+            return False
+
+    def _login_for_backup(self):
+        # Servarr's /backup/ route uses its UI authentication policy. The
+        # X-Api-Key header only authenticates API routes, not Forms login.
+        if not self.username or not self.password:
+            raise ServarrError(f"{self.name}: backup download requires web login (HTTP 302). Fill in Backup download authentication, or use an internal URL that allows access to /backup/.")
+        with self.session.post(f"{self.url}/login", data={
+            "username": self.username, "password": self.password,
+            "rememberMe": "false",
+        }, timeout=self.timeout, allow_redirects=False) as response:
+            target = urljoin(f"{self.url}/login", response.headers.get("Location", ""))
+            if (response.status_code not in (302, 303) or not self._local_download_url(target)
+                    or urlsplit(target).path.rstrip("/") != urlsplit(self.url).path.rstrip("/")):
+                raise ServarrError(f"{self.name}: web login failed. Check the username and password in Backup download authentication. For an external login proxy, use the app's internal URL or allow Backuparr to access /backup/.")
+
+    def download_backup(self, path, dest, max_bytes=None):
+        """Download a real ZIP, handling local web login and file redirects.
+
+        Do not follow a login proxy or send credentials to another origin.
+        Stage privately so failures never leave HTML or a partial backup.
+        """
+        if not isinstance(path, str) or not path.startswith("/backup/"):
+            raise ServarrError(f"{self.name}: invalid backup path")
+        download_url = self.url + path
+        backup_prefix = urlsplit(self.url).path.rstrip("/") + "/backup/"
+        login_path = urlsplit(self.url).path.rstrip("/") + "/login"
+        logged_in = False
+        basic_auth = None
+        staged = None
+        try:
+            for _ in range(6):
+                kwargs = {"auth": basic_auth} if basic_auth else {}
+                with self.session.get(download_url, timeout=self.timeout, stream=True,
+                                      allow_redirects=False, **kwargs) as response:
+                    if response.status_code in (301, 302, 303, 307, 308):
+                        location = response.headers.get("Location")
+                        target = urljoin(download_url, location) if location else ""
+                        if target and self._local_download_url(target):
+                            target_path = urlsplit(target).path
+                            if target_path.rstrip("/").lower() == login_path.lower():
+                                if logged_in:
+                                    raise ServarrError(f"{self.name}: web login did not authorize the backup download. Check Backup download authentication and proxy access to /backup/.")
+                                # Close the streaming response before logging in.
+                                response.close()
+                                self._login_for_backup()
+                                logged_in = True
+                                continue
+                            if target_path.startswith(backup_prefix):
+                                download_url = target
+                                continue
+                        raise ServarrError(f"{self.name}: backup download was redirected (HTTP {response.status_code}) outside the app's /backup/ route. Use its internal URL or allow Backuparr through the reverse proxy; external login pages cannot be authenticated with an API key.")
+                    if (response.status_code == 401 and basic_auth is None
+                            and response.headers.get("WWW-Authenticate", "").lower().startswith("basic")
+                            and self.username and self.password):
+                        basic_auth = (self.username, self.password)
+                        continue
+                    if response.status_code != 200:
+                        raise ServarrError(f"{self.name}: could not download the backup (HTTP {response.status_code}). Check Backup download authentication and reverse proxy access to /backup/.")
+                    fd, staged = tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(dest)), prefix=".backup-")
+                    size = 0
+                    with os.fdopen(fd, "wb") as target:
+                        for chunk in response.iter_content(chunk_size=1024 * 1024):
+                            size += len(chunk)
+                            if max_bytes is not None and size > max_bytes:
+                                raise ServarrError(f"{self.name}: backup is too large to download")
+                            target.write(chunk)
+                    if not zipfile.is_zipfile(staged):
+                        raise ServarrError(f"{self.name}: backup download did not return a valid ZIP archive. Check Backup download authentication and reverse proxy access to /backup/.")
+                    os.replace(staged, dest)
+                    staged = None
+                    return dest
+            raise ServarrError(f"{self.name}: too many backup redirects. Check authentication and reverse proxy access to /backup/.")
+        except requests.RequestException:
+            raise ServarrError(f"{self.name}: could not connect while downloading the backup. Check the app URL and reverse proxy access to /backup/.") from None
+        finally:
+            if staged is not None:
+                os.remove(staged)
+
     def download_latest_manual(self, dest_dir):
         manual = [b for b in self.list_backups() if b.get("type") == "manual"]
         if not manual:
@@ -71,14 +163,9 @@ class ServarrApp:
         manual.sort(key=lambda b: b.get("time", ""), reverse=True)
         latest = manual[0]
 
-        download_url = f"{self.url}{latest['path']}"
-        res = self.session.get(download_url, timeout=self.timeout)
-        res.raise_for_status()
-
         filename = os.path.basename(latest["path"])
         dest = os.path.join(dest_dir, filename)
-        with open(dest, "wb") as f:
-            f.write(res.content)
+        self.download_backup(latest["path"], dest)
         return dest, latest.get("id")
 
     def delete_backup(self, backup_id):

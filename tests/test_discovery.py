@@ -8,13 +8,18 @@ import pytest
 import requests
 
 import discovery
+from apps.prowlarr import ProwlarrApp
 
 
 class Response:
-    def __init__(self, data=None, content=b"", status=200):
+    def __init__(self, data=None, content=b"", status=200, headers=None):
         self.data = data
         self.content = content
         self.status_code = status
+        self.headers = headers or {}
+
+    def close(self):
+        pass
 
     def __enter__(self):
         return self
@@ -33,10 +38,12 @@ class Response:
         yield self.content
 
 
-class FakeProwlarr:
+class FakeProwlarr(ProwlarrApp):
     url = "https://prowlarr.example/prowlarr"
 
     def __init__(self, providers, clients=None, archive=b""):
+        super().__init__(self.url, "fixture-key")
+        self.session.close()
         self.providers = providers
         self.clients = clients or []
         self.archive = archive

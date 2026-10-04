@@ -125,7 +125,7 @@ def test_session_cleanup_error_does_not_block_future_discovery(webui, monkeypatc
     class Instance:
         session = BrokenSession()
 
-        def __init__(self, *args):
+        def __init__(self, *args, **kwargs):
             pass
 
     monkeypatch.setattr(webui, "ProwlarrApp", Instance)
@@ -134,3 +134,37 @@ def test_session_cleanup_error_does_not_block_future_discovery(webui, monkeypatc
     result = client.get("/api/discovery/prowlarr/" + response.json["job_id"])
     assert result.json["state"] == "completed"
     assert not webui.DISCOVERY_RUN_LOCK.locked()
+
+
+@pytest.mark.parametrize("extra", [
+    {"username": "demo"}, {"password": "secret"},
+    {"username": None}, {"password": 123},
+])
+def test_discovery_validates_optional_web_credentials(webui, extra):
+    response = client_for(webui).post("/api/discovery/prowlarr", json={
+        "url": "http://prowlarr:9696", "api_key": "key", **extra,
+    })
+    assert response.status_code == 400
+    assert not webui.DISCOVERY_JOBS
+    assert not webui.DISCOVERY_RUN_LOCK.locked()
+
+
+def test_discovery_passes_web_credentials_without_exposing_them(webui, monkeypatch):
+    received = {}
+
+    class Instance:
+        session = requests.Session()
+
+        def __init__(self, url, api_key, **kwargs):
+            received.update(kwargs)
+
+    monkeypatch.setattr(webui, "ProwlarrApp", Instance)
+    client = client_for(webui)
+    response = client.post("/api/discovery/prowlarr", json={
+        "url": "http://prowlarr:9696", "api_key": "key",
+        "username": " demo ", "password": " exact-password ",
+    })
+    result = client.get("/api/discovery/prowlarr/" + response.json["job_id"])
+    assert result.json["state"] == "completed"
+    assert received == {"username": "demo", "password": " exact-password "}
+    assert "exact-password" not in result.text + str(webui.DISCOVERY_JOBS)

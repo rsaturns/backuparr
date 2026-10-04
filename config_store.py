@@ -15,10 +15,15 @@ DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "pass
 
 # Drives the web UI's forms generically. "coming_soon" apps render
 # disabled with a badge, same as DESTINATION_META below.
+BACKUP_AUTH_FIELDS = [
+    {"name": "username", "label": "Web UI username", "type": "text"},
+    {"name": "password", "label": "Web UI password", "type": "password"},
+]
+
 APP_META = [
-    {"id": "radarr", "label": "Radarr", "icon": "radarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://radarr:7878", "extra_fields": []},
-    {"id": "sonarr", "label": "Sonarr", "icon": "sonarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://sonarr:8989", "extra_fields": []},
-    {"id": "prowlarr", "label": "Prowlarr", "icon": "prowlarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://prowlarr:9696", "extra_fields": []},
+    {"id": "radarr", "label": "Radarr", "icon": "radarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://radarr:7878", "extra_fields": BACKUP_AUTH_FIELDS},
+    {"id": "sonarr", "label": "Sonarr", "icon": "sonarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://sonarr:8989", "extra_fields": BACKUP_AUTH_FIELDS},
+    {"id": "prowlarr", "label": "Prowlarr", "icon": "prowlarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://prowlarr:9696", "extra_fields": BACKUP_AUTH_FIELDS},
     {
         "id": "profilarr",
         "label": "Profilarr",
@@ -255,7 +260,7 @@ def _secret_fields(cfg):
     """(container_dict, key) for every value encrypted at rest - an
     explicit allowlist, not "encrypt everything"."""
     fields = [(cfg["apps"][name], "api_key") for name in APP_NAMES]
-    fields.append((cfg["apps"]["bazarr"], "password"))
+    fields.extend((cfg["apps"][name], "password") for name in ("radarr", "sonarr", "prowlarr", "bazarr"))
     fields.append((cfg["destinations"]["gdrive"], "client_secret"))
     fields.append((cfg["destinations"]["gdrive"], "developer_key"))
     fields.append((cfg["destinations"]["gdrive"], "refresh_token"))
