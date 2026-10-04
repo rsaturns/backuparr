@@ -115,6 +115,8 @@ body {
 
 .tabs {
   display: flex;
+  max-width: 100%;
+  overflow-x: auto;
   gap: 4px;
   background: var(--bg);
   border: 1px solid var(--border);
@@ -123,6 +125,7 @@ body {
 }
 
 .tab-btn {
+  flex-shrink: 0;
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -271,6 +274,35 @@ body {
 }
 
 .app-card:last-child { margin-bottom: 0; }
+
+.prowlarr-discovery-card {
+  border: 2px solid var(--accent);
+  background: var(--bg);
+}
+
+.discovery-badge {
+  color: var(--accent);
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.discovery-intro { margin: 12px 0 0; }
+.discovery-help { margin: 0; }
+.discovery-status { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
+.discovery-service { border-top: 1px solid var(--border); padding: 12px 0; }
+.discovery-service p { margin: 5px 0 8px; overflow-wrap: anywhere; }
+.discovery-service select { width: 100%; margin: 0 0 8px; }
+.discovery-service .btn { white-space: normal; text-align: left; }
+.discovery-origin { margin: 0; color: var(--accent); font-size: 13px; }
+.discovery-warning { font-size: 13px; color: var(--text-muted); overflow-wrap: anywhere; }
+
+@media (max-width: 480px) {
+  .prowlarr-discovery-card .app-card-head { flex-wrap: wrap; }
+  .prowlarr-discovery-card .app-card-actions { flex-wrap: wrap; }
+}
 
 .app-card-head {
   display: flex;

@@ -1,0 +1,90 @@
+name: Docker Test Image
+
+# Publish previews independently of releases. Pushing this dedicated test
+# branch starts a build without updating main or any release image tag.
+on:
+  push:
+    branches:
+      - test/prowlarr-discovery
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+# Serialize publishing so the mutable preview tag is updated in order.
+concurrency:
+  group: docker-test-image
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Test and publish preview
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run test suite
+        run: pytest -q
+
+      - name: Set image name
+        id: image
+        shell: bash
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=raw,value=prowlarr-discovery
+            type=sha,prefix=sha-,format=long
+
+      - name: Build and push test image
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Write test instructions
+        env:
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          {
+            printf '### Test image\n\n'
+            printf 'Preview tag: `%s:prowlarr-discovery`\n\n' "$IMAGE_NAME"
+            printf 'Pinned image: `%s@%s`\n\n' "$IMAGE_NAME" "$IMAGE_DIGEST"
+            printf 'Run with `docker compose -f docker-compose.test.yml pull` and `docker compose -f docker-compose.test.yml up -d`.\n\n'
+            printf 'The test instance uses port 8991 and ./test-data by default.\n\n'
+            printf 'If GHCR requires authentication, use a GitHub token with read:packages and `docker login ghcr.io`, or make the container package public in its GitHub package settings.\n'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -290,6 +290,36 @@ control upgrades yourself - see [Docker
 Hub](https://hub.docker.com/r/rsaturns/backuparr)
 for available tags.
 
+### Test the Prowlarr discovery preview
+
+The **Docker Test Image** workflow runs tests and publishes a preview to
+GHCR when `test/prowlarr-discovery` is pushed. It builds both
+`linux/amd64` and `linux/arm64`, without publishing a release or changing
+the release image's `latest` tag. On the `vladimir-aubrecht/backuparr`
+fork, the preview is `ghcr.io/vladimir-aubrecht/backuparr:prowlarr-discovery`.
+Each build also publishes `sha-<full commit SHA>`; its Actions summary
+contains the immutable image digest for pinning an exact build.
+
+After the workflow finishes successfully, run:
+
+```sh
+docker compose -f docker-compose.test.yml pull
+docker compose -f docker-compose.test.yml up -d
+```
+
+Open `http://<host>:8991`. This Compose file uses the `backuparr-test`
+container and `./test-data` volume so it can run alongside your existing
+Backuparr instance. Override `BACKUPARR_TEST_IMAGE` to use a pinned image,
+or `BACKUPARR_TEST_PORT` to change the exposed port. If Prowlarr's service
+URLs use container names, enable the commented external network settings
+and set `BACKUPARR_NETWORK` to the Docker network shared by those services.
+
+New GHCR packages can be private even for public repositories. If pulling
+requires authentication, log in with a GitHub personal access token with
+`read:packages` using `docker login ghcr.io`, or change the container
+package's visibility to public in its GitHub package settings. Publishing
+uses the workflow's `GITHUB_TOKEN`, so no Docker Hub secrets are required.
+
 ### Or build from source
 
 Clone this repo, then use its own `docker-compose.yml` (swap the `image:`
@@ -303,11 +333,18 @@ Then open `http://<host>:8990` - the first visit is a one-time setup
 screen to create an admin username/password; every visit after that
 requires logging in. On the **Settings** tab:
 
-1. For each app you want backed up: flip it on, fill in its URL (container
-   name + internal port if it's on the same Compose network, e.g.
-   `http://radarr:7878` - or a LAN IP:port for anything on host networking,
-   like Tdarr) and API key (from that app's Settings > General), then hit
-   **Test connection** to confirm it's right before saving.
+1. Start with the highlighted **Prowlarr** card: enter its URL and API
+   key. Discovery runs when you finish editing those fields, or click
+   **Discover services** to run it again. It finds Radarr, Sonarr and
+   SABnzbd configured in Prowlarr, fills empty forms with their URLs and
+   API keys, and offers a choice when multiple instances exist. Existing
+   values and edits made during discovery are kept; replacing them is an
+   explicit action. Prowlarr backup does not need to be enabled to discover
+   its services. Enable each app you want backed up and use **Test
+   connection** to check reachability from Backuparr before saving.
+   You can also configure every app manually with its URL (container name
+   + internal port on the same Compose network, e.g. `http://radarr:7878`,
+   or a LAN IP:port) and API key from that app's Settings > General.
 2. Enable at least one destination - Local needs nothing further; see
    [Destinations](#destinations) above for connecting Google Drive or
    OneDrive.
@@ -319,6 +356,28 @@ requires logging in. On the **Settings** tab:
 Everything is written to `config.json` on the `./data` volume, so it
 survives container recreation - the cron schedule inside the container
 picks up changes automatically the next time you save, no restart needed.
+
+Prowlarr masks API keys in its normal API responses. Discovery creates a
+temporary official Prowlarr backup, reads only the supported services'
+settings from its SQLite database, then removes the downloaded files and
+the newly created backup on Prowlarr. Existing backups are preserved. The
+temporary backup is not uploaded to Backuparr's destinations. If it cannot
+be identified safely because another manual backup appeared at the same
+time, discovery leaves it alone and reports this so you can check
+Prowlarr's backup list. If deletion fails, discovery also reports it.
+Discovery results stay in memory, are private to the initiating login
+session and expire after ten minutes; they are saved only with **Save
+settings**, using the existing encryption for API keys. If the backup is
+unavailable or Prowlarr uses PostgreSQL (whose database is not included
+in its official backup), discovery can still fill in URLs; enter the
+missing API keys manually.
+
+**Bazarr:** Prowlarr does not store its URL or API key. Discovery offers
+an explicitly unverified URL suggestion using a discovered Radarr/Sonarr
+host with port `6767`. It does not fill this suggestion automatically or
+copy another app's key. Container addresses, ports, TLS and reverse proxy
+paths may differ: review the suggestion, enter Bazarr's own API key and
+test the connection. Other services remain manually configured.
 
 Use the **Run & Status** tab to trigger a backup immediately and watch it
 happen live, **History** to see what's on each destination per app (and

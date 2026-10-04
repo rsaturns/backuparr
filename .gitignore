@@ -1,5 +1,6 @@
 rclone.conf
 data/
+test-data/
 *.zip
 .env
 __pycache__/

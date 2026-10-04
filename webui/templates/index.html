@@ -63,10 +63,10 @@
     <div class="grid">
       <div class="card apps-card">
         <h2>Apps</h2>
-        <p class="hint">Check the apps you want backed up - each one expands for its URL and API key (find the key in that app's Settings &gt; General).</p>
+        <p class="hint">Connect Prowlarr first to fill in linked services, or configure each app manually. Check the apps you want backed up.</p>
         <div id="app-list">
           {% for m in app_meta %}
-          <div class="app-card{% if m.status != 'available' %} card-soon{% endif %}" data-app="{{ m.id }}">
+          <div class="app-card{% if m.id == 'prowlarr' %} prowlarr-discovery-card{% endif %}{% if m.status != 'available' %} card-soon{% endif %}" data-app="{{ m.id }}">
             <div class="app-card-head">
               <label class="switch">
                 <input type="checkbox" class="f-enabled"{% if m.status != 'available' %} disabled{% endif %}>
@@ -74,11 +74,15 @@
               </label>
               <img class="app-icon" src="{{ url_for('static', filename='icons/' ~ m.icon) }}" alt="" width="22" height="22">
               <h3>{{ m.label }}</h3>
+              {% if m.id == 'prowlarr' %}<span class="discovery-badge">Start here</span>{% endif %}
               {% if m.status != 'available' %}<span class="badge-soon">Coming soon</span>{% endif %}
               <span class="status-dot" data-state="idle"></span>
             </div>
             {% if m.status == 'available' %}
-            <div class="app-card-body hidden">
+            {% if m.id == 'prowlarr' %}
+            <p class="hint discovery-intro">Enter Prowlarr's URL and API key to discover Radarr, Sonarr and SABnzbd. Prowlarr backup does not need to be enabled.</p>
+            {% endif %}
+            <div class="app-card-body{% if m.id != 'prowlarr' %} hidden{% endif %}">
               <label class="field">
                 <span class="field-label">URL</span>
                 <input type="text" class="f-url" placeholder="{{ m.url_placeholder }}" autocomplete="off">
@@ -103,9 +107,15 @@
               </label>
               {% endif %}
               <div class="app-card-actions">
+                {% if m.id == 'prowlarr' %}<button type="button" class="btn btn-primary btn-sm" id="discover-btn" disabled>Discover services</button>{% endif %}
                 <button type="button" class="btn btn-ghost btn-sm test-btn">Test connection</button>
                 <span class="test-result"></span>
               </div>
+              {% if m.id == 'prowlarr' %}
+              <p class="hint discovery-help">Discovery runs when you finish entering these details. It uses a temporary Prowlarr backup to read masked API keys. Review the results, choose which apps to back up, then save settings.</p>
+              <p id="discovery-status" class="discovery-status" role="status" aria-live="polite"></p>
+              <div id="discovery-results"></div>
+              {% endif %}
             </div>
             {% endif %}
           </div>

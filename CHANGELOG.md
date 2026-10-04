@@ -11,7 +11,21 @@ release event.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- Prowlarr appears first in Settings with automatic discovery of configured
+  Radarr, Sonarr and SABnzbd services. Empty forms receive their URLs and
+  API keys; multiple instances offer a choice and existing edits are kept.
+  API keys masked by Prowlarr are read from a temporary official backup,
+  which is removed afterwards without touching existing backups. Discovery
+  works without enabling Prowlarr backup and does not enable or save apps
+  automatically. Missing keys can be entered manually, including when
+  Prowlarr uses PostgreSQL.
+- Optional, unverified Bazarr URL suggestions based on discovered hosts
+  and port 6767; Bazarr's own API key is entered manually.
+- A dedicated GitHub Actions workflow publishes amd64/arm64 discovery
+  previews to GHCR from `test/prowlarr-discovery`. A separate test Compose
+  file uses port 8991 and its own data directory.
 
 ## [1.0.7-beta] - 2026-10-04
 

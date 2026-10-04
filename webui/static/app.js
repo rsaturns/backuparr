@@ -6,6 +6,10 @@ let DESTINATION_META = [];
 let RUN_POLL_TIMER = null;
 let RESTORE_POLL_TIMER = null;
 let SETTINGS_SNAPSHOT = null;
+let DISCOVERY_RUNNING = false;
+let DISCOVERY_TIMER = null;
+let DISCOVERY_LAST_ATTEMPT = null;
+const APP_CREDENTIAL_EDIT_REVISION = new Map();
 
 async function apiFetch(url, opts) {
   const res = await fetch(url, opts);
@@ -303,7 +307,7 @@ function appCard(appId) {
 
 function setAppCardExpanded(card, expanded) {
   const body = card.querySelector(".app-card-body");
-  if (body) body.classList.toggle("hidden", !expanded);
+  if (body) body.classList.toggle("hidden", !expanded && card.dataset.app !== "prowlarr");
 }
 
 function fillAppCard(appId, cfg) {
@@ -318,6 +322,7 @@ function fillAppCard(appId, cfg) {
     input.value = cfg[input.dataset.field] || "";
   });
   setAppCardExpanded(card, !!cfg.enabled);
+  if (appId === "prowlarr") updateDiscoveryButton();
 }
 
 function readAppCard(appId) {
@@ -333,6 +338,215 @@ function readAppCard(appId) {
     out[input.dataset.field] = input.value;
   });
   return out;
+}
+
+function prowlarrCredentials() {
+  const { url, api_key } = readAppCard("prowlarr");
+  return { url, api_key };
+}
+
+function updateDiscoveryButton() {
+  const btn = document.getElementById("discover-btn");
+  const details = prowlarrCredentials();
+  btn.disabled = DISCOVERY_RUNNING || !details.url || !details.api_key;
+  btn.textContent = DISCOVERY_RUNNING ? "Discovering..." : "Discover services";
+}
+
+function queueDiscovery() {
+  clearTimeout(DISCOVERY_TIMER);
+  DISCOVERY_TIMER = setTimeout(() => discoverServices(false), 600);
+}
+
+function markDiscovered(appId, guessed, missingKey) {
+  const card = appCard(appId);
+  let note = card.querySelector(".discovery-origin");
+  if (!note) {
+    note = document.createElement("p");
+    note.className = "discovery-origin";
+    card.querySelector(".app-card-body").appendChild(note);
+  }
+  note.textContent = guessed
+    ? "Suggested URL (unverified) — test the connection and enter Bazarr's own API key."
+    : `Found via Prowlarr — review and save settings.${missingKey ? " Enter the API key manually." : ""}`;
+  setAppCardExpanded(card, true);
+}
+
+function applyDiscoveredService(candidate, guessed = false) {
+  const card = appCard(candidate.app);
+  card.querySelector(".f-url").value = candidate.url;
+  if (!guessed) card.querySelector(".f-api_key").value = candidate.api_key || "";
+  // Finding a service does not opt it in to scheduled backups.
+  markDiscovered(candidate.app, guessed, !candidate.api_key);
+  card.querySelector(".status-dot").dataset.state = "idle";
+  card.querySelector(".test-result").textContent = "";
+}
+
+function bazarrSuggestions(candidates) {
+  const urls = new Set();
+  candidates.filter((candidate) => ["radarr", "sonarr"].includes(candidate.app)).forEach((candidate) => {
+    try {
+      const url = new URL(candidate.url);
+      url.port = "6767";
+      url.pathname = "/";
+      url.search = "";
+      url.hash = "";
+      urls.add(url.toString().replace(/\/$/, ""));
+    } catch (e) {
+      // Invalid discovery URLs cannot produce a useful guess.
+    }
+  });
+  return [...urls].map((url) => ({ app: "bazarr", name: "Suggested Bazarr", url, api_key: "" }));
+}
+
+function renderDiscoveryResults(result, initial) {
+  const root = document.getElementById("discovery-results");
+  root.replaceChildren();
+  const groups = new Map();
+  result.candidates.forEach((candidate) => {
+    if (!groups.has(candidate.app)) groups.set(candidate.app, []);
+    groups.get(candidate.app).push(candidate);
+  });
+  const guesses = bazarrSuggestions(result.candidates);
+  if (guesses.length) groups.set("bazarr", guesses);
+
+  let filled = 0;
+  groups.forEach((candidates, appId) => {
+    const guessed = appId === "bazarr";
+    const current = readAppCard(appId);
+    // Check both the original and current form: user edits made while a
+    // backup is being created must not be overwritten by its delayed result.
+    const wasEmpty = initial[appId] && !initial[appId].url && !initial[appId].api_key;
+    const isEmpty = !current.url && !current.api_key;
+    const unedited = initial[appId].revision === (APP_CREDENTIAL_EDIT_REVISION.get(appId) || 0);
+    const automatic = !guessed && candidates.length === 1 && wasEmpty && isEmpty && unedited;
+    if (automatic) {
+      applyDiscoveredService(candidates[0]);
+      filled += 1;
+    }
+
+    const row = document.createElement("div");
+    row.className = "discovery-service";
+    const title = document.createElement("strong");
+    title.textContent = guessed ? "Bazarr URL suggestion (unverified)" : appLabel(appId);
+    row.appendChild(title);
+    const description = document.createElement("p");
+    description.className = "hint";
+    description.textContent = guessed
+      ? "Prowlarr does not store Bazarr credentials. This guesses port 6767 on a discovered host; containers may use a different address. Enter Bazarr's API key manually."
+      : automatic
+        ? "Filled in below. Review the details and enable backups if wanted."
+        : candidates.length > 1
+          ? "Multiple instances found. Choose one; Backuparr supports one instance per app."
+          : "Your existing settings were kept. You can explicitly use the discovered service below.";
+    row.appendChild(description);
+
+    let selected = candidates.length === 1 ? candidates[0] : null;
+    let select = null;
+    const details = document.createElement("p");
+    details.className = "discovery-status";
+    if (candidates.length > 1) {
+      select = document.createElement("select");
+      select.setAttribute("aria-label", `Choose ${appLabel(appId)} instance`);
+      select.add(new Option("Choose an instance...", ""));
+      candidates.forEach((candidate, index) => select.add(new Option(`${candidate.name} — ${candidate.url}`, String(index))));
+      row.appendChild(select);
+    }
+    row.appendChild(details);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn btn-ghost btn-sm";
+    const update = () => {
+      btn.disabled = !selected;
+      if (!selected) {
+        details.textContent = "";
+        btn.textContent = guessed ? "Use suggested URL" : "Use selected service";
+        return;
+      }
+      details.textContent = guessed ? selected.url : `${selected.name} — ${selected.url} · ${selected.api_key ? "API key available" : "API key unavailable — enter manually"}`;
+      const fields = readAppCard(appId);
+      const replaces = (fields.url && fields.url !== selected.url) || (!guessed && fields.api_key && fields.api_key !== selected.api_key);
+      btn.textContent = replaces
+        ? guessed ? "Replace URL with suggestion" : "Replace URL and API key"
+        : guessed ? "Use suggested URL" : "Use this service";
+    };
+    if (select) select.addEventListener("change", () => {
+      selected = select.value === "" ? null : candidates[Number(select.value)];
+      update();
+    });
+    // Keep the action label accurate if the user edits the form afterwards.
+    row.addEventListener("pointerover", update);
+    btn.addEventListener("focus", update);
+    btn.addEventListener("click", () => {
+      if (!selected) return;
+      applyDiscoveredService(selected, guessed);
+      description.textContent = guessed ? "Suggested URL filled in. Test the connection and enter the API key." : "Filled in below. Review and save settings.";
+      update();
+    });
+    update();
+    row.appendChild(btn);
+    root.appendChild(row);
+  });
+  result.warnings.forEach((warning) => {
+    const note = document.createElement("p");
+    note.className = "discovery-warning";
+    note.textContent = warning;
+    root.appendChild(note);
+  });
+  const status = document.getElementById("discovery-status");
+  status.textContent = result.candidates.length
+    ? `Found ${result.candidates.length} service(s); filled ${filled} empty form(s). Review the details and save settings.`
+    : "No supported services found. Add Radarr, Sonarr or SABnzbd to Prowlarr, or configure them manually below.";
+}
+
+async function discoverServices(manual = true) {
+  clearTimeout(DISCOVERY_TIMER);
+  const credentials = prowlarrCredentials();
+  const signature = JSON.stringify(credentials);
+  if (DISCOVERY_RUNNING || !credentials.url || !credentials.api_key || (!manual && DISCOVERY_LAST_ATTEMPT === signature)) return;
+  DISCOVERY_LAST_ATTEMPT = signature;
+  DISCOVERY_RUNNING = true;
+  updateDiscoveryButton();
+  const status = document.getElementById("discovery-status");
+  status.textContent = "Connecting to Prowlarr...";
+  document.getElementById("discovery-results").replaceChildren();
+  const initial = {};
+  ["radarr", "sonarr", "sabnzbd", "bazarr"].forEach((appId) => {
+    initial[appId] = { ...readAppCard(appId), revision: APP_CREDENTIAL_EDIT_REVISION.get(appId) || 0 };
+  });
+  let jobId = null;
+  let completed = false;
+  try {
+    const job = await apiFetch("/api/discovery/prowlarr", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(credentials),
+    });
+    jobId = job.job_id;
+    const deadline = Date.now() + 10 * 60 * 1000;
+    while (Date.now() < deadline) {
+      const state = await apiFetch(`/api/discovery/prowlarr/${jobId}`);
+      status.textContent = state.message;
+      if (state.state !== "running") {
+        completed = true;
+        if (signature !== JSON.stringify(prowlarrCredentials())) {
+          status.textContent = "Prowlarr details changed. Previous discovery results were discarded.";
+          return;
+        }
+        if (state.state === "failed") throw new Error(state.message);
+        renderDiscoveryResults(state.result, initial);
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    throw new Error("Discovery is taking longer than expected. Try again after Prowlarr finishes its backup.");
+  } catch (e) {
+    status.textContent = e.message;
+  } finally {
+    if (jobId && completed) {
+      try { await apiFetch(`/api/discovery/prowlarr/${jobId}`, { method: "DELETE" }); } catch (e) { /* Results also expire automatically. */ }
+    }
+    DISCOVERY_RUNNING = false;
+    updateDiscoveryButton();
+    if (signature !== JSON.stringify(prowlarrCredentials())) queueDiscovery();
+  }
 }
 
 // ---------------------------------------------------------- destinations ----
@@ -852,6 +1066,20 @@ function initScheduleEvents() {
 
 function initSettingsEvents() {
   document.getElementById("save-btn").addEventListener("click", saveSettings);
+  document.getElementById("discover-btn").addEventListener("click", () => discoverServices());
+  const prowlarr = appCard("prowlarr");
+  prowlarr.querySelectorAll(".f-url, .f-api_key").forEach((input) => {
+    input.addEventListener("input", updateDiscoveryButton);
+    input.addEventListener("change", queueDiscovery);
+  });
+  document.querySelectorAll(".app-card[data-app] .f-url, .app-card[data-app] .f-api_key").forEach((input) => {
+    input.addEventListener("input", () => {
+      const card = input.closest(".app-card");
+      APP_CREDENTIAL_EDIT_REVISION.set(card.dataset.app, (APP_CREDENTIAL_EDIT_REVISION.get(card.dataset.app) || 0) + 1);
+      const origin = card.querySelector(".discovery-origin");
+      if (origin) origin.remove();
+    });
+  });
   document.querySelectorAll(".test-btn").forEach((btn) => {
     btn.addEventListener("click", () => testApp(btn.closest(".app-card").dataset.app));
   });

@@ -1,0 +1,24 @@
+name: backuparr-test
+
+services:
+  backuparr:
+    image: ${BACKUPARR_TEST_IMAGE:-ghcr.io/vladimir-aubrecht/backuparr:prowlarr-discovery}
+    container_name: backuparr-test
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Etc/UTC}
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      # Set true only when an authenticating proxy protects the entire UI/API.
+      BACKUPARR_DISABLE_AUTH: ${BACKUPARR_DISABLE_AUTH:-false}
+    ports:
+      - "${BACKUPARR_TEST_PORT:-8991}:8990"
+    volumes:
+      - ./test-data:/config/backuparr
+
+# If discovered URLs use Docker container names, connect this instance to
+# the same existing Docker network as Prowlarr and the other services.
+# networks:
+#   default:
+#     external: true
+#     name: ${BACKUPARR_NETWORK:-arr}

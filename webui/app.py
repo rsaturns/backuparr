@@ -19,12 +19,14 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 import auth_store
 import destination_util
+import discovery
 import gdrive_oauth
 import onedrive_oauth
 import rclone_util
 import restore_actions as ra
 import secrets_crypto
 from backup import build_app, format_run_message, humanize_error, notify, run_backup
+from apps.prowlarr import ProwlarrApp
 from config_store import (
     APP_META,
     APP_NAMES,
@@ -425,7 +427,8 @@ def start_scheduler():
 # --------------------------------------------------------------- pages ----
 @app.get("/")
 def index():
-    return render_template("index.html", app_meta=APP_META, destination_meta=DESTINATION_META, version=VERSION,
+    settings_apps = sorted(APP_META, key=lambda meta: meta["id"] != "prowlarr")
+    return render_template("index.html", app_meta=settings_apps, destination_meta=DESTINATION_META, version=VERSION,
                            auth_disabled=_AUTH_DISABLED)
 
 
@@ -522,6 +525,94 @@ def api_test(app_name):
         return jsonify({"ok": True, "message": message})
     except Exception as exc:
         return jsonify({"ok": False, "message": humanize_error(exc)})
+
+
+# Discovery runs independently of the backup scheduler. Results contain API
+# keys, stay in memory briefly, and are accessible only to the initiating session.
+DISCOVERY_RUN_LOCK = threading.Lock()
+DISCOVERY_JOBS_LOCK = threading.Lock()
+DISCOVERY_JOBS = {}
+DISCOVERY_RESULT_TTL = 600
+
+
+def _forget_discovery(job_id):
+    with DISCOVERY_JOBS_LOCK:
+        DISCOVERY_JOBS.pop(job_id, None)
+
+
+def _discovery_work(job_id, url, api_key):
+    def progress(message):
+        with DISCOVERY_JOBS_LOCK:
+            if job_id in DISCOVERY_JOBS:
+                DISCOVERY_JOBS[job_id]["message"] = message
+
+    instance = None
+    try:
+        instance = ProwlarrApp(url, api_key)
+        result = discovery.discover_prowlarr(instance, progress)
+        outcome = {"state": "completed", "message": "Discovery complete.", "result": result}
+    except discovery.DiscoveryError as exc:
+        outcome = {"state": "failed", "message": str(exc)}
+    except Exception:
+        # Never expose remote response bodies, URLs or credentials in logs/errors.
+        outcome = {"state": "failed", "message": "Could not discover services. Check Prowlarr's URL, API key and that it is reachable from Backuparr."}
+    finally:
+        if instance is not None:
+            try:
+                instance.session.close()
+            except Exception:
+                pass
+        with DISCOVERY_JOBS_LOCK:
+            if job_id in DISCOVERY_JOBS:
+                DISCOVERY_JOBS[job_id].update(outcome)
+        DISCOVERY_RUN_LOCK.release()
+    timer = threading.Timer(DISCOVERY_RESULT_TTL, _forget_discovery, args=(job_id,))
+    timer.daemon = True
+    timer.start()
+
+
+def _discovery_response(data, status=200):
+    response = jsonify(data)
+    response.status_code = status
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.post("/api/discovery/prowlarr")
+def api_discovery_prowlarr():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not discovery.valid_service_url(data.get("url")):
+        return _discovery_response({"error": "A valid Prowlarr URL starting with http:// or https:// is required."}, 400)
+    api_key = data.get("api_key")
+    if not isinstance(api_key, str) or not api_key.strip():
+        return _discovery_response({"error": "Prowlarr's API key is required."}, 400)
+    if not DISCOVERY_RUN_LOCK.acquire(blocking=False):
+        return _discovery_response({"error": "Discovery is already running. Try again when it finishes."}, 409)
+    owner = session.setdefault("discovery_owner", secrets.token_urlsafe(24))
+    job_id = secrets.token_urlsafe(24)
+    with DISCOVERY_JOBS_LOCK:
+        DISCOVERY_JOBS[job_id] = {"owner": owner, "state": "running", "message": "Connecting to Prowlarr..."}
+    try:
+        threading.Thread(target=_discovery_work, args=(job_id, data["url"].strip(), api_key.strip()), daemon=True).start()
+    except Exception:
+        _forget_discovery(job_id)
+        DISCOVERY_RUN_LOCK.release()
+        return _discovery_response({"error": "Could not start discovery. Try again."}, 503)
+    return _discovery_response({"job_id": job_id}, 202)
+
+
+@app.route("/api/discovery/prowlarr/<job_id>", methods=["GET", "DELETE"])
+def api_discovery_status(job_id):
+    with DISCOVERY_JOBS_LOCK:
+        job = DISCOVERY_JOBS.get(job_id)
+        if not job or job["owner"] != session.get("discovery_owner"):
+            return _discovery_response({"error": "Discovery results expired. Run discovery again."}, 404)
+        if request.method == "DELETE":
+            if job["state"] == "running":
+                return _discovery_response({"error": "Discovery is still running."}, 409)
+            DISCOVERY_JOBS.pop(job_id)
+            return _discovery_response({"ok": True})
+        return _discovery_response({key: value for key, value in job.items() if key != "owner"})
 
 
 @app.post("/api/test-notify")
