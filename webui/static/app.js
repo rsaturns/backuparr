@@ -1,5 +1,6 @@
 "use strict";
 
+const AUTH_DISABLED = document.body.dataset.authDisabled === "true";
 let APP_META = [];
 let DESTINATION_META = [];
 let RUN_POLL_TIMER = null;
@@ -8,7 +9,7 @@ let SETTINGS_SNAPSHOT = null;
 
 async function apiFetch(url, opts) {
   const res = await fetch(url, opts);
-  if (res.status === 401) {
+  if (res.status === 401 && !AUTH_DISABLED) {
     // Session expired - bounce to login instead of surfacing a raw 401 toast.
     window.location.href = "/login";
     return new Promise(() => {}); // navigation in flight, never resolve

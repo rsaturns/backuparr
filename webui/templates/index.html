@@ -17,7 +17,7 @@
 <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
+<body data-auth-disabled="{{ 'true' if auth_disabled else 'false' }}">
 <header class="topbar">
   <div class="brand">
     <img class="brand-mark" src="{{ url_for('static', filename='logo.png') }}" alt="">
@@ -33,7 +33,9 @@
     <button class="tab-btn" data-tab="history" type="button">History</button>
     <button class="tab-btn" data-tab="restore" type="button">Restore</button>
   </nav>
+  {% if not auth_disabled %}
   <button type="button" class="btn btn-ghost btn-sm" id="logout-btn">Log out</button>
+  {% endif %}
   <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle light/dark theme">&#9789;</button>
 </header>
 

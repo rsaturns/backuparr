@@ -152,6 +152,7 @@ are the deployment-level settings that exist outside it, set in
 | `LOG_LEVEL` | `INFO` | Python logging level for backup/restore runs - e.g. `DEBUG` for more detail while troubleshooting a connector |
 | `BACKUPARR_SECRETS_KEY` | *(auto-generated)* | Overrides the auto-generated `secrets.key` value used to encrypt `config.json`'s secrets (see [Encryption at rest](#encryption-at-rest)) - set this to keep the key off the volume entirely, e.g. a Docker secret |
 | `RCLONE_CONFIG_PASS` | *(auto-generated)* | Overrides the auto-generated password used to encrypt `rclone.conf` |
+| `BACKUPARR_DISABLE_AUTH` | `false` | Set to `true` (or `1`/`yes`) to turn off local login when an authenticating reverse proxy (e.g. Authelia) protects the entire UI and API. Anything else, or unset, keeps login required. See [Login](#login). |
 | `BACKUPARR_FORCE_HTTPS` | `false` | Set to `true` if Backuparr sits behind your own TLS-terminating reverse proxy - marks the session cookie `Secure` (HTTPS-only) and trusts that proxy's `X-Forwarded-Proto`/`X-Forwarded-For` headers, so OAuth redirect URIs (Google Drive) come out `https://` and login-lockout tracking sees real client IPs instead of the proxy's. Leave unset for the default plain-HTTP-on-LAN deployment, or login will silently fail. |
 
 ### Advanced: file locations
@@ -254,6 +255,7 @@ services:
       # the README's Environment variables section for what each does.
       #- LOG_LEVEL=INFO
       #- BACKUPARR_FORCE_HTTPS=true
+      #- BACKUPARR_DISABLE_AUTH=true
       #- BACKUPARR_SECRETS_KEY=
       #- RCLONE_CONFIG_PASS=
       # Changing this also means updating the ports: mapping below.
@@ -325,6 +327,33 @@ recovery (see below).
 
 ### Login
 
+#### Authentication at the reverse proxy
+
+Local login is always on unless you opt out. If your reverse proxy already
+authenticates every request (for example with Authelia), set
+`BACKUPARR_DISABLE_AUTH=true` and recreate the container:
+
+```yaml
+services:
+  backuparr:
+    environment:
+      BACKUPARR_DISABLE_AUTH: "true"
+```
+
+With this set, the UI and API work without a local account or login,
+including on a fresh install. `/login` and `/setup` redirect to the main
+UI, the logout button is hidden, and `/api/setup`, `/api/login`,
+`/api/logout` and `/api/reset` return `403`. Existing credentials and
+backups are kept; remove the setting (or set it to `false`) and recreate
+the container to require local login again.
+
+**Protect the entire UI and API at the reverse proxy and block direct
+access to port 8990.** Anyone who can reach Backuparr directly in this
+mode has full access, including backup/restore and stored credentials.
+Backuparr does not read proxy user headers.
+
+#### Local account and password recovery
+
 The setup screen's admin account is required by default. Forgot the
 password? Click **Reset Backuparr** on the login screen - after
 confirming a warning and typing a confirmation phrase, it wipes local
@@ -333,8 +362,8 @@ account, and local backup files - anything already uploaded to Google
 Drive/OneDrive is untouched) back to a fresh install and shows the setup
 screen again.
 
-**The reset endpoint is reachable without logging in**, gated only by a
-fixed confirmation phrase visible in this project's source
+**With local authentication enabled, the reset endpoint is reachable
+without logging in**, gated only by a fixed confirmation phrase visible in this project's source
 (`webui/static/login.js`), not a per-install secret. This is fine on a
 trusted LAN behind your own firewall, but **do not expose port 8990 to an
 untrusted network** without putting a login of your own in front of it at
