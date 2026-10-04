@@ -12,7 +12,8 @@ Include what you'd include in a bug report: affected version/commit, steps to re
 
 A few things are intentionally not "fixed" - they're documented trade-offs for this project's single-trusted-admin threat model, not oversights:
 
-- `POST /api/reset` (the forgot-password recovery flow) is reachable without authentication, gated only by a confirmation phrase visible in the client-side source. See the README's [Login](README.md#login) section.
+- With local authentication enabled, `POST /api/reset` (the forgot-password recovery flow) is reachable without authentication, gated only by a confirmation phrase visible in the client-side source. It is disabled when `BACKUPARR_DISABLE_AUTH=true`. See the README's [Login](README.md#login) section.
+- `BACKUPARR_DISABLE_AUTH=true` grants full access to the UI and operational API without a local account. Use it only when an authenticating reverse proxy protects all routes and direct access to the container is blocked; Backuparr does not verify proxy user headers.
 - `rclone`'s OAuth tokens/client secrets are passed as subprocess arguments on every sync, visible to anything that can inspect the container's own process list (`/proc`, `ps`, `docker top`).
 
 If you believe either of these has a worse impact than described, or you've found something else, please still report it privately first.

@@ -38,9 +38,9 @@ ENV RCLONE_CONFIG=/config/backuparr/rclone.conf \
 
 EXPOSE 8990
 
-# /login always returns 200 (or a 302 to /setup on first boot, which wget
-# follows) with no auth needed either way - just confirms the web server
-# itself is actually serving, regardless of setup/login state.
+# /login returns 200 or redirects to /setup on first boot, or / when
+# local auth is disabled. wget follows these redirects without needing
+# credentials - just confirms the web server itself is actually serving.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -q -O /dev/null "http://127.0.0.1:${WEBUI_PORT}/login" || exit 1
 

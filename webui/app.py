@@ -89,6 +89,8 @@ def _load_or_create_secret_key():
 # http:// this container actually listens on, and login-lockout tracking
 # sees the real client IP instead of the proxy's.
 _BEHIND_HTTPS_PROXY = os.environ.get("BACKUPARR_FORCE_HTTPS", "").lower() in ("1", "true", "yes")
+# Deployment setting: read at startup, never controlled by a request or config.json.
+_AUTH_DISABLED = os.environ.get("BACKUPARR_DISABLE_AUTH", "").lower() in ("1", "true", "yes")
 if _BEHIND_HTTPS_PROXY:
     app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_for=1)
 
@@ -141,11 +143,19 @@ def _login_record_failure(ip):
 # Session-cookie login, single admin account created via the setup screen
 # (see auth_store.py).
 _PUBLIC_PATHS = {"/api/logout", "/api/reset"}
+_AUTH_API_PATHS = {"/api/setup", "/api/login", "/api/logout", "/api/reset"}
 
 
 @app.before_request
 def _check_auth():
     if request.path.startswith("/static/"):
+        return None
+
+    if _AUTH_DISABLED:
+        if request.path in ("/login", "/setup"):
+            return redirect("/")
+        if request.path in _AUTH_API_PATHS:
+            return jsonify({"error": "local authentication is disabled"}), 403
         return None
 
     if request.path in _PUBLIC_PATHS:
@@ -408,7 +418,8 @@ def start_scheduler():
 # --------------------------------------------------------------- pages ----
 @app.get("/")
 def index():
-    return render_template("index.html", app_meta=APP_META, destination_meta=DESTINATION_META, version=VERSION)
+    return render_template("index.html", app_meta=APP_META, destination_meta=DESTINATION_META, version=VERSION,
+                           auth_disabled=_AUTH_DISABLED)
 
 
 # -------------------------------------------------------------- config ----

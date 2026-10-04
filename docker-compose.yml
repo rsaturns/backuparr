@@ -10,6 +10,9 @@ services:
       # there) if you want its files owned by you instead of 1000:1000.
       PUID: 1000
       PGID: 1000
+      # Optional: disable local login when a reverse proxy (e.g. Authelia)
+      # protects the entire UI and API. Block direct access to port 8990.
+      # BACKUPARR_DISABLE_AUTH: "true"
     ports:
       - "8990:8990"
     volumes:

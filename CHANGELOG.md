@@ -11,7 +11,13 @@ release event.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- `BACKUPARR_DISABLE_AUTH=true` skips local account setup and login for
+  deployments protected by an authenticating reverse proxy such as
+  Authelia. Local authentication is enabled by default. In this mode,
+  local authentication and forgot-password reset APIs are disabled, and
+  the logout button is hidden. Existing admin credentials are preserved.
 
 ## [1.0.6-beta] - 2026-09-14
 
