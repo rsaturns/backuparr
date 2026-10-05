@@ -21,9 +21,7 @@ release event.
   enables Prowlarr when explicitly requested; other apps and saving settings
   remain user choices. Missing keys can be entered manually, including when
   Prowlarr uses PostgreSQL.
-- A dedicated GitHub Actions workflow publishes amd64/arm64 discovery
-  previews to GHCR from `test/prowlarr-discovery`. A separate test Compose
-  file uses port 8991 and its own data directory.
+- A separate test Compose file uses port 8991 and its own data directory.
 
 ### Fixed
 

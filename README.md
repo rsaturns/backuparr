@@ -301,21 +301,14 @@ control upgrades yourself - see [Docker
 Hub](https://hub.docker.com/r/rsaturns/backuparr)
 for available tags.
 
-### Test the Prowlarr discovery preview
+### Test with an isolated Compose instance
 
-The **Docker Test Image** workflow runs tests and publishes a preview to
-GHCR when `test/prowlarr-discovery` is pushed. It builds both
-`linux/amd64` and `linux/arm64`, without publishing a release or changing
-the release image's `latest` tag. On the `vladimir-aubrecht/backuparr`
-fork, the preview is `ghcr.io/vladimir-aubrecht/backuparr:prowlarr-discovery`.
-Each build also publishes `sha-<full commit SHA>`; its Actions summary
-contains the immutable image digest for pinning an exact build.
-
-After the workflow finishes successfully, run:
+Build an image from this checkout and use it with the separate test
+Compose file:
 
 ```sh
-docker compose -f docker-compose.test.yml pull
-docker compose -f docker-compose.test.yml up -d
+docker build -t backuparr:test .
+BACKUPARR_TEST_IMAGE=backuparr:test docker compose -f docker-compose.test.yml up -d
 ```
 
 Open `http://<host>:8991`. This Compose file uses the `backuparr-test`
@@ -324,12 +317,6 @@ Backuparr instance. Override `BACKUPARR_TEST_IMAGE` to use a pinned image,
 or `BACKUPARR_TEST_PORT` to change the exposed port. If Prowlarr's service
 URLs use container names, enable the commented external network settings
 and set `BACKUPARR_NETWORK` to the Docker network shared by those services.
-
-New GHCR packages can be private even for public repositories. If pulling
-requires authentication, log in with a GitHub personal access token with
-`read:packages` using `docker login ghcr.io`, or change the container
-package's visibility to public in its GitHub package settings. Publishing
-uses the workflow's `GITHUB_TOKEN`, so no Docker Hub secrets are required.
 
 ### Or build from source
 
