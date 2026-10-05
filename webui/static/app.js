@@ -8,6 +8,7 @@ let RESTORE_POLL_TIMER = null;
 let SETTINGS_SNAPSHOT = null;
 let DISCOVERY_RUNNING = false;
 const APP_CREDENTIAL_EDIT_REVISION = new Map();
+const APP_ENABLED_EDIT_REVISION = new Map();
 
 async function apiFetch(url, opts) {
   const res = await fetch(url, opts);
@@ -678,6 +679,7 @@ async function runTest({ btn, resultEl, dot, pendingText, request }) {
 async function testApp(appId) {
   const card = appCard(appId);
   const payload = readAppCard(appId);
+  const enabledRevision = APP_ENABLED_EDIT_REVISION.get(appId) || 0;
   const resultEl = card.querySelector(".test-result");
   const dot = card.querySelector(".status-dot");
   const res = await runTest({
@@ -694,8 +696,9 @@ async function testApp(appId) {
   });
   if (!res) return;
   // A delayed test must not enable settings edited since the request began.
-  // Include the checkbox so a user can still turn an app off during its test.
-  if (JSON.stringify(readAppCard(appId)) !== JSON.stringify(payload)) {
+  // Remember switch changes even when it ends up back in its original state.
+  if (enabledRevision !== (APP_ENABLED_EDIT_REVISION.get(appId) || 0)
+      || JSON.stringify(readAppCard(appId)) !== JSON.stringify(payload)) {
     resultEl.textContent = "Settings changed; test the connection again.";
     resultEl.className = "test-result";
     dot.dataset.state = "idle";
@@ -1098,7 +1101,9 @@ function initSettingsEvents() {
   });
   document.querySelectorAll(".f-enabled").forEach((checkbox) => {
     checkbox.addEventListener("change", () => {
-      setAppCardExpanded(checkbox.closest(".app-card"), checkbox.checked);
+      const card = checkbox.closest(".app-card");
+      APP_ENABLED_EDIT_REVISION.set(card.dataset.app, (APP_ENABLED_EDIT_REVISION.get(card.dataset.app) || 0) + 1);
+      setAppCardExpanded(card, checkbox.checked);
     });
   });
   document.getElementById("notify-test-btn").addEventListener("click", testNotifyUrl);

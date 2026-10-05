@@ -23,6 +23,41 @@ class ServarrError(RuntimeError):
     pass
 
 
+class UnsafeRedirectError(requests.RequestException):
+    """A redirect would send the service's credentials to another origin."""
+
+
+def _same_origin(source, target):
+    try:
+        source, target = urlsplit(source), urlsplit(target)
+
+        def origin(url):
+            port = url.port if url.port is not None else (443 if url.scheme == "https" else 80)
+            return url.scheme, url.hostname, port
+
+        return (origin(source) == origin(target) and target.username is None
+                and target.password is None)
+    except ValueError:
+        return False
+
+
+class _ServarrSession(requests.Session):
+    def __init__(self, service_url):
+        super().__init__()
+        self._service_url = requests.Request("GET", service_url).prepare().url
+
+    def send(self, request, **kwargs):
+        # Requests preserves custom X-Api-Key headers on redirects, even when
+        # it strips Authorization. Reject the new destination before sending
+        # any request there, including redirected POSTs and restore uploads.
+        if not _same_origin(self._service_url, request.url):
+            raise UnsafeRedirectError(
+                "API request redirected outside the configured service. "
+                "Use its final URL or an internal URL that bypasses the login proxy."
+            )
+        return super().send(request, **kwargs)
+
+
 class ServarrApp:
     api_version = "v3"
 
@@ -30,7 +65,7 @@ class ServarrApp:
         self.name = name
         self.url = url.rstrip("/")
         self.timeout = timeout
-        self.session = requests.Session()
+        self.session = _ServarrSession(self.url)
         self.session.headers.update({"X-Api-Key": api_key, "Accept": "application/json"})
 
     def _api(self, path):
@@ -69,13 +104,7 @@ class ServarrApp:
 
     def _local_download_url(self, url):
         """Only send session credentials to the configured app's origin."""
-        try:
-            base, target = urlsplit(self.url), urlsplit(url)
-            origin = lambda value: (value.scheme, value.hostname, value.port or (443 if value.scheme == "https" else 80))
-            return (origin(base) == origin(target) and not target.username
-                    and not target.password and not target.fragment)
-        except ValueError:
-            return False
+        return _same_origin(self.url, url) and not urlsplit(url).fragment
 
     def download_backup(self, path, dest, max_bytes=None):
         """Download a real ZIP using the API key and local file redirects.

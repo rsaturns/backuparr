@@ -10,7 +10,7 @@ import sqlite3
 import tempfile
 import zipfile
 
-from apps.servarr import ServarrError
+from apps.servarr import ServarrError, UnsafeRedirectError
 from urllib.parse import urlsplit
 
 import requests
@@ -86,7 +86,11 @@ def _service_url(app, settings):
 
 
 def _get_providers(instance, path):
-    with instance.session.get(instance._api(path), timeout=15) as response:
+    try:
+        response = instance.session.get(instance._api(path), timeout=15)
+    except UnsafeRedirectError as exc:
+        raise DiscoveryError(str(exc)) from None
+    with response:
         if response.status_code in (401, 403):
             raise DiscoveryError("Prowlarr rejected access. Check its API key and permissions.")
         if response.status_code != 200:

@@ -25,7 +25,7 @@ WORKDIR /app
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY backup.py restore.py restore_actions.py rclone_util.py config_store.py destination_util.py discovery.py gdrive_oauth.py onedrive_oauth.py auth_store.py secrets_crypto.py entrypoint.sh VERSION /app/
+COPY backup.py restore.py restore_actions.py rclone_util.py config_store.py destination_util.py discovery.py gdrive_oauth.py onedrive_oauth.py auth_store.py secrets_crypto.py healthcheck.py entrypoint.sh VERSION /app/
 COPY apps /app/apps
 COPY webui /app/webui
 RUN chmod +x /app/entrypoint.sh
@@ -39,10 +39,8 @@ ENV RCLONE_CONFIG=/config/backuparr/rclone.conf \
 
 EXPOSE 8990
 
-# /login returns 200 or redirects to /setup on first boot, or / when
-# local auth is disabled. wget follows these redirects without needing
-# credentials - just confirms the web server itself is actually serving.
+# Check the configured bind address, mapping wildcard listeners to loopback.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget -q -O /dev/null "http://127.0.0.1:${WEBUI_PORT}/login" || exit 1
+    CMD ["python", "/app/healthcheck.py"]
 
 ENTRYPOINT ["/app/entrypoint.sh"]

@@ -27,6 +27,12 @@ release event.
 
 ### Fixed
 
+- Servarr API requests reject redirects to another origin before sending
+  API keys or restore uploads to the redirected destination.
+- A successful connection test preserves manual switch changes made while
+  it was running, including switching an initially disabled app on and off.
+- The Docker healthcheck uses `WEBUI_HOST`, including non-default loopback
+  addresses and IPv6, and connects directly without an outbound HTTP proxy.
 - Discovery runs only with Discover services; editing credentials and Test
   connection do not start it. Clicking Discover services enables Prowlarr.
 - Prowlarr, Radarr and Sonarr use only URL and API key. Backup downloads
