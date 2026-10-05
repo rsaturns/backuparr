@@ -27,6 +27,8 @@ release event.
 
 ### Fixed
 
+- Editing a discovered service's URL or API key immediately restores its
+  apply action, so the discovered values can be reused without another backup.
 - Servarr API requests reject redirects to another origin before sending
   API keys or restore uploads to the redirected destination.
 - A successful connection test preserves manual switch changes made while

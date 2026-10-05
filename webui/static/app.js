@@ -9,6 +9,7 @@ let SETTINGS_SNAPSHOT = null;
 let DISCOVERY_RUNNING = false;
 const APP_CREDENTIAL_EDIT_REVISION = new Map();
 const APP_ENABLED_EDIT_REVISION = new Map();
+const APP_DISCOVERY_UPDATES = new Map();
 
 async function apiFetch(url, opts) {
   const res = await fetch(url, opts);
@@ -361,6 +362,7 @@ function markDiscovered(appId) {
 }
 
 function clearDiscoveryResults() {
+  APP_DISCOVERY_UPDATES.clear();
   document.getElementById("discovery-results").replaceChildren();
   document.querySelectorAll(".app-discovery").forEach((panel) => {
     panel.replaceChildren();
@@ -458,7 +460,8 @@ function renderDiscoveryResults(result, initial) {
       selected = select.value === "" ? null : candidates[Number(select.value)];
       update();
     });
-    // Keep the action label accurate if the user edits the form afterwards.
+    // Input events must refresh actions even when this panel is hidden.
+    APP_DISCOVERY_UPDATES.set(appId, update);
     panel.onpointerover = update;
     btn.addEventListener("focus", update);
     btn.addEventListener("click", () => {
@@ -1090,6 +1093,8 @@ function initSettingsEvents() {
     input.addEventListener("input", () => {
       const card = input.closest(".app-card");
       APP_CREDENTIAL_EDIT_REVISION.set(card.dataset.app, (APP_CREDENTIAL_EDIT_REVISION.get(card.dataset.app) || 0) + 1);
+      const updateDiscovery = APP_DISCOVERY_UPDATES.get(card.dataset.app);
+      if (updateDiscovery) updateDiscovery();
       const origin = card.querySelector(".discovery-origin");
       if (origin) origin.classList.add("hidden");
       const keyStatus = card.querySelector(".discovery-key-status");
