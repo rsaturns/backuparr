@@ -11,7 +11,24 @@ release event.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Security
+
+- Radarr, Sonarr and Prowlarr requests no longer follow a redirect to a
+  different host. Requests keeps a custom `X-Api-Key` header across
+  redirects, so such a redirect could send the API key (or a backup
+  upload) to another host. Redirects to the same host, including an
+  http-to-https upgrade or a port change, still work; a downgrade from
+  https to http does not. If your app URL currently relies on a cross-host
+  redirect, update it to its final address, or set
+  `BACKUPARR_ALLOW_CROSS_HOST_REDIRECTS=true` to keep the old behaviour.
+
+### Changed
+
+- Backup downloads from Radarr, Sonarr and Prowlarr are staged privately
+  and checked to be a real ZIP archive before being kept, so a login page
+  or a partial download is never stored as a backup. A download that is
+  redirected to the app's web login now fails with an actionable message.
+  Archives are written with mode `0600`.
 
 ## [1.0.7-beta] - 2026-10-04
 
