@@ -308,7 +308,10 @@ requires logging in. On the **Settings** tab:
    name + internal port if it's on the same Compose network, e.g.
    `http://radarr:7878` - or a LAN IP:port for anything on host networking,
    like Tdarr) and API key (from that app's Settings > General), then hit
-   **Test connection** to confirm it's right before saving.
+   **Test connection** to confirm it's right before saving. Using
+   Prowlarr? Set it up first (it leads the list) and click **Discover
+   services** to fill in Radarr, Sonarr and SABnzbd for you - see
+   [Prowlarr discovery](#prowlarr-discovery).
 2. Enable at least one destination - Local needs nothing further; see
    [Destinations](#destinations) above for connecting Google Drive or
    OneDrive.
@@ -320,6 +323,35 @@ requires logging in. On the **Settings** tab:
 Everything is written to `config.json` on the `./data` volume, so it
 survives container recreation - the cron schedule inside the container
 picks up changes automatically the next time you save, no restart needed.
+
+#### Prowlarr discovery
+
+Entirely optional - everything can be configured by hand. If you run
+Prowlarr, switch on its card at the top of the Settings list, enter its URL
+and API key, and click **Discover services**. Backuparr reads the Radarr,
+Sonarr and SABnzbd instances configured in Prowlarr and fills in their URLs
+and API keys.
+
+- Only empty fields are filled; replacing a value you already entered is an
+  explicit button. If Prowlarr has several instances of an app, you pick one.
+  Nothing is saved or enabled until you enable the apps you want and click
+  **Save settings**. **Test connection** never starts discovery.
+- Prowlarr masks its apps' API keys, so Backuparr creates a temporary
+  Prowlarr backup, reads the keys from its SQLite database, and deletes only
+  the backup it created (existing backups are never touched). Results stay
+  in memory for ten minutes, private to your browser.
+- The URLs are the ones Prowlarr uses, which may not resolve from Backuparr
+  if the containers are on different Docker networks - **Test connection**
+  after applying each one.
+- If Prowlarr uses PostgreSQL (its backup has no database), or `/backup/`
+  sits behind a login proxy that doesn't let Backuparr through, URLs are
+  still filled in and the missing keys are entered by hand. Backuparr never
+  asks for web-login credentials; use Prowlarr's internal URL if it already
+  permits local access.
+- Discovery refuses any redirect away from Prowlarr's exact URL (stricter
+  than normal backups), so enter Prowlarr's final URL.
+- Bazarr, Profilarr, Tdarr, Tautulli and Seerr aren't stored in Prowlarr
+  and are always configured manually.
 
 Use the **Run & Status** tab to trigger a backup immediately and watch it
 happen live, **History** to see what's on each destination per app (and

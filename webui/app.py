@@ -19,11 +19,13 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 import auth_store
 import destination_util
+import discovery
 import gdrive_oauth
 import onedrive_oauth
 import rclone_util
 import restore_actions as ra
 import secrets_crypto
+from apps.prowlarr import ProwlarrApp
 from backup import build_app, format_run_message, humanize_error, notify, run_backup
 from config_store import (
     APP_META,
@@ -238,7 +240,9 @@ def api_login():
 @app.post("/api/logout")
 def api_logout():
     session.clear()
-    return jsonify({"ok": True})
+    response = jsonify({"ok": True})
+    response.delete_cookie(DISCOVERY_OWNER_COOKIE)
+    return response
 
 
 # Deliberately public - it's the forgot-password recovery path. Gated by
@@ -425,7 +429,10 @@ def start_scheduler():
 # --------------------------------------------------------------- pages ----
 @app.get("/")
 def index():
-    return render_template("index.html", app_meta=APP_META, destination_meta=DESTINATION_META, version=VERSION,
+    # Prowlarr and the apps it discovers lead the Settings list, side by side.
+    lead = ("prowlarr", "radarr", "sonarr", "sabnzbd")
+    apps = sorted(APP_META, key=lambda m: lead.index(m["id"]) if m["id"] in lead else len(lead))
+    return render_template("index.html", app_meta=apps, destination_meta=DESTINATION_META, version=VERSION,
                            auth_disabled=_AUTH_DISABLED)
 
 
@@ -522,6 +529,107 @@ def api_test(app_name):
         return jsonify({"ok": True, "message": message})
     except Exception as exc:
         return jsonify({"ok": False, "message": humanize_error(exc)})
+
+
+# Discovery runs independently of the backup scheduler. Results contain API
+# keys, stay in memory briefly, and are accessible only to the initiating
+# browser. Finished jobs are purged lazily, on the next discovery request.
+DISCOVERY_RUN_LOCK = threading.Lock()
+DISCOVERY_JOBS_LOCK = threading.Lock()
+DISCOVERY_JOBS = {}
+DISCOVERY_RESULT_TTL = 600
+DISCOVERY_OWNER_COOKIE = "backuparr_discovery"
+
+
+def _purge_discovery_locked():
+    cutoff = time.time() - DISCOVERY_RESULT_TTL
+    for job_id in [j for j, job in DISCOVERY_JOBS.items() if job.get("finished", cutoff + 1) < cutoff]:
+        del DISCOVERY_JOBS[job_id]
+
+
+def _forget_discovery(job_id):
+    with DISCOVERY_JOBS_LOCK:
+        DISCOVERY_JOBS.pop(job_id, None)
+
+
+def _discovery_work(job_id, url, api_key):
+    def progress(message):
+        with DISCOVERY_JOBS_LOCK:
+            if job_id in DISCOVERY_JOBS:
+                DISCOVERY_JOBS[job_id]["message"] = message
+
+    instance = None
+    try:
+        # Strict: discovery never follows a redirect off the configured origin.
+        instance = ProwlarrApp(url, api_key, strict_redirects=True)
+        result = discovery.discover_prowlarr(instance, progress)
+        outcome = {"state": "completed", "message": "Discovery complete.", "result": result}
+    except discovery.DiscoveryError as exc:
+        outcome = {"state": "failed", "message": str(exc)}
+    except Exception:
+        # Never expose remote response bodies, URLs or credentials in logs/errors.
+        outcome = {"state": "failed", "message": "Could not discover services. Check Prowlarr's URL, API key and that it is reachable from Backuparr."}
+    finally:
+        if instance is not None:
+            try:
+                instance.session.close()
+            except Exception:
+                pass
+        with DISCOVERY_JOBS_LOCK:
+            if job_id in DISCOVERY_JOBS:
+                DISCOVERY_JOBS[job_id].update(outcome, finished=time.time())
+        DISCOVERY_RUN_LOCK.release()
+
+
+def _discovery_response(data, status=200):
+    response = jsonify(data)
+    response.status_code = status
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.post("/api/discovery/prowlarr")
+def api_discovery_prowlarr():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not discovery.valid_service_url(data.get("url")):
+        return _discovery_response({"error": "A valid Prowlarr URL starting with http:// or https:// is required."}, 400)
+    api_key = data.get("api_key")
+    if not isinstance(api_key, str) or not api_key.strip():
+        return _discovery_response({"error": "Prowlarr's API key is required."}, 400)
+    if not DISCOVERY_RUN_LOCK.acquire(blocking=False):
+        return _discovery_response({"error": "Discovery is already running. Try again when it finishes."}, 409)
+    # Keep ownership outside Flask's refreshing session cookie: a concurrent
+    # read response carrying an older session must not erase discovery access.
+    owner = request.cookies.get(DISCOVERY_OWNER_COOKIE) or secrets.token_urlsafe(24)
+    job_id = secrets.token_urlsafe(24)
+    with DISCOVERY_JOBS_LOCK:
+        _purge_discovery_locked()
+        DISCOVERY_JOBS[job_id] = {"owner": owner, "state": "running", "message": "Connecting to Prowlarr..."}
+    try:
+        threading.Thread(target=_discovery_work, args=(job_id, data["url"].strip(), api_key.strip()), daemon=True).start()
+    except Exception:
+        _forget_discovery(job_id)
+        DISCOVERY_RUN_LOCK.release()
+        return _discovery_response({"error": "Could not start discovery. Try again."}, 503)
+    response = _discovery_response({"job_id": job_id}, 202)
+    response.set_cookie(DISCOVERY_OWNER_COOKIE, owner, httponly=True,
+                        secure=app.config["SESSION_COOKIE_SECURE"], samesite="Strict")
+    return response
+
+
+@app.route("/api/discovery/prowlarr/<job_id>", methods=["GET", "DELETE"])
+def api_discovery_status(job_id):
+    with DISCOVERY_JOBS_LOCK:
+        _purge_discovery_locked()
+        job = DISCOVERY_JOBS.get(job_id)
+        if not job or job["owner"] != request.cookies.get(DISCOVERY_OWNER_COOKIE):
+            return _discovery_response({"error": "Discovery results expired. Run discovery again."}, 404)
+        if request.method == "DELETE":
+            if job["state"] == "running":
+                return _discovery_response({"error": "Discovery is still running."}, 409)
+            DISCOVERY_JOBS.pop(job_id)
+            return _discovery_response({"ok": True})
+        return _discovery_response({key: value for key, value in job.items() if key not in ("owner", "finished")})
 
 
 @app.post("/api/test-notify")

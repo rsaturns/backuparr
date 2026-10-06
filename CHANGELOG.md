@@ -11,6 +11,17 @@ release event.
 
 ## [Unreleased]
 
+### Added
+
+- Optional Prowlarr discovery: a **Discover services** button on the Prowlarr
+  card (listed first, followed by Radarr, Sonarr and SABnzbd) fills in the
+  URLs and API keys of the Radarr, Sonarr and SABnzbd instances configured in
+  Prowlarr, with an instance selector when there are several. Prowlarr hides
+  its apps' API keys, so they are read from a temporary Prowlarr backup that
+  is deleted afterwards; existing backups are never touched. Nothing is saved
+  or enabled until you do so, and manual setup is unchanged. Prowlarr on
+  PostgreSQL still yields URLs; keys are then entered by hand.
+
 ### Security
 
 - Radarr, Sonarr and Prowlarr requests no longer follow a redirect to a

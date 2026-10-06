@@ -120,3 +120,34 @@ def test_manual_redirect_handling_can_inspect_the_response_without_following_it(
     with app.session.get(app._api("/system/status"), allow_redirects=False) as response:
         assert response.status_code == 302
     assert len(adapter.sent) == 1
+
+
+@pytest.mark.parametrize("target", [
+    "https://prowlarr.example:8443/api/v1/system/status",   # other port
+    "http://prowlarr.example/api/v1/system/status",         # downgrade
+])
+def test_strict_mode_refuses_any_origin_change(target):
+    app, adapter = driver(target)
+    app.session._strict = True
+    with pytest.raises(UnsafeRedirectError):
+        app.session.get(app._api("/system/status"))
+    assert len(adapter.sent) == 1
+
+
+def test_strict_mode_ignores_the_opt_out(monkeypatch):
+    monkeypatch.setenv(ALLOW_CROSS_HOST_ENV, "true")
+    app, adapter = driver("https://canonical.example/api/v1/system/status")
+    app.session._strict = True
+    with pytest.raises(UnsafeRedirectError):
+        app.session.get(app._api("/system/status"))
+
+
+@pytest.mark.parametrize("url,location", [
+    ("https://prowlarr.example", "https://prowlarr.example:443/api/v1/system/status"),
+    ("https://prowlarr.example:443", "/api/v1/system/status/"),
+])
+def test_strict_mode_allows_the_same_origin(url, location):
+    app, adapter = driver(location, url=url)
+    app.session._strict = True
+    app.session.get(app._api("/system/status"))
+    assert len(adapter.sent) == 2
