@@ -48,6 +48,10 @@ _Nothing yet._
 
 ### Fixed
 
+- History download and delete, and restore, accepted the file names `.` and
+  `..`. Downloading `..` made the server copy every app's backups into its
+  temporary folder before failing. Names starting with a dot, or ending in a
+  newline, are now rejected.
 - Profilarr backups were stored as `profilarr_<timestamp>.zip` although
   they are Profilarr's own `.tar.gz`, which Profilarr refuses to import
   under any other name. They are now kept as
