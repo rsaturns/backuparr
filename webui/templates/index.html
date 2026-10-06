@@ -331,6 +331,19 @@
   </span>
 </footer>
 
+<div class="feedback" id="feedback">
+  <div class="feedback-menu hidden" id="feedback-menu" role="menu" aria-label="Feedback">
+    <a class="feedback-link" role="menuitem" target="_blank" rel="noopener noreferrer"
+       href="https://github.com/rsaturns/backuparr/issues/new?template=bug_report.yml">Report a bug</a>
+    <a class="feedback-link" role="menuitem" target="_blank" rel="noopener noreferrer"
+       href="https://github.com/rsaturns/backuparr/issues/new?template=feature_request.yml">Request a feature</a>
+  </div>
+  <button type="button" class="feedback-btn" id="feedback-btn" aria-label="Report a bug or request a feature"
+          aria-haspopup="menu" aria-expanded="false" aria-controls="feedback-menu">
+    <img src="{{ url_for('static', filename='logo.png') }}" alt="">
+  </button>
+</div>
+
 <div id="setup-guide-modal" class="modal-overlay hidden">
   <div class="modal">
     <div class="modal-head">
