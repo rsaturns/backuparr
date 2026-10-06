@@ -675,6 +675,14 @@ def api_destinations():
     return jsonify(DESTINATION_META)
 
 
+def _not_connected_message(dest_id, label, request_data):
+    """Test only checks the saved connection, so a token that's pasted but not
+    yet connected (the UI sends token_pasted) gets a pointer to Connect."""
+    if request_data.get("token_pasted"):
+        return f"The pasted token isn't used until you click Connect {label} - connect first, then test"
+    return f"Not connected yet - paste a token from `rclone authorize {dest_id}` first"
+
+
 @app.post("/api/test-destination/<dest_id>")
 def api_test_destination(dest_id):
     if dest_id not in DEST_NAMES:
@@ -706,7 +714,7 @@ def api_test_destination(dest_id):
 
         if dest_id == "onedrive":
             if not dest_cfg.get("token"):
-                return jsonify({"ok": False, "message": "Not connected yet - paste a token from `rclone authorize onedrive` first"})
+                return jsonify({"ok": False, "message": _not_connected_message("onedrive", "OneDrive", data)})
             cfg["destinations"]["onedrive"] = dest_cfg
             destination_util.sync(cfg)
             root = destination_util.remote_root("onedrive", dest_cfg)
@@ -715,7 +723,7 @@ def api_test_destination(dest_id):
 
         if dest_id == "dropbox":
             if not dest_cfg.get("token"):
-                return jsonify({"ok": False, "message": "Not connected yet - paste a token from `rclone authorize dropbox` first"})
+                return jsonify({"ok": False, "message": _not_connected_message("dropbox", "Dropbox", data)})
             cfg["destinations"]["dropbox"] = dest_cfg
             destination_util.sync(cfg)
             root = destination_util.remote_root("dropbox", dest_cfg)

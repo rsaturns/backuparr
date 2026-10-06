@@ -704,6 +704,9 @@ async function testApp(appId) {
 async function testDestination(destId) {
   const card = destCard(destId);
   const payload = readDestCard(destId);
+  // Pasted but not yet connected: lets the server say "click Connect first".
+  const pasteBox = document.getElementById(`${destId}-token-input`);
+  if (pasteBox && pasteBox.value.trim()) payload.token_pasted = true;
   await runTest({
     btn: card.querySelector(".test-dest-btn"),
     resultEl: card.querySelector(".test-result"),

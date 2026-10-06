@@ -229,6 +229,21 @@ def test_cloud_destinations_must_be_connected_first(authed_client):
     assert "rclone authorize onedrive" in authed_client.post("/api/test-destination/onedrive").get_json()["message"]
 
 
+@pytest.mark.parametrize("dest_id, label", [("onedrive", "OneDrive"), ("dropbox", "Dropbox")])
+def test_testing_with_a_pasted_but_unconnected_token_points_at_connect(authed_client, dest_id, label):
+    plain = authed_client.post(f"/api/test-destination/{dest_id}").get_json()
+    assert plain["ok"] is False and f"rclone authorize {dest_id}" in plain["message"]
+
+    pasted = authed_client.post(f"/api/test-destination/{dest_id}", json={"token_pasted": True}).get_json()
+    assert pasted["ok"] is False
+    assert f"click Connect {label}" in pasted["message"]
+
+
+def test_token_pasted_cannot_make_a_destination_connected(authed_client, isolated_webui):
+    authed_client.post("/api/test-destination/dropbox", json={"token_pasted": True, "token": "{}"})
+    assert isolated_webui.load_config()["destinations"]["dropbox"]["token"] == ""
+
+
 def test_cloud_destination_test_checks_the_remote(authed_client, isolated_webui, monkeypatch):
     checked = []
     monkeypatch.setattr(isolated_webui.rclone_util, "check_remote", checked.append)
