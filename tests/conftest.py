@@ -1,6 +1,7 @@
 """Fixtures for exercising webui/app.py against a throwaway config."""
 import importlib
 import sys
+import threading
 
 import pytest
 
@@ -46,3 +47,20 @@ def authed_client(isolated_webui):
     response = client.post("/api/setup", json={"username": "admin", "password": PASSWORD})
     assert response.status_code == 200
     return client
+
+
+class InlineThread:
+    """Stands in for threading.Thread: start() runs the work right away, so a
+    request that starts a background run returns after the run is finished."""
+
+    def __init__(self, target=None, args=(), kwargs=None, daemon=None, **extra):
+        self.target, self.args, self.kwargs = target, args, kwargs or {}
+
+    def start(self):
+        self.target(*self.args, **self.kwargs)
+
+
+@pytest.fixture
+def inline(isolated_webui, monkeypatch):
+    monkeypatch.setattr(threading, "Thread", InlineThread)
+    return isolated_webui

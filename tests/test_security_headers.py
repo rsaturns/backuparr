@@ -1,4 +1,3 @@
-import importlib
 import re
 from pathlib import Path
 
@@ -8,18 +7,13 @@ WEBUI = Path(__file__).resolve().parent.parent / "webui"
 
 
 @pytest.fixture
-def webui(tmp_path, monkeypatch):
-    monkeypatch.setenv("BACKUPARR_SECRET_KEY_PATH", str(tmp_path / "session.key"))
-    monkeypatch.setenv("BACKUPARR_LOG_DIR", str(tmp_path / "logs"))
-    module = importlib.import_module("webui.app")
-    monkeypatch.setattr(module.auth_store, "has_credentials", lambda: True)
-    return module
+def webui(isolated_webui, authed_client):
+    return isolated_webui
 
 
 def authed(webui):
     client = webui.app.test_client()
-    with client.session_transaction() as session:
-        session["authed"] = True
+    client.post("/api/login", json={"username": "admin", "password": "test-password"})
     return client
 
 

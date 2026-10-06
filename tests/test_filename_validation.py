@@ -1,5 +1,3 @@
-import importlib
-
 import pytest
 
 import restore_actions as ra
@@ -33,19 +31,12 @@ def test_fetch_backup_refuses_directory_names_before_touching_the_destination(mo
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("BACKUPARR_SECRET_KEY_PATH", str(tmp_path / "session.key"))
-    monkeypatch.setenv("BACKUPARR_LOG_DIR", str(tmp_path / "logs"))
-    module = importlib.import_module("webui.app")
-    monkeypatch.setattr(module.auth_store, "has_credentials", lambda: True)
+def client(isolated_webui, authed_client, monkeypatch):
     calls = []
-    monkeypatch.setattr(module.rclone_util, "copyto", lambda *a: calls.append(a))
-    monkeypatch.setattr(module.rclone_util, "delete_file", lambda *a: calls.append(a))
-    client = module.app.test_client()
-    with client.session_transaction() as session:
-        session["authed"] = True
-    client.calls = calls
-    return client
+    monkeypatch.setattr(isolated_webui.rclone_util, "copyto", lambda *a: calls.append(a))
+    monkeypatch.setattr(isolated_webui.rclone_util, "delete_file", lambda *a: calls.append(a))
+    authed_client.calls = calls
+    return authed_client
 
 
 @pytest.mark.parametrize("name", ["%2e%2e", "%2e", "%2ehidden"])
