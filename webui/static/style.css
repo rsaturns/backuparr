@@ -182,6 +182,57 @@ body {
   font-size: 14.5px;
 }
 
+/* Bottom-right feedback button + popover. Below .modal-overlay (200) so dialogs cover it. */
+.feedback {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.feedback-btn {
+  width: 48px;
+  height: 48px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.feedback-btn:hover,
+.feedback-btn[aria-expanded="true"] { border-color: var(--accent); }
+
+.feedback-btn img { width: 100%; height: 100%; object-fit: contain; }
+
+.feedback-menu {
+  min-width: 180px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.feedback-link {
+  display: block;
+  padding: 10px 14px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 14.5px;
+}
+
+.feedback-link + .feedback-link { border-top: 1px solid var(--border); }
+.feedback-link:hover, .feedback-link:focus-visible { background: var(--bg); color: var(--accent); }
+
 .site-footer-name { font-weight: 600; }
 
 .site-footer-version { margin-left: 6px; }

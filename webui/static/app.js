@@ -1855,8 +1855,30 @@ function initWhatsChangedEvents() {
   });
 }
 
+function initFeedbackMenu() {
+  const btn = document.getElementById("feedback-btn");
+  const menu = document.getElementById("feedback-menu");
+  const setOpen = (open) => {
+    menu.classList.toggle("hidden", !open);
+    btn.setAttribute("aria-expanded", String(open));
+  };
+  btn.addEventListener("click", () => setOpen(menu.classList.contains("hidden")));
+  document.addEventListener("click", (e) => {
+    if (!document.getElementById("feedback").contains(e.target)) setOpen(false);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !menu.classList.contains("hidden")) {
+      setOpen(false);
+      btn.focus();
+    }
+  });
+  // A link click opens a new tab; close so the menu isn't left open behind it.
+  menu.addEventListener("click", () => setOpen(false));
+}
+
 async function init() {
   initTabs();
+  initFeedbackMenu();
   initTheme();
   initLogout();
   initWhatsChangedEvents();

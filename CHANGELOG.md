@@ -5,7 +5,11 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- A Backuparr logo button in the bottom-right corner of the web UI opens a
+  small menu with **Report a bug** and **Request a feature**, which go
+  straight to the matching GitHub issue templates.
 
 ## [1.1.0-beta] - 2026-10-06
 
