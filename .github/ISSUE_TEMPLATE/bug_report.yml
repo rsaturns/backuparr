@@ -38,6 +38,7 @@ body:
         - Local storage
         - Google Drive
         - OneDrive
+        - Dropbox
         - Not destination-specific
     validations:
       required: false

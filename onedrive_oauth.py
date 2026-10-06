@@ -8,26 +8,12 @@ predates that requirement. Personal Microsoft accounts only.
 rclone.conf is encrypted (see entrypoint.sh), so it's written via
 rclone_util's `rclone config` wrappers, not configparser directly.
 """
-import base64
-import binascii
-import json
-import re
-
 import requests
 
+import rclone_token
 import rclone_util
 
 REMOTE_NAME = "backuparr-onedrive"
-
-_PASTE_MARKERS = re.compile(
-    r"Paste the following into your remote machine\s*--->\s*(.*?)\s*<---\s*End paste",
-    re.DOTALL,
-)
-
-_BAD_TOKEN_MESSAGE = (
-    "That doesn't look like a valid rclone token - paste the exact output of "
-    "`rclone authorize onedrive`."
-)
 
 
 class OneDriveOAuthError(RuntimeError):
@@ -35,33 +21,11 @@ class OneDriveOAuthError(RuntimeError):
 
 
 def parse_token_blob(pasted):
-    """Accepts the full terminal block, just the base64 line, or raw
-    token JSON. Returns (token_json, access_token); token_json is a
-    compact single-line re-serialization, safe as an INI value."""
-    text = (pasted or "").strip()
-    if not text:
-        raise OneDriveOAuthError("Paste the token `rclone authorize onedrive` printed first.")
-
-    match = _PASTE_MARKERS.search(text)
-    if match:
-        text = match.group(1).strip()
-
-    candidate = text
-    if not text.lstrip().startswith("{"):
-        try:
-            candidate = base64.b64decode(text, validate=True).decode("utf-8")
-        except (binascii.Error, ValueError, UnicodeDecodeError) as exc:
-            raise OneDriveOAuthError(_BAD_TOKEN_MESSAGE) from exc
-
+    """See rclone_token.parse_token_blob."""
     try:
-        data = json.loads(candidate)
-    except json.JSONDecodeError as exc:
-        raise OneDriveOAuthError(_BAD_TOKEN_MESSAGE) from exc
-
-    if not isinstance(data, dict) or not data.get("access_token") or not data.get("refresh_token"):
-        raise OneDriveOAuthError(_BAD_TOKEN_MESSAGE)
-
-    return json.dumps(data, separators=(",", ":")), data["access_token"]
+        return rclone_token.parse_token_blob(pasted, "onedrive")
+    except rclone_token.TokenError as exc:
+        raise OneDriveOAuthError(str(exc)) from exc
 
 
 def approot_metadata(access_token):

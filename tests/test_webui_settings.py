@@ -57,7 +57,7 @@ def test_the_dashboard_shows_the_release_version(authed_client, isolated_webui):
     ({"apps": {"radarr": {"enabled": True, "url": "http://r"}}}, "API key is required"),
     ({"apps": {"seerr": {"enabled": True, "url": "http://s", "api_key": "k"}}}, "isn't available yet"),
     ({"destinations": {"nope": {}}}, "unknown destination"),
-    ({"destinations": {"dropbox": {"enabled": True}}}, "isn't available yet"),
+    ({"destinations": {"dropbox": {"enabled": True}}}, "connect it first"),
     ({"destinations": {"gdrive": {"enabled": True}}}, "Client ID is required"),
     ({"destinations": {"onedrive": {"enabled": True}}}, "connect it first"),
 ])
@@ -206,7 +206,8 @@ def test_notification_test_sends_a_message_and_reports_failures(authed_client, i
 
 def test_destination_test_rejects_unknown_ids(authed_client):
     assert authed_client.post("/api/test-destination/nope").status_code == 404
-    assert authed_client.post("/api/test-destination/dropbox").get_json()["ok"] is False
+    not_connected = authed_client.post("/api/test-destination/dropbox").get_json()
+    assert not_connected["ok"] is False and "rclone authorize dropbox" in not_connected["message"]
 
 
 def test_local_destination_test_writes_and_removes_a_probe(authed_client, tmp_path):
@@ -239,12 +240,15 @@ def test_cloud_destination_test_checks_the_remote(authed_client, isolated_webui,
     cfg = isolated_webui.load_config()
     cfg["destinations"]["gdrive"].update(refresh_token="rt", folder_name="Backups")
     cfg["destinations"]["onedrive"].update(token="{}")
+    cfg["destinations"]["dropbox"].update(token="{}")
     isolated_webui.save_config(cfg)
     drive_result = authed_client.post("/api/test-destination/gdrive").get_json()
     assert drive_result["ok"] is True and '"Backups"' in drive_result["message"]
     one_result = authed_client.post("/api/test-destination/onedrive").get_json()
     assert one_result["ok"] is True and "OneDrive" in one_result["message"]
-    assert checked == ["backuparr-gdrive:", "backuparr-onedrive:"]
+    dropbox_result = authed_client.post("/api/test-destination/dropbox").get_json()
+    assert dropbox_result["ok"] is True and "Dropbox" in dropbox_result["message"]
+    assert checked == ["backuparr-gdrive:", "backuparr-onedrive:", "backuparr-dropbox:Backuparr"]
 
 
 def test_cloud_destination_test_reports_a_rejected_remote(authed_client, isolated_webui, monkeypatch):

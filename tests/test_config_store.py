@@ -54,3 +54,27 @@ def test_save_and_load_roundtrip_plain_and_encrypted_fields():
         raw_on_disk = f.read()
     assert "plain-radarr-key" not in raw_on_disk
     assert secrets_crypto.PREFIX in raw_on_disk
+
+
+def test_a_config_saved_before_dropbox_existed_loads_with_an_empty_token():
+    import json
+
+    with open(config_store.CONFIG_PATH, "w") as f:
+        json.dump({"destinations": {"dropbox": {"enabled": False}}}, f)
+
+    cfg = config_store.load_config()
+
+    assert cfg["destinations"]["dropbox"] == {"enabled": False, "token": ""}
+    assert config_store.enabled_destinations(cfg) == ["local"]
+
+
+def test_dropbox_token_is_encrypted_at_rest():
+    cfg = config_store.load_config()
+    cfg["destinations"]["dropbox"].update(enabled=True, token="plain-dropbox-token")
+    config_store.save_config(cfg)
+
+    with open(config_store.CONFIG_PATH) as f:
+        assert "plain-dropbox-token" not in f.read()
+    reloaded = config_store.load_config()
+    assert reloaded["destinations"]["dropbox"]["token"] == "plain-dropbox-token"
+    assert config_store.enabled_destinations(reloaded) == ["local", "dropbox"]

@@ -21,6 +21,7 @@ import auth_store
 import destination_util
 import discovery
 import gdrive_oauth
+import dropbox_oauth
 import onedrive_oauth
 import rclone_util
 import restore_actions as ra
@@ -508,6 +509,8 @@ def _validate_config(data, cfg):
             return "Google Drive: a Client ID is required to enable it (paste it in first, then Connect)"
         if name == "onedrive" and dest_data.get("enabled") and not cfg["destinations"]["onedrive"].get("token"):
             return "OneDrive: connect it first (paste a token from `rclone authorize onedrive`) before enabling"
+        if name == "dropbox" and dest_data.get("enabled") and not cfg["destinations"]["dropbox"].get("token"):
+            return "Dropbox: connect it first (paste a token from `rclone authorize dropbox`) before enabling"
     return None
 
 
@@ -709,6 +712,15 @@ def api_test_destination(dest_id):
             root = destination_util.remote_root("onedrive", dest_cfg)
             rclone_util.check_remote(root)
             return jsonify({"ok": True, "message": "connected, backing up to your OneDrive app folder"})
+
+        if dest_id == "dropbox":
+            if not dest_cfg.get("token"):
+                return jsonify({"ok": False, "message": "Not connected yet - paste a token from `rclone authorize dropbox` first"})
+            cfg["destinations"]["dropbox"] = dest_cfg
+            destination_util.sync(cfg)
+            root = destination_util.remote_root("dropbox", dest_cfg)
+            rclone_util.check_remote(root)
+            return jsonify({"ok": True, "message": f"connected, backing up to the {dropbox_oauth.BACKUP_FOLDER} folder in your Dropbox"})
 
         return jsonify({"ok": False, "message": f"{dest_id} is not available yet"})
     except (rclone_util.RcloneError, destination_util.DestinationError, OSError) as exc:
@@ -1137,6 +1149,37 @@ def api_onedrive_disconnect():
     cfg["destinations"]["onedrive"].update({
         "enabled": False, "token": "", "drive_id": "", "drive_type": "", "item_id": "",
     })
+    save_config(cfg)
+    destination_util.sync(cfg)
+    return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------- dropbox ----
+@app.post("/api/destinations/dropbox/connect")
+def api_dropbox_connect():
+    """Validates the pasted `rclone authorize dropbox` token against
+    Dropbox before saving it."""
+    data = request.get_json(force=True, silent=True) or {}
+    try:
+        token_json, access_token = dropbox_oauth.parse_token_blob(data.get("token_blob", ""))
+        dropbox_oauth.verify_access_token(access_token)
+    except Exception as exc:
+        return jsonify({"error": humanize_error(exc)}), 400
+
+    cfg = load_config()
+    dropbox_cfg = cfg["destinations"]["dropbox"]
+    dropbox_cfg["token"] = token_json
+    dropbox_cfg["enabled"] = True
+    save_config(cfg)
+    # force=True: fresh token should win over whatever's already stored.
+    dropbox_oauth.sync_rclone_remote(dropbox_cfg, force=True)
+    return jsonify({"ok": True})
+
+
+@app.post("/api/destinations/dropbox/disconnect")
+def api_dropbox_disconnect():
+    cfg = load_config()
+    cfg["destinations"]["dropbox"].update({"enabled": False, "token": ""})
     save_config(cfg)
     destination_util.sync(cfg)
     return jsonify({"ok": True})

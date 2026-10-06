@@ -5,7 +5,12 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- Dropbox is now a backup destination. Connect it from Settings by pasting
+  the token `rclone authorize dropbox` prints (rclone's built-in Dropbox app,
+  so no Dropbox app registration); backups go to a `Backuparr` folder in your
+  Dropbox. Its token is encrypted at rest like the other destinations'.
 
 ## [1.1.1-beta] - 2026-10-06
 

@@ -1,12 +1,11 @@
 """Resolves each enabled destination's rclone remote root generically, so
 backup.py/restore_actions.py/webui/app.py don't need destination-specific
-branching beyond "which id is this". Currently local, gdrive, and onedrive
-have real backends - dropbox is still coming_soon in
-config_store.DESTINATION_META and never reaches here (enabled_destinations()
-already filters it out).
+branching beyond "which id is this". Local, gdrive, onedrive, and dropbox
+all have real backends.
 """
 import os
 
+import dropbox_oauth
 import gdrive_oauth
 import onedrive_oauth
 from config_store import DEFAULT_LOCAL_DIR
@@ -37,6 +36,11 @@ def remote_root(dest_id, dest_cfg):
             return onedrive_oauth.remote_root(dest_cfg)
         except onedrive_oauth.OneDriveOAuthError as exc:
             raise DestinationError(str(exc)) from exc
+    if dest_id == "dropbox":
+        try:
+            return dropbox_oauth.remote_root(dest_cfg)
+        except dropbox_oauth.DropboxOAuthError as exc:
+            raise DestinationError(str(exc)) from exc
     raise DestinationError(f"unknown or unsupported destination: {dest_id}")
 
 
@@ -45,3 +49,4 @@ def sync(cfg):
     before an operation touches them - safe/cheap to call unconditionally."""
     gdrive_oauth.sync_rclone_remote(cfg["destinations"]["gdrive"])
     onedrive_oauth.sync_rclone_remote(cfg["destinations"]["onedrive"])
+    dropbox_oauth.sync_rclone_remote(cfg["destinations"]["dropbox"])

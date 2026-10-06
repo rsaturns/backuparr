@@ -49,6 +49,7 @@ DESTS = [
     ("Local storage", None, "local", "zero setup"),
     ("Google Drive", os.path.join(ICONS, "google-drive.svg"), "svg", "OAuth connect"),
     ("Microsoft OneDrive", os.path.join(ICONS, "microsoft-onedrive.svg"), "svg", "rclone authorize"),
+    ("Dropbox", os.path.join(ICONS, "dropbox.svg"), "svg", "rclone authorize"),
 ]
 
 CARD_W, CARD_H, CARD_GAP, ICON_SIZE = 230, 60, 16, 32

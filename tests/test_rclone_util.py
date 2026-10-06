@@ -94,3 +94,17 @@ def test_config_set_redacts_sensitive_fields_via_run(monkeypatch):
             rclone_util.config_set("gdrive", "drive", {"client_secret": secret})
 
     assert secret not in str(exc_info.value)
+
+
+@pytest.mark.parametrize("root, expected", [
+    ("backuparr-gdrive:", "backuparr-gdrive:"),
+    ("backuparr-gdrive:/", "backuparr-gdrive:"),
+    ("backuparr-dropbox:Backuparr", "backuparr-dropbox:"),
+    ("backuparr-dropbox:Backuparr/radarr", "backuparr-dropbox:"),
+    ("backuparr-onedrive", "backuparr-onedrive:"),
+])
+def test_check_remote_lists_only_the_remote_itself(monkeypatch, root, expected):
+    calls = []
+    monkeypatch.setattr(rclone_util, "_run", lambda args, redact=(): calls.append(args))
+    rclone_util.check_remote(root)
+    assert calls == [["lsd", "--max-depth", "1", expected]]

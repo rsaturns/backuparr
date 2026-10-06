@@ -164,15 +164,17 @@
                 <div class="app-card-actions">
                   <button type="button" class="btn btn-ghost btn-sm setup-guide-btn" data-dest="{{ m.id }}">Setup guide</button>
                 </div>
-                {% elif m.id == 'onedrive' %}
-                <p id="onedrive-status" class="hint">Not connected yet.</p>
-                <label class="field" id="onedrive-paste-field">
-                  <span class="field-label">Token from <code>rclone authorize onedrive</code></span>
-                  <textarea id="onedrive-token-input" rows="3" placeholder="Paste the output here"></textarea>
+                {% elif m.id in ('onedrive', 'dropbox') %}
+                {# Token-paste destinations; ids here must match TOKEN_DESTS in app.js. #}
+                {% set short = 'OneDrive' if m.id == 'onedrive' else 'Dropbox' %}
+                <p id="{{ m.id }}-status" class="hint">Not connected yet.</p>
+                <label class="field" id="{{ m.id }}-paste-field">
+                  <span class="field-label">Token from <code>rclone authorize {{ m.id }}</code></span>
+                  <textarea id="{{ m.id }}-token-input" rows="3" placeholder="Paste the output here"></textarea>
                 </label>
                 <div class="app-card-actions">
-                  <button type="button" class="btn btn-ghost btn-sm" id="onedrive-connect-btn">Connect OneDrive</button>
-                  <button type="button" class="btn btn-ghost btn-sm hidden" id="onedrive-disconnect-btn">Disconnect</button>
+                  <button type="button" class="btn btn-ghost btn-sm" id="{{ m.id }}-connect-btn">Connect {{ short }}</button>
+                  <button type="button" class="btn btn-ghost btn-sm hidden" id="{{ m.id }}-disconnect-btn">Disconnect</button>
                   <button type="button" class="btn btn-ghost btn-sm test-dest-btn">Test</button>
                   <span class="test-result"></span>
                 </div>
