@@ -154,6 +154,7 @@ are the deployment-level settings that exist outside it, set in
 | `RCLONE_CONFIG_PASS` | *(auto-generated)* | Overrides the auto-generated password used to encrypt `rclone.conf` |
 | `BACKUPARR_DISABLE_AUTH` | `false` | Set to `true` (or `1`/`yes`) to turn off local login when an authenticating reverse proxy (e.g. Authelia) protects the entire UI and API. Anything else, or unset, keeps login required. See [Login](#login). |
 | `BACKUPARR_FORCE_HTTPS` | `false` | Set to `true` if Backuparr sits behind your own TLS-terminating reverse proxy - marks the session cookie `Secure` (HTTPS-only) and trusts that proxy's `X-Forwarded-Proto`/`X-Forwarded-For` headers, so OAuth redirect URIs (Google Drive) come out `https://` and login-lockout tracking sees real client IPs instead of the proxy's. Leave unset for the default plain-HTTP-on-LAN deployment, or login will silently fail. |
+| `BACKUPARR_ALLOW_CROSS_HOST_REDIRECTS` | `false` | Set to `true` (or `1`/`yes`) only if an app's configured URL redirects to a *different* host and you can't update the URL to its final address. By default Backuparr refuses such redirects so your API key is never sent to another host; same-host redirects (including http→https) always work. |
 
 ### Advanced: file locations
 
