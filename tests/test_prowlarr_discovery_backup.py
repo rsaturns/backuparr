@@ -1,6 +1,4 @@
 """The command echo Prowlarr gives back decides whether discovery owns a backup."""
-import requests
-
 from apps.prowlarr import ProwlarrApp
 
 

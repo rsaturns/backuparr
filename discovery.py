@@ -1,7 +1,6 @@
-"""Read configured services from Prowlarr, including masked API keys.
+"""Read the services configured in Prowlarr, recovering their masked API keys.
 
-No configuration is saved here. Only a newly created discovery backup is
-deleted; existing manual and scheduled backups are left alone.
+Nothing is saved here, and only a backup created by discovery is ever deleted.
 """
 import json
 import os
@@ -52,35 +51,30 @@ def _real_key(value):
     return value.strip() if isinstance(value, str) and value.strip().strip("*") else ""
 
 
+def _sabnzbd_url(settings):
+    host = settings.get("host")
+    if not isinstance(host, str) or not host.strip():
+        return ""
+    host = host.strip()
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"  # bare IPv6
+    try:
+        parsed = urlsplit("//" + host)
+        if (not parsed.hostname or parsed.port is not None or parsed.username or parsed.password
+                or parsed.path or parsed.query or parsed.fragment):
+            return ""
+        port = int(settings.get("port", 8080))
+    except (TypeError, ValueError):
+        return ""
+    base = settings.get("urlbase") or ""
+    if not isinstance(base, str):
+        return ""
+    scheme = "https" if settings.get("usessl") in (True, 1, "true", "True") else "http"
+    return f"{scheme}://{host}:{port}" + (f"/{base.strip('/')}" if base.strip("/") else "")
+
+
 def _service_url(app, settings):
-    if app in ("radarr", "sonarr"):
-        url = settings.get("baseurl", "")
-    else:
-        host = settings.get("host")
-        if not isinstance(host, str) or not host.strip():
-            return ""
-        host = host.strip()
-        if ":" in host and not host.startswith("["):
-            host = f"[{host}]"  # IPv6
-        try:
-            parsed_host = urlsplit("//" + host)
-            if (not parsed_host.hostname or parsed_host.port is not None
-                    or parsed_host.username or parsed_host.password
-                    or parsed_host.path or parsed_host.query or parsed_host.fragment):
-                return ""
-        except ValueError:
-            return ""
-        try:
-            port = int(settings.get("port", 8080))
-        except (TypeError, ValueError):
-            return ""
-        ssl = settings.get("usessl") in (True, 1, "true", "True")
-        base = settings.get("urlbase") or ""
-        if not isinstance(base, str):
-            return ""
-        url = f"{'https' if ssl else 'http'}://{host}:{port}"
-        if base.strip("/"):
-            url += "/" + base.strip("/")
+    url = settings.get("baseurl", "") if app in ("radarr", "sonarr") else _sabnzbd_url(settings)
     return url.rstrip("/") if valid_service_url(url) else ""
 
 
@@ -104,24 +98,20 @@ def _get_providers(instance, path):
 
 
 def read_backup_settings(archive_path):
-    """Read only supported provider settings from a private, read-only DB.
+    """Read the supported providers' settings from the backup's SQLite database.
 
-    Read the exact zip member instead of extractall (no archive path traversal).
-    PostgreSQL deployments omit the database from Prowlarr's official backup.
+    Returns ({(implementation, id): settings}, warnings). Prowlarr on PostgreSQL
+    has no database in its backup.
     """
     with zipfile.ZipFile(archive_path) as archive:
         if "prowlarr.db" not in archive.namelist():
             return {}, ["The Prowlarr backup has no SQLite database (for example, when using PostgreSQL). Enter missing API keys manually."]
-        info = archive.getinfo("prowlarr.db")
-        if info.file_size > MAX_BACKUP_BYTES:
-            raise DiscoveryError("The Prowlarr backup database is too large to read.")
         with tempfile.TemporaryDirectory(prefix="backuparr-discovery-db-") as tmp:
             db_path = os.path.join(tmp, "prowlarr.db")
-            with archive.open(info) as source, open(db_path, "xb") as target:
+            with archive.open("prowlarr.db") as source, open(db_path, "xb") as target:
                 os.chmod(db_path, 0o600)
-                # The header's declared size is not trusted: cap what is read.
                 written = 0
-                while chunk := source.read(1024 * 1024):
+                while chunk := source.read(1024 * 1024):  # the zip header's size isn't trusted
                     written += len(chunk)
                     if written > MAX_BACKUP_BYTES:
                         raise DiscoveryError("The Prowlarr backup database is too large to read.")
@@ -129,15 +119,10 @@ def read_backup_settings(archive_path):
             connection = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
             try:
                 result = {}
-                for table, implementations in (
-                    ("Applications", ("radarr", "sonarr")),
-                    ("DownloadClients", ("sabnzbd",)),
-                ):
-                    placeholders = ",".join("?" for _ in implementations)
+                for table in ("Applications", "DownloadClients"):
                     rows = connection.execute(
                         f'SELECT Id, Implementation, Settings FROM "{table}" '
-                        f'WHERE lower(Implementation) IN ({placeholders})', implementations,
-                    )
+                        "WHERE lower(Implementation) IN ('radarr', 'sonarr', 'sabnzbd')")
                     for provider_id, implementation, raw in rows:
                         try:
                             settings = json.loads(raw)
@@ -170,9 +155,8 @@ def _backup_settings(instance, progress, warnings):
             progress("Reading API keys from the temporary Prowlarr backup...")
             with tempfile.TemporaryDirectory(prefix="backuparr-discovery-") as tmp:
                 archive_path = os.path.join(tmp, "backup.zip")
-                path = backup.get("path")
                 try:
-                    instance.download_backup(path, archive_path, max_bytes=MAX_BACKUP_BYTES)
+                    instance.download_backup(backup.get("path"), archive_path, max_bytes=MAX_BACKUP_BYTES)
                 except ServarrError as exc:
                     raise DiscoveryError(str(exc)) from None
                 try:
@@ -219,7 +203,7 @@ def _fill_missing_keys(instance, candidates, progress, warnings):
                 candidate["api_key_error"] = reason
     except DiscoveryError as exc:
         key_error = str(exc)
-    except (requests.RequestException, OSError, sqlite3.Error, zipfile.BadZipFile, RuntimeError):
+    except (OSError, RuntimeError):
         key_error = "Could not read API keys from a temporary Prowlarr backup. Enter missing API keys manually."
     if key_error:
         warnings.append(key_error)

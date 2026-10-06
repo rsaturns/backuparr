@@ -531,9 +531,9 @@ def api_test(app_name):
         return jsonify({"ok": False, "message": humanize_error(exc)})
 
 
-# Discovery runs independently of the backup scheduler. Results contain API
-# keys, stay in memory briefly, and are accessible only to the initiating
-# browser. Finished jobs are purged lazily, on the next discovery request.
+# Discovery results contain API keys: they live in memory for a few minutes,
+# visible only to the browser that started the job, and are purged on the next
+# discovery request.
 DISCOVERY_RUN_LOCK = threading.Lock()
 DISCOVERY_JOBS_LOCK = threading.Lock()
 DISCOVERY_JOBS = {}
@@ -543,7 +543,8 @@ DISCOVERY_OWNER_COOKIE = "backuparr_discovery"
 
 def _purge_discovery_locked():
     cutoff = time.time() - DISCOVERY_RESULT_TTL
-    for job_id in [j for j, job in DISCOVERY_JOBS.items() if job.get("finished", cutoff + 1) < cutoff]:
+    expired = [j for j, job in DISCOVERY_JOBS.items() if job.get("finished", float("inf")) < cutoff]
+    for job_id in expired:
         del DISCOVERY_JOBS[job_id]
 
 
@@ -558,23 +559,16 @@ def _discovery_work(job_id, url, api_key):
             if job_id in DISCOVERY_JOBS:
                 DISCOVERY_JOBS[job_id]["message"] = message
 
-    instance = None
     try:
-        # Strict: discovery never follows a redirect off the configured origin.
         instance = ProwlarrApp(url, api_key, strict_redirects=True)
         result = discovery.discover_prowlarr(instance, progress)
         outcome = {"state": "completed", "message": "Discovery complete.", "result": result}
     except discovery.DiscoveryError as exc:
         outcome = {"state": "failed", "message": str(exc)}
     except Exception:
-        # Never expose remote response bodies, URLs or credentials in logs/errors.
+        # Remote error text can carry URLs or credentials, so it is never surfaced.
         outcome = {"state": "failed", "message": "Could not discover services. Check Prowlarr's URL, API key and that it is reachable from Backuparr."}
     finally:
-        if instance is not None:
-            try:
-                instance.session.close()
-            except Exception:
-                pass
         with DISCOVERY_JOBS_LOCK:
             if job_id in DISCOVERY_JOBS:
                 DISCOVERY_JOBS[job_id].update(outcome, finished=time.time())
@@ -598,8 +592,7 @@ def api_discovery_prowlarr():
         return _discovery_response({"error": "Prowlarr's API key is required."}, 400)
     if not DISCOVERY_RUN_LOCK.acquire(blocking=False):
         return _discovery_response({"error": "Discovery is already running. Try again when it finishes."}, 409)
-    # Keep ownership outside Flask's refreshing session cookie: a concurrent
-    # read response carrying an older session must not erase discovery access.
+    # A separate cookie: a stale concurrent response must not clobber the refreshing session cookie.
     owner = request.cookies.get(DISCOVERY_OWNER_COOKIE) or secrets.token_urlsafe(24)
     job_id = secrets.token_urlsafe(24)
     with DISCOVERY_JOBS_LOCK:
@@ -607,7 +600,7 @@ def api_discovery_prowlarr():
         DISCOVERY_JOBS[job_id] = {"owner": owner, "state": "running", "message": "Connecting to Prowlarr..."}
     try:
         threading.Thread(target=_discovery_work, args=(job_id, data["url"].strip(), api_key.strip()), daemon=True).start()
-    except Exception:
+    except RuntimeError:
         _forget_discovery(job_id)
         DISCOVERY_RUN_LOCK.release()
         return _discovery_response({"error": "Could not start discovery. Try again."}, 503)

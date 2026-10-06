@@ -343,26 +343,20 @@ and API key, and click **Discover services**. Backuparr reads the Radarr,
 Sonarr and SABnzbd instances configured in Prowlarr and fills in their URLs
 and API keys.
 
-- Only empty fields are filled; replacing a value you already entered is an
-  explicit button. If Prowlarr has several instances of an app, you pick one.
-  Nothing is saved or enabled until you enable the apps you want and click
-  **Save settings**. **Test connection** never starts discovery.
-- Prowlarr masks its apps' API keys, so Backuparr creates a temporary
-  Prowlarr backup, reads the keys from its SQLite database, and deletes only
-  the backup it created (existing backups are never touched). Results stay
-  in memory for ten minutes, private to your browser.
-- The URLs are the ones Prowlarr uses, which may not resolve from Backuparr
-  if the containers are on different Docker networks - **Test connection**
-  after applying each one.
-- If Prowlarr uses PostgreSQL (its backup has no database), or `/backup/`
-  sits behind a login proxy that doesn't let Backuparr through, URLs are
-  still filled in and the missing keys are entered by hand. Backuparr never
-  asks for web-login credentials; use Prowlarr's internal URL if it already
-  permits local access.
-- Discovery refuses any redirect away from Prowlarr's exact URL (stricter
-  than normal backups), so enter Prowlarr's final URL.
-- Bazarr, Profilarr, Tdarr, Tautulli and Seerr aren't stored in Prowlarr
-  and are always configured manually.
+- Only empty fields are filled, and nothing is enabled or saved until you do
+  so. **Test connection** never runs discovery.
+- Prowlarr masks its apps' API keys, so Backuparr reads them from a temporary
+  Prowlarr backup and deletes that backup afterwards (existing backups are
+  never touched). Results stay in memory for ten minutes.
+- The URLs are the ones Prowlarr uses; run **Test connection** to confirm
+  Backuparr can reach them.
+- On PostgreSQL, or if a login proxy blocks `/backup/`, URLs are still filled
+  in and the missing keys are entered by hand. Backuparr never asks for
+  web-login credentials.
+- Discovery refuses any redirect away from Prowlarr's exact URL, so use its
+  final address.
+- Bazarr, Profilarr, Tdarr, Tautulli and Seerr are not stored in Prowlarr and
+  are always configured manually.
 
 Use the **Run & Status** tab to trigger a backup immediately and watch it
 happen live, **History** to see what's on each destination per app (and
