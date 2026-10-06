@@ -13,6 +13,9 @@ release event.
 
 ### Added
 
+- `WEBUI_HOST` sets the address the web UI listens on (default `0.0.0.0`,
+  unchanged). With host networking, `127.0.0.1` restricts access to the
+  host's loopback interface.
 - Optional Prowlarr discovery: a **Discover services** button on the Prowlarr
   card (listed first, followed by Radarr, Sonarr and SABnzbd) fills in the
   URLs and API keys of the Radarr, Sonarr and SABnzbd instances configured in
@@ -40,6 +43,9 @@ release event.
   or a partial download is never stored as a backup. A download that is
   redirected to the app's web login now fails with an actionable message.
   Archives are written with mode `0600`.
+- The Docker healthcheck now probes the configured `WEBUI_HOST` (wildcard
+  addresses map to loopback, IPv6 included) and connects directly, ignoring
+  any outbound HTTP proxy.
 
 ## [1.0.7-beta] - 2026-10-04
 

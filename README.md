@@ -146,6 +146,7 @@ are the deployment-level settings that exist outside it, set in
 
 | Env var | Default | Purpose |
 |---|---|---|
+| `WEBUI_HOST` | `0.0.0.0` | Address the web UI listens on. With `network_mode: host`, set `127.0.0.1` to allow connections only through the host's loopback interface. |
 | `WEBUI_PORT` | `8990` | Port the web UI listens on inside the container |
 | `PUID` / `PGID` | `1000` / `1000` | User/group the container runs as instead of root - match your host user (`id`) if you want files on `./data` owned by yourself; re-applied on every start |
 | `TZ` | UTC (Alpine default) | Standard timezone env var - determines what local time the cron schedule (the Daily/Weekly/Every-few-hours time picker on Settings) actually fires at, and the timestamps in `backup.log` |
@@ -155,6 +156,16 @@ are the deployment-level settings that exist outside it, set in
 | `BACKUPARR_DISABLE_AUTH` | `false` | Set to `true` (or `1`/`yes`) to turn off local login when an authenticating reverse proxy (e.g. Authelia) protects the entire UI and API. Anything else, or unset, keeps login required. See [Login](#login). |
 | `BACKUPARR_FORCE_HTTPS` | `false` | Set to `true` if Backuparr sits behind your own TLS-terminating reverse proxy - marks the session cookie `Secure` (HTTPS-only) and trusts that proxy's `X-Forwarded-Proto`/`X-Forwarded-For` headers, so OAuth redirect URIs (Google Drive) come out `https://` and login-lockout tracking sees real client IPs instead of the proxy's. Leave unset for the default plain-HTTP-on-LAN deployment, or login will silently fail. |
 | `BACKUPARR_ALLOW_CROSS_HOST_REDIRECTS` | `false` | Set to `true` (or `1`/`yes`) only if an app's configured URL redirects to a *different* host and you can't update the URL to its final address. By default Backuparr refuses such redirects so your API key is never sent to another host; same-host redirects (including http→https) always work. |
+
+For loopback-only access with Docker host networking, set `network_mode: host`
+on the service and `WEBUI_HOST: "127.0.0.1"` in its environment. Remove the
+`ports:` section, since host networking does not use port publishing. A reverse
+proxy running on the host (or also using host networking) can then reach
+Backuparr at `http://127.0.0.1:8990`.
+
+With Docker bridge networking, keep the default `WEBUI_HOST`. To restrict the
+published port to the host, use `ports: ["127.0.0.1:8990:8990"]` instead; binding
+the app to loopback inside a bridge container prevents published-port access.
 
 ### Advanced: file locations
 
