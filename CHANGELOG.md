@@ -5,6 +5,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.1.1-beta] - 2026-10-06
+
 ### Added
 
 - A Backuparr logo button in the bottom-right corner of the web UI opens a
