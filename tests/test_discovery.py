@@ -150,6 +150,36 @@ def test_multiple_instances_are_returned_for_selection():
     assert result["candidates"][1]["name"] == "4K"
 
 
+def test_multiple_sonarr_instances_keep_their_prowlarr_names_and_own_keys(tmp_path, monkeypatch):
+    monkeypatch.setattr(discovery.tempfile, "tempdir", str(tmp_path))
+    archive = archive_with_settings(tmp_path, [
+        ("Applications", 10, "Radarr", {"baseUrl": "http://radarr:7878", "apiKey": "radarr-key"}),
+        ("Applications", 11, "Sonarr", {"baseUrl": "http://sonarr:8989", "apiKey": "tv-key"}),
+        ("Applications", 12, "Sonarr", {"baseUrl": "http://sonarr-4k:8989", "apiKey": "uhd-key"}),
+    ])
+    instance = FakeProwlarr([
+        provider(url="http://radarr:7878"),
+        provider("Sonarr", 11, "http://sonarr:8989", name="TV"),
+        provider("Sonarr", 12, "http://sonarr-4k:8989", name="Sonarr 4K"),
+    ], archive=archive)
+    result = discovery.discover_prowlarr(instance)
+    sonarr = [c for c in result["candidates"] if c["app"] == "sonarr"]
+    assert [(c["name"], c["url"], c["api_key"]) for c in sonarr] == [
+        ("TV", "http://sonarr:8989", "tv-key"),
+        ("Sonarr 4K", "http://sonarr-4k:8989", "uhd-key"),
+    ]
+    assert [c["api_key"] for c in result["candidates"] if c["app"] == "radarr"] == ["radarr-key"]
+    assert result["warnings"] == []
+
+
+def test_instance_label_is_the_prowlarr_name_or_the_app_type_when_blank():
+    result = discovery.discover_prowlarr(FakeProwlarr([
+        provider("Sonarr", 11, "http://sonarr:8989", key="one", name="Anime"),
+        provider("Sonarr", 12, "http://sonarr-4k:8989", key="two", name=""),
+    ]))
+    assert [c["name"] for c in result["candidates"]] == ["Anime", "sonarr"]
+
+
 def test_sabnzbd_ipv6_ssl_and_urlbase(tmp_path):
     client = {"id": 4, "name": "SAB", "implementation": "Sabnzbd", "fields": [
         {"name": "host", "value": "2001:db8::1"}, {"name": "port", "value": 9090},
