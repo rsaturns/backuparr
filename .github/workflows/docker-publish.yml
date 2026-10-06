@@ -26,10 +26,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
+      # Same Python as ci.yml and the python:3.14-alpine image the app ships in.
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Install Python dependencies
         run: pip install -r requirements.txt -r requirements-dev.txt
