@@ -83,6 +83,19 @@ def build_app(name, app_cfg):
     raise ValueError(f"Unknown app: {name}")
 
 
+_TAR_SUFFIX = re.compile(r"\.tar\.(?:gz|bz2|xz|zst)$")
+
+
+def archive_suffix(path):
+    """.zip for a real zip; an app's own non-zip archive (e.g. Profilarr's
+    .tar.gz) keeps its extension rather than being renamed to .zip."""
+    if zipfile.is_zipfile(path):
+        return ".zip"
+    name = Path(path).name
+    match = _TAR_SUFFIX.search(name)
+    return match.group(0) if match else Path(name).suffix or ".bin"
+
+
 def zip_dir(src_dir, zip_path):
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
         for root, _dirs, files in os.walk(src_dir):
@@ -198,8 +211,7 @@ def run_backup(cfg, on_progress=None, should_cancel=None):
 
             work_dir = os.path.join(run_tmp, name)
             os.makedirs(work_dir, exist_ok=True)
-            zip_name = f"{name}_{timestamp}.zip"
-            zip_path = os.path.join(run_tmp, zip_name)
+            archive_path = None
 
             try:
                 app = build_app(name, app_cfg)
@@ -207,19 +219,23 @@ def run_backup(cfg, on_progress=None, should_cancel=None):
                 result_path = Path(result)
 
                 if result_path.is_dir():
-                    zip_dir(result_path, zip_path)
+                    archive_name = f"{name}_{timestamp}.zip"
+                    archive_path = os.path.join(run_tmp, archive_name)
+                    zip_dir(result_path, archive_path)
                 else:
-                    # Already a zip from the app itself - just move it.
-                    shutil.move(result_path, zip_path)
+                    # The app's own archive - move it, keeping its format.
+                    archive_name = f"{name}_{timestamp}{archive_suffix(result_path)}"
+                    archive_path = os.path.join(run_tmp, archive_name)
+                    shutil.move(result_path, archive_path)
 
-                size = os.path.getsize(zip_path)
+                size = os.path.getsize(archive_path)
                 dest_failures = []
                 for dest_id, root in dest_roots.items():
                     check_cancel()
-                    remote_dest = f"{root}/{name}/{zip_name}"
+                    remote_dest = f"{root}/{name}/{archive_name}"
                     log.info("%s: uploading to %s...", name, dest_id)
                     try:
-                        rclone_util.copyto(zip_path, remote_dest)
+                        rclone_util.copyto(archive_path, remote_dest)
                         log.info("%s: uploaded -> %s (%d bytes)", name, remote_dest, size)
                     except rclone_util.RcloneError as exc:
                         log.error("%s: upload to %s failed: %s", name, dest_id, exc)
@@ -236,8 +252,8 @@ def run_backup(cfg, on_progress=None, should_cancel=None):
                 failed.append(f"{name}: {humanize_error(exc)}")
             finally:
                 shutil.rmtree(work_dir, ignore_errors=True)
-                if os.path.exists(zip_path):
-                    os.remove(zip_path)
+                if archive_path and os.path.exists(archive_path):
+                    os.remove(archive_path)
     except RunCancelled:
         cancelled = True
         log.warning("backup run cancelled")

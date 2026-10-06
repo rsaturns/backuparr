@@ -3,15 +3,78 @@
 All notable changes to this project are documented in this file. The
 format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-Versions before `0.9.0-beta` were never tagged in git or published as
-GitHub Releases - they're reconstructed here from commit history purely
-for readability, not presented as formal releases. Version headers below
-are dated to when the `VERSION` file was set to that value, not to a
-release event.
-
 ## [Unreleased]
 
 _Nothing yet._
+
+## [1.1.0-beta] - 2026-10-06
+
+### Added
+
+- `WEBUI_HOST` sets the address the web UI listens on (default `0.0.0.0`,
+  unchanged). With host networking, `127.0.0.1` restricts access to the
+  host's loopback interface.
+- Optional Prowlarr discovery: a **Discover services** button on the Prowlarr
+  card (listed first, followed by Radarr, Sonarr and SABnzbd) fills in the URLs
+  and API keys of the Radarr, Sonarr and SABnzbd instances configured in
+  Prowlarr. Keys are read from a temporary Prowlarr backup that is deleted
+  afterwards. Manual setup is unchanged.
+
+### Security
+
+- Radarr, Sonarr and Prowlarr requests no longer follow a redirect to a
+  different host. Requests keeps a custom `X-Api-Key` header across
+  redirects, so such a redirect could send the API key (or a backup
+  upload) to another host. Redirects to the same host, including an
+  http-to-https upgrade or a port change, still work; a downgrade from
+  https to http does not. If your app URL currently relies on a cross-host
+  redirect, update it to its final address, or set
+  `BACKUPARR_ALLOW_CROSS_HOST_REDIRECTS=true` to keep the old behaviour.
+- API responses (which include your API keys and backups) are now sent with
+  `Cache-Control: no-store`, and every page carries a Content-Security-Policy
+  that only allows scripts from Backuparr itself and Google's Drive picker.
+- New backup files are private: mode `0600` in `0700` directories, instead
+  of readable by every user on the host, since they hold API keys and
+  credentials. Files already written are not changed. If something else on
+  the host reads your backups as a different user, set `UMASK=022` to keep
+  the previous behaviour.
+
+### Changed
+
+- Backup downloads from Radarr, Sonarr and Prowlarr are staged privately
+  and checked to be a real ZIP archive before being kept, so a login page
+  or a partial download is never stored as a backup. A download that is
+  redirected to the app's web login now fails with an actionable message.
+- The Docker healthcheck now probes the configured `WEBUI_HOST` (wildcard
+  addresses map to loopback, IPv6 included) and connects directly, ignoring
+  any outbound HTTP proxy.
+
+### Removed
+
+- The `restore.py` command-line script. Restores are done from the web UI's
+  **Restore** tab, which covers every app the script did.
+
+### Fixed
+
+- A failed Tautulli connection or error response wrote its API key into the
+  logs: the key is sent in the URL, and the error (and its traceback)
+  repeated that URL in `backup.log` and the container output. Tautulli
+  errors no longer include it. If an earlier failure may have logged your key,
+  rotate it in Tautulli and clear old logs.
+- Saving settings or starting a restore with a malformed request body
+  (for example `apps` or the restore `override` sent as a list) returned a
+  server error and a stack trace in the log; they now return a 400. A
+  boolean `retention_days` is rejected, and the restore backup list refuses
+  unknown app names (it accepted `..`, which listed the folder above the
+  backups).
+- History download and delete, and restore, accepted the file names `.` and
+  `..`. Downloading `..` made the server copy every app's backups into its
+  temporary folder before failing. Names starting with a dot, or ending in a
+  newline, are now rejected.
+- Profilarr backups were stored as `profilarr_<timestamp>.zip` although
+  they are Profilarr's own `.tar.gz`, which Profilarr refuses to import
+  under any other name. They are now kept as
+  `profilarr_<timestamp>.tar.gz`; earlier backups keep their old names.
 
 ## [1.0.7-beta] - 2026-10-04
 

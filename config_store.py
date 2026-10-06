@@ -1,5 +1,5 @@
 """Persistent config for Backuparr - a single JSON file on a volume,
-shared by backup.py, restore.py, and the web UI."""
+shared by backup.py and the web UI."""
 import copy
 import json
 import os

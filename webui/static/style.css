@@ -272,6 +272,26 @@ body {
 
 .app-card:last-child { margin-bottom: 0; }
 
+.discovery-badge {
+  color: var(--accent);
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.discovery-status { margin: 8px 0 0; font-size: 14px; overflow-wrap: anywhere; }
+.app-discovery { display: grid; gap: 8px; }
+.app-discovery p { margin: 0; overflow-wrap: anywhere; }
+.app-discovery .btn { justify-self: start; white-space: normal; text-align: left; }
+.discovery-key-status { display: block; margin-top: 6px; color: var(--danger); font-size: 13px; font-weight: 400; overflow-wrap: anywhere; }
+.discovery-warning { font-size: 13px; color: var(--text-muted); overflow-wrap: anywhere; }
+
+@media (max-width: 480px) {
+  .app-card-head { flex-wrap: wrap; }
+}
+
 .app-card-head {
   display: flex;
   align-items: center;
@@ -441,6 +461,46 @@ input:focus, select:focus, textarea:focus {
 }
 
 .field-actions-spaced { margin-top: 10px; }
+
+.help-tip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--text-muted);
+  border-radius: 50%;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: help;
+}
+
+.help-tip:hover,
+.help-tip:focus { color: var(--accent); border-color: var(--accent); outline: none; }
+
+.help-tip:hover::after,
+.help-tip:focus::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  width: min(280px, 70vw);
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.4;
+  text-align: left;
+}
 
 .test-result {
   font-size: 14.5px;

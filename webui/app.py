@@ -19,11 +19,13 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 import auth_store
 import destination_util
+import discovery
 import gdrive_oauth
 import onedrive_oauth
 import rclone_util
 import restore_actions as ra
 import secrets_crypto
+from apps.prowlarr import ProwlarrApp
 from backup import build_app, format_run_message, humanize_error, notify, run_backup
 from config_store import (
     APP_META,
@@ -107,11 +109,33 @@ app.config.update(
 )
 
 
+# Scripts only from this origin plus Google's, which the Drive folder picker
+# loads; there are no inline scripts. Inline styles stay allowed. connect-src
+# includes GitHub's API for the footer's new-version check.
+CONTENT_SECURITY_POLICY = "; ".join([
+    "default-src 'self'",
+    "script-src 'self' https://apis.google.com https://www.gstatic.com",
+    "style-src 'self' 'unsafe-inline' https://www.gstatic.com",
+    "img-src 'self' data: https://*.gstatic.com https://*.googleusercontent.com https://*.google.com",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    "connect-src 'self' https://*.googleapis.com https://api.github.com",
+    "frame-src https://*.google.com https://content.googleapis.com",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+])
+
+
 @app.after_request
 def _security_headers(response):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "same-origin"
+    response.headers.setdefault("Content-Security-Policy", CONTENT_SECURITY_POLICY)
+    # API responses carry API keys and backups: never let a browser or proxy cache them.
+    if request.path.startswith("/api/"):
+        response.headers.setdefault("Cache-Control", "no-store")
     return response
 
 # CSRF state for the OAuth callback, no session store needed. state -> ts
@@ -238,7 +262,9 @@ def api_login():
 @app.post("/api/logout")
 def api_logout():
     session.clear()
-    return jsonify({"ok": True})
+    response = jsonify({"ok": True})
+    response.delete_cookie(DISCOVERY_OWNER_COOKIE)
+    return response
 
 
 # Deliberately public - it's the forgot-password recovery path. Gated by
@@ -425,7 +451,10 @@ def start_scheduler():
 # --------------------------------------------------------------- pages ----
 @app.get("/")
 def index():
-    return render_template("index.html", app_meta=APP_META, destination_meta=DESTINATION_META, version=VERSION,
+    # Prowlarr and the apps it discovers lead the Settings list, side by side.
+    lead = ("prowlarr", "radarr", "sonarr", "sabnzbd")
+    apps = sorted(APP_META, key=lambda m: lead.index(m["id"]) if m["id"] in lead else len(lead))
+    return render_template("index.html", app_meta=apps, destination_meta=DESTINATION_META, version=VERSION,
                            auth_disabled=_AUTH_DISABLED)
 
 
@@ -441,9 +470,15 @@ def api_meta():
 
 
 def _validate_config(data, cfg):
+    if not isinstance(data, dict):
+        return "expected a JSON object"
+    for key in ("apps", "destinations"):
+        section = data.get(key, {})
+        if not isinstance(section, dict) or not all(isinstance(entry, dict) for entry in section.values()):
+            return f"{key} must be an object of objects"
     if "retention_days" in data:
         try:
-            if int(data["retention_days"]) < 1:
+            if isinstance(data["retention_days"], bool) or int(data["retention_days"]) < 1:
                 return "retention_days must be a positive number"
         except (TypeError, ValueError):
             return "retention_days must be a number"
@@ -478,7 +513,7 @@ def _validate_config(data, cfg):
 
 @app.post("/api/config")
 def api_set_config():
-    data = request.get_json(force=True, silent=True) or {}
+    data = request.get_json(force=True, silent=True)
     cfg = load_config()
     error = _validate_config(data, cfg)
     if error:
@@ -522,6 +557,100 @@ def api_test(app_name):
         return jsonify({"ok": True, "message": message})
     except Exception as exc:
         return jsonify({"ok": False, "message": humanize_error(exc)})
+
+
+# Discovery results contain API keys: they live in memory for a few minutes,
+# visible only to the browser that started the job, and are purged on the next
+# discovery request.
+DISCOVERY_RUN_LOCK = threading.Lock()
+DISCOVERY_JOBS_LOCK = threading.Lock()
+DISCOVERY_JOBS = {}
+DISCOVERY_RESULT_TTL = 600
+DISCOVERY_OWNER_COOKIE = "backuparr_discovery"
+
+
+def _purge_discovery_locked():
+    cutoff = time.time() - DISCOVERY_RESULT_TTL
+    expired = [j for j, job in DISCOVERY_JOBS.items() if job.get("finished", float("inf")) < cutoff]
+    for job_id in expired:
+        del DISCOVERY_JOBS[job_id]
+
+
+def _forget_discovery(job_id):
+    with DISCOVERY_JOBS_LOCK:
+        DISCOVERY_JOBS.pop(job_id, None)
+
+
+def _discovery_work(job_id, url, api_key):
+    def progress(message):
+        with DISCOVERY_JOBS_LOCK:
+            if job_id in DISCOVERY_JOBS:
+                DISCOVERY_JOBS[job_id]["message"] = message
+
+    try:
+        instance = ProwlarrApp(url, api_key, strict_redirects=True)
+        result = discovery.discover_prowlarr(instance, progress)
+        outcome = {"state": "completed", "message": "Discovery complete.", "result": result}
+    except discovery.DiscoveryError as exc:
+        outcome = {"state": "failed", "message": str(exc)}
+    except Exception:
+        # Remote error text can carry URLs or credentials, so it is never surfaced.
+        outcome = {"state": "failed", "message": "Could not discover services. Check Prowlarr's URL, API key and that it is reachable from Backuparr."}
+    finally:
+        with DISCOVERY_JOBS_LOCK:
+            if job_id in DISCOVERY_JOBS:
+                DISCOVERY_JOBS[job_id].update(outcome, finished=time.time())
+        DISCOVERY_RUN_LOCK.release()
+
+
+def _discovery_response(data, status=200):
+    response = jsonify(data)
+    response.status_code = status
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.post("/api/discovery/prowlarr")
+def api_discovery_prowlarr():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not discovery.valid_service_url(data.get("url")):
+        return _discovery_response({"error": "A valid Prowlarr URL starting with http:// or https:// is required."}, 400)
+    api_key = data.get("api_key")
+    if not isinstance(api_key, str) or not api_key.strip():
+        return _discovery_response({"error": "Prowlarr's API key is required."}, 400)
+    if not DISCOVERY_RUN_LOCK.acquire(blocking=False):
+        return _discovery_response({"error": "Discovery is already running. Try again when it finishes."}, 409)
+    # A separate cookie: a stale concurrent response must not clobber the refreshing session cookie.
+    owner = request.cookies.get(DISCOVERY_OWNER_COOKIE) or secrets.token_urlsafe(24)
+    job_id = secrets.token_urlsafe(24)
+    with DISCOVERY_JOBS_LOCK:
+        _purge_discovery_locked()
+        DISCOVERY_JOBS[job_id] = {"owner": owner, "state": "running", "message": "Connecting to Prowlarr..."}
+    try:
+        threading.Thread(target=_discovery_work, args=(job_id, data["url"].strip(), api_key.strip()), daemon=True).start()
+    except RuntimeError:
+        _forget_discovery(job_id)
+        DISCOVERY_RUN_LOCK.release()
+        return _discovery_response({"error": "Could not start discovery. Try again."}, 503)
+    response = _discovery_response({"job_id": job_id}, 202)
+    response.set_cookie(DISCOVERY_OWNER_COOKIE, owner, httponly=True,
+                        secure=app.config["SESSION_COOKIE_SECURE"], samesite="Strict")
+    return response
+
+
+@app.route("/api/discovery/prowlarr/<job_id>", methods=["GET", "DELETE"])
+def api_discovery_status(job_id):
+    with DISCOVERY_JOBS_LOCK:
+        _purge_discovery_locked()
+        job = DISCOVERY_JOBS.get(job_id)
+        if not job or job["owner"] != request.cookies.get(DISCOVERY_OWNER_COOKIE):
+            return _discovery_response({"error": "Discovery results expired. Run discovery again."}, 404)
+        if request.method == "DELETE":
+            if job["state"] == "running":
+                return _discovery_response({"error": "Discovery is still running."}, 409)
+            DISCOVERY_JOBS.pop(job_id)
+            return _discovery_response({"ok": True})
+        return _discovery_response({key: value for key, value in job.items() if key not in ("owner", "finished")})
 
 
 @app.post("/api/test-notify")
@@ -794,6 +923,8 @@ def api_restore_status():
 
 @app.get("/api/restore/<dest_id>/<app_name>/backups")
 def api_restore_backups(dest_id, app_name):
+    if app_name not in APP_NAMES:
+        return jsonify({"error": "unknown app"}), 404
     cfg = load_config()
     root, error = _destination_root_or_error(cfg, dest_id)
     if error:
@@ -846,6 +977,8 @@ def api_restore(dest_id, app_name):
     # config.json. Lets you point a restore at a throwaway/test instance
     # without touching the app's configured connection in Settings.
     override = data.get("override")
+    if override and not isinstance(override, dict):
+        return jsonify({"error": "override must be an object"}), 400
     if override:
         allowed = _restore_override_fields(app_name)
         app_cfg = dict(app_cfg)
@@ -1013,4 +1146,8 @@ def api_onedrive_disconnect():
 start_scheduler()
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("WEBUI_PORT", 8990)), debug=False)
+    app.run(
+        host=os.environ.get("WEBUI_HOST") or "0.0.0.0",
+        port=int(os.environ.get("WEBUI_PORT", 8990)),
+        debug=False,
+    )

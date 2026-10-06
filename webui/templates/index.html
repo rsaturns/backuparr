@@ -5,14 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="description" content="Backuparr - backup your Arrs">
 <title>Backuparr</title>
-<script>
-(function () {
-  try {
-    var t = localStorage.getItem("backuparr-theme");
-    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
-  } catch (e) {}
-})();
-</script>
+<script src="{{ url_for('static', filename='theme-init.js') }}"></script>
 <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
 <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
@@ -74,11 +67,13 @@
               </label>
               <img class="app-icon" src="{{ url_for('static', filename='icons/' ~ m.icon) }}" alt="" width="22" height="22">
               <h3>{{ m.label }}</h3>
+              {% if m.id in ('radarr', 'sonarr', 'sabnzbd') %}<span class="discovery-badge discovery-origin hidden">From Prowlarr</span>{% endif %}
               {% if m.status != 'available' %}<span class="badge-soon">Coming soon</span>{% endif %}
               <span class="status-dot" data-state="idle"></span>
             </div>
             {% if m.status == 'available' %}
             <div class="app-card-body hidden">
+              {% if m.id in ('radarr', 'sonarr', 'sabnzbd') %}<div class="app-discovery hidden"></div>{% endif %}
               <label class="field">
                 <span class="field-label">URL</span>
                 <input type="text" class="f-url" placeholder="{{ m.url_placeholder }}" autocomplete="off">
@@ -89,6 +84,7 @@
                   {% if not m.key_required %}<span class="muted">(optional{% if m.key_help %} &mdash; {{ m.key_help }}{% endif %})</span>{% endif %}
                 </span>
                 <input type="password" class="f-api_key" autocomplete="off">
+                {% if m.id in ('radarr', 'sonarr', 'sabnzbd') %}<span class="discovery-key-status hidden" role="status"></span>{% endif %}
               </label>
               {% for f in m.extra_fields %}
               <label class="field">
@@ -104,8 +100,13 @@
               {% endif %}
               <div class="app-card-actions">
                 <button type="button" class="btn btn-ghost btn-sm test-btn">Test connection</button>
+                {% if m.id == 'prowlarr' %}<button type="button" class="btn btn-primary btn-sm" id="discover-btn" disabled>Discover services</button><span class="help-tip" tabindex="0" role="img" aria-label="Reads the apps and download clients connected to Prowlarr, through its API, and fills in the URL and API key of your Radarr, Sonarr and SABnzbd." data-tip="Reads the apps and download clients connected to Prowlarr, through its API, and fills in the URL and API key of your Radarr, Sonarr and SABnzbd.">?</span>{% endif %}
                 <span class="test-result"></span>
               </div>
+              {% if m.id == 'prowlarr' %}
+              <p id="discovery-status" class="discovery-status" role="status" aria-live="polite"></p>
+              <div id="discovery-results"></div>
+              {% endif %}
             </div>
             {% endif %}
           </div>

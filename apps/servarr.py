@@ -9,25 +9,104 @@ restore) upload a zip straight back in. No filesystem/volume access at all.
 """
 import logging
 import os
+import tempfile
 import time
+from urllib.parse import urljoin, urlsplit
+import zipfile
 
 import requests
 
 logger = logging.getLogger(f"backuparr.{__name__}")
+
+ALLOW_CROSS_HOST_ENV = "BACKUPARR_ALLOW_CROSS_HOST_REDIRECTS"
+
+_BACKUP_ACCESS_HINT = (
+    "Use the app's internal URL if it already permits local access, or allow "
+    "Backuparr through the reverse proxy; external login pages cannot be "
+    "authenticated with an API key."
+)
 
 
 class ServarrError(RuntimeError):
     pass
 
 
+class UnsafeRedirectError(requests.RequestException):
+    """A redirect would send the service's API key to a different host."""
+
+
+def _redirect_ok(source, target):
+    """Whether a redirect to ``target`` can safely carry the API key.
+
+    Requests keeps a custom X-Api-Key header across redirects, so only the same
+    host qualifies (an http->https upgrade or port change is fine), never a
+    downgrade to http. The target may carry the configured URL's own
+    credentials (http://user:pass@host works) but never new ones.
+    """
+    try:
+        src, dst = urlsplit(source), urlsplit(target)
+        _ = dst.port  # raises ValueError on a malformed port
+        return (
+            src.hostname is not None and src.hostname == dst.hostname
+            and (dst.username, dst.password) in ((None, None), (src.username, src.password))
+            and (dst.scheme == src.scheme or (src.scheme, dst.scheme) == ("http", "https"))
+        )
+    except ValueError:
+        return False
+
+
+def _cross_host_allowed():
+    return os.environ.get(ALLOW_CROSS_HOST_ENV, "").lower() in ("1", "true", "yes")
+
+
+def _same_origin(source, target):
+    try:
+        src, dst = urlsplit(source), urlsplit(target)
+        default = {"http": 80, "https": 443}
+        return (_redirect_ok(source, target) and src.scheme == dst.scheme
+                and (src.port or default[src.scheme]) == (dst.port or default[dst.scheme]))
+    except (ValueError, KeyError):
+        return False
+
+
+class _ServarrSession(requests.Session):
+    def __init__(self, service_url, strict=False):
+        super().__init__()
+        self._service_url = requests.Request("GET", service_url).prepare().url
+        self._strict = strict
+        self._warned = False
+
+    def redirect_allowed(self, target):
+        if self._strict:
+            return _same_origin(self._service_url, target)
+        if _redirect_ok(self._service_url, target):
+            return True
+        if _cross_host_allowed():
+            if not self._warned:
+                self._warned = True
+                logger.warning("following a redirect to a different host because %s is set", ALLOW_CROSS_HOST_ENV)
+            return True
+        return False
+
+    def send(self, request, **kwargs):
+        # Runs on every hop, so redirected POSTs and uploads are refused too.
+        if not self.redirect_allowed(request.url):
+            raise UnsafeRedirectError(
+                "the request was redirected to a different host and not sent, to avoid "
+                "exposing the API key. Update the app's URL to its final address, or set "
+                f"{ALLOW_CROSS_HOST_ENV}=true to follow cross-host redirects."
+            )
+        return super().send(request, **kwargs)
+
+
 class ServarrApp:
     api_version = "v3"
 
-    def __init__(self, name, url, api_key, timeout=30):
+    def __init__(self, name, url, api_key, timeout=30, strict_redirects=False):
         self.name = name
         self.url = url.rstrip("/")
         self.timeout = timeout
-        self.session = requests.Session()
+        self.session = _ServarrSession(self.url, strict=strict_redirects)
         self.session.headers.update({"X-Api-Key": api_key, "Accept": "application/json"})
 
     def _api(self, path):
@@ -41,8 +120,10 @@ class ServarrApp:
         info = res.json()
         return f"{self.name} {info.get('version', '?')} reachable"
 
-    def trigger_backup(self, poll_interval=2, timeout_s=300):
-        res = self.session.post(self._api("/command"), json={"name": "Backup"}, timeout=self.timeout)
+    def trigger_backup(self, poll_interval=2, timeout_s=300, request_headers=None):
+        """Run a Backup command and wait for it; returns the finished command."""
+        res = self.session.post(self._api("/command"), json={"name": "Backup"},
+                                timeout=self.timeout, headers=request_headers)
         res.raise_for_status()
         command_id = res.json()["id"]
 
@@ -50,9 +131,10 @@ class ServarrApp:
         while time.time() < deadline:
             res = self.session.get(self._api(f"/command/{command_id}"), timeout=self.timeout)
             res.raise_for_status()
-            status = res.json().get("status")
+            command = res.json()
+            status = command.get("status")
             if status == "completed":
-                return
+                return command
             if status in ("failed", "aborted"):
                 raise ServarrError(f"{self.name}: backup command {status}")
             time.sleep(poll_interval)
@@ -63,6 +145,71 @@ class ServarrApp:
         res.raise_for_status()
         return res.json()
 
+    def _next_download_url(self, response, current, base):
+        """The same-host /backup/ URL a redirect points to, or a ServarrError."""
+        status = response.status_code
+        location = response.headers.get("Location")
+        target = urljoin(current, location) if location else ""
+        parts = urlsplit(target)
+        if target and not parts.fragment and self.session.redirect_allowed(target):
+            path = parts.path.rstrip("/").lower()
+            if path == base.path.rstrip("/").lower() + "/login":
+                raise ServarrError(
+                    f"{self.name}: backup download redirects to the app's web login (HTTP {status}). "
+                    f"Its API key cannot authenticate /backup/. {_BACKUP_ACCESS_HINT}")
+            if parts.hostname != base.hostname or parts.path.startswith(base.path.rstrip("/") + "/backup/"):
+                return target
+        raise ServarrError(
+            f"{self.name}: backup download was redirected (HTTP {status}) "
+            f"outside the app's /backup/ route. {_BACKUP_ACCESS_HINT}")
+
+    def _save_zip(self, response, dest, max_bytes):
+        """Stream ``response`` to ``dest`` via a private temp file, only if it is a real ZIP."""
+        fd, staged = tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(dest)), prefix=".backup-")
+        try:
+            size = 0
+            with os.fdopen(fd, "wb") as out:
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    size += len(chunk)
+                    if max_bytes is not None and size > max_bytes:
+                        raise ServarrError(f"{self.name}: backup is too large to download")
+                    out.write(chunk)
+            if not zipfile.is_zipfile(staged):
+                raise ServarrError(
+                    f"{self.name}: backup download did not return a valid ZIP archive. "
+                    "Check authentication and reverse proxy access to /backup/.")
+            os.replace(staged, dest)
+        finally:
+            if os.path.exists(staged):
+                os.remove(staged)
+
+    def download_backup(self, path, dest, max_bytes=None):
+        """Download a backup zip with the API key, following only safe redirects."""
+        if not isinstance(path, str) or not path.startswith("/backup/"):
+            raise ServarrError(f"{self.name}: invalid backup path")
+        base = urlsplit(self.url)
+        url = self.url + path
+        try:
+            for _ in range(6):
+                with self.session.get(url, timeout=self.timeout, stream=True, allow_redirects=False) as response:
+                    if response.status_code in (301, 302, 303, 307, 308):
+                        url = self._next_download_url(response, url, base)
+                        continue
+                    if response.status_code != 200:
+                        raise ServarrError(
+                            f"{self.name}: could not download the backup (HTTP {response.status_code}). "
+                            f"Check the API key and access to /backup/. {_BACKUP_ACCESS_HINT}")
+                    self._save_zip(response, dest, max_bytes)
+                    return dest
+            raise ServarrError(
+                f"{self.name}: too many backup redirects. Check authentication and reverse proxy access to /backup/.")
+        except UnsafeRedirectError:
+            raise
+        except requests.RequestException:
+            raise ServarrError(
+                f"{self.name}: could not connect while downloading the backup. "
+                "Check the app URL and reverse proxy access to /backup/.") from None
+
     def download_latest_manual(self, dest_dir):
         manual = [b for b in self.list_backups() if b.get("type") == "manual"]
         if not manual:
@@ -70,14 +217,9 @@ class ServarrApp:
         manual.sort(key=lambda b: b.get("time", ""), reverse=True)
         latest = manual[0]
 
-        download_url = f"{self.url}{latest['path']}"
-        res = self.session.get(download_url, timeout=self.timeout)
-        res.raise_for_status()
-
         filename = os.path.basename(latest["path"])
         dest = os.path.join(dest_dir, filename)
-        with open(dest, "wb") as f:
-            f.write(res.content)
+        self.download_backup(latest["path"], dest)
         return dest, latest.get("id")
 
     def delete_backup(self, backup_id):
