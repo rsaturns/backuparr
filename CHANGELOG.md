@@ -3,13 +3,11 @@
 All notable changes to this project are documented in this file. The
 format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-Versions before `0.9.0-beta` were never tagged in git or published as
-GitHub Releases - they're reconstructed here from commit history purely
-for readability, not presented as formal releases. Version headers below
-are dated to when the `VERSION` file was set to that value, not to a
-release event.
-
 ## [Unreleased]
+
+_Nothing yet._
+
+## [1.1.0-beta] - 2026-10-06
 
 ### Added
 
