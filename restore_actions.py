@@ -20,7 +20,8 @@ from apps.tdarr import TdarrApp
 
 UPLOAD_RESTORE_APPS = {"radarr": RadarrApp, "sonarr": SonarrApp, "prowlarr": ProwlarrApp}
 
-# Backup filenames are always <app>_<timestamp>.zip. filename can come
+# Backup filenames are always <app>_<timestamp>.<ext> (.zip, or .tar.gz for
+# Profilarr). filename can come
 # straight from a request body, so reject anything else to block path
 # traversal into a local path.join() or remote rclone path.
 SAFE_FILENAME = re.compile(r"^[A-Za-z0-9._-]+$")

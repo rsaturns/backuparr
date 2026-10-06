@@ -37,10 +37,16 @@ _Nothing yet._
   and checked to be a real ZIP archive before being kept, so a login page
   or a partial download is never stored as a backup. A download that is
   redirected to the app's web login now fails with an actionable message.
-  Archives are written with mode `0600`.
 - The Docker healthcheck now probes the configured `WEBUI_HOST` (wildcard
   addresses map to loopback, IPv6 included) and connects directly, ignoring
   any outbound HTTP proxy.
+
+### Fixed
+
+- Profilarr backups were stored as `profilarr_<timestamp>.zip` although
+  they are Profilarr's own `.tar.gz`, which Profilarr refuses to import
+  under any other name. They are now kept as
+  `profilarr_<timestamp>.tar.gz`; earlier backups keep their old names.
 
 ## [1.0.7-beta] - 2026-10-04
 
