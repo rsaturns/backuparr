@@ -34,7 +34,8 @@ def test_pages_carry_a_policy_that_blocks_inline_and_foreign_scripts(webui):
 
 
 @pytest.mark.parametrize("path", ["/api/config", "/api/history/local", "/api/meta"])
-def test_api_responses_are_never_cached(webui, path):
+def test_api_responses_are_never_cached(webui, monkeypatch, path):
+    monkeypatch.setattr(webui.rclone_util, "lsjson", lambda root, recursive=False: [])
     assert authed(webui).get(path).headers["Cache-Control"] == "no-store"
 
 

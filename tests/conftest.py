@@ -8,6 +8,7 @@ import pytest
 import auth_store
 import config_store
 import destination_util
+import rclone_util
 import secrets_crypto
 
 PASSWORD = "test-password"
@@ -29,6 +30,11 @@ def isolated_webui(tmp_path, monkeypatch):
     monkeypatch.setattr(secrets_crypto, "_fernet", None)
     monkeypatch.setattr(destination_util, "DEFAULT_LOCAL_DIR", str(tmp_path / "backups"))
     monkeypatch.setattr(destination_util, "sync", lambda *args, **kwargs: None)
+
+    def no_real_rclone(*args, **kwargs):
+        raise AssertionError("this test ran the real rclone; stub the rclone_util function it needs (CI has no rclone binary)")
+
+    monkeypatch.setattr(rclone_util, "_run", no_real_rclone)
     with pytest.MonkeyPatch.context() as startup:
         startup.setattr("threading.Thread.start", lambda self: None)
         if "webui.app" in sys.modules:
