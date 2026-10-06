@@ -79,8 +79,8 @@ class TautulliApp:
             res.raise_for_status()
         except requests.exceptions.HTTPError as exc:
             # Don't let requests' default message through - it embeds the
-            # full request URL, apikey included.
-            raise TautulliError(f"tautulli: HTTP {res.status_code} calling {cmd}") from exc
+            # full request URL, apikey included - or chain it (from None).
+            raise TautulliError(f"tautulli: HTTP {res.status_code} calling {cmd}") from None
         return res
 
     def test_connection(self):
@@ -116,8 +116,8 @@ class TautulliApp:
             raise TautulliError(f"tautulli: {data.get('message') or res.text or 'import failed'}")
         try:
             res.raise_for_status()
-        except requests.exceptions.HTTPError as exc:
-            raise TautulliError(f"tautulli: HTTP {res.status_code} calling {cmd}") from exc
+        except requests.exceptions.HTTPError:
+            raise TautulliError(f"tautulli: HTTP {res.status_code} calling {cmd}") from None
         data = res.json().get("response", {})
         if data.get("result") != "success":
             raise TautulliError(f"tautulli: {data.get('message') or 'import failed'}")

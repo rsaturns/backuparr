@@ -56,10 +56,10 @@ _Nothing yet._
 
 ### Fixed
 
-- A failed Tautulli connection wrote its API key into the logs: the key is
-  sent in the URL, and the connection error (and its traceback) repeated
-  that URL in `backup.log` and the container output. Tautulli errors no
-  longer include it. If an earlier failure may have logged your key,
+- A failed Tautulli connection or error response wrote its API key into the
+  logs: the key is sent in the URL, and the error (and its traceback)
+  repeated that URL in `backup.log` and the container output. Tautulli
+  errors no longer include it. If an earlier failure may have logged your key,
   rotate it in Tautulli and clear old logs.
 - Saving settings or starting a restore with a malformed request body
   (for example `apps` or the restore `override` sent as a list) returned a

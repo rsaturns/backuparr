@@ -1,5 +1,7 @@
+import http.server
 import io
 import logging
+import threading
 
 import pytest
 import requests
@@ -64,3 +66,47 @@ def test_a_failed_backup_run_keeps_the_key_out_of_the_logs(tmp_path, monkeypatch
     assert "Traceback" in stream.getvalue()  # the failure is still logged in full
     assert KEY not in stream.getvalue()
     assert KEY not in "".join(failed)
+
+
+@pytest.fixture
+def server_answering_500():
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(500)
+            self.end_headers()
+
+        do_POST = do_GET
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{server.server_port}"
+    server.shutdown()
+
+
+def logged(call):
+    stream = io.StringIO()
+    logger = logging.getLogger("backuparr.test")
+    handler = logging.StreamHandler(stream)
+    logger.addHandler(handler)
+    try:
+        call()
+    except Exception:
+        logger.exception("failed")
+    finally:
+        logger.removeHandler(handler)
+    return stream.getvalue()
+
+
+def test_an_http_error_response_does_not_carry_the_key_into_the_log(server_answering_500):
+    # requests' own HTTPError text repeats the whole URL, apikey included.
+    output = logged(lambda: TautulliApp(server_answering_500, KEY).test_connection())
+    assert "HTTP 500" in output and KEY not in output
+
+
+def test_an_http_error_while_importing_does_not_carry_the_key_into_the_log(server_answering_500, tmp_path):
+    (tmp_path / "config.ini").write_text("[General]\n")
+    output = logged(lambda: TautulliApp(server_answering_500, KEY).restore(str(tmp_path)))
+    assert "HTTP 500" in output and KEY not in output
