@@ -30,6 +30,9 @@ _Nothing yet._
   https to http does not. If your app URL currently relies on a cross-host
   redirect, update it to its final address, or set
   `BACKUPARR_ALLOW_CROSS_HOST_REDIRECTS=true` to keep the old behaviour.
+- API responses (which include your API keys and backups) are now sent with
+  `Cache-Control: no-store`, and every page carries a Content-Security-Policy
+  that only allows scripts from Backuparr itself and Google's Drive picker.
 - New backup files are private: mode `0600` in `0700` directories, instead
   of readable by every user on the host, since they hold API keys and
   credentials. Files already written are not changed. If something else on

@@ -109,11 +109,33 @@ app.config.update(
 )
 
 
+# Scripts only from this origin plus Google's, which the Drive folder picker
+# loads; there are no inline scripts. Inline styles stay allowed. connect-src
+# includes GitHub's API for the footer's new-version check.
+CONTENT_SECURITY_POLICY = "; ".join([
+    "default-src 'self'",
+    "script-src 'self' https://apis.google.com https://www.gstatic.com",
+    "style-src 'self' 'unsafe-inline' https://www.gstatic.com",
+    "img-src 'self' data: https://*.gstatic.com https://*.googleusercontent.com https://*.google.com",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    "connect-src 'self' https://*.googleapis.com https://api.github.com",
+    "frame-src https://*.google.com https://content.googleapis.com",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+])
+
+
 @app.after_request
 def _security_headers(response):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "same-origin"
+    response.headers.setdefault("Content-Security-Policy", CONTENT_SECURITY_POLICY)
+    # API responses carry API keys and backups: never let a browser or proxy cache them.
+    if request.path.startswith("/api/"):
+        response.headers.setdefault("Cache-Control", "no-store")
     return response
 
 # CSRF state for the OAuth callback, no session store needed. state -> ts
