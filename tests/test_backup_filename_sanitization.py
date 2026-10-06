@@ -59,3 +59,22 @@ def test_profilarr_download_latest_sanitizes_malicious_filename(tmp_path):
     assert filename == "evil.zip"
     assert os.path.dirname(dest) == str(tmp_path)
     assert os.path.exists(dest)
+
+
+def test_bazarr_restore_file_stays_readable_by_bazarr_under_a_private_umask(tmp_path):
+    source = tmp_path / "bazarr_20261006_171108.zip"
+    source.write_bytes(_valid_zip_bytes())
+    bazarr_dir = tmp_path / "bazarr-backup"
+    bazarr_dir.mkdir()
+    app = BazarrApp("http://bazarr.example", "fake-api-key")
+
+    previous = os.umask(0o077)
+    try:
+        with patch.object(app.session, "patch", return_value=MagicMock()):
+            app.restore_from_file(str(source), str(bazarr_dir))
+    finally:
+        os.umask(previous)
+
+    placed = bazarr_dir / "bazarr_backup_vbazarr_20261006_171108.zip"
+    assert placed.read_bytes() == source.read_bytes()
+    assert placed.stat().st_mode & 0o777 == 0o644
