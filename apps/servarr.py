@@ -61,13 +61,27 @@ def _cross_host_allowed():
     return os.environ.get(ALLOW_CROSS_HOST_ENV, "").lower() in ("1", "true", "yes")
 
 
+def _same_origin(source, target):
+    try:
+        src, dst = urlsplit(source), urlsplit(target)
+        default = {"http": 80, "https": 443}
+        return (_redirect_ok(source, target) and src.scheme == dst.scheme
+                and (src.port or default[src.scheme]) == (dst.port or default[dst.scheme]))
+    except (ValueError, KeyError):
+        return False
+
+
 class _ServarrSession(requests.Session):
-    def __init__(self, service_url):
+    def __init__(self, service_url, strict=False):
         super().__init__()
         self._service_url = requests.Request("GET", service_url).prepare().url
+        self._strict = strict
         self._warned = False
 
     def redirect_allowed(self, target):
+        if self._strict:
+            # No redirect leaves the configured origin, and no opt-out.
+            return _same_origin(self._service_url, target)
         if _redirect_ok(self._service_url, target):
             return True
         if _cross_host_allowed():
@@ -92,11 +106,11 @@ class _ServarrSession(requests.Session):
 class ServarrApp:
     api_version = "v3"
 
-    def __init__(self, name, url, api_key, timeout=30):
+    def __init__(self, name, url, api_key, timeout=30, strict_redirects=False):
         self.name = name
         self.url = url.rstrip("/")
         self.timeout = timeout
-        self.session = _ServarrSession(self.url)
+        self.session = _ServarrSession(self.url, strict=strict_redirects)
         self.session.headers.update({"X-Api-Key": api_key, "Accept": "application/json"})
 
     def _api(self, path):
@@ -110,8 +124,10 @@ class ServarrApp:
         info = res.json()
         return f"{self.name} {info.get('version', '?')} reachable"
 
-    def trigger_backup(self, poll_interval=2, timeout_s=300):
-        res = self.session.post(self._api("/command"), json={"name": "Backup"}, timeout=self.timeout)
+    def trigger_backup(self, poll_interval=2, timeout_s=300, request_headers=None):
+        """Run a Backup command and wait for it; returns the finished command."""
+        res = self.session.post(self._api("/command"), json={"name": "Backup"},
+                                timeout=self.timeout, headers=request_headers)
         res.raise_for_status()
         command_id = res.json()["id"]
 
@@ -119,9 +135,10 @@ class ServarrApp:
         while time.time() < deadline:
             res = self.session.get(self._api(f"/command/{command_id}"), timeout=self.timeout)
             res.raise_for_status()
-            status = res.json().get("status")
+            command = res.json()
+            status = command.get("status")
             if status == "completed":
-                return
+                return command
             if status in ("failed", "aborted"):
                 raise ServarrError(f"{self.name}: backup command {status}")
             time.sleep(poll_interval)
