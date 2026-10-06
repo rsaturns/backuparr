@@ -1,4 +1,6 @@
+import os
 import re
+import subprocess
 import zipfile
 from pathlib import Path
 
@@ -64,3 +66,27 @@ def test_run_backup_names_each_archive_by_its_real_format(tmp_path, monkeypatch)
     assert re.fullmatch(r"profilarr_\d{8}_\d{6}\.tar\.gz", names["profilarr"])
     assert re.fullmatch(r"radarr_\d{8}_\d{6}\.zip", names["radarr"])
     assert re.fullmatch(r"tdarr_\d{8}_\d{6}\.zip", names["tdarr"])
+
+
+ENTRYPOINT = Path(__file__).resolve().parent.parent / "entrypoint.sh"
+UMASK_BLOCK = re.search(r'UMASK="\$\{UMASK:-077\}".*?umask "\$UMASK"\n', ENTRYPOINT.read_text(), re.S).group(0)
+
+
+def effective_umask(value):
+    env = {k: v for k, v in os.environ.items() if k != "UMASK"}
+    if value is not None:
+        env["UMASK"] = value
+    out = subprocess.run(["bash", "-c", UMASK_BLOCK + "umask"], env=env, capture_output=True, text=True, check=True)
+    return out.stdout.strip().splitlines()[-1]
+
+
+@pytest.mark.parametrize("value, expected", [
+    (None, "0077"),
+    ("022", "0022"),
+    ("0027", "0027"),
+    ("77", "0077"),
+    ("999", "0077"),
+    ("rwx", "0077"),
+])
+def test_entrypoint_umask_defaults_private_and_rejects_bad_values(value, expected):
+    assert effective_umask(value) == expected

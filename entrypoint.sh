@@ -52,5 +52,14 @@ if [ "$FORCE_HTTPS_LOWER" = "1" ] || [ "$FORCE_HTTPS_LOWER" = "true" ] || [ "$FO
     WAITRESS_ARGS+=(--trusted-proxy="*" --trusted-proxy-headers="x-forwarded-proto x-forwarded-for x-forwarded-host")
 fi
 
+# Backups hold API keys and credentials, so new files are owner-only
+# (0600, directories 0700) unless UMASK says otherwise, e.g. UMASK=022.
+UMASK="${UMASK:-077}"
+case "$UMASK" in
+    [0-7][0-7][0-7]|0[0-7][0-7][0-7]) ;;
+    *) echo "Backuparr: ignoring invalid UMASK '$UMASK', using 077"; UMASK=077 ;;
+esac
+umask "$UMASK"
+
 echo "Backuparr: starting web UI on ${WEBUI_HOST}:${WEBUI_PORT} (as ${USER_NAME}:${GROUP_NAME}, ${PUID}:${PGID})"
 exec su-exec "$PUID:$PGID" waitress-serve "${WAITRESS_ARGS[@]}" webui.app:app

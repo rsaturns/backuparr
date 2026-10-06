@@ -30,6 +30,11 @@ _Nothing yet._
   https to http does not. If your app URL currently relies on a cross-host
   redirect, update it to its final address, or set
   `BACKUPARR_ALLOW_CROSS_HOST_REDIRECTS=true` to keep the old behaviour.
+- New backup files are private: mode `0600` in `0700` directories, instead
+  of readable by every user on the host, since they hold API keys and
+  credentials. Files already written are not changed. If something else on
+  the host reads your backups as a different user, set `UMASK=022` to keep
+  the previous behaviour.
 
 ### Changed
 

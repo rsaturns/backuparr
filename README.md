@@ -142,6 +142,7 @@ are set in your compose file's `environment:` block.
 | `WEBUI_PORT` | `8990` | Port the web UI listens on inside the container |
 | `PUID` / `PGID` | `1000` / `1000` | User/group the container runs as instead of root. Match your host user (`id`) so files on the config volume are owned by you; re-applied on every start |
 | `TZ` | UTC | Timezone: sets the local time the cron schedule fires at, and the timestamps in `backup.log` |
+| `UMASK` | `077` | Permissions of newly created files: the default makes backups readable only by the container user (files `0600`, directories `0700`). Set `022` if something else on the host reads the backup folder as a different user. Files written earlier keep their old permissions. |
 | `LOG_LEVEL` | `INFO` | Python logging level for backup/restore runs, e.g. `DEBUG` when troubleshooting |
 | `BACKUPARR_SECRETS_KEY` | *(auto-generated)* | Overrides the generated `secrets.key` that encrypts `config.json`'s secrets (see [Encryption at rest](#encryption-at-rest)); set it to keep the key off the volume, e.g. a Docker secret |
 | `RCLONE_CONFIG_PASS` | *(auto-generated)* | Overrides the auto-generated password used to encrypt `rclone.conf` |
