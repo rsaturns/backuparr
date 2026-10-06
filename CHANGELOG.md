@@ -49,6 +49,11 @@ _Nothing yet._
   addresses map to loopback, IPv6 included) and connects directly, ignoring
   any outbound HTTP proxy.
 
+### Removed
+
+- The `restore.py` command-line script. Restores are done from the web UI's
+  **Restore** tab, which covers every app the script did.
+
 ### Fixed
 
 - History download and delete, and restore, accepted the file names `.` and
