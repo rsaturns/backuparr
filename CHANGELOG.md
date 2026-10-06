@@ -56,6 +56,11 @@ _Nothing yet._
 
 ### Fixed
 
+- A failed Tautulli connection wrote its API key into the logs: the key is
+  sent in the URL, and the connection error (and its traceback) repeated
+  that URL in `backup.log` and the container output. Tautulli errors no
+  longer include it. If an earlier failure may have logged your key,
+  rotate it in Tautulli and clear old logs.
 - History download and delete, and restore, accepted the file names `.` and
   `..`. Downloading `..` made the server copy every app's backups into its
   temporary folder before failing. Names starting with a dot, or ending in a
