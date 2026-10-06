@@ -61,6 +61,12 @@ _Nothing yet._
   that URL in `backup.log` and the container output. Tautulli errors no
   longer include it. If an earlier failure may have logged your key,
   rotate it in Tautulli and clear old logs.
+- Saving settings or starting a restore with a malformed request body
+  (for example `apps` or the restore `override` sent as a list) returned a
+  server error and a stack trace in the log; they now return a 400. A
+  boolean `retention_days` is rejected, and the restore backup list refuses
+  unknown app names (it accepted `..`, which listed the folder above the
+  backups).
 - History download and delete, and restore, accepted the file names `.` and
   `..`. Downloading `..` made the server copy every app's backups into its
   temporary folder before failing. Names starting with a dot, or ending in a

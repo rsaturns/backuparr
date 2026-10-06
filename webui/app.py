@@ -470,9 +470,15 @@ def api_meta():
 
 
 def _validate_config(data, cfg):
+    if not isinstance(data, dict):
+        return "expected a JSON object"
+    for key in ("apps", "destinations"):
+        section = data.get(key, {})
+        if not isinstance(section, dict) or not all(isinstance(entry, dict) for entry in section.values()):
+            return f"{key} must be an object of objects"
     if "retention_days" in data:
         try:
-            if int(data["retention_days"]) < 1:
+            if isinstance(data["retention_days"], bool) or int(data["retention_days"]) < 1:
                 return "retention_days must be a positive number"
         except (TypeError, ValueError):
             return "retention_days must be a number"
@@ -507,7 +513,7 @@ def _validate_config(data, cfg):
 
 @app.post("/api/config")
 def api_set_config():
-    data = request.get_json(force=True, silent=True) or {}
+    data = request.get_json(force=True, silent=True)
     cfg = load_config()
     error = _validate_config(data, cfg)
     if error:
@@ -917,6 +923,8 @@ def api_restore_status():
 
 @app.get("/api/restore/<dest_id>/<app_name>/backups")
 def api_restore_backups(dest_id, app_name):
+    if app_name not in APP_NAMES:
+        return jsonify({"error": "unknown app"}), 404
     cfg = load_config()
     root, error = _destination_root_or_error(cfg, dest_id)
     if error:
@@ -969,6 +977,8 @@ def api_restore(dest_id, app_name):
     # config.json. Lets you point a restore at a throwaway/test instance
     # without touching the app's configured connection in Settings.
     override = data.get("override")
+    if override and not isinstance(override, dict):
+        return jsonify({"error": "override must be an object"}), 400
     if override:
         allowed = _restore_override_fields(app_name)
         app_cfg = dict(app_cfg)
