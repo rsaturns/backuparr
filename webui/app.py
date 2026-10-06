@@ -1013,4 +1013,8 @@ def api_onedrive_disconnect():
 start_scheduler()
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("WEBUI_PORT", 8990)), debug=False)
+    app.run(
+        host=os.environ.get("WEBUI_HOST") or "0.0.0.0",
+        port=int(os.environ.get("WEBUI_PORT", 8990)),
+        debug=False,
+    )

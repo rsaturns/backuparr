@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+WEBUI_HOST="${WEBUI_HOST:-0.0.0.0}"
 WEBUI_PORT="${WEBUI_PORT:-8990}"
 RCLONE_CONFIG_PASS_FILE="${RCLONE_CONFIG_PASS_FILE:-/config/backuparr/rclone.pass}"
 PUID="${PUID:-1000}"
@@ -40,7 +41,7 @@ USER_NAME="$(getent passwd "$PUID" | cut -d: -f1)"
 mkdir -p "$(dirname "$BACKUPARR_CONFIG")" "$BACKUPARR_LOG_DIR"
 chown -R "$PUID:$PGID" "$(dirname "$BACKUPARR_CONFIG")" "$BACKUPARR_LOG_DIR"
 
-WAITRESS_ARGS=(--host=0.0.0.0 --port="${WEBUI_PORT}" --threads=6)
+WAITRESS_ARGS=(--host="${WEBUI_HOST}" --port="${WEBUI_PORT}" --threads=6)
 
 # Same opt-in as webui/app.py's ProxyFix wrapping (BACKUPARR_FORCE_HTTPS).
 # Without --trusted-proxy, waitress silently drops incoming
@@ -51,5 +52,5 @@ if [ "$FORCE_HTTPS_LOWER" = "1" ] || [ "$FORCE_HTTPS_LOWER" = "true" ] || [ "$FO
     WAITRESS_ARGS+=(--trusted-proxy="*" --trusted-proxy-headers="x-forwarded-proto x-forwarded-for x-forwarded-host")
 fi
 
-echo "Backuparr: starting web UI on :${WEBUI_PORT} (as ${USER_NAME}:${GROUP_NAME}, ${PUID}:${PGID})"
+echo "Backuparr: starting web UI on ${WEBUI_HOST}:${WEBUI_PORT} (as ${USER_NAME}:${GROUP_NAME}, ${PUID}:${PGID})"
 exec su-exec "$PUID:$PGID" waitress-serve "${WAITRESS_ARGS[@]}" webui.app:app

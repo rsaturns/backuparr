@@ -11,7 +11,17 @@ release event.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- `WEBUI_HOST` sets the address the web UI listens on (default `0.0.0.0`,
+  unchanged). With host networking, `127.0.0.1` restricts access to the
+  host's loopback interface.
+
+### Changed
+
+- The Docker healthcheck now probes the configured `WEBUI_HOST` (wildcard
+  addresses map to loopback, IPv6 included) and connects directly, ignoring
+  any outbound HTTP proxy.
 
 ## [1.0.7-beta] - 2026-10-04
 
