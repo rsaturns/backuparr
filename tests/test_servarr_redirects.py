@@ -151,3 +151,29 @@ def test_strict_mode_allows_the_same_origin(url, location):
     app.session._strict = True
     app.session.get(app._api("/system/status"))
     assert len(adapter.sent) == 2
+
+
+@pytest.mark.parametrize("url", ["https://user:pass@prowlarr.example", "https://user:pass@prowlarr.example/prowlarr"])
+@pytest.mark.parametrize("location", [
+    "/login",
+    "https://prowlarr.example/login",
+    "https://user:pass@prowlarr.example/login",
+])
+def test_url_with_embedded_credentials_works_and_keeps_following_same_host_redirects(url, location):
+    app, adapter = driver(location, url=url)
+    app.list_backups()
+    assert len(adapter.sent) == 2
+    assert all(request.headers["X-Api-Key"] == "fixture-private-key" for request in adapter.sent)
+    assert adapter.sent[0].headers["Authorization"].startswith("Basic ")
+
+
+def test_first_request_to_a_url_with_credentials_is_not_treated_as_a_redirect():
+    app, adapter = driver("/ignored", status=200, url="http://user:pass@prowlarr.example:9696")
+    app.list_backups()
+    assert len(adapter.sent) == 1
+
+
+def test_redirect_cannot_introduce_different_credentials():
+    app, _ = driver("https://other:secret@prowlarr.example/login", url="https://user:pass@prowlarr.example")
+    with pytest.raises(UnsafeRedirectError):
+        app.list_backups()

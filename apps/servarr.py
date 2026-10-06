@@ -40,14 +40,15 @@ def _redirect_ok(source, target):
 
     Requests keeps a custom X-Api-Key header across redirects, so only the same
     host qualifies (an http->https upgrade or port change is fine), never a
-    downgrade to http or a URL with embedded credentials.
+    downgrade to http. The target may carry the configured URL's own
+    credentials (http://user:pass@host works) but never new ones.
     """
     try:
         src, dst = urlsplit(source), urlsplit(target)
-        dst.port  # validates the port
+        _ = dst.port  # raises ValueError on a malformed port
         return (
             src.hostname is not None and src.hostname == dst.hostname
-            and dst.username is None and dst.password is None
+            and (dst.username, dst.password) in ((None, None), (src.username, src.password))
             and (dst.scheme == src.scheme or (src.scheme, dst.scheme) == ("http", "https"))
         )
     except ValueError:
