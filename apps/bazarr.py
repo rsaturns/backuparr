@@ -143,6 +143,9 @@ class BazarrApp:
         target = os.path.join(bazarr_backup_dir, filename)
         with open(local_zip_path, "rb") as src, open(target, "wb") as dst:
             dst.write(src.read())
+        # Backuparr's private umask would make this unreadable to Bazarr
+        # when the two containers run as different users.
+        os.chmod(target, 0o644)
 
         try:
             res = self.session.patch(

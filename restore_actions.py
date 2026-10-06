@@ -1,7 +1,6 @@
-"""Restore logic shared by the restore.py CLI and the web UI, so both stay
-in sync with a single implementation per app. See apps/*.py for the actual
-API mechanics; this module just wires config + rclone + zip handling around
-them.
+"""Restore logic for the web UI: one implementation per app. See apps/*.py
+for the actual API mechanics; this module just wires config + rclone + zip
+handling around them.
 """
 import json
 import os
@@ -20,10 +19,11 @@ from apps.tdarr import TdarrApp
 
 UPLOAD_RESTORE_APPS = {"radarr": RadarrApp, "sonarr": SonarrApp, "prowlarr": ProwlarrApp}
 
-# Backup filenames are always <app>_<timestamp>.zip. filename can come
-# straight from a request body, so reject anything else to block path
-# traversal into a local path.join() or remote rclone path.
-SAFE_FILENAME = re.compile(r"^[A-Za-z0-9._-]+$")
+# Backup filenames are always <app>_<timestamp>.<ext> (.zip, or .tar.gz for
+# Profilarr). filename can come straight from a request body, so reject
+# anything else to block path traversal into a local path.join() or remote
+# rclone path.
+SAFE_FILENAME = re.compile(r"^(?!\.)[A-Za-z0-9._-]+\Z")  # no leading dot: "." and ".." are directories
 
 
 def list_backups(rclone_remote, app_name):
@@ -91,7 +91,7 @@ def load_sabnzbd_config(tmp_dir, local_zip):
 
 
 def sabnzbd_server_summary(config):
-    """Servers needing a password, for the UI/CLI to prompt for."""
+    """Servers needing a password, for the UI to prompt for."""
     servers = config.get("config", {}).get("servers", [])
     return [
         {"name": s.get("name"), "host": s.get("host"), "needs_password": s.get("password") == MASKED}
@@ -105,18 +105,12 @@ def restore_sabnzbd(app_cfg, config, password_prompt):
 
 
 def restore_app(app_name, app_cfg, tmp_dir, local_zip, *, bazarr_backup_dir=None, sabnzbd_config=None, sabnzbd_password_prompt=None):
-    """The single place that maps an app name to its restore action - both
-    restore.py's CLI and the web UI call this instead of each keeping their
-    own copy of this branch. Each caller still owns its own UX around the
-    call (confirmation prompts, progress reporting) and any app-specific
-    prep (e.g. loading sabnzbd's config early to show a server count before
-    confirming) - only the "which restore_actions function for this app"
-    decision lives here.
+    """Maps an app name to its restore action. The caller owns the UX around
+    it (confirmation, progress reporting) and any app-specific prep.
 
     bazarr_backup_dir is required for bazarr. sabnzbd_password_prompt is
-    required for sabnzbd; sabnzbd_config can be passed pre-loaded (the CLI
-    needs it before this call anyway, to build its confirmation prompt) or
-    left out to have it loaded here.
+    required for sabnzbd; sabnzbd_config can be passed pre-loaded or left
+    out to have it loaded here.
 
     Returns a small dict describing what happened, shaped per app:
       {"kind": "upload"} - radarr/sonarr/prowlarr

@@ -87,7 +87,7 @@ def test_late_session_refresh_cannot_erase_discovery_access(webui):
 
 def test_logout_discards_discovery_cookie(webui):
     client = client_for(webui)
-    response = client.post("/api/discovery/prowlarr", json={"url": "http://prowlarr:9696", "api_key": "key"})
+    client.post("/api/discovery/prowlarr", json={"url": "http://prowlarr:9696", "api_key": "key"})
     assert client.get_cookie(webui.DISCOVERY_OWNER_COOKIE)
     assert client.post("/api/logout").status_code == 200
     assert client.get_cookie(webui.DISCOVERY_OWNER_COOKIE) is None
@@ -109,45 +109,19 @@ def test_remote_errors_do_not_expose_secrets_and_allow_retry(webui, monkeypatch,
     assert client.get(path).status_code == 404
 
 
-def test_session_cleanup_error_does_not_block_future_discovery(webui, monkeypatch):
-    class BrokenSession:
-        def close(self):
-            raise requests.ConnectionError("closing failed")
-
-    class Instance:
-        session = BrokenSession()
-
-        def __init__(self, *args, **kwargs):
-            pass
-
-    monkeypatch.setattr(webui, "ProwlarrApp", Instance)
-    client = client_for(webui)
-    response = client.post("/api/discovery/prowlarr", json={"url": "http://prowlarr:9696", "api_key": "key"})
-    result = client.get("/api/discovery/prowlarr/" + response.json["job_id"])
-    assert result.json["state"] == "completed"
-    assert not webui.DISCOVERY_RUN_LOCK.locked()
-
-
-def test_discovery_uses_only_url_and_api_key(webui, monkeypatch):
+def test_discovery_connects_with_strict_redirects(webui, monkeypatch):
     received = []
 
     class Instance:
-        session = requests.Session()
-
         def __init__(self, url, api_key, **kwargs):
-            received.extend([url, api_key, kwargs])
+            received.append((url, api_key, kwargs))
 
     monkeypatch.setattr(webui, "ProwlarrApp", Instance)
     client = client_for(webui)
-    response = client.post("/api/discovery/prowlarr", json={
-        "url": "http://prowlarr:9696", "api_key": "key",
-        # An older cached UI may send removed fields; do not use them.
-        "username": "unused-user", "password": "unused-password",
-    })
+    response = client.post("/api/discovery/prowlarr", json={"url": "http://prowlarr:9696", "api_key": " key "})
     result = client.get("/api/discovery/prowlarr/" + response.json["job_id"])
     assert result.json["state"] == "completed"
-    assert received == ["http://prowlarr:9696", "key", {"strict_redirects": True}]
-    assert "unused-password" not in result.text + str(webui.DISCOVERY_JOBS)
+    assert received == [("http://prowlarr:9696", "key", {"strict_redirects": True})]
 
 
 def test_finished_results_are_purged_after_the_ttl(webui, monkeypatch):

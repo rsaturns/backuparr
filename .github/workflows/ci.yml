@@ -29,10 +29,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
+      # Same Python as the python:3.14-alpine image the app ships in.
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Install Python dependencies
         run: pip install -r requirements.txt -r requirements-dev.txt
@@ -45,6 +46,20 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
+
+      # Run the image, not just build it: catches a module missing from the
+      # Dockerfile COPY list, entrypoint errors and a failing healthcheck.
+      - name: Build Docker image for the smoke test
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: backuparr:ci
+          cache-from: type=gha,scope=smoke-amd64
+          cache-to: type=gha,mode=max,scope=smoke-amd64
+
+      - name: Smoke test the container
+        run: scripts/smoke_test.sh backuparr:ci
 
       # Validates the Dockerfile builds cleanly on both target
       # architectures. Nothing is pushed anywhere from this workflow.

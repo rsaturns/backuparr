@@ -60,17 +60,27 @@ class TautulliApp:
     def _api_url(self):
         return f"{self.url}/api/v2"
 
+    def _send(self, method, cmd, **kwargs):
+        """The API key travels in the query string, and requests' network
+        error messages embed the full URL, so they are re-raised without it
+        (same exception class, so callers still tell a refused connection
+        from a timeout) and without the chained original."""
+        try:
+            return self.session.request(method, self._api_url(), **kwargs)
+        except requests.exceptions.RequestException as exc:
+            raise type(exc)(f"tautulli: {type(exc).__name__} calling {cmd}") from None
+
     def _call(self, cmd, timeout=None, **params):
         payload = {"apikey": self.api_key, "cmd": cmd, **params}
-        res = self.session.get(self._api_url(), params=payload, timeout=timeout or self.timeout)
+        res = self._send("GET", cmd, params=payload, timeout=timeout or self.timeout)
         if res.status_code == 401:
             raise TautulliError("tautulli: unauthorized - check the API key")
         try:
             res.raise_for_status()
         except requests.exceptions.HTTPError as exc:
             # Don't let requests' default message through - it embeds the
-            # full request URL, apikey included.
-            raise TautulliError(f"tautulli: HTTP {res.status_code} calling {cmd}") from exc
+            # full request URL, apikey included - or chain it (from None).
+            raise TautulliError(f"tautulli: HTTP {res.status_code} calling {cmd}") from None
         return res
 
     def test_connection(self):
@@ -92,7 +102,7 @@ class TautulliApp:
         with open(file_path, "rb") as f:
             payload = {"apikey": self.api_key, "cmd": cmd}
             files = {field_name: (os.path.basename(file_path), f, "application/octet-stream")}
-            res = self.session.post(self._api_url(), params=payload, data=extra, files=files, timeout=120)
+            res = self._send("POST", cmd, params=payload, data=extra, files=files, timeout=120)
         if res.status_code == 401:
             raise TautulliError("tautulli: unauthorized - check the API key")
         # Tautulli's API wraps its own {"result": "error", "message": ...}
@@ -106,8 +116,8 @@ class TautulliApp:
             raise TautulliError(f"tautulli: {data.get('message') or res.text or 'import failed'}")
         try:
             res.raise_for_status()
-        except requests.exceptions.HTTPError as exc:
-            raise TautulliError(f"tautulli: HTTP {res.status_code} calling {cmd}") from exc
+        except requests.exceptions.HTTPError:
+            raise TautulliError(f"tautulli: HTTP {res.status_code} calling {cmd}") from None
         data = res.json().get("response", {})
         if data.get("result") != "success":
             raise TautulliError(f"tautulli: {data.get('message') or 'import failed'}")
