@@ -7,6 +7,41 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 _Nothing yet._
 
+## [1.2.1-beta] - 2026-10-07
+
+### Changed
+
+- Setup and environment problems are now logged as one readable line instead
+  of a Python traceback, and the same wording appears in the web UI and
+  notifications. Covered: a hostname that doesn't resolve, a refused or
+  timed-out connection, a TLS error, a rejected API key or other HTTP error
+  (404, 5xx), a URL that answers with a web page instead of the app's API, a
+  full disk, a read-only or unwritable folder, a corrupt backup file and an
+  unreadable `config.json`. The messages name the host or file, never the
+  full URL, so API keys can't end up in the log. Unexpected errors still log
+  their full traceback.
+- Destination failures from rclone show the cause on its own, with a hint for
+  the usual ones: a folder Backuparr can't write to, a full or read-only
+  destination, an expired or revoked connection, or a hostname that won't
+  resolve.
+- Saving settings to a volume that is full or read-only, or opening Backuparr
+  with a broken `config.json`, now says what is wrong instead of returning a
+  bare server error. The scheduler reports a broken config once instead of
+  every 20 seconds.
+
+### Fixed
+
+- Restoring Tautulli's config reported success but never applied it: Tautulli's
+  `import_config` call only stages the file, and starting the import is a
+  separate request that Backuparr wasn't making. It now makes it. If Tautulli
+  has a login enabled, that request can't be made with an API key, so the
+  restore says the config is staged and shows the URL to open after logging in
+  to Tautulli. See the README's Tautulli restore note.
+- Failures reported by the apps themselves no longer repeat the app name
+  ("sonarr: sonarr: unauthorized - check the API key").
+- A backup work folder that can't be created now fails only that app, instead
+  of ending the whole run.
+
 ## [1.2.0-beta] - 2026-10-06
 
 ### Added

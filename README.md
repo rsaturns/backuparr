@@ -32,6 +32,7 @@ See [CHANGELOG.md](CHANGELOG.md) for release history.
   - [Per-app backup method (read this before deploying)](#per-app-backup-method-read-this-before-deploying)
     - [Profilarr backup note](#profilarr-backup-note)
     - [Tautulli backup note](#tautulli-backup-note)
+    - [Tautulli restore note](#tautulli-restore-note)
     - [Bazarr auth note](#bazarr-auth-note)
     - [Tdarr auth note](#tdarr-auth-note)
   - [Environment variables](#environment-variables)
@@ -81,7 +82,7 @@ in-app "Connect" button, and OneDrive and Dropbox via a one-time
 | Bazarr | `POST /api/system/backups` to trigger, poll `GET` until the new file appears, download it, `DELETE` it server-side | The download route (`/system/backup/download/<file>`) is gated by Bazarr's web-auth setting, **not** the API key - see the [Bazarr auth note](#bazarr-auth-note). Bazarr has no upload-restore endpoint, so restore writes the file into Bazarr's backup folder, then an API call triggers the restore and restart. |
 | Tdarr | `POST /api/v2/cruddb` with `mode: getAll` for every internal DB collection (library settings, flows, global settings, node registrations, staged/output/statistics) | Fully API-driven both ways. Restore does `removeAll` then re-`insert`s each document one at a time (no bulk-insert mode) - destructive, asks for confirmation. |
 | SABnzbd | `GET /sabnzbd/api?mode=get_config` to back up; `mode=set_config` per key to restore | SABnzbd's API returns every password field (e.g. a Usenet server password) as `**********`, with no way to get the real value. Restore recreates each Usenet server and every plain `misc`-style setting via the API, and asks for each server's real password (fields left out of the API call are untouched, so a skipped password isn't overwritten with a blank). Categories, RSS feeds, and sorters aren't auto-restored. |
-| Tautulli | `GET /api/v2?cmd=download_database` and `cmd=download_config` - each streams a fresh copy directly, no trigger/poll step | The database comes back with Plex tokens nulled out; the config is only lightly sanitized - see the [Tautulli backup note](#tautulli-backup-note). Restore uploads each separately via `cmd=import_database` and `cmd=import_config` (multipart); a config restore restarts Tautulli. |
+| Tautulli | `GET /api/v2?cmd=download_database` and `cmd=download_config` - each streams a fresh copy directly, no trigger/poll step | The database comes back with Plex tokens nulled out; the config is only lightly sanitized - see the [Tautulli backup note](#tautulli-backup-note). Restore uploads each separately via `cmd=import_database` and `cmd=import_config` (multipart) - see the [Tautulli restore note](#tautulli-restore-note). |
 | Seerr | *(none)* | Not implemented - Seerr has no backup/restore API. Shown on the Settings tab as "Coming soon". |
 
 ### Profilarr backup note
@@ -111,6 +112,27 @@ Backuparr's own `config.json` secrets are encrypted (see [Encryption at
 rest](#encryption-at-rest)), but treat every destination holding Tautulli
 backups as holding a live Tautulli API key, and rotate it in Tautulli's
 Settings if a destination is ever compromised.
+
+### Tautulli restore note
+
+Tautulli's `import_config` API call only **stages** the uploaded config.
+Applying it takes a second request to a web route (`/restart_import_config`)
+that Tautulli protects with its login, and Backuparr makes that request for
+you right after the upload:
+
+- **No login set up in Tautulli** (Settings > Web Interface): the import
+  starts and Tautulli restarts by itself.
+- **Login enabled:** an API key can't use that route, so the config stays
+  staged and nothing changes yet. The Restore tab (and the log) says so and
+  shows the URL: log in to Tautulli, open
+  `<your Tautulli URL>/restart_import_config`, and the import runs and
+  Tautulli restarts. The staged import is held in Tautulli's memory: if
+  Tautulli restarts before you open that URL, its page still says "Importing a
+  Config" but nothing is applied, so run the restore again.
+
+The database can't be restored over the API at all (an upstream Tautulli bug),
+so Backuparr skips it and says so; import `tautulli.db` by hand from Tautulli's
+Settings > Import & Backup > Import Database.
 
 ### Bazarr auth note
 
@@ -438,8 +460,10 @@ throwaway copy first.
   servers need a password (SABnzbd's API never returns the real value; see the
   table above). Type them in, or leave any blank and set that server's
   password in SABnzbd afterward.
-- **Tautulli** - restores the database and config separately; Tautulli
-  restarts once the config is applied.
+- **Tautulli** - restores the config (the database must be imported by hand);
+  Tautulli restarts once the config is applied. With a login enabled in
+  Tautulli the config is only staged and the result tells you how to finish -
+  see the [Tautulli restore note](#tautulli-restore-note).
 
 ## Notifications
 

@@ -1,5 +1,6 @@
 """Fixtures for exercising webui/app.py against a throwaway config."""
 import importlib
+import socket
 import sys
 import threading
 
@@ -70,3 +71,14 @@ class InlineThread:
 def inline(isolated_webui, monkeypatch):
     monkeypatch.setattr(threading, "Thread", InlineThread)
     return isolated_webui
+
+
+@pytest.fixture
+def dns_down(monkeypatch):
+    """Every hostname lookup fails, as for a container that isn't on the
+    caller's Docker network - the real requests/urllib3 error chain, no
+    network needed."""
+    def refuse(*args, **kwargs):
+        raise socket.gaierror(-2, "Name does not resolve")
+
+    monkeypatch.setattr(socket, "getaddrinfo", refuse)

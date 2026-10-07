@@ -109,10 +109,10 @@ def folder(tmp_path, db=True, config=True):
 
 
 def test_restore_uploads_both_files_with_the_right_form_fields(tmp_path):
-    app = app_with(ok("database imported"), ok("config import started"))
+    app = app_with(ok("database imported"), ok("config import started"), Reply())
     summary = app.restore(folder(tmp_path))
     assert summary == {"database": "database imported", "config": "config import started"}
-    (m1, _, db_call), (m2, _, cfg_call) = app.session.sent
+    (m1, _, db_call), (m2, _, cfg_call), _start = app.session.sent
     assert m1 == m2 == "POST"
     assert db_call["params"] == {"apikey": KEY, "cmd": "import_database"}
     assert db_call["data"] == {"app": "tautulli", "method": "overwrite", "backup": "true"}
@@ -123,7 +123,7 @@ def test_restore_uploads_both_files_with_the_right_form_fields(tmp_path):
 
 def test_the_known_upstream_database_bug_is_skipped_but_the_config_still_restores(tmp_path):
     bug = Reply(400, data={"response": {"result": "error", "message": "No app specified for import."}})
-    summary = app_with(bug, ok("started")).restore(folder(tmp_path))
+    summary = app_with(bug, ok("started"), Reply()).restore(folder(tmp_path))
     assert summary == {"database_skipped": "not restorable via API - see README", "config": "started"}
 
 
@@ -136,7 +136,7 @@ def test_any_other_database_error_is_not_swallowed(tmp_path):
 
 
 def test_older_backups_with_only_one_file_still_restore(tmp_path):
-    assert app_with(ok("cfg ok")).restore(folder(tmp_path, db=False)) == {"config": "cfg ok"}
+    assert app_with(ok("cfg ok"), Reply()).restore(folder(tmp_path, db=False)) == {"config": "cfg ok"}
 
 
 def test_a_backup_with_neither_file_is_an_error(tmp_path):
@@ -163,3 +163,48 @@ def test_network_errors_during_upload_do_not_leak_the_key(tmp_path):
     with pytest.raises(requests.exceptions.ConnectionError) as caught:
         app.restore(folder(tmp_path, db=False))
     assert KEY not in str(caught.value)
+
+
+# --- finishing the config import --------------------------------------------
+# import_config only stages the file; /restart_import_config runs the import.
+
+STAGED_URL = "http://tautulli:8181/restart_import_config"
+
+
+def test_without_a_login_the_staged_import_is_started_with_the_api_key_in_a_header(tmp_path):
+    app = app_with(ok("staged"), Reply(200))
+    summary = app.restore(folder(tmp_path, db=False))
+    assert summary == {"config": "staged"}
+    method, url, call = app.session.sent[-1]
+    assert (method, url) == ("GET", STAGED_URL)
+    assert call["headers"] == {"X-Api-Key": KEY} and call["allow_redirects"] is False
+    assert KEY not in url and "params" not in call
+
+
+@pytest.mark.parametrize("status", [301, 302, 303, 307, 308, 401, 403])
+def test_with_a_login_the_config_stays_staged_and_the_user_is_told_how_to_finish(tmp_path, status, caplog):
+    summary = app_with(ok("staged"), Reply(status)).restore(folder(tmp_path, db=False))
+    assert summary["config"] == "staged"
+    message = summary["config_staged"]
+    assert message.startswith("Tautulli has a login set up, so Backuparr can't start the import. The config is staged.")
+    assert message.endswith(f"log in to Tautulli if asked, then open {STAGED_URL}")
+    assert KEY not in message
+    assert message in caplog.text
+
+
+def test_an_unexpected_answer_is_reported_with_the_same_instructions(tmp_path):
+    message = app_with(ok("staged"), Reply(500)).restore(folder(tmp_path, db=False))["config_staged"]
+    assert message.startswith("Tautulli answered HTTP 500 when asked to start the import")
+    assert message.endswith(STAGED_URL)
+
+
+def test_the_database_is_still_reported_when_the_config_stays_staged(tmp_path):
+    summary = app_with(ok("db done"), ok("staged"), Reply(303)).restore(folder(tmp_path))
+    assert summary["database"] == "db done" and "config_staged" in summary
+
+
+def test_a_network_error_starting_the_import_does_not_leak_the_key(tmp_path):
+    app = app_with(ok("staged"), requests.exceptions.ConnectionError(f"refused {STAGED_URL}?apikey={KEY}"))
+    with pytest.raises(requests.exceptions.ConnectionError) as caught:
+        app.restore(folder(tmp_path, db=False))
+    assert KEY not in str(caught.value) and caught.value.__cause__ is None

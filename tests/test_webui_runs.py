@@ -1,4 +1,5 @@
 """Backup runs, the in-process scheduler and the run-tracking helpers."""
+import errno
 import logging
 import os
 import threading
@@ -241,3 +242,88 @@ def test_the_scheduler_does_not_retry_a_minute_skipped_because_a_run_was_active(
     monkeypatch.setattr(isolated_webui, "_start_backup_run", lambda: attempts.append(1) or False)
     clock("* * * * *", [at(5, 3, 0, 0), at(5, 3, 0, 20), at(5, 3, 0, 40)])
     assert attempts == [1]
+
+
+def test_a_run_that_cannot_start_for_lack_of_disk_is_reported_in_one_line(inline, authed_client, monkeypatch, caplog):
+    def disk_full(cfg, **kw):
+        raise OSError(errno.ENOSPC, "No space left on device", "/tmp/backuparr-run-x")
+
+    monkeypatch.setattr(inline, "run_backup", disk_full)
+    with caplog.at_level(logging.INFO):
+        assert authed_client.post("/api/backup/run").status_code == 200
+    state = status(authed_client)
+    assert state["failed"] == ["backup run stopped: no space left on the device (/tmp/backuparr-run-x)"]
+    stopped = [r for r in caplog.records if "backup run stopped" in r.getMessage() and r.levelno == logging.ERROR]
+    assert len(stopped) == 1 and stopped[0].exc_info is None
+
+
+class _StopLoop(Exception):
+    pass
+
+
+def _ticks(inline, monkeypatch, errors):
+    """Runs the scheduler loop once per entry: an exception to raise from
+    load_config, or None for a healthy tick."""
+    queue = list(errors)
+
+    def load_config():
+        error = queue.pop(0)
+        if error:
+            raise error
+        return {"cron_schedule": "0 3 * * *"}
+
+    def sleep(seconds):
+        if not queue:
+            raise _StopLoop
+
+    monkeypatch.setattr(inline, "load_config", load_config)
+    monkeypatch.setattr(inline.time, "sleep", sleep)
+    with pytest.raises(_StopLoop):
+        inline._scheduler_loop()
+
+
+def test_a_broken_config_is_reported_once_not_every_tick(inline, monkeypatch, caplog):
+    broken = inline.ConfigError("config.json isn't valid JSON (line 3) - fix it")
+    with caplog.at_level(logging.INFO):
+        _ticks(inline, monkeypatch, [broken, broken, broken])
+    lines = [r for r in caplog.records if "scheduler tick failed" in r.getMessage()]
+    assert len(lines) == 1 and lines[0].exc_info is None
+    assert lines[0].getMessage() == "scheduler tick failed - config.json isn't valid JSON (line 3) - fix it"
+
+
+def test_the_scheduler_reports_a_problem_again_after_it_recovers(inline, monkeypatch, caplog):
+    broken = inline.ConfigError("config.json isn't valid JSON")
+    with caplog.at_level(logging.INFO):
+        _ticks(inline, monkeypatch, [broken, None, broken])
+    assert len([r for r in caplog.records if "scheduler tick failed" in r.getMessage()]) == 2
+
+
+def test_an_unexpected_scheduler_error_keeps_its_traceback(inline, monkeypatch, caplog):
+    with caplog.at_level(logging.INFO):
+        _ticks(inline, monkeypatch, [KeyError("surprise")])
+    (line,) = [r for r in caplog.records if "scheduler tick failed" in r.getMessage()]
+    assert line.exc_info and line.exc_info[0] is KeyError
+
+
+def test_saving_settings_to_a_read_only_volume_explains_itself(authed_client, inline, monkeypatch, caplog):
+    def read_only(cfg):
+        raise PermissionError(errno.EACCES, "Permission denied", "/config/backuparr/config.json")
+
+    monkeypatch.setattr(inline, "save_config", read_only)
+    with caplog.at_level(logging.INFO):
+        response = authed_client.post("/api/config", json={"retention_days": 3})
+    assert response.status_code == 500
+    assert response.get_json()["error"].startswith("permission denied - Backuparr runs as PUID:PGID")
+    (line,) = [r for r in caplog.records if "POST /api/config failed" in r.getMessage()]
+    assert line.exc_info is None and "(/config/backuparr/config.json)" in line.getMessage()
+
+
+def test_a_corrupt_config_file_is_explained_not_a_stack_trace(authed_client, inline, monkeypatch, caplog):
+    def corrupt():
+        raise inline.ConfigError("config.json isn't valid JSON (line 1) - fix it")
+
+    monkeypatch.setattr(inline, "load_config", corrupt)
+    with caplog.at_level(logging.INFO):
+        response = authed_client.get("/api/config")
+    assert response.status_code == 500 and "isn't valid JSON" in response.get_json()["error"]
+    assert not any(r.exc_info for r in caplog.records if "GET /api/config failed" in r.getMessage())

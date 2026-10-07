@@ -1,11 +1,13 @@
 """History (list, download, delete) and the restore pipeline, with rclone and
 the app drivers stubbed out - CI has no rclone binary."""
+import logging
 import os
 
 import pytest
 import requests
 
 import restore_actions
+from apps.servarr import ServarrError
 from config_store import APP_NAMES
 
 
@@ -281,6 +283,15 @@ def test_tautulli_and_sabnzbd_restores_return_their_summary(restore, authed_clie
     assert result(authed_client)["summary"] == {"servers_restored": ["news"]} and result(authed_client)["message"] == "sabnzbd restore complete"
 
 
+def test_a_staged_tautulli_config_is_reported_as_needing_a_step(restore, authed_client):
+    staged = "Tautulli has a login set up, so Backuparr can't start the import. The config is staged. To apply it, log in to Tautulli if asked, then open http://tautulli:1/restart_import_config"
+    restore["results"] = {"tautulli": {"summary": {"config": "staged", "config_staged": staged}}}
+    start(authed_client, "tautulli")
+    state = result(authed_client)
+    assert state["ok"] is True and state["summary"]["config_staged"] == staged
+    assert state["message"] == "tautulli config staged, finish it in Tautulli"
+
+
 def test_sabnzbd_passwords_come_from_the_request_and_blank_means_skip(restore, authed_client):
     start(authed_client, "sabnzbd", passwords={"news": "secret", "free": ""})
     assert restore["prompts"] == {"news": "secret", "free": None, "unlisted": None}
@@ -294,6 +305,29 @@ def test_a_failed_restore_is_reported_and_cleaned_up(restore, authed_client):
     state = result(authed_client)
     assert state["ok"] is False and "couldn't connect" in state["error"] and "secret" not in state["error"]
     assert state["running"] is False and state["finished_at"] and not restore["tmp"].exists()
+
+
+def test_a_restore_that_cannot_resolve_the_host_logs_one_clean_line(restore, authed_client, dns_down, caplog):
+    with pytest.raises(requests.exceptions.ConnectionError) as caught:
+        requests.get("http://radarr:1/api/v3/system/status?apikey=secret")
+    restore["fail"] = caught.value
+    with caplog.at_level(logging.INFO):
+        assert start(authed_client).status_code == 200
+    state = result(authed_client)
+    assert state["ok"] is False and state["error"].startswith("couldn't resolve hostname 'radarr'")
+    failures = [r for r in caplog.records if "restore failed" in r.getMessage()]
+    assert len(failures) == 1 and failures[0].exc_info is None
+    assert "couldn't resolve hostname 'radarr'" in failures[0].getMessage()
+    assert "secret" not in caplog.text and "Traceback" not in caplog.text
+
+
+def test_a_restore_rejected_by_the_app_does_not_repeat_the_app_name_in_the_log(restore, authed_client, caplog):
+    restore["fail"] = ServarrError("radarr: unauthorized - check the API key")
+    with caplog.at_level(logging.INFO):
+        assert start(authed_client).status_code == 200
+    assert result(authed_client)["error"] == "radarr: unauthorized - check the API key"
+    (line,) = [r for r in caplog.records if "restore failed" in r.getMessage()]
+    assert line.getMessage() == "restore failed for radarr - unauthorized - check the API key"
 
 
 def test_a_missing_backup_is_reported(restore, authed_client):

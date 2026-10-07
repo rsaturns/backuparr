@@ -17,13 +17,19 @@ apikey-authenticated `/api/v2?apikey=...&cmd=...` route as every other
 call here - no separate session/cookie auth, and no trigger-then-poll
 step since each call already returns the finished file.
 
-Restore is two-part and API-driven too: `cmd=import_database` and
-`cmd=import_config` each accept a multipart file upload
-(`database_file`/`config_file`) and apply it - Tautulli restarts itself
-after a config import. Both run as a background thread on Tautulli's side
-and return immediately once accepted, so - like Radarr/Sonarr/Prowlarr/
-Bazarr's restore here - this confirms the upload was received, not that
-the import has finished.
+Restore is two-part: `cmd=import_database` and `cmd=import_config` each
+accept a multipart file upload (`database_file`/`config_file`).
+
+`import_config` only STAGES the file, though: it saves it to Tautulli's
+cache and creates an import thread that nothing starts. Tautulli's own UI
+starts it by calling the web route `/restart_import_config`, which applies
+the config and restarts Tautulli. That route is not part of the API and
+uses Tautulli's login session; the API key only bypasses its CSRF check.
+So restore() calls it after the upload: with no login set up Tautulli
+answers 200 and the import runs, with a login it redirects to the login
+page and the config stays staged for the user to finish (see restore()).
+Like Radarr/Sonarr/Prowlarr/Bazarr's restore here, this confirms the
+config was accepted, not that Tautulli has finished restarting.
 
 DATABASE RESTORE IS NOT ACTUALLY REACHABLE OVER THE API: `import_database`
 requires `app=` ("tautulli"/"plexwatch"/"plexivity") to know what it's
@@ -60,13 +66,13 @@ class TautulliApp:
     def _api_url(self):
         return f"{self.url}/api/v2"
 
-    def _send(self, method, cmd, **kwargs):
+    def _send(self, method, cmd, url=None, **kwargs):
         """The API key travels in the query string, and requests' network
         error messages embed the full URL, so they are re-raised without it
         (same exception class, so callers still tell a refused connection
         from a timeout) and without the chained original."""
         try:
-            return self.session.request(method, self._api_url(), **kwargs)
+            return self.session.request(method, url or self._api_url(), **kwargs)
         except requests.exceptions.RequestException as exc:
             raise type(exc)(f"tautulli: {type(exc).__name__} calling {cmd}") from None
 
@@ -77,7 +83,7 @@ class TautulliApp:
             raise TautulliError("tautulli: unauthorized - check the API key")
         try:
             res.raise_for_status()
-        except requests.exceptions.HTTPError as exc:
+        except requests.exceptions.HTTPError:
             # Don't let requests' default message through - it embeds the
             # full request URL, apikey included - or chain it (from None).
             raise TautulliError(f"tautulli: HTTP {res.status_code} calling {cmd}") from None
@@ -123,6 +129,23 @@ class TautulliApp:
             raise TautulliError(f"tautulli: {data.get('message') or 'import failed'}")
         return data.get("message", "")
 
+    def _start_config_import(self):
+        """Asks Tautulli to run the config import that import_config staged.
+        Returns None when it started, else a message telling the user how to
+        finish it themselves."""
+        route = f"{self.url}/restart_import_config"
+        res = self._send(
+            "GET", "restart_import_config", url=route,
+            headers={"X-Api-Key": self.api_key}, allow_redirects=False, timeout=self.timeout,
+        )
+        if res.status_code == 200:
+            return None
+        if res.status_code in (301, 302, 303, 307, 308, 401, 403):
+            reason = "Tautulli has a login set up, so Backuparr can't start the import"
+        else:
+            reason = f"Tautulli answered HTTP {res.status_code} when asked to start the import"
+        return f"{reason}. The config is staged. To apply it, log in to Tautulli if asked, then open {route}"
+
     def restore(self, extract_dir):
         """extract_dir must contain the files backup() wrote (tautulli.db
         and/or config.ini) - either or both may be present, since a user
@@ -151,6 +174,10 @@ class TautulliApp:
         cfg_path = os.path.join(extract_dir, "config.ini")
         if os.path.isfile(cfg_path):
             summary["config"] = self._import("import_config", "config_file", cfg_path, {"backup": "true"})
+            staged = self._start_config_import()
+            if staged:
+                logger.warning("tautulli: %s", staged)
+                summary["config_staged"] = staged
         if not summary:
             raise TautulliError("tautulli: backup contained neither tautulli.db nor config.ini")
         return summary

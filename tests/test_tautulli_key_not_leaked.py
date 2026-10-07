@@ -63,7 +63,8 @@ def test_a_failed_backup_run_keeps_the_key_out_of_the_logs(tmp_path, monkeypatch
         logger.removeHandler(handler)
 
     assert not ok and len(failed) == 1
-    assert "Traceback" in stream.getvalue()  # the failure is still logged in full
+    assert "backup failed - couldn't connect - connection refused by 127.0.0.1:1" in stream.getvalue()
+    assert "Traceback" not in stream.getvalue()  # an unreachable app is reported in one line
     assert KEY not in stream.getvalue()
     assert KEY not in "".join(failed)
 
