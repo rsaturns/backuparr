@@ -569,7 +569,7 @@ function fillDestCard(destId, cfg) {
   const body = card.querySelector(".app-card-body");
   if (body) body.classList.toggle("hidden", !cfg.enabled);
   if (destId === "gdrive") updateGdriveUI(cfg);
-  if (destId === "onedrive") updateOnedriveUI(cfg);
+  if (TOKEN_DESTS[destId]) updateTokenDestUI(destId, cfg);
 }
 
 function readDestCard(destId) {
@@ -704,6 +704,9 @@ async function testApp(appId) {
 async function testDestination(destId) {
   const card = destCard(destId);
   const payload = readDestCard(destId);
+  // Pasted but not yet connected: lets the server say "click Connect first".
+  const pasteBox = document.getElementById(`${destId}-token-input`);
+  if (pasteBox && pasteBox.value.trim()) payload.token_pasted = true;
   await runTest({
     btn: card.querySelector(".test-dest-btn"),
     resultEl: card.querySelector(".test-result"),
@@ -839,39 +842,45 @@ async function disconnectGdrive() {
   }
 }
 
-// ----------------------------------------------------------- onedrive ----
-function updateOnedriveUI(onedriveCfg) {
-  const statusEl = document.getElementById("onedrive-status");
-  const connectBtn = document.getElementById("onedrive-connect-btn");
-  const disconnectBtn = document.getElementById("onedrive-disconnect-btn");
-  const pasteField = document.getElementById("onedrive-paste-field");
+// ------------------------------------------- token-paste destinations ----
+// OneDrive and Dropbox both connect by pasting what `rclone authorize <id>`
+// prints; ids match the element ids in index.html and /api/destinations/<id>/.
+const TOKEN_DESTS = {
+  onedrive: { label: "OneDrive", connected: "Connected - backing up to your OneDrive app folder (Apps/Backuparr)." },
+  dropbox: { label: "Dropbox", connected: "Connected - backing up to the Backuparr folder in your Dropbox." },
+};
+
+function updateTokenDestUI(destId, cfg) {
+  const statusEl = document.getElementById(`${destId}-status`);
+  const connectBtn = document.getElementById(`${destId}-connect-btn`);
+  const disconnectBtn = document.getElementById(`${destId}-disconnect-btn`);
+  const pasteField = document.getElementById(`${destId}-paste-field`);
   if (!statusEl) return;
-  const connected = !!onedriveCfg.token;
+  const connected = !!cfg.token;
   connectBtn.classList.toggle("hidden", connected);
   disconnectBtn.classList.toggle("hidden", !connected);
   if (pasteField) pasteField.classList.toggle("hidden", connected);
-  statusEl.textContent = connected
-    ? "Connected - backing up to your OneDrive app folder (Apps/Backuparr)."
-    : "Not connected yet.";
+  statusEl.textContent = connected ? TOKEN_DESTS[destId].connected : "Not connected yet.";
 }
 
-async function connectOnedrive() {
-  const input = document.getElementById("onedrive-token-input");
-  const btn = document.getElementById("onedrive-connect-btn");
+async function connectTokenDest(destId) {
+  const { label } = TOKEN_DESTS[destId];
+  const input = document.getElementById(`${destId}-token-input`);
+  const btn = document.getElementById(`${destId}-connect-btn`);
   const tokenBlob = input.value.trim();
   if (!tokenBlob) {
-    toast("Paste the token `rclone authorize onedrive` printed first", "fail");
+    toast(`Paste the token \`rclone authorize ${destId}\` printed first`, "fail");
     return;
   }
   btn.disabled = true;
   try {
-    await apiFetch("/api/destinations/onedrive/connect", {
+    await apiFetch(`/api/destinations/${destId}/connect`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token_blob: tokenBlob }),
     });
     input.value = "";
-    toast("OneDrive connected", "ok");
+    toast(`${label} connected`, "ok");
     await loadConfig();
   } catch (e) {
     toast(`Could not connect: ${e.message}`, "fail");
@@ -880,11 +889,12 @@ async function connectOnedrive() {
   }
 }
 
-async function disconnectOnedrive() {
-  if (!confirm("Disconnect OneDrive? Existing backups already there are left untouched.")) return;
+async function disconnectTokenDest(destId) {
+  const { label } = TOKEN_DESTS[destId];
+  if (!confirm(`Disconnect ${label}? Existing backups already there are left untouched.`)) return;
   try {
-    await apiFetch("/api/destinations/onedrive/disconnect", { method: "POST" });
-    toast("OneDrive disconnected", "ok");
+    await apiFetch(`/api/destinations/${destId}/disconnect`, { method: "POST" });
+    toast(`${label} disconnected`, "ok");
     await loadConfig();
   } catch (e) {
     toast(`Could not disconnect: ${e.message}`, "fail");
@@ -1119,10 +1129,12 @@ function initSettingsEvents() {
   const gdriveDisconnectBtn = document.getElementById("gdrive-disconnect-btn");
   if (gdriveDisconnectBtn) gdriveDisconnectBtn.addEventListener("click", disconnectGdrive);
 
-  const onedriveConnectBtn = document.getElementById("onedrive-connect-btn");
-  if (onedriveConnectBtn) onedriveConnectBtn.addEventListener("click", connectOnedrive);
-  const onedriveDisconnectBtn = document.getElementById("onedrive-disconnect-btn");
-  if (onedriveDisconnectBtn) onedriveDisconnectBtn.addEventListener("click", disconnectOnedrive);
+  Object.keys(TOKEN_DESTS).forEach((destId) => {
+    const connectBtn = document.getElementById(`${destId}-connect-btn`);
+    if (connectBtn) connectBtn.addEventListener("click", () => connectTokenDest(destId));
+    const disconnectBtn = document.getElementById(`${destId}-disconnect-btn`);
+    if (disconnectBtn) disconnectBtn.addEventListener("click", () => disconnectTokenDest(destId));
+  });
 }
 
 // -------------------------------------------------------------- run tab ----

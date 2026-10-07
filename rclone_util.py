@@ -111,8 +111,8 @@ def lsjson(remote_dir, recursive=False):
 
 def check_remote(remote_dir):
     """Raises RcloneError if the remote can't be reached. Checks just the
-    remote root, not the subfolder - rclone creates that lazily."""
-    remote_root = remote_dir.split("/", 1)[0]
-    if not remote_root.endswith(":"):
-        remote_root += ":"
+    remote's own root, not any folder in the path - rclone creates that
+    lazily."""
+    name, colon, _path = remote_dir.partition(":")
+    remote_root = name + ":" if colon else remote_dir.split("/", 1)[0] + ":"
     _run(["lsd", "--max-depth", "1", remote_root])

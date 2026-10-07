@@ -10,8 +10,8 @@
 
 Scheduled config/database backups for Radarr, Sonarr, Prowlarr, Profilarr,
 Bazarr, Tdarr, SABnzbd, and Tautulli (Seerr coming soon), sent to every
-destination you enable: Local storage, Google Drive, and OneDrive today
-(Dropbox planned). Apps, URLs/API keys, destinations, schedule, retention,
+destination you enable: Local storage, Google Drive, OneDrive, and Dropbox.
+Apps, URLs/API keys, destinations, schedule, retention,
 and restores are all configured and triggered from the web UI, not env vars.
 
 Every app is backed up through **its own HTTP API**, never by reading its
@@ -60,7 +60,7 @@ See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## Architecture
 
-<img src="webui/static/architecture-diagram.svg" alt="Radarr, Sonarr, Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, and Tautulli each feed Backuparr over their own HTTP API; Backuparr uploads each backup via rclone to Local storage, Google Drive, and Microsoft OneDrive" width="100%">
+<img src="webui/static/architecture-diagram.svg" alt="Radarr, Sonarr, Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, and Tautulli each feed Backuparr over their own HTTP API; Backuparr uploads each backup via rclone to Local storage, Google Drive, Microsoft OneDrive, and Dropbox" width="100%">
 
 ## Why not reuse an existing tool?
 
@@ -69,8 +69,8 @@ this for Radarr/Sonarr/Prowlarr via S3. Backuparr extends the same idea
 (trigger the app's own backup API, download it, upload it) to Profilarr,
 Bazarr, Tdarr, and Tautulli, and uses a pick-your-destinations model built
 on [rclone](https://rclone.org/): Local out of the box, Google Drive via an
-in-app "Connect" button, and OneDrive via a one-time `rclone authorize`
-paste, with no need to run rclone's interactive config wizard yourself.
+in-app "Connect" button, and OneDrive and Dropbox via a one-time
+`rclone authorize` paste, with no need to run rclone's interactive config wizard yourself.
 
 ## Per-app backup method (read this before deploying)
 
@@ -228,7 +228,19 @@ in your OneDrive, created on first connect.
 
 ### Dropbox
 
-Shown on the Settings tab as "Coming soon"; not implemented yet.
+Uses rclone's built-in Dropbox app, so no Dropbox developer account or app
+registration is needed.
+
+1. On any computer with a browser (not necessarily where Backuparr runs),
+   [download rclone](https://rclone.org/downloads/) (a single binary) and run
+   `rclone authorize dropbox`.
+2. Sign in to Dropbox at the link it opens or prints, and approve access.
+3. Copy the block rclone prints after "Paste the following into your remote
+   machine --->", paste it into the Dropbox card in **Settings**, and click
+   **Connect Dropbox**.
+
+There's no folder picker: backups go to a `Backuparr` folder in your
+Dropbox, created on the first backup.
 
 ## Deploying
 
@@ -305,7 +317,7 @@ login. On the **Settings** tab:
    list) and click **Discover services** to fill in Radarr, Sonarr and
    SABnzbd - see [Prowlarr discovery](#prowlarr-discovery).
 2. Enable at least one destination. Local needs nothing further; see
-   [Destinations](#destinations) for Google Drive and OneDrive.
+   [Destinations](#destinations) for Google Drive, OneDrive and Dropbox.
 3. Set retention and a schedule (Daily/Weekly/Every few hours with a time
    picker, or **Advanced** for a raw cron expression).
 4. **Save settings.**
@@ -372,9 +384,9 @@ read proxy user headers.
 The admin account from the setup screen is required by default. Forgot the
 password? Click **Reset Backuparr** on the login screen. After you confirm a
 warning and type a confirmation phrase, it wipes local state (every app's API
-key, both destinations' connections, the admin account, and local backup
+key, every cloud destination's connection, the admin account, and local backup
 files) and returns to a fresh install and the setup screen. Anything already
-uploaded to Google Drive or OneDrive is untouched.
+uploaded to Google Drive, OneDrive or Dropbox is untouched.
 
 **With local authentication enabled, the reset endpoint is reachable without
 logging in**, gated only by a fixed confirmation phrase visible in this
@@ -389,12 +401,12 @@ behind a reverse proxy for TLS, as you likely do for Radarr/Sonarr.
 ### Encryption at rest
 
 Every app's API key, Bazarr's basic-auth password, Google Drive's client
-secret/API key/refresh token, OneDrive's token, and the Notify URL (which can
+secret/API key/refresh token, OneDrive's and Dropbox's tokens, and the Notify URL (which can
 embed a Telegram bot token or webhook secret) are encrypted in `config.json`.
 The key is `secrets.key`, generated on first run; set `BACKUPARR_SECRETS_KEY`
 to keep it off the volume entirely (e.g. a Docker secret).
 
-`rclone.conf`, which mirrors the Google Drive/OneDrive secrets for rclone, is
+`rclone.conf`, which mirrors the Google Drive/OneDrive/Dropbox secrets for rclone, is
 encrypted with rclone's built-in config encryption, using a generated password
 in `rclone.pass` (override with `RCLONE_CONFIG_PASS`).
 
@@ -494,6 +506,8 @@ These fields live in `config.json`, edited via the web UI or by hand:
 | `destinations.gdrive.refresh_token/folder_id/folder_name` | Set automatically by the Connect/Choose folder buttons - don't hand-edit |
 | `destinations.onedrive.enabled` | Whether the destination is active |
 | `destinations.onedrive.token/drive_id/drive_type/item_id` | Set automatically by pasting a token from `rclone authorize onedrive` - don't hand-edit |
+| `destinations.dropbox.enabled` | Whether the destination is active |
+| `destinations.dropbox.token` | Set automatically by pasting a token from `rclone authorize dropbox` - don't hand-edit |
 | `retention_days` | Delete backups older than this, per app per destination (default 7) |
 | `cron_schedule` | Standard 5-field cron syntax (default `0 3 * * *`) |
 | `notify_url` | Optional: POST a summary here after every run - see [Notifications](#notifications) above |

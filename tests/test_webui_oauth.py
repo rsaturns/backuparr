@@ -1,4 +1,4 @@
-"""Google Drive and OneDrive connection routes."""
+"""Google Drive, OneDrive and Dropbox connection routes."""
 import json
 import time
 import urllib.parse
@@ -6,6 +6,7 @@ import urllib.parse
 import pytest
 import requests
 
+import dropbox_oauth
 import gdrive_oauth
 import onedrive_oauth
 
@@ -232,3 +233,63 @@ def test_disconnecting_onedrive_clears_the_connection(authed_client, isolated_we
     assert authed_client.post("/api/destinations/onedrive/disconnect").get_json() == {"ok": True}
     cfg = onedrive(isolated_webui)
     assert (cfg["enabled"], cfg["token"], cfg["drive_id"], cfg["drive_type"], cfg["item_id"]) == (False, "", "", "", "")
+
+
+# --- Dropbox -----------------------------------------------------------------------
+
+def dropbox(webui):
+    return webui.load_config()["destinations"]["dropbox"]
+
+
+def test_connecting_dropbox_verifies_then_stores_the_token(authed_client, isolated_webui, monkeypatch):
+    synced, verified = [], []
+    monkeypatch.setattr(dropbox_oauth, "parse_token_blob", lambda blob: ('{"access_token":"a","refresh_token":"r"}', "a"))
+    monkeypatch.setattr(dropbox_oauth, "verify_access_token", verified.append)
+    monkeypatch.setattr(dropbox_oauth, "sync_rclone_remote", lambda cfg, force=False: synced.append(force))
+    response = authed_client.post("/api/destinations/dropbox/connect", json={"token_blob": "pasted"})
+    assert response.get_json() == {"ok": True}
+    cfg = dropbox(isolated_webui)
+    assert cfg["enabled"] is True and json.loads(cfg["token"])["refresh_token"] == "r"
+    assert verified == ["a"]
+    assert synced == [True]  # a freshly pasted token must replace the stored one
+
+
+@pytest.mark.parametrize("blob", ["", "not a token", "   "])
+def test_a_bad_dropbox_token_is_refused_and_changes_nothing(authed_client, isolated_webui, blob):
+    response = authed_client.post("/api/destinations/dropbox/connect", json={"token_blob": blob})
+    assert response.status_code == 400 and "rclone authorize dropbox" in response.get_json()["error"]
+    assert dropbox(isolated_webui)["token"] == "" and dropbox(isolated_webui)["enabled"] is False
+
+
+def test_dropbox_rejecting_the_token_is_reported_and_nothing_is_saved(authed_client, isolated_webui, monkeypatch):
+    monkeypatch.setattr(dropbox_oauth, "parse_token_blob", lambda blob: ("{}", "a"))
+
+    def refuse(access):
+        raise dropbox_oauth.DropboxOAuthError("Dropbox rejected that token: invalid_access_token")
+
+    monkeypatch.setattr(dropbox_oauth, "verify_access_token", refuse)
+    response = authed_client.post("/api/destinations/dropbox/connect", json={"token_blob": "x"})
+    assert response.status_code == 400 and "rejected" in response.get_json()["error"]
+    assert dropbox(isolated_webui)["token"] == ""
+
+
+def test_disconnecting_dropbox_clears_the_connection(authed_client, isolated_webui, monkeypatch):
+    monkeypatch.setattr(dropbox_oauth, "parse_token_blob", lambda blob: ("{}", "a"))
+    monkeypatch.setattr(dropbox_oauth, "verify_access_token", lambda access: None)
+    monkeypatch.setattr(dropbox_oauth, "sync_rclone_remote", lambda cfg, force=False: None)
+    authed_client.post("/api/destinations/dropbox/connect", json={"token_blob": "x"})
+    assert authed_client.post("/api/destinations/dropbox/disconnect").get_json() == {"ok": True}
+    cfg = dropbox(isolated_webui)
+    assert (cfg["enabled"], cfg["token"]) == (False, "")
+
+
+def test_the_dropbox_token_is_encrypted_in_config_json(authed_client, isolated_webui, monkeypatch):
+    secret = '{"access_token":"plain-access","refresh_token":"plain-refresh"}'
+    monkeypatch.setattr(dropbox_oauth, "parse_token_blob", lambda blob: (secret, "a"))
+    monkeypatch.setattr(dropbox_oauth, "verify_access_token", lambda access: None)
+    monkeypatch.setattr(dropbox_oauth, "sync_rclone_remote", lambda cfg, force=False: None)
+    authed_client.post("/api/destinations/dropbox/connect", json={"token_blob": "x"})
+    with open(isolated_webui.CONFIG_PATH) as f:
+        on_disk = f.read()
+    assert "plain-refresh" not in on_disk and "plain-access" not in on_disk
+    assert dropbox(isolated_webui)["token"] == secret

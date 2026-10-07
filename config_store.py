@@ -85,7 +85,7 @@ DEFAULT_DEST = {
         "folder_id": "",
         "folder_name": "",
     },
-    "dropbox": {"enabled": False},
+    "dropbox": {"enabled": False, "token": ""},
     "onedrive": {
         "enabled": False,
         "token": "",
@@ -236,9 +236,40 @@ DESTINATION_META = [
         "id": "dropbox",
         "label": "Dropbox",
         "icon": "dropbox.svg",
-        "status": "coming_soon",
-        "description": "Coming soon.",
-        "setup_help": None,
+        "status": "available",
+        "description": "Backed up to a Backuparr folder in your Dropbox. Uses rclone's own built-in Dropbox app - no Dropbox developer account, no app registration.",
+        "setup_help": {
+            "title": "Connect Dropbox",
+            "intro": "Uses rclone's own built-in Dropbox app, so there's no app to register - just run one command on any computer with a browser (it doesn't need to be this server).",
+            "steps": [
+                {
+                    "text": "Download rclone (a single binary, no install needed) on any computer with a web browser - your own laptop is fine, it doesn't have to be wherever Backuparr runs.",
+                    "link": {"label": "Download rclone", "url": "https://rclone.org/downloads/"},
+                },
+                {
+                    "text": "Open a terminal there and run:",
+                    "code": "rclone authorize dropbox",
+                    "link": None,
+                },
+                {
+                    "text": "It prints a link - open it in your browser, sign in to Dropbox, and approve access.",
+                    "link": None,
+                },
+                {
+                    "text": "Back in the terminal, rclone prints a block starting with \"Paste the following into your remote machine --->\". Copy that whole block (or just the line in the middle - either works) and paste it below, then click \"Connect Dropbox\".",
+                    "link": None,
+                },
+                {
+                    "text": "Backups are written to a folder named Backuparr in your Dropbox, created on the first backup.",
+                    "link": None,
+                },
+            ],
+            "links": [
+                {"label": "rclone downloads", "url": "https://rclone.org/downloads/"},
+                {"label": "rclone's Dropbox docs", "url": "https://rclone.org/dropbox/"},
+                {"label": "rclone's remote setup docs", "url": "https://rclone.org/remote_setup/"},
+            ],
+        },
     },
 ]
 
@@ -260,6 +291,7 @@ def _secret_fields(cfg):
     fields.append((cfg["destinations"]["gdrive"], "developer_key"))
     fields.append((cfg["destinations"]["gdrive"], "refresh_token"))
     fields.append((cfg["destinations"]["onedrive"], "token"))
+    fields.append((cfg["destinations"]["dropbox"], "token"))
     fields.append((cfg, "notify_url"))
     return fields
 
