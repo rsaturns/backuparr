@@ -31,6 +31,12 @@ _Nothing yet._
 
 ### Fixed
 
+- Restoring Tautulli's config reported success but never applied it: Tautulli's
+  `import_config` call only stages the file, and starting the import is a
+  separate request that Backuparr wasn't making. It now makes it. If Tautulli
+  has a login enabled, that request can't be made with an API key, so the
+  restore says the config is staged and shows the URL to open after logging in
+  to Tautulli. See the README's Tautulli restore note.
 - Failures reported by the apps themselves no longer repeat the app name
   ("sonarr: sonarr: unauthorized - check the API key").
 - A backup work folder that can't be created now fails only that app, instead

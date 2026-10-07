@@ -1647,12 +1647,13 @@ function renderRestoreState(state) {
         const parts = [];
         if (s.database) parts.push("database restored");
         if (s.database_skipped) parts.push(`database not restored (${s.database_skipped})`);
-        if (s.config) parts.push("config restored");
-        resultEl.textContent = parts.join(", ") + ".";
+        if (s.config && !s.config_staged) parts.push("config restored");
+        resultEl.textContent = parts.length ? parts.join(", ") + "." : "";
+        if (s.config_staged) resultEl.textContent += `${parts.length ? " " : ""}Config not applied yet: ${s.config_staged}`;
       } else {
         resultEl.textContent = state.message || "Restore complete.";
       }
-      resultEl.className = "save-result ok";
+      resultEl.className = `save-result ${s && s.config_staged ? "warn" : "ok"}`;
     }
   }
 }

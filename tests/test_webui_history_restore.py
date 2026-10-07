@@ -283,6 +283,15 @@ def test_tautulli_and_sabnzbd_restores_return_their_summary(restore, authed_clie
     assert result(authed_client)["summary"] == {"servers_restored": ["news"]} and result(authed_client)["message"] == "sabnzbd restore complete"
 
 
+def test_a_staged_tautulli_config_is_reported_as_needing_a_step(restore, authed_client):
+    staged = "Tautulli has a login set up, so Backuparr can't start the import. The config is staged. To apply it, log in to Tautulli if asked, then open http://tautulli:1/restart_import_config"
+    restore["results"] = {"tautulli": {"summary": {"config": "staged", "config_staged": staged}}}
+    start(authed_client, "tautulli")
+    state = result(authed_client)
+    assert state["ok"] is True and state["summary"]["config_staged"] == staged
+    assert state["message"] == "tautulli config staged, finish it in Tautulli"
+
+
 def test_sabnzbd_passwords_come_from_the_request_and_blank_means_skip(restore, authed_client):
     start(authed_client, "sabnzbd", passwords={"news": "secret", "free": ""})
     assert restore["prompts"] == {"news": "secret", "free": None, "unlisted": None}

@@ -913,7 +913,11 @@ def _restore_work(app_name, root, app_cfg, data, bazarr_backup_dir):
             log.info("restore: restoring tautulli...")
             result = ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
             RESTORE_RUN_STATE["summary"] = result["summary"]
-            RESTORE_RUN_STATE["message"] = "tautulli restore uploaded"
+            RESTORE_RUN_STATE["message"] = (
+                "tautulli config staged, finish it in Tautulli"
+                if result["summary"].get("config_staged")
+                else "tautulli restore uploaded"
+            )
 
         elif app_name == "sabnzbd":
             passwords = data.get("passwords", {})

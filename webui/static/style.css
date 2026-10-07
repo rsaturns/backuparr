@@ -617,6 +617,7 @@ input:focus, select:focus, textarea:focus {
 .save-result { font-size: 14.5px; color: var(--text-muted); }
 .save-result.ok { color: var(--ok); }
 .save-result.fail { color: var(--danger); }
+.save-result.warn { color: var(--warn); }
 
 .run-head {
   display: flex;
