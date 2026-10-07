@@ -22,6 +22,7 @@ import requests
 import destination_util
 import rclone_util
 from apps.bazarr import BazarrApp, BazarrError
+from apps.plex import PlexApp, PlexError
 from apps.profilarr import ProfilarrApp, ProfilarrError
 from apps.prowlarr import ProwlarrApp
 from apps.radarr import RadarrApp
@@ -56,6 +57,7 @@ _CLEAN_MESSAGE_ERRORS = (
     BazarrError,
     ConfigError,
     destination_util.DestinationError,
+    PlexError,
     ProfilarrError,
     rclone_util.RcloneError,
     SabnzbdError,
@@ -187,6 +189,8 @@ def log_failure(logger, summary, exc, url=None, app=None):
 
 
 def build_app(name, app_cfg):
+    if name == "plex":
+        return PlexApp(app_cfg["url"], app_cfg["api_key"])
     if name == "radarr":
         return RadarrApp(app_cfg["url"], app_cfg["api_key"])
     if name == "sonarr":

@@ -15,7 +15,7 @@ class ConfigError(RuntimeError):
     truncated by a full disk, ...). The message says what to do about it."""
 
 
-APP_NAMES = ["radarr", "sonarr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "tautulli", "seerr"]
+APP_NAMES = ["radarr", "sonarr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "tautulli", "plex", "seerr"]
 
 DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "password": ""}
 
@@ -62,6 +62,13 @@ APP_META = [
     },
     {"id": "sabnzbd", "label": "SABnzbd", "icon": "sabnzbd.svg", "status": "available", "key_required": True, "url_placeholder": "http://sabnzbd:8080", "extra_fields": []},
     {"id": "tautulli", "label": "Tautulli", "icon": "tautulli.svg", "status": "available", "key_required": True, "url_placeholder": "http://tautulli:8181", "extra_fields": []},
+    {
+        "id": "plex", "label": "Plex", "icon": "plex.svg",
+        "status": "available", "key_required": True, "key_label": "Plex token",
+        "url_placeholder": "http://plex:32400", "extra_fields": [],
+        "backup_help": "Use the server owner's Plex token. Library databases including all users' local watched/progress data, API server/library settings, metadata and artwork. No native Preferences.xml, media or plugin files. Manual restore.",
+        "restore_supported": False,
+    },
     {
         "id": "seerr",
         "label": "Seerr",
