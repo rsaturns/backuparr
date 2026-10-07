@@ -14,6 +14,7 @@ class ConfigError(RuntimeError):
     """config.json exists but can't be used (hand-edited into invalid JSON,
     truncated by a full disk, ...). The message says what to do about it."""
 
+
 APP_NAMES = ["radarr", "sonarr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "tautulli", "seerr"]
 
 DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "password": ""}

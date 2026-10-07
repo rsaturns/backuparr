@@ -385,7 +385,8 @@ def _backup_work():
         RUN_STATE["failed"] = failed
         notify(cfg.get("notify_url"), format_run_message(ok, failed))
     except Exception as exc:  # not a per-app failure: the run itself couldn't proceed
-        RUN_STATE["failed"] = [f"backup run stopped: {humanize_error(exc)}" if describe_failure(exc) else f"unexpected error: {exc}"]
+        message = describe_failure(exc)
+        RUN_STATE["failed"] = [f"backup run stopped: {message}" if message else f"unexpected error: {exc}"]
         log_failure(backup_logger, "backup run stopped", exc)
 
 
@@ -424,7 +425,7 @@ def _cancel_backup_run():
 # In-process, not an external cron daemon - re-reads cron_schedule from
 # config.json every tick, so a Settings change applies immediately.
 _SCHEDULER_INTERVAL_SECONDS = 20
-_scheduler_state = {"last_run_minute": None}
+_scheduler_state = {"last_run_minute": None, "last_error": None}
 
 
 def _scheduler_loop():
@@ -445,7 +446,7 @@ def _scheduler_loop():
             # A persistent problem (unreadable config.json, say) would
             # repeat every tick; report each distinct one once.
             problem = describe_failure(exc) or repr(exc)
-            if _scheduler_state.get("last_error") != problem:
+            if _scheduler_state["last_error"] != problem:
                 _scheduler_state["last_error"] = problem
                 log_failure(log, "scheduler tick failed", exc)
         else:
@@ -1098,8 +1099,8 @@ def api_gdrive_oauth_callback():
     except Exception as exc:
         # Broad on purpose: a network failure here raises a raw requests
         # exception, not just GDriveOAuthError.
-        log_failure(log, "gdrive oauth exchange failed", exc, "https://oauth2.googleapis.com")
-        return _redirect_with_error(humanize_error(exc, "https://oauth2.googleapis.com"))
+        log_failure(log, "gdrive oauth exchange failed", exc, gdrive_oauth.TOKEN_URL)
+        return _redirect_with_error(humanize_error(exc, gdrive_oauth.TOKEN_URL))
 
     gdrive_cfg["refresh_token"] = tokens["refresh_token"]
     gdrive_cfg["enabled"] = True

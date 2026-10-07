@@ -65,15 +65,6 @@ _CLEAN_MESSAGE_ERRORS = (
     UnsafeRedirectError,
 )
 
-_CONNECT_HINT = "check the URL and that it's reachable from this container"
-
-
-def is_dns_failure(exc):
-    """True when exc, or anything it was raised from, is a failed hostname
-    lookup (requests wraps socket.gaierror in several layers)."""
-    return _in_chain(exc, socket.gaierror) is not None
-
-
 def _in_chain(exc, kind):
     """The first exception of class `kind` in exc's cause/context chain."""
     seen = set()
@@ -83,6 +74,12 @@ def _in_chain(exc, kind):
             return exc
         exc = exc.__cause__ or exc.__context__
     return None
+
+
+def is_dns_failure(exc):
+    """True when exc, or anything it was raised from, is a failed hostname
+    lookup (requests wraps socket.gaierror in several layers)."""
+    return _in_chain(exc, socket.gaierror) is not None
 
 
 def _where(url):
@@ -99,6 +96,7 @@ def _where(url):
 
 
 def dns_failure_message(url):
+    """For a lookup that failed; names the host only (see _where)."""
     host = urlparse(url or "").hostname
     target = f"hostname '{host}'" if host else "the hostname in the URL"
     return f"couldn't resolve {target} - check the URL and that this container can look it up (same Docker network, or working DNS)"
@@ -116,12 +114,13 @@ def _http_status_message(status, where):
     return f"{where} answered HTTP {status}"
 
 
+_PERMISSION_DENIED = "permission denied - Backuparr runs as PUID:PGID, so that folder must be writable by it"
 _DISK_ERRORS = {
     errno.ENOSPC: "no space left on the device",
     errno.EDQUOT: "disk quota exceeded",
     errno.EROFS: "the filesystem is read-only",
-    errno.EACCES: "permission denied - Backuparr runs as PUID:PGID, so that folder must be writable by it",
-    errno.EPERM: "permission denied - Backuparr runs as PUID:PGID, so that folder must be writable by it",
+    errno.EACCES: _PERMISSION_DENIED,
+    errno.EPERM: _PERMISSION_DENIED,
 }
 
 
@@ -145,11 +144,11 @@ def describe_failure(exc, url=None):
         if isinstance(exc, requests.exceptions.SSLError):
             return f"TLS/SSL error talking to {where} - check http:// vs https:// and the app's certificate"
         if isinstance(exc, requests.exceptions.Timeout):
-            return f"couldn't connect - timed out waiting for {where}; is it running and not overloaded, and is no firewall dropping traffic?"
+            return f"couldn't connect - timed out waiting for {where}; is the app overloaded, or a firewall dropping the traffic?"
         if isinstance(exc, requests.exceptions.ConnectionError):
             if _in_chain(exc, ConnectionRefusedError):
                 return f"couldn't connect - connection refused by {where}; is the app running, and is the port right?"
-            return f"couldn't connect - {_CONNECT_HINT}"
+            return "couldn't connect - check the URL and that it's reachable from this container"
         if isinstance(exc, requests.exceptions.HTTPError) and exc.response is not None:
             return _http_status_message(exc.response.status_code, where)
         return f"request to {where} failed ({type(exc).__name__})"
@@ -166,8 +165,8 @@ def describe_failure(exc, url=None):
 def _without_app_prefix(message, app):
     """Driver errors start with "<app>: ", which the caller's own
     "<app>: ..." label would repeat."""
-    prefix = f"{app}: " if app else None
-    return message[len(prefix):] if prefix and message.startswith(prefix) else message
+    prefix = f"{app}: "
+    return message[len(prefix):] if app and message.startswith(prefix) else message
 
 
 def humanize_error(exc, url=None, app=None):

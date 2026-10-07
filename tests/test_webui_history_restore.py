@@ -7,6 +7,7 @@ import pytest
 import requests
 
 import restore_actions
+from apps.servarr import ServarrError
 from config_store import APP_NAMES
 
 
@@ -312,8 +313,6 @@ def test_a_restore_that_cannot_resolve_the_host_logs_one_clean_line(restore, aut
 
 
 def test_a_restore_rejected_by_the_app_does_not_repeat_the_app_name_in_the_log(restore, authed_client, caplog):
-    from apps.servarr import ServarrError
-
     restore["fail"] = ServarrError("radarr: unauthorized - check the API key")
     with caplog.at_level(logging.INFO):
         assert start(authed_client).status_code == 200

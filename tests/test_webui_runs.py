@@ -1,4 +1,5 @@
 """Backup runs, the in-process scheduler and the run-tracking helpers."""
+import errno
 import logging
 import os
 import threading
@@ -244,8 +245,6 @@ def test_the_scheduler_does_not_retry_a_minute_skipped_because_a_run_was_active(
 
 
 def test_a_run_that_cannot_start_for_lack_of_disk_is_reported_in_one_line(inline, authed_client, monkeypatch, caplog):
-    import errno
-
     def disk_full(cfg, **kw):
         raise OSError(errno.ENOSPC, "No space left on device", "/tmp/backuparr-run-x")
 
@@ -307,8 +306,6 @@ def test_an_unexpected_scheduler_error_keeps_its_traceback(inline, monkeypatch, 
 
 
 def test_saving_settings_to_a_read_only_volume_explains_itself(authed_client, inline, monkeypatch, caplog):
-    import errno
-
     def read_only(cfg):
         raise PermissionError(errno.EACCES, "Permission denied", "/config/backuparr/config.json")
 

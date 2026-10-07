@@ -3,6 +3,7 @@ are configuration problems, not crashes: the log gets one readable line and
 the UI a matching message. Real bugs keep their traceback."""
 import errno
 import logging
+import pathlib
 import socket
 import zipfile
 
@@ -193,6 +194,13 @@ def test_an_unexpected_error_still_logs_its_traceback(one_app_run, monkeypatch, 
     assert record.exc_info and record.exc_info[0] is KeyError
 
 
+def write_archive(work_dir):
+    folder = pathlib.Path(work_dir) / "backup"
+    folder.mkdir()
+    (folder / "sonarr.db").write_text("x")
+    return str(folder)
+
+
 def test_an_upload_failure_shows_the_cause_not_the_whole_rclone_command(one_app_run, monkeypatch, caplog):
     def refuse(local_path, remote_path):
         raise rclone_util.RcloneError(
@@ -200,22 +208,13 @@ def test_an_upload_failure_shows_the_cause_not_the_whole_rclone_command(one_app_
             "Failed to copyto: mkdir /ro/sonarr: read-only file system (the destination is read-only)",
         )
 
-    monkeypatch.setattr(backup.SonarrApp, "backup", lambda self, work_dir: _write_archive(work_dir))
+    monkeypatch.setattr(backup.SonarrApp, "backup", lambda self, work_dir: write_archive(work_dir))
     monkeypatch.setattr(backup.rclone_util, "copyto", refuse)
     with caplog.at_level(logging.INFO):
         ok, failed = one_app_run("http://sonarr:8989")
     assert failed == ["sonarr: failed on local: Failed to copyto: mkdir /ro/sonarr: read-only file system (the destination is read-only)"]
     (line,) = [r for r in caplog.records if "upload to local failed" in r.getMessage()]
     assert "rclone copyto" not in line.getMessage() and line.exc_info is None
-
-
-def _write_archive(work_dir):
-    import pathlib
-
-    folder = pathlib.Path(work_dir) / "backup"
-    folder.mkdir()
-    (folder / "sonarr.db").write_text("x")
-    return str(folder)
 
 
 def test_rclone_errors_describe_themselves_by_their_cause():
