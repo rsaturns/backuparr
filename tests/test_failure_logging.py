@@ -176,8 +176,9 @@ def test_a_rejected_api_key_is_one_clean_line(one_app_run, monkeypatch, caplog):
     monkeypatch.setattr(backup.SonarrApp, "backup", unauthorized)
     with caplog.at_level(logging.INFO):
         ok, failed = one_app_run("http://sonarr:8989")
-    assert len(failed) == 1 and failed[0].endswith("unauthorized - check the API key")
-    assert failure_records(caplog)[0].exc_info is None
+    assert failed == ["sonarr: unauthorized - check the API key"]
+    (record,) = failure_records(caplog)
+    assert record.exc_info is None and record.getMessage() == "sonarr: backup failed - unauthorized - check the API key"
 
 
 def test_an_unexpected_error_still_logs_its_traceback(one_app_run, monkeypatch, caplog):
@@ -222,3 +223,11 @@ def test_rclone_errors_describe_themselves_by_their_cause():
     assert backup.describe_failure(error) == "boom (hint)"
     assert str(error).startswith("rclone copyto a b failed")
     assert rclone_util.RcloneError("just this").detail == "just this"
+
+
+def test_the_apps_own_prefix_is_not_repeated_after_its_label():
+    error = ServarrError("sonarr: unauthorized - check the API key")
+    assert backup.humanize_error(error) == "sonarr: unauthorized - check the API key"
+    assert backup.humanize_error(error, app="sonarr") == "unauthorized - check the API key"
+    assert backup.humanize_error(error, app="radarr") == "sonarr: unauthorized - check the API key"
+    assert backup.humanize_error(KeyError("k"), app="sonarr") == "'k'"

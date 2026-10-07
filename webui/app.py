@@ -927,7 +927,7 @@ def _restore_work(app_name, root, app_cfg, data, bazarr_backup_dir):
 
         RESTORE_RUN_STATE["ok"] = True
     except Exception as exc:
-        log_failure(log, f"restore failed for {app_name}", exc, app_cfg.get("url"))
+        log_failure(log, f"restore failed for {app_name}", exc, app_cfg.get("url"), app=app_name)
         RESTORE_RUN_STATE["error"] = humanize_error(exc, app_cfg.get("url"))
     finally:
         if tmp_dir:

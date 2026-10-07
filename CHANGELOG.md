@@ -31,6 +31,8 @@ _Nothing yet._
 
 ### Fixed
 
+- Failures reported by the apps themselves no longer repeat the app name
+  ("sonarr: sonarr: unauthorized - check the API key").
 - A backup work folder that can't be created now fails only that app, instead
   of ending the whole run.
 

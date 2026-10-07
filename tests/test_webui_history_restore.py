@@ -311,6 +311,17 @@ def test_a_restore_that_cannot_resolve_the_host_logs_one_clean_line(restore, aut
     assert "secret" not in caplog.text and "Traceback" not in caplog.text
 
 
+def test_a_restore_rejected_by_the_app_does_not_repeat_the_app_name_in_the_log(restore, authed_client, caplog):
+    from apps.servarr import ServarrError
+
+    restore["fail"] = ServarrError("radarr: unauthorized - check the API key")
+    with caplog.at_level(logging.INFO):
+        assert start(authed_client).status_code == 200
+    assert result(authed_client)["error"] == "radarr: unauthorized - check the API key"
+    (line,) = [r for r in caplog.records if "restore failed" in r.getMessage()]
+    assert line.getMessage() == "restore failed for radarr - unauthorized - check the API key"
+
+
 def test_a_missing_backup_is_reported(restore, authed_client):
     restore["fetch_fail"] = FileNotFoundError("No backups found at /x/radarr/")
     start(authed_client)

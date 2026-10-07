@@ -163,12 +163,20 @@ def describe_failure(exc, url=None):
     return None
 
 
-def humanize_error(exc, url=None):
-    """The describe_failure() line, or str(exc) for anything it doesn't know."""
-    return describe_failure(exc, url) or str(exc)
+def _without_app_prefix(message, app):
+    """Driver errors start with "<app>: ", which the caller's own
+    "<app>: ..." label would repeat."""
+    prefix = f"{app}: " if app else None
+    return message[len(prefix):] if prefix and message.startswith(prefix) else message
 
 
-def log_failure(logger, summary, exc, url=None):
+def humanize_error(exc, url=None, app=None):
+    """The describe_failure() line, or str(exc) for anything it doesn't know.
+    Pass `app` when the result goes after an "<app>: " label."""
+    return _without_app_prefix(describe_failure(exc, url) or str(exc), app)
+
+
+def log_failure(logger, summary, exc, url=None, app=None):
     """Logs a failure as one readable ERROR line when describe_failure()
     recognises it, otherwise with the full traceback - unexpected errors
     are bugs, and a bug report needs the stack."""
@@ -176,7 +184,7 @@ def log_failure(logger, summary, exc, url=None):
     if message is None:
         logger.error("%s", summary, exc_info=exc)
     else:
-        logger.error("%s - %s", summary, message)
+        logger.error("%s - %s", summary, _without_app_prefix(message, app))
 
 
 def build_app(name, app_cfg):
@@ -369,8 +377,8 @@ def run_backup(cfg, on_progress=None, should_cancel=None):
             except RunCancelled:
                 raise
             except Exception as exc:
-                log_failure(log, f"{name}: backup failed", exc, app_cfg.get("url"))
-                failed.append(f"{name}: {humanize_error(exc, app_cfg.get('url'))}")
+                log_failure(log, f"{name}: backup failed", exc, app_cfg.get("url"), app=name)
+                failed.append(f"{name}: {humanize_error(exc, app_cfg.get('url'), app=name)}")
             finally:
                 shutil.rmtree(work_dir, ignore_errors=True)
                 if archive_path and os.path.exists(archive_path):
