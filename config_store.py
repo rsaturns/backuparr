@@ -9,6 +9,11 @@ import secrets_crypto
 
 CONFIG_PATH = os.environ.get("BACKUPARR_CONFIG", "/config/backuparr/config.json")
 
+
+class ConfigError(RuntimeError):
+    """config.json exists but can't be used (hand-edited into invalid JSON,
+    truncated by a full disk, ...). The message says what to do about it."""
+
 APP_NAMES = ["radarr", "sonarr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "tautulli", "seerr"]
 
 DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "password": ""}
@@ -302,8 +307,15 @@ def load_config():
         save_config(cfg)
         return cfg
 
-    with open(CONFIG_PATH) as f:
-        data = json.load(f)
+    try:
+        with open(CONFIG_PATH) as f:
+            data = json.load(f)
+    except json.JSONDecodeError as exc:
+        raise ConfigError(
+            f"{CONFIG_PATH} isn't valid JSON ({exc.msg}, line {exc.lineno}) - fix it, or delete the file to start over with defaults"
+        ) from exc
+    if not isinstance(data, dict):
+        raise ConfigError(f"{CONFIG_PATH} should hold a JSON object - fix it, or delete the file to start over with defaults")
 
     merged = copy.deepcopy(DEFAULTS)
     for key, value in data.items():

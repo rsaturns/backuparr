@@ -1,5 +1,6 @@
 """History (list, download, delete) and the restore pipeline, with rclone and
 the app drivers stubbed out - CI has no rclone binary."""
+import logging
 import os
 
 import pytest
@@ -294,6 +295,20 @@ def test_a_failed_restore_is_reported_and_cleaned_up(restore, authed_client):
     state = result(authed_client)
     assert state["ok"] is False and "couldn't connect" in state["error"] and "secret" not in state["error"]
     assert state["running"] is False and state["finished_at"] and not restore["tmp"].exists()
+
+
+def test_a_restore_that_cannot_resolve_the_host_logs_one_clean_line(restore, authed_client, dns_down, caplog):
+    with pytest.raises(requests.exceptions.ConnectionError) as caught:
+        requests.get("http://radarr:1/api/v3/system/status?apikey=secret")
+    restore["fail"] = caught.value
+    with caplog.at_level(logging.INFO):
+        assert start(authed_client).status_code == 200
+    state = result(authed_client)
+    assert state["ok"] is False and state["error"].startswith("couldn't resolve hostname 'radarr'")
+    failures = [r for r in caplog.records if "restore failed" in r.getMessage()]
+    assert len(failures) == 1 and failures[0].exc_info is None
+    assert "couldn't resolve hostname 'radarr'" in failures[0].getMessage()
+    assert "secret" not in caplog.text and "Traceback" not in caplog.text
 
 
 def test_a_missing_backup_is_reported(restore, authed_client):

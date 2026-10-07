@@ -7,7 +7,12 @@ logger = logging.getLogger(__name__)
 
 
 class RcloneError(RuntimeError):
-    pass
+    """str() is the full failed command line; .detail is just the cause (and
+    a hint), which is what a log line or the UI needs."""
+
+    def __init__(self, message, detail=None):
+        super().__init__(message)
+        self.detail = detail or message
 
 
 SENSITIVE_FIELDS = {"client_secret", "token", "password", "pass"}
@@ -34,15 +39,36 @@ def _clean_stderr(stderr):
     return _URL_RE.sub('"<url>"', last)
 
 
+# rclone's own wording says what failed but not what to do about it. First
+# match wins; matched against the already-cleaned last stderr line.
+_HINTS = (
+    (re.compile(r"read-only file system", re.I), "the destination is read-only"),
+    (re.compile(r"permission denied", re.I), "the folder isn't writable by Backuparr's user (PUID:PGID)"),
+    (re.compile(r"no space left|disk quota|insufficient storage|storagequotaexceeded|out of space|quota.*exceeded", re.I), "the destination is out of space"),
+    (re.compile(r"invalid_grant|expired or revoked|couldn't fetch token|unauthorized_client|401 unauthorized", re.I), "the connection to this destination has expired or been revoked - reconnect it in Settings"),
+    (re.compile(r"no such host|lookup .* on .*:", re.I), "the destination's hostname couldn't be resolved - check this container's network and DNS"),
+)
+
+
+def _hint(cleaned):
+    for pattern, hint in _HINTS:
+        if pattern.search(cleaned):
+            return f" ({hint})"
+    return ""
+
+
 def _run(args, redact=()):
     # stdin closed so an inherited TTY (e.g. manual docker exec) can't hang.
     proc = subprocess.run(["rclone", *args], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     if proc.returncode != 0:
-        message = f"rclone {' '.join(args)} failed: {_clean_stderr(proc.stderr)}"
+        cleaned = _clean_stderr(proc.stderr)
+        detail = f"{cleaned}{_hint(cleaned)}"
+        message = f"rclone {' '.join(args)} failed: {detail}"
         for secret in redact:
             if secret:
                 message = message.replace(secret, "***")
-        raise RcloneError(message)
+                detail = detail.replace(secret, "***")
+        raise RcloneError(message, detail)
     return proc.stdout
 
 

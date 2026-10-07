@@ -27,11 +27,12 @@ import rclone_util
 import restore_actions as ra
 import secrets_crypto
 from apps.prowlarr import ProwlarrApp
-from backup import build_app, format_run_message, humanize_error, notify, run_backup
+from backup import build_app, describe_failure, format_run_message, humanize_error, log_failure, notify, run_backup
 from config_store import (
     APP_META,
     APP_NAMES,
     CONFIG_PATH,
+    ConfigError,
     DEFAULT_APP,
     DEST_EDITABLE_FIELDS,
     DEST_NAMES,
@@ -383,9 +384,9 @@ def _backup_work():
         RUN_STATE["ok"] = ok
         RUN_STATE["failed"] = failed
         notify(cfg.get("notify_url"), format_run_message(ok, failed))
-    except Exception as exc:  # unexpected crash, not a per-app failure
-        RUN_STATE["failed"] = [f"unexpected error: {exc}"]
-        backup_logger.exception("backup run crashed")
+    except Exception as exc:  # not a per-app failure: the run itself couldn't proceed
+        RUN_STATE["failed"] = [f"backup run stopped: {humanize_error(exc)}" if describe_failure(exc) else f"unexpected error: {exc}"]
+        log_failure(backup_logger, "backup run stopped", exc)
 
 
 def _start_backup_run():
@@ -440,13 +441,34 @@ def _scheduler_loop():
                 _scheduler_state["last_run_minute"] = now
                 if _start_backup_run():
                     log.info("scheduler: starting backup run (schedule %r, %s)", schedule, now.isoformat())
-        except Exception:
-            log.exception("scheduler tick failed")
+        except Exception as exc:
+            # A persistent problem (unreadable config.json, say) would
+            # repeat every tick; report each distinct one once.
+            problem = describe_failure(exc) or repr(exc)
+            if _scheduler_state.get("last_error") != problem:
+                _scheduler_state["last_error"] = problem
+                log_failure(log, "scheduler tick failed", exc)
+        else:
+            _scheduler_state["last_error"] = None
         time.sleep(_SCHEDULER_INTERVAL_SECONDS)
 
 
 def start_scheduler():
     threading.Thread(target=_scheduler_loop, daemon=True).start()
+
+
+# --------------------------------------------------------------- errors ----
+# Safety net for failures no route handles itself: a full or read-only
+# volume when settings are saved, an unreadable or hand-broken config.json.
+@app.errorhandler(OSError)
+@app.errorhandler(ConfigError)
+def _operational_error(exc):
+    message = describe_failure(exc)
+    if message is None:  # an unfamiliar OS error: keep the stack for the bug report
+        log.error("%s %s failed", request.method, request.path, exc_info=exc)
+        return jsonify({"error": str(exc)}), 500
+    log.error("%s %s failed - %s", request.method, request.path, message)
+    return jsonify({"error": message}), 500
 
 
 # --------------------------------------------------------------- pages ----
@@ -905,8 +927,8 @@ def _restore_work(app_name, root, app_cfg, data, bazarr_backup_dir):
 
         RESTORE_RUN_STATE["ok"] = True
     except Exception as exc:
-        log.exception("restore failed for %s", app_name)
-        RESTORE_RUN_STATE["error"] = humanize_error(exc)
+        log_failure(log, f"restore failed for {app_name}", exc, app_cfg.get("url"))
+        RESTORE_RUN_STATE["error"] = humanize_error(exc, app_cfg.get("url"))
     finally:
         if tmp_dir:
             shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -1076,8 +1098,8 @@ def api_gdrive_oauth_callback():
     except Exception as exc:
         # Broad on purpose: a network failure here raises a raw requests
         # exception, not just GDriveOAuthError.
-        log.exception("gdrive oauth exchange failed")
-        return _redirect_with_error(humanize_error(exc))
+        log_failure(log, "gdrive oauth exchange failed", exc, "https://oauth2.googleapis.com")
+        return _redirect_with_error(humanize_error(exc, "https://oauth2.googleapis.com"))
 
     gdrive_cfg["refresh_token"] = tokens["refresh_token"]
     gdrive_cfg["enabled"] = True

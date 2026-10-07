@@ -108,3 +108,44 @@ def test_check_remote_lists_only_the_remote_itself(monkeypatch, root, expected):
     monkeypatch.setattr(rclone_util, "_run", lambda args, redact=(): calls.append(args))
     rclone_util.check_remote(root)
     assert calls == [["lsd", "--max-depth", "1", expected]]
+
+
+@pytest.mark.parametrize("stderr, hint", [
+    ("Failed to copyto: mkdir /config/backuparr/backups/radarr: permission denied", "the folder isn't writable by Backuparr's user (PUID:PGID)"),
+    ("Failed to copyto: write /backups/a.zip: no space left on device", "the destination is out of space"),
+    ("Failed to copyto: open /backups/a.zip: read-only file system", "the destination is read-only"),
+    ("Failed to copyto: googleapi: Error 403: storageQuotaExceeded", "the destination is out of space"),
+    ("Failed to copyto: couldn't fetch token: invalid_grant: maybe token expired?", "reconnect it in Settings"),
+    ("Failed to lsd: Get \"https://api.dropboxapi.com\": dial tcp: lookup api.dropboxapi.com on 127.0.0.11:53: no such host", "check this container's network and DNS"),
+])
+def test_run_adds_a_plain_hint_for_common_destination_failures(stderr, hint):
+    fake_result = MagicMock()
+    fake_result.returncode = 1
+    fake_result.stderr = f"2026/10/07 03:00:00 NOTICE: {stderr}"
+    with patch("rclone_util.subprocess.run", return_value=fake_result):
+        with pytest.raises(rclone_util.RcloneError) as exc_info:
+            rclone_util._run(["copyto", "a.zip", "local:a.zip"])
+    assert str(exc_info.value).endswith(f"({hint})") or hint in str(exc_info.value)
+    assert str(exc_info.value).count(hint) == 1
+
+
+def test_run_adds_no_hint_to_an_unrecognised_failure():
+    fake_result = MagicMock()
+    fake_result.returncode = 1
+    fake_result.stderr = "2026/10/07 03:00:00 NOTICE: Failed to copyto: something unusual"
+    with patch("rclone_util.subprocess.run", return_value=fake_result):
+        with pytest.raises(rclone_util.RcloneError) as exc_info:
+            rclone_util._run(["copyto", "a.zip", "local:a.zip"])
+    assert str(exc_info.value).endswith("Failed to copyto: something unusual")
+
+
+def test_error_detail_is_the_cause_without_the_command_and_is_redacted():
+    secret = "s3cr3t-token-value"
+    fake_result = MagicMock()
+    fake_result.returncode = 1
+    fake_result.stderr = f"2026/10/07 03:00:00 NOTICE: Failed to copyto: no space left on device {secret}"
+    with patch("rclone_util.subprocess.run", return_value=fake_result):
+        with pytest.raises(rclone_util.RcloneError) as exc_info:
+            rclone_util._run(["copyto", "a.zip", f"x:{secret}"], redact=[secret])
+    assert exc_info.value.detail == "Failed to copyto: no space left on device *** (the destination is out of space)"
+    assert "rclone copyto" in str(exc_info.value) and secret not in str(exc_info.value)

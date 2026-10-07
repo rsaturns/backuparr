@@ -3,11 +3,14 @@ result if needed, and upload it to the configured rclone remote. No app
 config volumes are read directly - everything goes through each app's
 HTTP API. Settings come from config_store, not environment variables.
 """
+import errno
+import json
 import logging
 import logging.handlers
 import os
 import re
 import shutil
+import socket
 import tempfile
 import zipfile
 from datetime import datetime
@@ -18,15 +21,16 @@ import requests
 
 import destination_util
 import rclone_util
-from apps.bazarr import BazarrApp
-from apps.profilarr import ProfilarrApp
+from apps.bazarr import BazarrApp, BazarrError
+from apps.profilarr import ProfilarrApp, ProfilarrError
 from apps.prowlarr import ProwlarrApp
 from apps.radarr import RadarrApp
-from apps.sabnzbd import SabnzbdApp
+from apps.sabnzbd import SabnzbdApp, SabnzbdError
+from apps.servarr import ServarrError, UnsafeRedirectError
 from apps.sonarr import SonarrApp
-from apps.tautulli import TautulliApp
-from apps.tdarr import TdarrApp
-from config_store import enabled_apps, enabled_destinations
+from apps.tautulli import TautulliApp, TautulliError
+from apps.tdarr import TdarrApp, TdarrError
+from config_store import ConfigError, enabled_apps, enabled_destinations
 
 LOG_DIR = os.environ.get("BACKUPARR_LOG_DIR", "/var/log/backuparr")
 LOG_FILE = os.path.join(LOG_DIR, "backup.log")
@@ -47,15 +51,132 @@ except OSError:
     log.warning("could not open %s for writing, file logging disabled", LOG_FILE)
 
 
-def humanize_error(exc):
-    """Turns a raw requests exception into a short, human-readable message
-    instead of a Python exception repr. Anything else passes through as
-    str(exc) unchanged."""
+# Errors whose message was written for humans (and carries no URL or key).
+_CLEAN_MESSAGE_ERRORS = (
+    BazarrError,
+    ConfigError,
+    destination_util.DestinationError,
+    ProfilarrError,
+    rclone_util.RcloneError,
+    SabnzbdError,
+    ServarrError,
+    TautulliError,
+    TdarrError,
+    UnsafeRedirectError,
+)
+
+_CONNECT_HINT = "check the URL and that it's reachable from this container"
+
+
+def is_dns_failure(exc):
+    """True when exc, or anything it was raised from, is a failed hostname
+    lookup (requests wraps socket.gaierror in several layers)."""
+    return _in_chain(exc, socket.gaierror) is not None
+
+
+def _in_chain(exc, kind):
+    """The first exception of class `kind` in exc's cause/context chain."""
+    seen = set()
+    while exc is not None and id(exc) not in seen:
+        seen.add(id(exc))
+        if isinstance(exc, kind):
+            return exc
+        exc = exc.__cause__ or exc.__context__
+    return None
+
+
+def _where(url):
+    """host[:port] for log text. Never the full URL: the exception text
+    repeats it, and some apps put their API key in the query string."""
+    parsed = urlparse(url or "")
+    if not parsed.hostname:
+        return "the app"
+    try:
+        port = parsed.port
+    except ValueError:
+        port = None
+    return f"{parsed.hostname}:{port}" if port else parsed.hostname
+
+
+def dns_failure_message(url):
+    host = urlparse(url or "").hostname
+    target = f"hostname '{host}'" if host else "the hostname in the URL"
+    return f"couldn't resolve {target} - check the URL and that this container can look it up (same Docker network, or working DNS)"
+
+
+def _http_status_message(status, where):
+    if status in (401, 403):
+        return f"{where} refused the API key (HTTP {status}) - check the API key"
+    if status == 404:
+        return f"{where} answered HTTP 404 - check the URL, including any base path (e.g. /sonarr)"
+    if status == 429:
+        return f"{where} is rate limiting requests (HTTP 429) - try again later"
+    if status >= 500:
+        return f"{where} had an internal error (HTTP {status}) - check that app's own logs"
+    return f"{where} answered HTTP {status}"
+
+
+_DISK_ERRORS = {
+    errno.ENOSPC: "no space left on the device",
+    errno.EDQUOT: "disk quota exceeded",
+    errno.EROFS: "the filesystem is read-only",
+    errno.EACCES: "permission denied - Backuparr runs as PUID:PGID, so that folder must be writable by it",
+    errno.EPERM: "permission denied - Backuparr runs as PUID:PGID, so that folder must be writable by it",
+}
+
+
+def describe_failure(exc, url=None):
+    """One readable, secret-free line for an operational failure the user
+    can act on (unreachable app, wrong key, full disk, ...), or None for
+    anything else - an unexpected error that deserves its full traceback.
+    `url` is the app/destination the work was for; only its host is used."""
+    where = _where(url)
     if isinstance(exc, (requests.exceptions.MissingSchema, requests.exceptions.InvalidSchema, requests.exceptions.InvalidURL)):
         return "that doesn't look like a valid URL - it should start with http:// or https://"
-    if isinstance(exc, (requests.exceptions.ConnectionError, requests.exceptions.Timeout)):
-        return "couldn't connect - check the URL and that it's reachable from this container"
-    return str(exc)
+    if isinstance(exc, rclone_util.RcloneError):
+        return exc.detail
+    if isinstance(exc, _CLEAN_MESSAGE_ERRORS):
+        return str(exc)
+    if isinstance(exc, (requests.exceptions.JSONDecodeError, json.JSONDecodeError)):
+        return f"{where} didn't answer with API data - the URL probably points at something other than the app's API (check the URL and any base path)"
+    if isinstance(exc, requests.exceptions.RequestException):
+        if is_dns_failure(exc):
+            return dns_failure_message(url)
+        if isinstance(exc, requests.exceptions.SSLError):
+            return f"TLS/SSL error talking to {where} - check http:// vs https:// and the app's certificate"
+        if isinstance(exc, requests.exceptions.Timeout):
+            return f"couldn't connect - timed out waiting for {where}; is it running and not overloaded, and is no firewall dropping traffic?"
+        if isinstance(exc, requests.exceptions.ConnectionError):
+            if _in_chain(exc, ConnectionRefusedError):
+                return f"couldn't connect - connection refused by {where}; is the app running, and is the port right?"
+            return f"couldn't connect - {_CONNECT_HINT}"
+        if isinstance(exc, requests.exceptions.HTTPError) and exc.response is not None:
+            return _http_status_message(exc.response.status_code, where)
+        return f"request to {where} failed ({type(exc).__name__})"
+    if isinstance(exc, zipfile.BadZipFile):
+        return "the backup file isn't a valid zip - it may be corrupt or incomplete"
+    if isinstance(exc, OSError) and exc.errno in _DISK_ERRORS:
+        path = f" ({exc.filename})" if exc.filename else ""
+        return f"{_DISK_ERRORS[exc.errno]}{path}"
+    if isinstance(exc, FileNotFoundError):
+        return str(exc)
+    return None
+
+
+def humanize_error(exc, url=None):
+    """The describe_failure() line, or str(exc) for anything it doesn't know."""
+    return describe_failure(exc, url) or str(exc)
+
+
+def log_failure(logger, summary, exc, url=None):
+    """Logs a failure as one readable ERROR line when describe_failure()
+    recognises it, otherwise with the full traceback - unexpected errors
+    are bugs, and a bug report needs the stack."""
+    message = describe_failure(exc, url)
+    if message is None:
+        logger.error("%s", summary, exc_info=exc)
+    else:
+        logger.error("%s - %s", summary, message)
 
 
 def build_app(name, app_cfg):
@@ -210,10 +331,10 @@ def run_backup(cfg, on_progress=None, should_cancel=None):
             app_cfg = cfg["apps"][name]
 
             work_dir = os.path.join(run_tmp, name)
-            os.makedirs(work_dir, exist_ok=True)
             archive_path = None
 
             try:
+                os.makedirs(work_dir, exist_ok=True)
                 app = build_app(name, app_cfg)
                 result = app.backup(work_dir)
                 result_path = Path(result)
@@ -238,8 +359,8 @@ def run_backup(cfg, on_progress=None, should_cancel=None):
                         rclone_util.copyto(archive_path, remote_dest)
                         log.info("%s: uploaded -> %s (%d bytes)", name, remote_dest, size)
                     except rclone_util.RcloneError as exc:
-                        log.error("%s: upload to %s failed: %s", name, dest_id, exc)
-                        dest_failures.append(f"{dest_id}: {exc}")
+                        log.error("%s: upload to %s failed: %s", name, dest_id, exc.detail)
+                        dest_failures.append(f"{dest_id}: {exc.detail}")
 
                 if dest_failures:
                     failed.append(f"{name}: failed on {'; '.join(dest_failures)}")
@@ -248,8 +369,8 @@ def run_backup(cfg, on_progress=None, should_cancel=None):
             except RunCancelled:
                 raise
             except Exception as exc:
-                log.exception("%s: backup failed", name)
-                failed.append(f"{name}: {humanize_error(exc)}")
+                log_failure(log, f"{name}: backup failed", exc, app_cfg.get("url"))
+                failed.append(f"{name}: {humanize_error(exc, app_cfg.get('url'))}")
             finally:
                 shutil.rmtree(work_dir, ignore_errors=True)
                 if archive_path and os.path.exists(archive_path):

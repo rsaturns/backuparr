@@ -78,3 +78,13 @@ def test_dropbox_token_is_encrypted_at_rest():
     reloaded = config_store.load_config()
     assert reloaded["destinations"]["dropbox"]["token"] == "plain-dropbox-token"
     assert config_store.enabled_destinations(reloaded) == ["local", "dropbox"]
+
+
+@pytest.mark.parametrize("content", ["{not json", "", "[1, 2]", '"text"'])
+def test_an_unusable_config_file_raises_a_message_that_says_what_to_do(content):
+    with open(config_store.CONFIG_PATH, "w") as f:
+        f.write(content)
+    with pytest.raises(config_store.ConfigError) as caught:
+        config_store.load_config()
+    message = str(caught.value)
+    assert config_store.CONFIG_PATH in message and "delete the file to start over" in message
