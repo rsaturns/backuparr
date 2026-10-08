@@ -133,10 +133,17 @@ Protect the archive: exported settings/databases can contain credentials.
 
 Large libraries/artwork can take time and space. API exports run sequentially
 and are not atomic with the native database snapshot; avoid scans and settings
-changes during a backup. Broken pagination or failed downloads fail the backup.
+changes during a backup. Artwork that Plex lists but cannot serve (HTTP 404) is
+recorded in `manifest.json` under `unavailable_artwork`; it does not discard
+the database backup. Broken pagination and other failed downloads fail the backup.
 
 **Restore manually:** download the archive from History and extract
-`databases.zip`. Stop Plex, keep a copy of the target database directory,
+`databases.zip`. Plex's API normally names the library snapshot
+`databaseBackup.db`, sometimes with a UUID appended (for example
+`databaseBackup.db3fa58294-9e85-4bd7-ac6d-8da54a567d7e`);
+rename it to `com.plexapp.plugins.library.db` before
+restoring it. If it already has the latter name, keep it unchanged.
+Stop Plex, keep a copy of the target database directory,
 and follow Plex's [database restore procedure](https://support.plex.tv/articles/202485658-restore-a-database-backed-up-via-scheduled-tasks/)
 to replace the matching library database files (including the blobs database
 when supplied). Remove stale `-wal`/`-shm` companions as the guide directs,

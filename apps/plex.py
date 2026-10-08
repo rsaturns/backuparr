@@ -10,6 +10,13 @@ import zipfile
 import requests
 
 
+# The diagnostic export may append a temporary UUID directly after ".db".
+_LIBRARY_DATABASE_NAME = re.compile(
+    r"(?:com\.plexapp\.plugins\.library\.db|databaseBackup\.db"
+    r"(?:[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})?)", re.IGNORECASE,
+)
+
+
 class PlexError(RuntimeError):
     pass
 
@@ -32,7 +39,7 @@ class PlexApp:
         self.session = requests.Session()
         self.session.headers.update({"X-Plex-Token": api_key})
 
-    def _get(self, path, **kwargs):
+    def _get(self, path, *, missing_ok=False, **kwargs):
         try:
             response = self.session.get(
                 self.url + path, allow_redirects=False, **kwargs,
@@ -42,6 +49,8 @@ class PlexApp:
         if response.status_code != 200:
             status = response.status_code
             response.close()
+            if status == 404 and missing_ok:
+                return None
             if status in (401, 403):
                 raise PlexError("plex: access denied; use the server owner's Plex token")
             if 300 <= status < 400:
@@ -70,11 +79,15 @@ class PlexApp:
                     for chunk in response.iter_content(chunk_size=1024 * 1024):
                         output.write(chunk)
             with zipfile.ZipFile(archive) as zf:
+                # Accept Plex's diagnostic snapshot name, including its UUID,
+                # as well as the on-disk name used by other backup variants.
                 databases = [info for info in zf.infolist()
-                             if info.filename.replace("\\", "/").split("/")[-1]
-                             == "com.plexapp.plugins.library.db"]
-                if len(databases) != 1:
+                             if _LIBRARY_DATABASE_NAME.fullmatch(
+                                 info.filename.replace("\\", "/").split("/")[-1])]
+                if not databases:
                     raise PlexError("plex: export does not contain the Plex library database")
+                if len(databases) > 1:
+                    raise PlexError("plex: export contains multiple Plex library databases")
                 with zf.open(databases[0]) as db:
                     if db.read(16) != b"SQLite format 3\0":
                         raise PlexError("plex: export contains an invalid library database")
@@ -171,7 +184,11 @@ class PlexApp:
                                             skipped_artwork.add(path)
                     image_index = []
                     for number, path in enumerate(sorted(artwork)):
-                        with self._get(path, timeout=(self.timeout, 120), stream=True) as response:
+                        response = self._get(path, missing_ok=True, timeout=(self.timeout, 120), stream=True)
+                        if response is None:
+                            skipped_artwork.add(path)
+                            continue
+                        with response:
                             mime = response.headers.get("Content-Type", "")
                             if not mime.lower().startswith("image/"):
                                 raise PlexError("plex: artwork endpoint did not return an image")
@@ -197,7 +214,12 @@ class PlexApp:
                         "Plex backup: databases, API settings, metadata and artwork\n\n"
                         "databases.zip is Plex's unchanged native database export. It includes\n"
                         "locally stored watched/unwatched state, progress and ratings for all users.\n"
-                        "Stop Plex before restoring its databases using Plex's official guide:\n"
+                        "Stop Plex before restoring. Extract databases.zip, then rename its\n"
+                        "databaseBackup.db (possibly followed by a UUID) to\n"
+                        "com.plexapp.plugins.library.db. If the archive\n"
+                        "already uses com.plexapp.plugins.library.db, keep that name.\n"
+                        "Keep a copy of the target databases before replacing them and remove\n"
+                        "stale -wal/-shm companions as directed by Plex's official guide:\n"
                         "https://support.plex.tv/articles/202485658-restore-a-database-backed-up-via-scheduled-tasks/\n\n"
                         "server-preferences.xml and library-preferences/ are API response exports,\n"
                         "NOT native Preferences.xml files. Reapply reviewed settings in Settings,\n"

@@ -10,7 +10,10 @@ from backup import build_app
 from config_store import restore_supported
 
 
-def archive(name='com.plexapp.plugins.library.db', data=b'SQLite format 3\0fixture database'):
+EXPORT_NAME = 'databaseBackup.db3fa58294-9e85-4bd7-ac6d-8da54a567d7e'
+
+
+def archive(name=EXPORT_NAME, data=b'SQLite format 3\0fixture database'):
     out = io.BytesIO()
     with zipfile.ZipFile(out, 'w') as zf:
         zf.writestr(name, data)
@@ -39,6 +42,8 @@ class Session:
                 body = body(kwargs.get('params', {}))
         else:
             body = self.body if self.body is not None else archive()
+        if isinstance(body, tuple):
+            response.status_code, body = body
         response._content = body
         response.headers['Content-Type'] = 'image/png' if '/thumb/' in url else 'application/xml'
         response._content_consumed = True
@@ -58,8 +63,18 @@ def test_connection_requires_owner_settings_without_creating_backup():
     assert not app.session.calls[0][1]['allow_redirects']
 
 
-def test_native_database_export_kept_intact(tmp_path):
-    body = archive()
+@pytest.mark.parametrize('name', [
+    EXPORT_NAME,
+    'Databases/' + EXPORT_NAME,
+    'Databases\\' + EXPORT_NAME,
+    'databaseBackup.db',
+    'Databases/databaseBackup.db',
+    r'Databases\databaseBackup.db',
+    'com.plexapp.plugins.library.db',
+    'Databases/com.plexapp.plugins.library.db',
+])
+def test_native_database_export_kept_intact(tmp_path, name):
+    body = archive(name=name)
     app = driver(body=body)
     path = Path(app.backup(str(tmp_path)))
     with zipfile.ZipFile(path) as zf:
@@ -82,6 +97,8 @@ def test_http_failures_never_produce_backups(tmp_path, status):
 
 @pytest.mark.parametrize('body', [
     b'<html>sign in</html>', b'', archive('other.db'),
+    archive('com.plexapp.plugins.library.blobs.db'),
+    archive('databaseBackup.db-unrelated'),
     archive(data=b'not a database'), archive()[:-40],
 ])
 def test_invalid_archives_are_removed(tmp_path, body):
@@ -128,7 +145,8 @@ def test_factory_and_token_storage(authed_client, isolated_webui, monkeypatch):
     assert authed_client.post('/api/test/plex', json=cfg).json['ok']
 
 
-def test_database_export_preserves_watched_unwatched_and_progress_for_multiple_users(tmp_path):
+@pytest.mark.parametrize('name', [EXPORT_NAME, 'databaseBackup.db', 'com.plexapp.plugins.library.db'])
+def test_database_export_preserves_watched_unwatched_and_progress_for_multiple_users(tmp_path, name):
     import sqlite3
 
     original = tmp_path / 'original.db'
@@ -137,13 +155,24 @@ def test_database_export_preserves_watched_unwatched_and_progress_for_multiple_u
         rows = [(1, 'plex://movie/one', 1, 0), (2, 'plex://movie/one', 0, 0),
                 (2, 'plex://movie/two', 0, 123000)]
         db.executemany('INSERT INTO metadata_item_settings VALUES (?, ?, ?, ?)', rows)
-    output = driver(body=archive(data=original.read_bytes())).backup(str(tmp_path / 'output'))
+    output = driver(body=archive(name=name, data=original.read_bytes())).backup(str(tmp_path / 'output'))
     with zipfile.ZipFile(output) as zf:
-        restored = tmp_path / 'restored.db'
+        restored = tmp_path / 'com.plexapp.plugins.library.db'
         with zipfile.ZipFile(io.BytesIO(zf.read('databases.zip'))) as database:
-            restored.write_bytes(database.read('com.plexapp.plugins.library.db'))
+            restored.write_bytes(database.read(name))
+        assert b'databaseBackup.db' in zf.read('RESTORE.txt')
     with sqlite3.connect(restored) as db:
         assert db.execute('SELECT * FROM metadata_item_settings').fetchall() == rows
+
+
+def test_ambiguous_library_databases_are_rejected(tmp_path):
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, 'w') as zf:
+        for name in ('databaseBackup.db', 'com.plexapp.plugins.library.db'):
+            zf.writestr(name, b'SQLite format 3\0fixture database')
+    with pytest.raises(PlexError, match='multiple Plex library databases'):
+        driver(body=out.getvalue()).backup(str(tmp_path))
+    assert not list(tmp_path.iterdir())
 
 
 def test_settings_metadata_artwork_and_external_image_limits(tmp_path):
@@ -179,3 +208,31 @@ def test_incomplete_metadata_discards_entire_export(tmp_path):
     with pytest.raises(PlexError):
         app.backup(str(tmp_path))
     assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize('status', [404, 401, 403, 500, 302])
+def test_missing_artwork_is_reported_but_other_download_errors_fail(tmp_path, status):
+    import json
+
+    def pages(params):
+        if params['type'] == 18:
+            return b'<MediaContainer totalSize="0" offset="0"/>'
+        return b'<MediaContainer totalSize="1" offset="0"><Video ratingKey="7" thumb="/library/metadata/7/thumb/42"/></MediaContainer>'
+
+    app = driver(routes={
+        '/library/sections': b'<MediaContainer><Directory key="1" type="movie"/></MediaContainer>',
+        '/library/sections/1/prefs': b'<MediaContainer/>',
+        '/library/sections/1/all': pages,
+        '/library/metadata/7/thumb/42': (status, b'not found'),
+    })
+    if status == 404:
+        with zipfile.ZipFile(app.backup(str(tmp_path))) as z:
+            assert z.read('databases.zip') == archive()
+            assert 'metadata/1/1-0.xml' in z.namelist()
+            manifest = json.loads(z.read('manifest.json'))
+            assert manifest['unavailable_artwork'] == ['/library/metadata/7/thumb/42']
+            assert manifest['artwork_count'] == 0
+    else:
+        with pytest.raises(PlexError):
+            app.backup(str(tmp_path))
+        assert not list(tmp_path.iterdir())
