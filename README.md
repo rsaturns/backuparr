@@ -89,8 +89,17 @@ in-app "Connect" button, and OneDrive and Dropbox via a one-time
 
 ### Plex backup note
 
-Enter the Plex server URL (for example `http://plex:32400`) and the server
-owner's **Plex token** (`X-Plex-Token`). See Plex's guide to
+Enter the Plex server URL (for example `http://plex:32400`), then click
+**Get Plex token**. Sign in with the server owner's account in the Plex window
+and authorize Backuparr. The token is filled automatically; if you own multiple
+servers, select the one matching your URL. If popups are blocked, use the
+**Open Plex sign-in** link. Test the connection, then **Save settings**.
+Your Plex password and two-factor code are entered only on Plex's website.
+This sign-in needs internet access to plex.tv; it does not require a publicly
+reachable Backuparr URL. Cancelling or editing the Plex credentials discards
+the pending result, and acquiring a token never saves settings automatically.
+
+You can also paste the server owner's **Plex token** (`X-Plex-Token`) manually. See Plex's guide to
 [finding your token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/).
 It is stored encrypted in Backuparr's `api_key` field and sent in an HTTP
 header. Use a directly reachable URL: redirects to sign-in pages or another
