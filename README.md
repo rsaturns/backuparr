@@ -84,7 +84,7 @@ in-app "Connect" button, and OneDrive and Dropbox via a one-time
 | Tdarr | `POST /api/v2/cruddb` with `mode: getAll` for every internal DB collection (library settings, flows, global settings, node registrations, staged/output/statistics) | Fully API-driven both ways. Restore does `removeAll` then re-`insert`s each document one at a time (no bulk-insert mode) - destructive, asks for confirmation. |
 | SABnzbd | `GET /sabnzbd/api?mode=get_config` to back up; `mode=set_config` per key to restore | SABnzbd's API returns every password field (e.g. a Usenet server password) as `**********`, with no way to get the real value. Restore recreates each Usenet server and every plain `misc`-style setting via the API, and asks for each server's real password (fields left out of the API call are untouched, so a skipped password isn't overwritten with a blank). Categories, RSS feeds, and sorters aren't auto-restored. |
 | Tautulli | `GET /api/v2?cmd=download_database` and `cmd=download_config` - each streams a fresh copy directly, no trigger/poll step | The database comes back with Plex tokens nulled out; the config is only lightly sanitized - see the [Tautulli backup note](#tautulli-backup-note). Restore uploads each separately via `cmd=import_database` and `cmd=import_config` (multipart) - see the [Tautulli restore note](#tautulli-restore-note). |
-| Plex | Native database export plus API server/library settings, metadata and artwork | Includes every user's local watch/progress state. See [Plex backup note](#plex-backup-note) for scope and manual recovery. |
+| Plex | Native database export plus API server/library settings, metadata and artwork | Includes every user's local watch/progress state. Optional image-independent [restore agent](docs/plex-restore-agent.md) for database recovery. See [Plex backup note](#plex-backup-note) for scope. |
 | Seerr | *(none)* | Not implemented - Seerr has no backup/restore API. Shown on the Settings tab as "Coming soon". |
 
 ### Plex backup note
@@ -102,9 +102,10 @@ the pending result, and acquiring a token never saves settings automatically.
 You can also paste the server owner's **Plex token** (`X-Plex-Token`) manually. See Plex's guide to
 [finding your token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/).
 It is stored encrypted in Backuparr's `api_key` field and sent in an HTTP
-header. Use a directly reachable URL: redirects to sign-in pages or another
-host are rejected. A reverse proxy must permit the Plex API paths used here,
-including `/:/prefs`, `/diagnostics/databases` and `/library/...`, with Plex
+header. A domain/reverse proxy is fine. Same-origin redirects are followed with
+a bounded hop count; redirects to another host, port or protocol never receive
+the token. A reverse proxy must permit the Plex API paths used here,
+including `/identity`, `/:/prefs`, `/diagnostics/databases` and `/library/...`, with Plex
 handling token authentication.
 
 The ZIP contains:
@@ -121,7 +122,7 @@ The ZIP contains:
   seasons, episodes, music and collections where the library supports them.
 - `artwork/`: library thumbnails, backgrounds and banners served by Plex,
   with a JSON index mapping files to source item URLs and MIME types.
-- `manifest.json`, `RESTORE.txt`: scope, missing artwork and recovery notes.
+- `manifest.json`, `RESTORE.txt`: source server/version, scope, missing artwork and recovery notes.
 
 **Missing:** the native `Preferences.xml` (or platform registry equivalent),
 media and subtitle files, caches, codecs, plugin binaries/private data and
@@ -133,9 +134,18 @@ Protect the archive: exported settings/databases can contain credentials.
 
 Large libraries/artwork can take time and space. API exports run sequentially
 and are not atomic with the native database snapshot; avoid scans and settings
-changes during a backup. Artwork that Plex lists but cannot serve (HTTP 404) is
+changes during a backup. Artwork that Plex lists but cannot serve (HTTP 404), or
+redirects outside the configured origin, is
 recorded in `manifest.json` under `unavailable_artwork`; it does not discard
 the database backup. Broken pagination and other failed downloads fail the backup.
+
+**Automatic database restore:** deploy the optional [Plex restore agent](docs/plex-restore-agent.md),
+enter its URL and separate token in Settings, then use Backuparr's **Restore**
+tab. The agent works beside your existing Plex Docker image. It verifies the
+target, stops the container, preserves rollback copies, replaces the library
+database and restarts Plex. This requires a new backup carrying its source
+server/version and the same server and exact Plex version at restore time.
+API settings and artwork still require the manual steps below.
 
 **Restore manually:** download the archive from History and extract
 `databases.zip`. Plex's API normally names the library snapshot
@@ -166,7 +176,7 @@ because the native export does not contain the metadata folders. Match each
 upload the corresponding exported file. Missing artwork can also be refreshed
 from its provider. No media folders need mounting into Backuparr for backup;
 manual database recovery itself requires access to Plex's data directory.
-This integration is excluded from Backuparr's Restore tab.
+Backuparr itself needs no Docker socket or Plex filesystem mounts.
 
 For selective migration of watched state and ratings, follow Plex's
 [Move Viewstate/Ratings guide](https://support.plex.tv/articles/201154527-move-viewstate-ratings-from-one-install-to-another/),

@@ -1,0 +1,52 @@
+# Merge into the compose project that already contains your `plex` service:
+# docker compose -f docker-compose.yml -f /path/to/backuparr/docs/plex-restore.compose.yml up -d
+# See plex-restore-agent.md for paths, token creation and host networking.
+services:
+  plex:
+    # No image, entrypoint, supervisor or update-policy changes.
+    labels:
+      io.backuparr.plex-restore: "true"
+
+  plex-restore-agent:
+    build:
+      context: ..
+      dockerfile: plex_restore_agent/Dockerfile
+    image: backuparr-plex-restore-agent:local
+    container_name: backuparr-plex-restore-agent
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      PLEX_CONTAINER: ${PLEX_CONTAINER:-plex}
+      AGENT_CONTAINER: backuparr-plex-restore-agent
+      PLEX_URL: ${PLEX_AGENT_SERVER_URL:-http://plex:32400}
+      # Full path INSIDE your existing Plex container; adapt to its config layout.
+      PLEX_CONTAINER_DATABASE_DIR: ${PLEX_CONTAINER_DATABASE_DIR:-/config/Library/Application Support/Plex Media Server/Plug-in Support/Databases}
+    secrets:
+      - plex_restore_token
+    volumes:
+      # :ro does NOT make Docker API calls read-only. See security notes.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - type: bind
+        source: ${PLEX_DATA_PATH:?Set PLEX_DATA_PATH to the host Plex Media Server directory}/Plug-in Support/Databases
+        target: /plex-data/Plug-in Support/Databases
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${PLEX_DATA_PATH}/Preferences.xml
+        target: /plex-data/Preferences.xml
+        read_only: true
+        bind:
+          create_host_path: false
+      - plex_restore_state:/state
+    # No published port. Backuparr must share this compose/Docker network.
+
+secrets:
+  plex_restore_token:
+    file: ${PLEX_RESTORE_TOKEN_FILE:?Set PLEX_RESTORE_TOKEN_FILE to your agent token file}
+
+volumes:
+  plex_restore_state:

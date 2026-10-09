@@ -65,9 +65,15 @@ APP_META = [
     {
         "id": "plex", "label": "Plex", "icon": "plex.svg",
         "status": "available", "key_required": True, "key_label": "Plex token",
-        "url_placeholder": "http://plex:32400", "extra_fields": [],
-        "backup_help": "Use the server owner's Plex token. Library databases including all users' local watched/progress data, API server/library settings, metadata and artwork. No native Preferences.xml, media or plugin files. Manual restore.",
-        "restore_supported": False,
+        "url_placeholder": "http://plex:32400",
+        "extra_fields": [
+            {"name": "restore_agent_url", "label": "Restore agent URL", "type": "text",
+             "help": "Optional, only for automated database restore"},
+            {"name": "restore_agent_token", "label": "Restore agent token", "type": "password",
+             "help": "Separate from your Plex token"},
+        ],
+        "backup_help": "Use the server owner's Plex token. Library databases including all users' local watched/progress data, API server/library settings, metadata and artwork. No native Preferences.xml, media or plugin files. The optional restore agent recovers the database; settings and artwork need manual recovery.",
+        "restore_supported": True,
     },
     {
         "id": "seerr",
@@ -294,12 +300,14 @@ DEFAULTS = {
     "apps": {name: dict(DEFAULT_APP) for name in APP_NAMES},
     "destinations": {name: dict(DEFAULT_DEST[name]) for name in DEST_NAMES},
 }
+DEFAULTS["apps"]["plex"].update(restore_agent_url="", restore_agent_token="")
 
 def _secret_fields(cfg):
     """(container_dict, key) for every value encrypted at rest - an
     explicit allowlist, not "encrypt everything"."""
     fields = [(cfg["apps"][name], "api_key") for name in APP_NAMES]
     fields.append((cfg["apps"]["bazarr"], "password"))
+    fields.append((cfg["apps"]["plex"], "restore_agent_token"))
     fields.append((cfg["destinations"]["gdrive"], "client_secret"))
     fields.append((cfg["destinations"]["gdrive"], "developer_key"))
     fields.append((cfg["destinations"]["gdrive"], "refresh_token"))

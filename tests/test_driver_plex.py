@@ -32,7 +32,9 @@ class Session:
             raise self.error
         response = requests.Response()
         response.status_code = self.status
-        if url.endswith('/:/prefs'):
+        if url.endswith('/identity'):
+            body = b'<MediaContainer version="1.43.3.10896-test" machineIdentifier="fixture-server"/>'
+        elif url.endswith('/:/prefs'):
             body = self.prefs if self.prefs is not None else b'<MediaContainer><Setting id="FriendlyName" value="Fixture"/></MediaContainer>'
         elif url.endswith('/library/sections'):
             body = self.routes.get('/library/sections', b'<MediaContainer size="0"/>')
@@ -81,8 +83,8 @@ def test_native_database_export_kept_intact(tmp_path, name):
         assert zf.read("databases.zip") == body
         assert b"Fixture" in zf.read("server-preferences.xml")
     assert path.stat().st_mode & 0o777 == 0o600
-    assert len(app.session.calls) == 3
-    url, kwargs = app.session.calls[0]
+    assert len(app.session.calls) == 4
+    url, kwargs = app.session.calls[1]
     assert url.endswith('/diagnostics/databases')
     assert 'private-plex-token' not in str(app.session.calls)
     assert kwargs['stream'] and not kwargs['allow_redirects']
@@ -134,7 +136,7 @@ def test_bad_urls_fail_before_network(url):
 def test_factory_and_token_storage(authed_client, isolated_webui, monkeypatch):
     app = build_app('plex', {'url': 'http://plex:32400', 'api_key': 'private-plex-token'})
     assert app.session.headers['X-Plex-Token'] == 'private-plex-token'
-    assert not restore_supported('plex')
+    assert restore_supported('plex')
     html = authed_client.get('/').data
     assert b'Plex token' in html and b'Library databases including' in html
     cfg = {'enabled': True, 'url': 'http://plex:32400', 'api_key': 'private-plex-token'}

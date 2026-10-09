@@ -1201,6 +1201,27 @@ function initSettingsEvents() {
   document.getElementById("save-btn").addEventListener("click", saveSettings);
   document.getElementById("plex-token-btn").addEventListener("click", startPlexLogin);
   document.getElementById("plex-auth-cancel").addEventListener("click", () => stopPlexLogin("Plex sign-in cancelled."));
+  document.getElementById("plex-agent-test-btn").addEventListener("click", async () => {
+    const button = document.getElementById("plex-agent-test-btn");
+    const status = document.getElementById("plex-agent-status");
+    const card = appCard("plex");
+    const data = { url: card.querySelector(".f-url").value.trim(), api_key: card.querySelector(".f-api_key").value.trim() };
+    card.querySelectorAll(".f-extra").forEach((input) => { data[input.dataset.field] = input.value.trim(); });
+    button.disabled = true;
+    status.textContent = "Checking restore agent...";
+    try {
+      const result = await apiFetch("/api/plex/restore-agent/test", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
+      });
+      status.textContent = result.message;
+      status.className = `hint ${result.ok ? "ok" : "fail"}`;
+    } catch (error) {
+      status.textContent = error.message;
+      status.className = "hint fail";
+    } finally {
+      button.disabled = false;
+    }
+  });
   document.getElementById("discover-btn").addEventListener("click", () => discoverServices());
   appCard("prowlarr").querySelectorAll(".f-url, .f-api_key").forEach((input) => {
     input.addEventListener("input", updateDiscoveryButton);
@@ -1539,7 +1560,7 @@ function renderRestoreOverride() {
   const keyLabel = document.createElement("label");
   keyLabel.className = "field";
   const keyHint = !meta.key_required ? `<span class="muted">(optional${meta.key_help ? ` &mdash; ${meta.key_help}` : ""})</span>` : "";
-  keyLabel.innerHTML = `<span class="field-label">API key ${keyHint}</span><input type="password" id="r-ovr-api_key" autocomplete="off">`;
+  keyLabel.innerHTML = `<span class="field-label">${meta.key_label || "API key"} ${keyHint}</span><input type="password" id="r-ovr-api_key" autocomplete="off">`;
   block.appendChild(keyLabel);
 
   (meta.extra_fields || []).forEach((f) => {
@@ -1609,7 +1630,12 @@ function renderRestoreExtra() {
   const extraRoot = document.getElementById("r-extra");
   extraRoot.innerHTML = "";
 
-  if (appId === "tdarr") {
+  if (appId === "plex") {
+    const block = document.createElement("div");
+    block.className = "extra-field-block";
+    block.textContent = "Requires the optional Plex restore agent. Plex will stop while its library database is replaced, including all users' local watched state, progress and ratings. Use a backup from this server and the same Plex version. The agent keeps a rollback copy and restarts Plex. Settings, artwork files and plugins are not applied.";
+    extraRoot.appendChild(block);
+  } else if (appId === "tdarr") {
     const block = document.createElement("div");
     block.className = "extra-field-block";
     block.innerHTML =

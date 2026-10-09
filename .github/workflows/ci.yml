@@ -70,3 +70,13 @@ jobs:
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Build optional Plex restore agent (no push)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: plex_restore_agent/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: false
+          cache-from: type=gha,scope=plex-agent-ci
+          cache-to: type=gha,mode=max,scope=plex-agent-ci

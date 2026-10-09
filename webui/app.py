@@ -554,7 +554,8 @@ def api_set_config():
     for name in APP_NAMES:
         if name in data.get("apps", {}):
             incoming = data["apps"][name]
-            cfg["apps"][name].update({k: v for k, v in incoming.items() if k in DEFAULT_APP})
+            allowed = set(DEFAULT_APP) | _restore_override_fields(name)
+            cfg["apps"][name].update({k: v for k, v in incoming.items() if k in allowed})
     for name in DEST_NAMES:
         if name in data.get("destinations", {}):
             incoming = data["destinations"][name]
@@ -584,6 +585,22 @@ def api_test(app_name):
         instance = build_app(app_name, app_cfg)
         message = instance.test_connection()
         return jsonify({"ok": True, "message": message})
+    except Exception as exc:
+        return jsonify({"ok": False, "message": humanize_error(exc)})
+
+
+@app.post("/api/plex/restore-agent/test")
+def api_plex_restore_agent_test():
+    from apps.plex import PlexApp
+    from apps.plex_restore import PlexRestoreAgent
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"ok": False, "message": "Expected a JSON object"}), 400
+    try:
+        agent = PlexRestoreAgent(data.get("restore_agent_url"), data.get("restore_agent_token"))
+        plex = PlexApp(data.get("url"), data.get("api_key"))
+        return jsonify({"ok": True, "message": agent.test_connection(plex)})
     except Exception as exc:
         return jsonify({"ok": False, "message": humanize_error(exc)})
 
@@ -981,6 +998,12 @@ def _restore_work(app_name, root, app_cfg, data, bazarr_backup_dir):
             ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
             RESTORE_RUN_STATE["message"] = "tdarr restore complete"
 
+        elif app_name == "plex":
+            log.info("restore: uploading Plex backup to its restore agent...")
+            result = ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
+            RESTORE_RUN_STATE["summary"] = result["summary"]
+            RESTORE_RUN_STATE["message"] = result["summary"]["message"]
+
         elif app_name == "tautulli":
             log.info("restore: restoring tautulli...")
             result = ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
@@ -1108,6 +1131,8 @@ def api_restore(dest_id, app_name):
 
     if not app_cfg.get("url") or (key_required(app_name) and not app_cfg.get("api_key")):
         return jsonify({"error": f"{app_name} is not configured"}), 400
+    if app_name == "plex" and not all(app_cfg.get(key) for key in ("restore_agent_url", "restore_agent_token")):
+        return jsonify({"error": "Configure the optional Plex restore agent URL and token in Settings first"}), 400
 
     bazarr_backup_dir = None
     if app_name == "bazarr":

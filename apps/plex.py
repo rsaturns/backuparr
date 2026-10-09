@@ -3,18 +3,12 @@ import json
 import os
 import re
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 import xml.etree.ElementTree as ET
 import zipfile
 
 import requests
-
-
-# The diagnostic export may append a temporary UUID directly after ".db".
-_LIBRARY_DATABASE_NAME = re.compile(
-    r"(?:com\.plexapp\.plugins\.library\.db|databaseBackup\.db"
-    r"(?:[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})?)", re.IGNORECASE,
-)
+from apps.plex_archive import library_databases
 
 
 class PlexError(RuntimeError):
@@ -40,12 +34,38 @@ class PlexApp:
         self.session.headers.update({"X-Plex-Token": api_key})
 
     def _get(self, path, *, missing_ok=False, **kwargs):
-        try:
-            response = self.session.get(
-                self.url + path, allow_redirects=False, **kwargs,
-            )
-        except requests.RequestException:
-            raise PlexError("plex: could not reach the server; check its URL and network access") from None
+        url = self.url + path
+        origin = urlsplit(self.url)
+        endpoint = urlsplit(path).path
+        # Plex itself can redirect artwork. Follow only same-origin redirects,
+        # explicitly: Requests forwards custom X-Plex-Token headers cross-host.
+        for hop in range(6):
+            try:
+                response = self.session.get(url, allow_redirects=False, **kwargs)
+            except requests.RequestException:
+                raise PlexError(f"plex: could not reach {endpoint}; check server network access") from None
+            if response.status_code not in (301, 302, 303, 307, 308):
+                break
+            location = response.headers.get("Location", "")
+            response.close()
+            try:
+                target = urlsplit(urljoin(url, location))
+                default_port = 443 if origin.scheme == "https" else 80
+                safe = (bool(location) and "\\" not in location
+                        and not any(ord(c) < 32 for c in location)
+                        and target.username is None and target.fragment == ""
+                        and (target.scheme, target.hostname, target.port or default_port)
+                        == (origin.scheme, origin.hostname, origin.port or default_port))
+            except ValueError:
+                safe = False
+            if not safe:
+                if missing_ok and location:
+                    return None  # Record unavailable artwork in the manifest.
+                raise PlexError(f"plex: redirect refused at {endpoint}; destination must stay on the configured server and protocol")
+            if hop == 5:
+                raise PlexError(f"plex: too many redirects at {endpoint}; check the server URL and proxy")
+            url = target.geturl()
+            kwargs.pop("params", None)  # Location supplies the redirected query.
         if response.status_code != 200:
             status = response.status_code
             response.close()
@@ -54,8 +74,8 @@ class PlexApp:
             if status in (401, 403):
                 raise PlexError("plex: access denied; use the server owner's Plex token")
             if 300 <= status < 400:
-                raise PlexError("plex: redirect refused; use the final internal server URL")
-            raise PlexError(f"plex: HTTP {status} requesting the Plex API")
+                raise PlexError(f"plex: redirect refused at {endpoint}; check the server URL and proxy")
+            raise PlexError(f"plex: HTTP {status} at {endpoint}")
         return response
 
     def test_connection(self):
@@ -69,6 +89,13 @@ class PlexApp:
                 raise PlexError("plex: the response is not Plex server settings")
         return "Plex owner access verified (databases, API settings and artwork)"
 
+    def identity(self):
+        root, _ = self._xml("/identity")
+        version, identifier = root.get("version"), root.get("machineIdentifier")
+        if not version or not identifier:
+            raise PlexError("plex: server identity is missing its version or identifier")
+        return {"version": version, "machine_identifier": identifier}
+
     def _download_databases(self, dest_dir):
         os.makedirs(dest_dir, exist_ok=True)
         archive = Path(dest_dir) / "plex-databases.zip"
@@ -81,9 +108,7 @@ class PlexApp:
             with zipfile.ZipFile(archive) as zf:
                 # Accept Plex's diagnostic snapshot name, including its UUID,
                 # as well as the on-disk name used by other backup variants.
-                databases = [info for info in zf.infolist()
-                             if _LIBRARY_DATABASE_NAME.fullmatch(
-                                 info.filename.replace("\\", "/").split("/")[-1])]
+                databases = library_databases(zf)
                 if not databases:
                     raise PlexError("plex: export does not contain the Plex library database")
                 if len(databases) > 1:
@@ -146,6 +171,7 @@ class PlexApp:
                 raise PlexError("plex: incomplete library metadata export")
 
     def backup(self, dest_dir):
+        identity = self.identity()
         database = Path(self._download_databases(dest_dir))
         archive = Path(dest_dir) / "plex-backup.zip"
         complete = False
@@ -200,6 +226,7 @@ class PlexApp:
                     zf.writestr("artwork/index.json", json.dumps(image_index, indent=2))
                     zf.writestr("manifest.json", json.dumps({
                         "format": "backuparr-plex-export", "format_version": 1,
+                        "server": identity,
                         "database_archive": "databases.zip", "artwork_count": len(image_index),
                         "unavailable_artwork": sorted(skipped_artwork),
                         "limitations": [
@@ -207,13 +234,18 @@ class PlexApp:
                             "No media, subtitle files, codecs, caches, plugin binaries or opaque plugin data.",
                             "Artwork includes library thumbnails/backgrounds/banners exposed by the server; external image URLs are listed but not fetched with the Plex token.",
                             "Plex cloud-only account data is excluded. API settings/artwork reads are not atomic with the native database export.",
-                            "Manual restore only; recover databases from databases.zip and reapply settings using the reference exports.",
+                            "The optional Plex restore agent restores the library database on the same server/version. API settings and artwork need separate manual recovery.",
                         ],
                     }, indent=2))
                     zf.writestr("RESTORE.txt", (
                         "Plex backup: databases, API settings, metadata and artwork\n\n"
                         "databases.zip is Plex's unchanged native database export. It includes\n"
                         "locally stored watched/unwatched state, progress and ratings for all users.\n"
+                        "Use Backuparr's Restore tab with the optional Plex restore agent for\n"
+                        "database recovery on the same server and Plex version. It preserves a\n"
+                        "rollback copy, stops the container, restores the database and restarts it.\n"
+                        "Settings and image files are not applied by the agent.\n\n"
+                        "Alternatively, to restore manually:\n"
                         "Stop Plex before restoring. Extract databases.zip, then rename its\n"
                         "databaseBackup.db (possibly followed by a UUID) to\n"
                         "com.plexapp.plugins.library.db. If the archive\n"
