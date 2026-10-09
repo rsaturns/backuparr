@@ -1,7 +1,9 @@
 """Plex's native database export. This is not a full Plex data-directory backup."""
 import json
+import logging
 import os
 import re
+import time
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit
 import xml.etree.ElementTree as ET
@@ -9,6 +11,14 @@ import zipfile
 
 import requests
 from apps.plex_archive import library_databases
+
+
+logger = logging.getLogger(f"backuparr.{__name__}")
+_PROGRESS_INTERVAL = 10
+_MIB = 1024 * 1024
+_MEDIA_LABELS = {1: "movies", 2: "shows", 3: "seasons", 4: "episodes",
+                 8: "artists", 9: "albums", 10: "tracks", 13: "photos",
+                 14: "photo albums", 18: "collections"}
 
 
 class PlexError(RuntimeError):
@@ -100,11 +110,20 @@ class PlexApp:
         os.makedirs(dest_dir, exist_ok=True)
         archive = Path(dest_dir) / "plex-databases.zip"
         try:
+            logger.info("plex: requesting database export; waiting for Plex to prepare the snapshot...")
             with self._get("/diagnostics/databases", timeout=(self.timeout, 600), stream=True) as response:
+                logger.info("plex: downloading database export...")
+                downloaded, last_report = 0, time.monotonic()
                 with archive.open("wb") as output:
                     os.chmod(archive, 0o600)
                     for chunk in response.iter_content(chunk_size=1024 * 1024):
                         output.write(chunk)
+                        downloaded += len(chunk)
+                        now = time.monotonic()
+                        if now - last_report >= _PROGRESS_INTERVAL:
+                            logger.info("plex: database download: %.1f MiB received", downloaded / _MIB)
+                            last_report = now
+            logger.info("plex: database downloaded (%.1f MiB); validating archive...", downloaded / _MIB)
             with zipfile.ZipFile(archive) as zf:
                 # Accept Plex's diagnostic snapshot name, including its UUID,
                 # as well as the on-disk name used by other backup variants.
@@ -118,6 +137,7 @@ class PlexApp:
                         raise PlexError("plex: export contains an invalid library database")
                 if zf.testzip() is not None:
                     raise PlexError("plex: database export is corrupt")
+            logger.info("plex: database archive validated")
         except requests.RequestException:
             archive.unlink(missing_ok=True)
             raise PlexError("plex: database download interrupted; retry the backup") from None
@@ -144,6 +164,8 @@ class PlexApp:
 
     def _metadata_pages(self, section, media_type):
         start, total, seen = 0, None, set()
+        label = _MEDIA_LABELS.get(media_type, "items")
+        logger.info("plex: library %s: reading %s metadata...", section, label)
         while True:
             params = {"X-Plex-Container-Start": start, "X-Plex-Container-Size": 500}
             if media_type is not None:
@@ -163,6 +185,7 @@ class PlexApp:
                 if not key or key in seen:
                     raise PlexError("plex: duplicate or missing library item ID")
                 seen.add(key)
+            logger.info("plex: library %s: %s metadata read %d/%d", section, label, start + len(items), total)
             yield start, data, items
             start += len(items)
             if start == total:
@@ -171,7 +194,10 @@ class PlexApp:
                 raise PlexError("plex: incomplete library metadata export")
 
     def backup(self, dest_dir):
+        started = time.monotonic()
+        logger.info("plex: checking server identity...")
         identity = self.identity()
+        logger.info("plex: server identity verified")
         database = Path(self._download_databases(dest_dir))
         archive = Path(dest_dir) / "plex-backup.zip"
         complete = False
@@ -181,20 +207,27 @@ class PlexApp:
             with archive.open("wb") as output:
                 os.chmod(archive, 0o600)
                 with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                    logger.info("plex: adding database export to backup archive...")
                     zf.write(database, "databases.zip")
+                    logger.info("plex: database export added; exporting server settings...")
                     _, prefs = self._xml("/:/prefs")
                     zf.writestr("server-preferences.xml", prefs)
+                    logger.info("plex: server settings exported; reading library list...")
                     sections, data = self._xml("/library/sections")
                     zf.writestr("library-sections.xml", data)
+                    libraries = sections.findall("Directory")
+                    logger.info("plex: library list exported (%d libraries)", len(libraries))
                     artwork, skipped_artwork = set(), set()
                     kinds = {"movie": (1, 18), "show": (2, 3, 4, 18),
                              "artist": (8, 9, 10, 18), "photo": (13, 14)}
-                    for section in sections.findall("Directory"):
+                    for library_number, section in enumerate(libraries, start=1):
                         key = section.get("key", "")
                         if not re.fullmatch(r"[0-9]+", key):
                             raise PlexError("plex: invalid library section ID")
+                        logger.info("plex: library %d/%d (ID %s): exporting settings...", library_number, len(libraries), key)
                         _, prefs = self._xml(f"/library/sections/{key}/prefs")
                         zf.writestr(f"library-preferences/{key}.xml", prefs)
+                        logger.info("plex: library %s: settings exported", key)
                         for media_type in kinds.get(section.get("type"), (None,)):
                             for start, page, items in self._metadata_pages(key, media_type):
                                 zf.writestr(f"metadata/{key}/{media_type or 'all'}-{start}.xml", page)
@@ -210,11 +243,24 @@ class PlexApp:
                                             artwork.add(path)
                                         else:
                                             skipped_artwork.add(path)
+                        logger.info("plex: library %d/%d (ID %s) exported", library_number, len(libraries), key)
                     image_index = []
+                    artwork_bytes, last_artwork_report = 0, time.monotonic()
+                    logger.info("plex: downloading artwork (%d files; %d external URLs skipped)...", len(artwork), len(skipped_artwork))
+
+                    def artwork_progress(processed):
+                        nonlocal last_artwork_report
+                        now = time.monotonic()
+                        if now - last_artwork_report >= _PROGRESS_INTERVAL:
+                            logger.info("plex: artwork: %d/%d processed, %d saved, %.1f MiB received",
+                                        processed, len(artwork), len(image_index), artwork_bytes / _MIB)
+                            last_artwork_report = now
+
                     for number, path in enumerate(sorted(artwork)):
                         response = self._get(path, missing_ok=True, timeout=(self.timeout, 120), stream=True)
                         if response is None:
                             skipped_artwork.add(path)
+                            artwork_progress(number + 1)
                             continue
                         with response:
                             mime = response.headers.get("Content-Type", "")
@@ -224,7 +270,12 @@ class PlexApp:
                             with zf.open(filename, "w", force_zip64=True) as image:
                                 for chunk in response.iter_content(1024 * 1024):
                                     image.write(chunk)
+                                    artwork_bytes += len(chunk)
+                                    artwork_progress(number)
                             image_index.append({"path": path, "file": filename, "content_type": mime})
+                        artwork_progress(number + 1)
+                    logger.info("plex: artwork export complete: %d saved, %d unavailable or external", len(image_index), len(skipped_artwork))
+                    logger.info("plex: writing manifest and restore instructions; finalizing archive...")
                     zf.writestr("artwork/index.json", json.dumps(image_index, indent=2))
                     zf.writestr("manifest.json", json.dumps({
                         "format": "backuparr-plex-export", "format_version": 1,
@@ -265,6 +316,8 @@ class PlexApp:
                         "to their old item URLs; IDs can change after rebuilding a library.\n"
                         "Check manifest.json for missing data. Protect these sensitive archives.\n"
                     ))
+            logger.info("plex: backup archive ready (%.1f MiB, %.1f seconds)",
+                        archive.stat().st_size / _MIB, time.monotonic() - started)
             complete = True
         except requests.RequestException:
             raise PlexError("plex: artwork download interrupted; retry the backup") from None

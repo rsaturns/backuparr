@@ -7,6 +7,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Plex backups now log each export phase, library metadata counts and periodic database/artwork download progress in the live run log.
 - Plex native database backups preserving all users' local watched/progress data, plus API server/library settings, metadata and artwork, with manual restore guidance.
 - A **Get Plex token** button signs in through Plex's own website and fills the token for a server you own, with a server selector when needed.
 - An optional Plex restore agent restores the library database through Backuparr's Restore tab. It works with the existing Plex Docker image, validates the container/data mount and backup version, preserves rollback copies and recovers interrupted restores. Includes compose setup and explicit restore limitations.

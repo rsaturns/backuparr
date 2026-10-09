@@ -133,7 +133,10 @@ Artwork and metadata are not a byte-for-byte copy of Plex's data directory.
 Protect the archive: exported settings/databases can contain credentials.
 
 Large libraries/artwork can take time and space. API exports run sequentially
-and are not atomic with the native database snapshot; avoid scans and settings
+and report each phase in the live run log, including metadata counts and
+periodic download progress. Waiting for Plex to prepare its database snapshot
+is reported separately from downloading it. API settings/artwork reads
+are not atomic with the native database snapshot; avoid scans and settings
 changes during a backup. Artwork that Plex lists but cannot serve (HTTP 404), or
 redirects outside the configured origin, is
 recorded in `manifest.json` under `unavailable_artwork`; it does not discard
