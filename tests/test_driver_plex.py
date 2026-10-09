@@ -83,7 +83,7 @@ def test_native_database_export_kept_intact(tmp_path, name):
         assert zf.read("databases.zip") == body
         assert b"Fixture" in zf.read("server-preferences.xml")
     assert path.stat().st_mode & 0o777 == 0o600
-    assert len(app.session.calls) == 4
+    assert len(app.session.calls) == 5
     url, kwargs = app.session.calls[1]
     assert url.endswith('/diagnostics/databases')
     assert 'private-plex-token' not in str(app.session.calls)
@@ -174,6 +174,18 @@ def test_ambiguous_library_databases_are_rejected(tmp_path):
             zf.writestr(name, b'SQLite format 3\0fixture database')
     with pytest.raises(PlexError, match='multiple Plex library databases'):
         driver(body=out.getvalue()).backup(str(tmp_path))
+    assert not list(tmp_path.iterdir())
+
+
+def test_version_change_during_database_export_discards_archive(tmp_path, monkeypatch):
+    app = driver()
+    identities = iter([
+        {'version': '1.43.3', 'machine_identifier': 'fixture-server'},
+        {'version': '1.43.4', 'machine_identifier': 'fixture-server'},
+    ])
+    monkeypatch.setattr(app, 'identity', lambda: next(identities))
+    with pytest.raises(PlexError, match='changed during the database export'):
+        app.backup(str(tmp_path))
     assert not list(tmp_path.iterdir())
 
 

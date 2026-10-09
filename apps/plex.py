@@ -176,6 +176,8 @@ class PlexApp:
         archive = Path(dest_dir) / "plex-backup.zip"
         complete = False
         try:
+            if self.identity() != identity:
+                raise PlexError("plex: server identity or version changed during the database export; retry after the server is stable")
             with archive.open("wb") as output:
                 os.chmod(archive, 0o600)
                 with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as zf:
