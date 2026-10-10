@@ -1,2 +1,3 @@
 -r requirements.txt
+-r plex_restore_agent/requirements.txt
 pytest>=9.1.1

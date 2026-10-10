@@ -34,6 +34,10 @@ def create_app(manager, token):
     def agent_error(error):
         return jsonify(error=str(error)), 503
 
+    @app.errorhandler(OSError)
+    def storage_error(error):
+        return jsonify(error="Agent storage is unavailable; check storage and restart the agent to retry recovery"), 503
+
     @app.errorhandler(HTTPException)
     def http_error(error):
         return jsonify(error=error.name), error.code
@@ -80,6 +84,7 @@ def create_app(manager, token):
                 return jsonify(existing), 200
             if manager.recovery_blocked():
                 return jsonify(error="An earlier restore needs recovery; inspect its status and agent state volume"), 409
+            manager.active_job = job_id
             directory = manager.state_dir / job_id
             directory.mkdir(mode=0o700)
             sync_directory(manager.state_dir)
@@ -106,11 +111,12 @@ def create_app(manager, token):
             return response, 202
         except Exception:
             if job:
-                manager.save(job, "failed", error="Archive upload could not be completed; Plex was not changed")
+                manager.fail_job(job, "failed", "Archive upload could not be completed; Plex was not changed")
                 manager.cleanup(job)
             raise
         finally:
             if not handed_off:
+                manager.active_job = None
                 manager.lock.release()
 
     return app
@@ -138,14 +144,6 @@ def from_environment():
         state_dir=os.environ.get("AGENT_STATE_DIR", "/state"),
         plex_url=plex_url, max_bytes=maximum, health_timeout=timeout,
     )
-    # Waitress spools large HTTP bodies to disk. Use persistent disk space,
-    # not a small container /tmp tmpfs or the Plex data directory.
-    spool = manager.state_dir / "http-spool"
-    spool.mkdir(mode=0o700, exist_ok=True)
-    if spool.is_symlink():
-        raise AgentError("HTTP spool directory must not be a symlink")
-    import tempfile
-    tempfile.tempdir = str(spool)
     # Refuse a mismatched/missing mount before recovering any journalled job.
     manager.validate_target()
     app = create_app(manager, token)

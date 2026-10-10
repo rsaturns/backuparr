@@ -14,6 +14,8 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Plex restores now block further operations if the journal cannot be written or an earlier operation remains unfinished, preventing a later rollback from overwriting a newer restore.
+- The Plex restore agent authenticates uploads before reading their bodies, so unauthenticated requests cannot spool archives to its state volume.
 - Plex database exports named `databaseBackup.db`, including names with an appended UUID, are now accepted alongside the on-disk library filename. Restore instructions explain how to rename the downloaded snapshot.
 - Missing Plex artwork (HTTP 404) is recorded in the backup manifest instead of discarding the database backup. Other download failures still fail the backup.
 - Plex's own same-origin redirects are followed without forwarding the token to other hosts, ports or protocols. External artwork redirects are recorded as unavailable; other redirect failures identify the requested endpoint.

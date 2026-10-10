@@ -1,6 +1,7 @@
 """Durable stop / snapshot / replace / start transaction for one Plex container."""
 import fcntl
 import json
+import logging
 import os
 from pathlib import Path, PurePosixPath
 import shutil
@@ -18,6 +19,8 @@ DATABASE = "com.plexapp.plugins.library.db"
 BLOBS = "com.plexapp.plugins.library.blobs.db"
 DATABASE_FILES = tuple(name + suffix for name in (DATABASE, BLOBS) for suffix in ("", "-wal", "-shm"))
 TERMINAL = {"complete", "failed", "rolled_back", "recovery_failed"}
+SETTLED = TERMINAL - {"recovery_failed"}
+logger = logging.getLogger(__name__)
 
 
 def sync_directory(path):
@@ -90,6 +93,8 @@ class RestoreManager:
         self.max_bytes = max_bytes
         self.health_timeout = health_timeout
         self.lock = threading.Lock()
+        self.active_job = None
+        self.journal_failed = False
         self.file_locks = []
         # Also prevents two differently configured agents from editing one DB.
         for folder in (self.state_dir, self.database_dir):
@@ -109,13 +114,35 @@ class RestoreManager:
 
     def read_job(self, job_id):
         path = self.state_dir / job_id / "job.json"
-        return json.loads(path.read_text()) if path.exists() else None
+        try:
+            job = json.loads(path.read_text())
+            if not isinstance(job, dict) or job.get("id") != job_id or not isinstance(job.get("phase"), str):
+                raise ValueError("Invalid job journal")
+            return job
+        except FileNotFoundError:
+            return None
+        except (OSError, ValueError):
+            self.journal_failed = True
+            raise AgentError("Cannot read restore journal; repair agent storage before retrying recovery") from None
 
     def save(self, job, phase=None, **fields):
+        saved = dict(job, **fields)
         if phase:
-            job["phase"] = phase
-        job.update(fields)
-        write_json(self.state_dir / job["id"] / "job.json", job)
+            saved["phase"] = phase
+        try:
+            write_json(self.state_dir / job["id"] / "job.json", saved)
+        except OSError:
+            # The failure marker may be impossible to persist as well. Keep
+            # this latch until startup recovery has reconciled the journal.
+            self.journal_failed = True
+            raise
+        job.update(saved)
+
+    def fail_job(self, job, phase, error):
+        try:
+            self.save(job, phase, error=error)
+        except OSError:
+            logger.error("Cannot record restore failure; new restores are blocked. Repair storage and restart the agent.")
 
     def validate_target(self, target_id=None):
         target = self.docker.inspect(target_id or self.container)
@@ -232,11 +259,11 @@ class RestoreManager:
 
     def rollback(self, job, token=None):
         self.validate_target(job["container_id"])
-        self.docker.restart_policy(job["container_id"], {"Name": "no", "MaximumRetryCount": 0})
-        self.docker.stop(job["container_id"])
-        self.save(job, "rolling_back")
         # A failed write may have filled the disk with an incomplete staging file.
         self.cleanup_staging(job)
+        self.save(job, "rolling_back")
+        self.docker.restart_policy(job["container_id"], {"Name": "no", "MaximumRetryCount": 0})
+        self.docker.stop(job["container_id"])
         # Before snapshot_ready no database file has been changed.
         if "original_files" in job:
             directory = self.state_dir / job["id"] / "rollback"
@@ -263,6 +290,7 @@ class RestoreManager:
 
     def execute(self, job, token, expected_identity):
         """Caller owns the operation lock; no request can change the target."""
+        self.active_job = job["id"]
         try:
             self.save(job, "validating")
             directory = self.state_dir / job["id"]
@@ -309,12 +337,13 @@ class RestoreManager:
             if job.get("container_id"):
                 self.recover_job(job, token, error)
             else:
-                self.save(job, "failed", error=error)
+                self.fail_job(job, "failed", error)
         finally:
             try:
-                if job.get("phase") in TERMINAL - {"recovery_failed"}:
+                if job.get("phase") in SETTLED:
                     self.cleanup(job)
             finally:
+                self.active_job = None
                 self.lock.release()
 
     def recover_job(self, job, token=None, cause=None):
@@ -323,7 +352,7 @@ class RestoreManager:
             if cause:
                 self.save(job, cause=cause)
         except Exception:
-            self.save(job, "recovery_failed", error=(
+            self.fail_job(job, "recovery_failed", (
                 "Automatic recovery could not finish. Do not start another restore. "
                 "Keep the agent state volume and recover the rollback files using the agent documentation."
             ))
@@ -331,17 +360,31 @@ class RestoreManager:
     def recover(self):
         """Run before accepting requests; retry an incomplete rollback after reboot."""
         with self.lock:
-            for path in sorted(self.state_dir.glob("*/job.json")):
-                job = json.loads(path.read_text())
-                if job["phase"] in TERMINAL - {"recovery_failed"}:
-                    continue
-                if job.get("container_id"):
-                    self.recover_job(job)
-                else:
-                    self.save(job, "failed", error="Upload/validation was interrupted before any Plex changes")
-                if job["phase"] in TERMINAL:
-                    self.cleanup(job)
+            self.journal_failed = False
+            for job in self.jobs():
+                if job["phase"] not in SETTLED:
+                    if job.get("container_id"):
+                        self.recover_job(job)
+                    else:
+                        self.fail_job(job, "failed", "Upload/validation was interrupted before any Plex changes")
+                    if job["phase"] in TERMINAL:
+                        self.cleanup(job)
+
+    def jobs(self):
+        # iterdir propagates I/O errors instead of silently skipping journals.
+        for directory in sorted(self.state_dir.iterdir()):
+            if stat.S_ISDIR(directory.stat().st_mode):
+                job = self.read_job(directory.name)
+                if job is not None:
+                    yield job
 
     def recovery_blocked(self):
-        return any(json.loads(path.read_text()).get("phase") == "recovery_failed"
-                   for path in self.state_dir.glob("*/job.json"))
+        if self.journal_failed:
+            return True
+        try:
+            return any(job["phase"] == "recovery_failed" or
+                       (job["phase"] not in SETTLED and job["id"] != self.active_job)
+                       for job in self.jobs())
+        except (OSError, AgentError):
+            self.journal_failed = True
+            return True

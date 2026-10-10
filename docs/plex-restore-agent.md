@@ -26,8 +26,10 @@ supervisor. Keep your existing Plex image and update it normally.
   agent supports bind mounts and named volumes, with no nested database mounts.
 - The agent's state volume must persist across container recreation. It holds
   the upload, operation journal and rollback copies. Allow space for roughly
-  **two copies of the uploaded archive, its expanded database and the existing
-  database directory**, plus a temporary database copy on the Plex volume.
+  **the uploaded archive, its extracted `databases.zip`, the expanded database
+  and the existing database directory**, plus a temporary database copy on the
+  Plex volume. HTTP uploads stream directly to the authenticated job's directory;
+  the HTTP server does not keep an additional archive copy.
 
 The agent does **not** apply exported API settings, metadata XML or artwork files;
 the backup's `RESTORE.txt` describes their manual recovery. It does not restore
@@ -127,8 +129,12 @@ before removing old terminal job directories. Never delete a job in progress
 or one marked `recovery_failed`.
 
 If automatic rollback cannot finish (for example Docker is unavailable), new
-restores are blocked and the status says `recovery_failed`. Fix the Docker,
-mount, permissions or disk problem and restart the agent to retry recovery.
+restores are blocked and the status says `recovery_failed`. If even the journal
+cannot be written, the job may still show its last saved phase. The agent still
+blocks new restores and reports HTTP 503 from `/v1/health` with
+`recovery_required: true`. Freeing space or manually starting Plex does not lift
+this block. Fix the Docker, mount, permissions or disk problem and restart the
+agent to reconcile the journal and retry recovery before accepting new restores.
 If manual intervention is required, stop Plex, inspect `job.json`'s
 `original_files`, copy those files from `rollback/` to the database directory,
 restore the recorded ownership/mode, and remove database/WAL/SHM filenames from
@@ -139,9 +145,12 @@ Plex. Preserve the journal for diagnosis.
 
 ## API and access
 
-Every request requires `Authorization: Bearer <agent-token>`. No CORS is enabled
-and the API accepts no container IDs, shell commands or filesystem paths from
-clients. Configuration fixes the one labelled target container at startup.
+Every request requires `Authorization: Bearer <agent-token>`. Authentication is
+checked before reading or saving the body. The HTTP server closes each connection
+after its response, so rejected uploads do not have to finish before receiving
+an error. No CORS is enabled and the API accepts no container IDs, shell commands
+or filesystem paths from clients. Configuration fixes the one labelled target
+container at startup.
 
 - `GET /v1/health`: agent/recovery status; does not require Plex to be running.
 - `GET /v1/status`: verified target container and live Plex identity.

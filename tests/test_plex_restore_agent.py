@@ -1,4 +1,5 @@
 import copy
+import errno
 import io
 import json
 from pathlib import Path
@@ -13,6 +14,7 @@ from plex_restore_agent.archive import stage_database
 from plex_restore_agent.docker import AgentError
 from plex_restore_agent.restore import DATABASE, DATABASE_FILES, RestoreManager
 from plex_restore_agent.server import create_app
+from plex_restore_agent import restore as restore_module
 
 
 IDENTITY = {'version': '1.43.3.10896-test', 'machine_identifier': 'fixture-server'}
@@ -247,6 +249,101 @@ def test_failed_recovery_blocks_new_restores_and_can_be_retried(manager, backup,
     manager.recover()
     assert manager.read_job(JOB)['phase'] == 'rolled_back'
     assert not manager.recovery_blocked()
+
+
+@pytest.mark.parametrize('error_number', [errno.ENOSPC, errno.EIO])
+def test_unwritable_journal_blocks_later_restore_until_restart_recovery(
+        manager, backup, monkeypatch, tmp_path, error_number):
+    from conftest import InlineThread
+    original = (manager.database_dir / DATABASE).read_bytes()
+    write_json = restore_module.write_json
+    broken = False
+
+    def fail_after_replacement(path, value):
+        nonlocal broken
+        broken |= value['phase'] == 'starting'
+        if broken:
+            raise OSError(error_number, 'simulated journal failure')
+        write_json(path, value)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(restore_module, 'write_json', fail_after_replacement)
+        job = run_restore(manager, backup)
+    assert job['phase'] == 'applying'  # Even recording recovery_failed failed.
+    assert not manager.lock.locked()
+    assert manager.active_job is None
+    assert manager.recovery_blocked()
+    assert (manager.state_dir / JOB / 'rollback' / DATABASE).read_bytes() == original
+
+    client = create_app(manager, AGENT_TOKEN).test_client()
+    headers = {'Authorization': 'Bearer ' + AGENT_TOKEN, 'X-Plex-Token': 'plex-token',
+               'X-Plex-Machine-Identifier': IDENTITY['machine_identifier']}
+    assert client.get('/v1/health', headers=headers).status_code == 503
+    # Freeing space and manually starting Plex must not allow a newer restore
+    # that would be overwritten when this old journal is recovered later.
+    manager.docker.start(manager.container)
+    second_backup = export(database(tmp_path / 'second.db', 9))
+    response = client.put('/v1/restores/' + 'b' * 32, data=second_backup,
+                          content_type='application/zip', headers=headers)
+    assert response.status_code == 409
+    assert manager.read_job('b' * 32) is None
+
+    # Drop process-local state as on a real restart; the unfinished journal
+    # alone must still block new work before recovery.
+    manager.journal_failed = False
+    assert manager.recovery_blocked()
+    manager.recover()
+    assert manager.read_job(JOB)['phase'] == 'rolled_back'
+    assert (manager.database_dir / DATABASE).read_bytes() == original
+    assert client.get('/v1/health', headers=headers).status_code == 200
+    monkeypatch.setattr(threading, 'Thread', InlineThread)
+    assert client.put('/v1/restores/' + 'b' * 32, data=second_backup,
+                      content_type='application/zip', headers=headers).status_code == 202
+    assert manager.read_job('b' * 32)['phase'] == 'complete'
+    manager.recover()
+    with sqlite3.connect(manager.database_dir / DATABASE) as db:
+        assert db.execute('SELECT view_count FROM metadata_item_settings WHERE account_id=1').fetchone() == (9,)
+
+
+def test_running_restore_is_healthy_but_abandoned_job_blocks(manager, backup, monkeypatch):
+    replace = manager.replace
+
+    def check_active(*args):
+        assert manager.active_job == JOB
+        assert not manager.recovery_blocked()
+        replace(*args)
+
+    monkeypatch.setattr(manager, 'replace', check_active)
+    assert run_restore(manager, backup)['phase'] == 'complete'
+    manager.save(manager.read_job(JOB), 'applying')
+    assert manager.recovery_blocked()
+
+
+def test_unreadable_journal_fails_closed(manager):
+    folder = manager.state_dir / JOB
+    folder.mkdir()
+    (folder / 'job.json').write_text('{truncated')
+    assert manager.recovery_blocked()
+    client = create_app(manager, AGENT_TOKEN).test_client()
+    headers = {'Authorization': 'Bearer ' + AGENT_TOKEN}
+    assert client.get('/v1/health', headers=headers).status_code == 503
+    assert client.get('/v1/restores/' + JOB, headers=headers).status_code == 503
+
+
+def test_initial_journal_failure_releases_lock_and_retains_storage_block(manager, backup, monkeypatch):
+    def unwritable(*args):
+        raise OSError(errno.ENOSPC, 'simulated full state volume')
+
+    monkeypatch.setattr(restore_module, 'write_json', unwritable)
+    client = create_app(manager, AGENT_TOKEN).test_client()
+    headers = {'Authorization': 'Bearer ' + AGENT_TOKEN, 'X-Plex-Token': 'plex-token',
+               'X-Plex-Machine-Identifier': IDENTITY['machine_identifier']}
+    assert client.put('/v1/restores/' + JOB, data=backup, content_type='application/zip',
+                      headers=headers).status_code == 503
+    assert not manager.lock.locked()
+    assert manager.active_job is None
+    assert manager.recovery_blocked()
+    assert manager.docker.calls == []
 
 
 def test_restore_refuses_symlink_without_modifying_target(manager, backup, tmp_path):
