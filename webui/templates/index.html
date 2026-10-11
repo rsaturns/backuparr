@@ -80,24 +80,47 @@
               </label>
               <label class="field">
                 <span class="field-label">
-                  API key
+                  {{ m.key_label | default("API key") }}
                   {% if not m.key_required %}<span class="muted">(optional{% if m.key_help %} &mdash; {{ m.key_help }}{% endif %})</span>{% endif %}
                 </span>
                 <input type="password" class="f-api_key" autocomplete="off">
                 {% if m.id in ('radarr', 'sonarr', 'sabnzbd') %}<span class="discovery-key-status hidden" role="status"></span>{% endif %}
               </label>
+              {% if m.id == 'plex' %}
+              <div class="plex-auth-actions">
+                <button type="button" class="btn btn-ghost btn-sm" id="plex-token-btn">Get Plex token</button>
+                <a id="plex-auth-link" class="hidden" target="_blank" rel="noopener noreferrer">Open Plex sign-in</a>
+                <button type="button" class="btn btn-ghost btn-sm hidden" id="plex-auth-cancel">Cancel</button>
+              </div>
+              <p class="hint" id="plex-auth-status" role="status" aria-live="polite">Sign in on Plex with the server owner's account to fill the token automatically.</p>
+              <label class="field hidden" id="plex-server-field">
+                <span class="field-label">Your Plex server</span>
+                <select id="plex-server-select"></select>
+              </label>
+              {% endif %}
+              {% if m.id == 'plex' %}
+              <details class="extra-field-block">
+                <summary>Automatic restore (optional)</summary>
+                <p class="hint">Connect a restore agent to recover the Plex library database, including watched state and progress.</p>
+              {% endif %}
               {% for f in m.extra_fields %}
               <label class="field">
                 <span class="field-label">{{ f.label }} {% if f.help %}<span class="muted">({{ f.help }})</span>{% endif %}</span>
                 <input type="{{ f.type }}" class="f-extra" data-field="{{ f.name }}" autocomplete="off">
               </label>
               {% endfor %}
+              {% if m.id == 'plex' %}
+              <button type="button" class="btn btn-ghost btn-sm" id="plex-agent-test-btn">Test restore agent</button>
+              <p class="hint" id="plex-agent-status" role="status" aria-live="polite"></p>
+              </details>
+              {% endif %}
               {% if m.id == 'bazarr' %}
               <label class="field">
                 <span class="field-label">Backup folder <span class="muted">(local path, only needed to restore Bazarr)</span></span>
                 <input type="text" id="s-bazarr_backup_dir" placeholder="/mnt/bazarr-backup">
               </label>
               {% endif %}
+              {% if m.backup_help %}<p class="hint">{{ m.backup_help }}</p>{% endif %}
               <div class="app-card-actions">
                 <button type="button" class="btn btn-ghost btn-sm test-btn">Test connection</button>
                 {% if m.id == 'prowlarr' %}<button type="button" class="btn btn-primary btn-sm" id="discover-btn" disabled>Discover services</button><span class="help-tip" tabindex="0" role="img" aria-label="Reads the apps and download clients connected to Prowlarr, through its API, and fills in the URL and API key of your Radarr, Sonarr and SABnzbd." data-tip="Reads the apps and download clients connected to Prowlarr, through its API, and fills in the URL and API key of your Radarr, Sonarr and SABnzbd.">?</span>{% endif %}

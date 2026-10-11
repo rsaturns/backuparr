@@ -7,6 +7,7 @@ let RUN_POLL_TIMER = null;
 let RESTORE_POLL_TIMER = null;
 let SETTINGS_SNAPSHOT = null;
 let DISCOVERY_RUNNING = false;
+let PLEX_LOGIN = null;
 const APP_CREDENTIAL_EDIT_REVISION = new Map();
 const APP_DISCOVERY_UPDATES = new Map();
 
@@ -313,6 +314,7 @@ function setAppCardExpanded(card, expanded) {
 }
 
 function fillAppCard(appId, cfg) {
+  if (appId === "plex" && PLEX_LOGIN) stopPlexLogin("Plex settings reloaded. Sign in again to get a token.");
   const card = appCard(appId);
   if (!card) return;
   card.querySelector(".f-enabled").checked = !!cfg.enabled;
@@ -358,6 +360,122 @@ function readAppCard(appId) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const trimUrl = (url) => url.replace(/\/+$/, "");
+
+// Plex credentials are entered only in Plex's own window. Keep unsaved form
+// values here while polling, and never replace credentials edited meanwhile.
+function forgetPlexLogin(jobId) {
+  if (jobId) apiFetch(`/api/plex/auth/${jobId}`, { method: "DELETE" }).catch(() => {});
+}
+
+function stopPlexLogin(message) {
+  const flow = PLEX_LOGIN;
+  PLEX_LOGIN = null;
+  if (flow) {
+    forgetPlexLogin(flow.jobId);
+    try { flow.popup?.close(); } catch (_) { /* The browser may sever the popup handle. */ }
+  }
+  document.getElementById("plex-token-btn").disabled = false;
+  document.getElementById("plex-token-btn").textContent = "Get Plex token";
+  const link = document.getElementById("plex-auth-link");
+  link.classList.add("hidden");
+  link.removeAttribute("href");
+  document.getElementById("plex-auth-cancel").classList.add("hidden");
+  document.getElementById("plex-server-field").classList.add("hidden");
+  document.getElementById("plex-server-select").onchange = null;
+  document.getElementById("plex-server-select").replaceChildren();
+  document.getElementById("plex-auth-status").textContent = message;
+}
+
+function applyPlexToken(flow, server) {
+  if (PLEX_LOGIN !== flow) return;
+  const card = appCard("plex");
+  if ((APP_CREDENTIAL_EDIT_REVISION.get("plex") || 0) !== flow.revision
+      || card.querySelector(".f-api_key").value !== flow.originalKey) {
+    stopPlexLogin("Plex details changed. Sign in again to get a token.");
+    return;
+  }
+  stopPlexLogin(`Token filled for ${server.name}. Check the server URL, test the connection, then save settings.`);
+  const input = card.querySelector(".f-api_key");
+  input.value = server.api_key;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  card.querySelector(".status-dot").dataset.state = "idle";
+  card.querySelector(".test-result").textContent = "";
+}
+
+async function startPlexLogin() {
+  if (PLEX_LOGIN) return;
+  const card = appCard("plex");
+  const flow = {
+    popup: window.open("about:blank", "_blank", "popup,width=600,height=720"),
+    revision: APP_CREDENTIAL_EDIT_REVISION.get("plex") || 0,
+    originalKey: card.querySelector(".f-api_key").value,
+    jobId: null,
+  };
+  PLEX_LOGIN = flow;
+  if (flow.popup) {
+    flow.popup.opener = null;
+    flow.popup.document.title = "Plex sign-in";
+    flow.popup.document.body.textContent = "Opening Plex sign-in...";
+  }
+  document.getElementById("plex-token-btn").disabled = true;
+  document.getElementById("plex-token-btn").textContent = "Waiting for Plex...";
+  document.getElementById("plex-auth-cancel").classList.remove("hidden");
+  const status = document.getElementById("plex-auth-status");
+  status.textContent = "Opening Plex sign-in...";
+  try {
+    const login = await apiFetch("/api/plex/auth", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+    });
+    flow.jobId = login.job_id;
+    if (PLEX_LOGIN !== flow) { forgetPlexLogin(flow.jobId); return; }
+    const link = document.getElementById("plex-auth-link");
+    link.href = login.auth_url;
+    link.classList.remove("hidden");
+    try { if (flow.popup && !flow.popup.closed) flow.popup.location.href = login.auth_url; } catch (_) { /* Use the link instead. */ }
+    status.textContent = "Sign in on Plex with the server owner's account, then return here. If no window opened, use Open Plex sign-in.";
+    const deadline = Date.now() + login.expires_in * 1000;
+    let failures = 0;
+    while (PLEX_LOGIN === flow && Date.now() < deadline) {
+      await sleep(2000);
+      if (PLEX_LOGIN !== flow) return;
+      let result;
+      try {
+        result = await apiFetch(`/api/plex/auth/${flow.jobId}`);
+        failures = 0;
+      } catch (e) {
+        if (PLEX_LOGIN !== flow) return;
+        if (e.status === 400 || e.status === 404 || e.status === 410 || ++failures >= 3) throw e;
+        status.textContent = "Connection interrupted. Retrying Plex sign-in...";
+        continue;
+      }
+      if (PLEX_LOGIN !== flow) return;
+      if (result.state !== "completed") continue;
+      // Once received, results only live in this unsaved form.
+      forgetPlexLogin(flow.jobId);
+      flow.jobId = null;
+      if (result.servers.length === 1) {
+        applyPlexToken(flow, result.servers[0]);
+      } else {
+        try { flow.popup?.close(); } catch (_) { /* May already be closed. */ }
+        link.classList.add("hidden");
+        link.removeAttribute("href");
+        const select = document.getElementById("plex-server-select");
+        select.replaceChildren(new Option("Choose your server", ""));
+        result.servers.forEach((server, index) => select.add(new Option(server.name, String(index))));
+        select.onchange = () => {
+          if (select.value !== "") applyPlexToken(flow, result.servers[Number(select.value)]);
+        };
+        document.getElementById("plex-server-field").classList.remove("hidden");
+        status.textContent = "Choose the Plex server matching the URL above to fill its token.";
+        document.getElementById("plex-token-btn").textContent = "Choose your server";
+      }
+      return;
+    }
+    if (PLEX_LOGIN === flow) stopPlexLogin("Plex sign-in expired. Click Get Plex token to try again.");
+  } catch (e) {
+    if (PLEX_LOGIN === flow) stopPlexLogin(e.message);
+  }
+}
 
 function markDiscovered(appId) {
   const card = appCard(appId);
@@ -1081,6 +1199,29 @@ function initScheduleEvents() {
 
 function initSettingsEvents() {
   document.getElementById("save-btn").addEventListener("click", saveSettings);
+  document.getElementById("plex-token-btn").addEventListener("click", startPlexLogin);
+  document.getElementById("plex-auth-cancel").addEventListener("click", () => stopPlexLogin("Plex sign-in cancelled."));
+  document.getElementById("plex-agent-test-btn").addEventListener("click", async () => {
+    const button = document.getElementById("plex-agent-test-btn");
+    const status = document.getElementById("plex-agent-status");
+    const card = appCard("plex");
+    const data = { url: card.querySelector(".f-url").value.trim(), api_key: card.querySelector(".f-api_key").value.trim() };
+    card.querySelectorAll(".f-extra").forEach((input) => { data[input.dataset.field] = input.value.trim(); });
+    button.disabled = true;
+    status.textContent = "Checking restore agent...";
+    try {
+      const result = await apiFetch("/api/plex/restore-agent/test", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
+      });
+      status.textContent = result.message;
+      status.className = `hint ${result.ok ? "ok" : "fail"}`;
+    } catch (error) {
+      status.textContent = error.message;
+      status.className = "hint fail";
+    } finally {
+      button.disabled = false;
+    }
+  });
   document.getElementById("discover-btn").addEventListener("click", () => discoverServices());
   appCard("prowlarr").querySelectorAll(".f-url, .f-api_key").forEach((input) => {
     input.addEventListener("input", updateDiscoveryButton);
@@ -1089,6 +1230,7 @@ function initSettingsEvents() {
     input.addEventListener("input", () => {
       const card = input.closest(".app-card");
       const appId = card.dataset.app;
+      if (appId === "plex" && PLEX_LOGIN) stopPlexLogin("Plex details changed. Sign in again to get a token.");
       APP_CREDENTIAL_EDIT_REVISION.set(appId, (APP_CREDENTIAL_EDIT_REVISION.get(appId) || 0) + 1);
       const refresh = APP_DISCOVERY_UPDATES.get(appId);
       if (refresh) refresh();
@@ -1418,7 +1560,7 @@ function renderRestoreOverride() {
   const keyLabel = document.createElement("label");
   keyLabel.className = "field";
   const keyHint = !meta.key_required ? `<span class="muted">(optional${meta.key_help ? ` &mdash; ${meta.key_help}` : ""})</span>` : "";
-  keyLabel.innerHTML = `<span class="field-label">API key ${keyHint}</span><input type="password" id="r-ovr-api_key" autocomplete="off">`;
+  keyLabel.innerHTML = `<span class="field-label">${meta.key_label || "API key"} ${keyHint}</span><input type="password" id="r-ovr-api_key" autocomplete="off">`;
   block.appendChild(keyLabel);
 
   (meta.extra_fields || []).forEach((f) => {
@@ -1488,7 +1630,12 @@ function renderRestoreExtra() {
   const extraRoot = document.getElementById("r-extra");
   extraRoot.innerHTML = "";
 
-  if (appId === "tdarr") {
+  if (appId === "plex") {
+    const block = document.createElement("div");
+    block.className = "extra-field-block";
+    block.textContent = "Requires the optional Plex restore agent. Plex will stop while its library database is replaced, including all users' local watched state, progress and ratings. Use a backup from this server and the same Plex version. The agent keeps a rollback copy and restarts Plex. Settings, artwork files and plugins are not applied.";
+    extraRoot.appendChild(block);
+  } else if (appId === "tdarr") {
     const block = document.createElement("div");
     block.className = "extra-field-block";
     block.innerHTML =

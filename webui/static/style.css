@@ -513,6 +513,8 @@ input:focus, select:focus, textarea:focus {
 
 .field-actions-spaced { margin-top: 10px; }
 
+.plex-auth-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+
 .help-tip {
   position: relative;
   display: inline-flex;

@@ -143,9 +143,11 @@ def test_lockout_is_tracked_per_address(isolated_webui):
 # --- the auth gate ---------------------------------------------------------
 
 PROTECTED = [
+    ("post", "/api/plex/restore-agent/test"),
     ("GET", "/api/config"), ("POST", "/api/config"), ("GET", "/api/meta"), ("GET", "/api/destinations"),
     ("POST", "/api/test/radarr"), ("POST", "/api/test-notify"), ("POST", "/api/test-destination/local"),
     ("POST", "/api/discovery/prowlarr"), ("GET", "/api/discovery/prowlarr/x"),
+    ("POST", "/api/plex/auth"), ("GET", "/api/plex/auth/x"), ("DELETE", "/api/plex/auth/x"),
     ("POST", "/api/backup/run"), ("POST", "/api/backup/cancel"), ("GET", "/api/backup/status"),
     ("GET", "/api/history/local"), ("DELETE", "/api/history/local/radarr/a.zip"),
     ("GET", "/api/history/local/radarr/a.zip/download"),

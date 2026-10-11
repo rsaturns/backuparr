@@ -10,6 +10,8 @@ import zipfile
 
 import rclone_util
 from apps.bazarr import BazarrApp
+from apps.plex import PlexApp
+from apps.plex_restore import PlexRestoreAgent
 from apps.prowlarr import ProwlarrApp
 from apps.radarr import RadarrApp
 from apps.sabnzbd import MASKED, SabnzbdApp
@@ -120,6 +122,10 @@ def restore_app(app_name, app_cfg, tmp_dir, local_zip, *, bazarr_backup_dir=None
     if app_name in UPLOAD_RESTORE_APPS:
         restore_upload_app(app_name, app_cfg, local_zip)
         return {"kind": "upload"}
+    if app_name == "plex":
+        agent = PlexRestoreAgent(app_cfg.get("restore_agent_url"), app_cfg.get("restore_agent_token"))
+        plex = PlexApp(app_cfg["url"], app_cfg["api_key"])
+        return {"kind": "plex", "summary": agent.restore(local_zip, plex)}
     if app_name == "bazarr":
         if not bazarr_backup_dir:
             raise ValueError("bazarr restore requires bazarr_backup_dir")

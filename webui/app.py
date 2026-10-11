@@ -27,6 +27,7 @@ import rclone_util
 import restore_actions as ra
 import secrets_crypto
 from apps.prowlarr import ProwlarrApp
+from webui.plex_auth import PlexAuthError, PlexLogin
 from backup import build_app, describe_failure, format_run_message, humanize_error, log_failure, notify, run_backup
 from config_store import (
     APP_META,
@@ -264,8 +265,10 @@ def api_login():
 @app.post("/api/logout")
 def api_logout():
     session.clear()
+    _discard_plex_logins(request.cookies.get(PLEX_OWNER_COOKIE))
     response = jsonify({"ok": True})
     response.delete_cookie(DISCOVERY_OWNER_COOKIE)
+    response.delete_cookie(PLEX_OWNER_COOKIE)
     return response
 
 
@@ -521,7 +524,7 @@ def _validate_config(data, cfg):
         if app_data.get("enabled") and not app_data.get("url"):
             return f"{name}: a URL is required to enable it"
         if app_data.get("enabled") and key_required(name) and not app_data.get("api_key"):
-            return f"{name}: an API key is required to enable it"
+            return f"{name}: {meta.get('key_label', 'an API key')} is required to enable it"
     for name, dest_data in data.get("destinations", {}).items():
         if name not in DEST_NAMES:
             return f"unknown destination: {name}"
@@ -551,7 +554,8 @@ def api_set_config():
     for name in APP_NAMES:
         if name in data.get("apps", {}):
             incoming = data["apps"][name]
-            cfg["apps"][name].update({k: v for k, v in incoming.items() if k in DEFAULT_APP})
+            allowed = set(DEFAULT_APP) | _restore_override_fields(name)
+            cfg["apps"][name].update({k: v for k, v in incoming.items() if k in allowed})
     for name in DEST_NAMES:
         if name in data.get("destinations", {}):
             incoming = data["destinations"][name]
@@ -573,7 +577,7 @@ def api_test(app_name):
     if not data.get("url"):
         return jsonify({"ok": False, "message": "URL is required"}), 400
     if key_required(app_name) and not data.get("api_key"):
-        return jsonify({"ok": False, "message": "API key is required"}), 400
+        return jsonify({"ok": False, "message": f"{meta.get('key_label', 'API key')} is required"}), 400
 
     app_cfg = copy.deepcopy(DEFAULT_APP)
     app_cfg.update(data)
@@ -583,6 +587,91 @@ def api_test(app_name):
         return jsonify({"ok": True, "message": message})
     except Exception as exc:
         return jsonify({"ok": False, "message": humanize_error(exc)})
+
+
+@app.post("/api/plex/restore-agent/test")
+def api_plex_restore_agent_test():
+    from apps.plex import PlexApp
+    from apps.plex_restore import PlexRestoreAgent
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"ok": False, "message": "Expected a JSON object"}), 400
+    try:
+        agent = PlexRestoreAgent(data.get("restore_agent_url"), data.get("restore_agent_token"))
+        plex = PlexApp(data.get("url"), data.get("api_key"))
+        return jsonify({"ok": True, "message": agent.test_connection(plex)})
+    except Exception as exc:
+        return jsonify({"ok": False, "message": humanize_error(exc)})
+
+
+# ------------------------------------------------------- Plex sign-in ----
+PLEX_OWNER_COOKIE = "backuparr_plex_login"
+PLEX_LOGINS = {}
+PLEX_LOGINS_LOCK = threading.Lock()
+PLEX_START_LOCK = threading.Lock()
+
+
+def _purge_plex_logins_locked():
+    for job_id, (_, login) in list(PLEX_LOGINS.items()):
+        if time.monotonic() >= login.expires_at:
+            del PLEX_LOGINS[job_id]
+
+
+def _discard_plex_logins(owner):
+    with PLEX_LOGINS_LOCK:
+        for job_id, (job_owner, _) in list(PLEX_LOGINS.items()):
+            if job_owner == owner:
+                del PLEX_LOGINS[job_id]
+
+
+@app.post("/api/plex/auth")
+def api_plex_auth_start():
+    # JSON-only, with no CORS allowance: a cross-origin form cannot start login.
+    if not isinstance(request.get_json(silent=True), dict):
+        return jsonify({"error": "A JSON request is required."}), 400
+    if not PLEX_START_LOCK.acquire(blocking=False):
+        return jsonify({"error": "Plex sign-in is starting. Try again in a moment."}), 429
+    try:
+        owner = request.cookies.get(PLEX_OWNER_COOKIE) or secrets.token_urlsafe(24)
+        _discard_plex_logins(owner)
+        with PLEX_LOGINS_LOCK:
+            _purge_plex_logins_locked()
+            if len(PLEX_LOGINS) >= 20:
+                return jsonify({"error": "Too many pending Plex sign-ins. Try again later."}), 429
+        login = PlexLogin(VERSION)
+        job_id = secrets.token_urlsafe(24)
+        with PLEX_LOGINS_LOCK:
+            PLEX_LOGINS[job_id] = (owner, login)
+        response = jsonify({"job_id": job_id, "auth_url": login.auth_url, "expires_in": login.expires_in})
+        # Separate from Flask's refreshing session cookie, as with discovery.
+        response.set_cookie(PLEX_OWNER_COOKIE, owner, httponly=True,
+                            secure=app.config["SESSION_COOKIE_SECURE"], samesite="Strict")
+        return response, 201
+    except PlexAuthError as exc:
+        return jsonify({"error": str(exc)}), exc.status
+    finally:
+        PLEX_START_LOCK.release()
+
+
+@app.route("/api/plex/auth/<job_id>", methods=["GET", "DELETE"])
+def api_plex_auth_status(job_id):
+    with PLEX_LOGINS_LOCK:
+        _purge_plex_logins_locked()
+        job = PLEX_LOGINS.get(job_id)
+        if not job or job[0] != request.cookies.get(PLEX_OWNER_COOKIE):
+            return jsonify({"error": "Plex sign-in expired or was cancelled. Click Get Plex token to try again."}), 404
+        if request.method == "DELETE":
+            del PLEX_LOGINS[job_id]
+            return jsonify({"ok": True})
+    try:
+        result = job[1].poll()
+        with PLEX_LOGINS_LOCK:
+            if PLEX_LOGINS.get(job_id) is not job:
+                return jsonify({"error": "Plex sign-in was cancelled."}), 404
+        return jsonify(result)
+    except PlexAuthError as exc:
+        return jsonify({"error": str(exc)}), exc.status
 
 
 # Discovery results contain API keys: they live in memory for a few minutes,
@@ -909,6 +998,12 @@ def _restore_work(app_name, root, app_cfg, data, bazarr_backup_dir):
             ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
             RESTORE_RUN_STATE["message"] = "tdarr restore complete"
 
+        elif app_name == "plex":
+            log.info("restore: uploading Plex backup to its restore agent...")
+            result = ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
+            RESTORE_RUN_STATE["summary"] = result["summary"]
+            RESTORE_RUN_STATE["message"] = result["summary"]["message"]
+
         elif app_name == "tautulli":
             log.info("restore: restoring tautulli...")
             result = ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
@@ -1036,6 +1131,8 @@ def api_restore(dest_id, app_name):
 
     if not app_cfg.get("url") or (key_required(app_name) and not app_cfg.get("api_key")):
         return jsonify({"error": f"{app_name} is not configured"}), 400
+    if app_name == "plex" and not all(app_cfg.get(key) for key in ("restore_agent_url", "restore_agent_token")):
+        return jsonify({"error": "Configure the optional Plex restore agent URL and token in Settings first"}), 400
 
     bazarr_backup_dir = None
     if app_name == "bazarr":

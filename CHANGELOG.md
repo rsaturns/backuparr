@@ -5,7 +5,24 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- Plex backups now log each export phase, library metadata counts and periodic database/artwork download progress in the live run log.
+- Plex native database backups preserving all users' local watched/progress data, plus API server/library settings, metadata and artwork, with manual restore guidance.
+- A **Get Plex token** button signs in through Plex's own website and fills the token for a server you own, with a server selector when needed.
+- An optional Plex restore agent restores the library database through Backuparr's Restore tab. It works with the existing Plex Docker image, validates the container/data mount and backup version, preserves rollback copies and recovers interrupted restores. Includes compose setup and explicit restore limitations.
+
+### Fixed
+
+- Plex manifest parsing explicitly requires the native JSON parser, preventing a Python fallback from accumulating large legacy artwork lists in memory.
+- Plex backups with many missing/external images remain automatically restorable: new exports store the image list separately, and the agent streams older large manifests with bounded memory.
+- A completed Plex rollback cannot be reactivated by a failed diagnostic write, preserving changes made after Plex resumes running.
+- The Plex restore agent limits incomplete HTTP headers to three seconds, including byte-by-byte senders, while retaining the longer timeout for authenticated uploads.
+- Plex restores now block further operations if the journal cannot be written or an earlier operation remains unfinished, preventing a later rollback from overwriting a newer restore.
+- The Plex restore agent authenticates uploads before reading their bodies, so unauthenticated requests cannot spool archives to its state volume.
+- Plex database exports named `databaseBackup.db`, including names with an appended UUID, are now accepted alongside the on-disk library filename. Restore instructions explain how to rename the downloaded snapshot.
+- Missing Plex artwork (HTTP 404) is recorded in the backup instead of discarding the database backup. Other download failures still fail the backup.
+- Plex's own same-origin redirects are followed without forwarding the token to other hosts, ports or protocols. External artwork redirects are recorded as unavailable; other redirect failures identify the requested endpoint.
 
 ## [1.2.1-beta] - 2026-10-07
 

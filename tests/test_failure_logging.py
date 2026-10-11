@@ -170,16 +170,21 @@ def test_a_work_folder_that_cannot_be_created_fails_that_app_only(one_app_run, m
     assert failure_records(caplog)[0].exc_info is None
 
 
-def test_a_rejected_api_key_is_one_clean_line(one_app_run, monkeypatch, caplog):
+@pytest.mark.parametrize("app_name, driver, error", [
+    ("sonarr", backup.SonarrApp, ServarrError("sonarr: unauthorized - check the API key")),
+    ("plex", backup.PlexApp, backup.PlexError("plex: access denied; use the server owner's Plex token")),
+])
+def test_a_rejected_api_key_is_one_clean_line(one_app_run, monkeypatch, caplog, app_name, driver, error):
     def unauthorized(self, work_dir):
-        raise ServarrError("sonarr: unauthorized - check the API key")
+        raise error
 
-    monkeypatch.setattr(backup.SonarrApp, "backup", unauthorized)
+    monkeypatch.setattr(driver, "backup", unauthorized)
     with caplog.at_level(logging.INFO):
-        ok, failed = one_app_run("http://sonarr:8989")
-    assert failed == ["sonarr: unauthorized - check the API key"]
+        ok, failed = one_app_run(f"http://{app_name}:8989", app_name=app_name)
+    assert failed == [str(error)]
     (record,) = failure_records(caplog)
-    assert record.exc_info is None and record.getMessage() == "sonarr: backup failed - unauthorized - check the API key"
+    detail = str(error).removeprefix(f"{app_name}: ")
+    assert record.exc_info is None and record.getMessage() == f"{app_name}: backup failed - {detail}"
 
 
 def test_an_unexpected_error_still_logs_its_traceback(one_app_run, monkeypatch, caplog):
