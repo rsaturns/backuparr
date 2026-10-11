@@ -1,5 +1,4 @@
 """Bounded streaming extraction into fixed filenames, never ZIP member paths."""
-import json
 import os
 from pathlib import Path
 import shutil
@@ -8,6 +7,7 @@ import zipfile
 
 from apps.plex_archive import library_databases
 from plex_restore_agent.docker import AgentError
+from plex_restore_agent.manifest import read_manifest
 
 
 def copy_member(archive, info, target, limit):
@@ -38,9 +38,10 @@ def stage_database(upload, directory, limit):
             if names.count("manifest.json") != 1 or names.count("databases.zip") != 1:
                 raise AgentError("Expected a Backuparr Plex export with one manifest and database archive")
             info = archive.getinfo("manifest.json")
-            if info.file_size > 1024 * 1024:
-                raise AgentError("Backup manifest is too large")
-            manifest = json.loads(archive.read(info))
+            if info.file_size > limit or info.flag_bits & 1:
+                raise AgentError("Backup manifest is too large or encrypted")
+            with archive.open(info) as source:
+                manifest = read_manifest(source, limit)
             if (not isinstance(manifest, dict) or manifest.get("format") != "backuparr-plex-export"
                     or manifest.get("format_version") != 1
                     or manifest.get("database_archive") != "databases.zip"):

@@ -88,6 +88,7 @@ def test_external_artwork_redirect_is_recorded_without_losing_database_backup(tm
     monkeypatch.setattr(app.session, 'get', redirected)
     with zipfile.ZipFile(app.backup(str(tmp_path))) as archive:
         manifest = json.loads(archive.read('manifest.json'))
-        assert manifest['unavailable_artwork'] == ['/library/metadata/7/thumb/42']
+        assert manifest['unavailable_artwork_count'] == 1
+        assert json.loads(archive.read(manifest['unavailable_artwork_file'])) == ['/library/metadata/7/thumb/42']
         assert manifest['server']['machine_identifier'] == 'fixture-server'
         assert zipfile.is_zipfile(io.BytesIO(archive.read('databases.zip')))

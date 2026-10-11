@@ -38,6 +38,11 @@ Keep the existing Plex data/configuration and media mounts. A database export is
 not a complete, portable server image. Stock SQLite cannot fully integrity-check
 Plex's custom tokenizer; validation checks ZIP CRCs of consumed members, the
 SQLite header and required Plex tables, followed by live API readiness.
+Manifest parsing streams older inline artwork lists without loading them all into
+memory; new exports keep those lists in `artwork/unavailable.json`. The expanded
+manifest is subject to `MAX_ARCHIVE_BYTES`, with separate bounds on individual
+JSON values and nesting. Corrupt or truncated manifests are rejected before Plex
+is stopped, including malformed data after the server identity.
 
 ## Compose setup
 
@@ -174,7 +179,7 @@ Optional environment settings: `AGENT_HOST` (default `0.0.0.0`), `AGENT_PORT`
 (`8991`), `AGENT_TOKEN_FILE` (`/run/secrets/plex_restore_token`), `DOCKER_SOCKET`
 (`/var/run/docker.sock`), `PLEX_DATABASE_DIR` (`/plex-data/Plug-in Support/Databases`),
 `AGENT_STATE_DIR` (`/state`), `PLEX_HEALTH_TIMEOUT` (180 seconds, range 10–900),
-and `MAX_ARCHIVE_BYTES` (20 GiB for upload and each expanded database archive).
+and `MAX_ARCHIVE_BYTES` (20 GiB for upload, expanded manifest and each expanded database archive).
 `AGENT_CONTAINER` defaults to Docker's container hostname/ID; set it explicitly
 if you customize the hostname.
 

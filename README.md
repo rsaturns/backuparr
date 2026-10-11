@@ -122,13 +122,14 @@ The ZIP contains:
   seasons, episodes, music and collections where the library supports them.
 - `artwork/`: library thumbnails, backgrounds and banners served by Plex,
   with a JSON index mapping files to source item URLs and MIME types.
-- `manifest.json`, `RESTORE.txt`: source server/version, scope, missing artwork and recovery notes.
+- `artwork/unavailable.json`: URLs of missing or external images, also counted and referenced in the manifest.
+- `manifest.json`, `RESTORE.txt`: source server/version, scope and recovery notes.
 
 **Missing:** the native `Preferences.xml` (or platform registry equivalent),
 media and subtitle files, caches, codecs, plugin binaries/private data and
 cloud-only Plex account information not present on this server. API settings
 are recovery references, not a native preferences file. External artwork URLs
-are recorded in the manifest but are not fetched with the server token.
+are recorded in `artwork/unavailable.json` but are not fetched with the server token.
 Artwork and metadata are not a byte-for-byte copy of Plex's data directory.
 Protect the archive: exported settings/databases can contain credentials.
 
@@ -139,8 +140,10 @@ is reported separately from downloading it. API settings/artwork reads
 are not atomic with the native database snapshot; avoid scans and settings
 changes during a backup. Artwork that Plex lists but cannot serve (HTTP 404), or
 redirects outside the configured origin, is
-recorded in `manifest.json` under `unavailable_artwork`; it does not discard
-the database backup. Broken pagination and other failed downloads fail the backup.
+recorded in `artwork/unavailable.json`; it does not discard the database backup.
+Keeping this list separate keeps the manifest small even for large libraries.
+The restore agent also accepts older backups with the list inside the manifest.
+Broken pagination and other failed downloads fail the backup.
 
 **Automatic database restore:** deploy the optional [Plex restore agent](docs/plex-restore-agent.md),
 enter its URL and separate token in Settings, then use Backuparr's **Restore**

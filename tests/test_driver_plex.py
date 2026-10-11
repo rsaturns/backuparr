@@ -208,7 +208,8 @@ def test_settings_metadata_artwork_and_external_image_limits(tmp_path):
         assert z.read('artwork/0') == image
         manifest = json.loads(z.read('manifest.json'))
         assert manifest['artwork_count'] == 1
-        assert manifest['unavailable_artwork'] == ['https://external.example/private.jpg']
+        assert manifest['unavailable_artwork_count'] == 1
+        assert json.loads(z.read(manifest['unavailable_artwork_file'])) == ['https://external.example/private.jpg']
     assert all(url.startswith('http://plex:32400/base/') for url, _ in app.session.calls)
     assert list(tmp_path.iterdir()) == [tmp_path / 'plex-backup.zip']
 
@@ -244,7 +245,8 @@ def test_missing_artwork_is_reported_but_other_download_errors_fail(tmp_path, st
             assert z.read('databases.zip') == archive()
             assert 'metadata/1/1-0.xml' in z.namelist()
             manifest = json.loads(z.read('manifest.json'))
-            assert manifest['unavailable_artwork'] == ['/library/metadata/7/thumb/42']
+            assert manifest['unavailable_artwork_count'] == 1
+            assert json.loads(z.read(manifest['unavailable_artwork_file'])) == ['/library/metadata/7/thumb/42']
             assert manifest['artwork_count'] == 0
     else:
         with pytest.raises(PlexError):

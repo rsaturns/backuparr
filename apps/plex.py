@@ -277,11 +277,13 @@ class PlexApp:
                     logger.info("plex: artwork export complete: %d saved, %d unavailable or external", len(image_index), len(skipped_artwork))
                     logger.info("plex: writing manifest and restore instructions; finalizing archive...")
                     zf.writestr("artwork/index.json", json.dumps(image_index, indent=2))
+                    zf.writestr("artwork/unavailable.json", json.dumps(sorted(skipped_artwork), indent=2))
                     zf.writestr("manifest.json", json.dumps({
                         "format": "backuparr-plex-export", "format_version": 1,
                         "server": identity,
                         "database_archive": "databases.zip", "artwork_count": len(image_index),
-                        "unavailable_artwork": sorted(skipped_artwork),
+                        "unavailable_artwork_file": "artwork/unavailable.json",
+                        "unavailable_artwork_count": len(skipped_artwork),
                         "limitations": [
                             "Preferences are an API reference export, not a native Preferences.xml file.",
                             "No media, subtitle files, codecs, caches, plugin binaries or opaque plugin data.",
@@ -314,7 +316,8 @@ class PlexApp:
                         "help recover images separately: use Edit > Poster/Background to upload the\n"
                         "exported files. Use artwork/index.json to match image files\n"
                         "to their old item URLs; IDs can change after rebuilding a library.\n"
-                        "Check manifest.json for missing data. Protect these sensitive archives.\n"
+                        "Check manifest.json for missing data and artwork/unavailable.json\n"
+                        "for unavailable image URLs. Protect these sensitive archives.\n"
                     ))
             logger.info("plex: backup archive ready (%.1f MiB, %.1f seconds)",
                         archive.stat().st_size / _MIB, time.monotonic() - started)
