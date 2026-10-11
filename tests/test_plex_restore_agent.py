@@ -202,6 +202,69 @@ def test_failed_health_check_rolls_back_every_database_companion(manager, backup
     assert manager.docker.target['HostConfig']['RestartPolicy']['Name'] == 'unless-stopped'
 
 
+def test_no_diagnostic_write_can_reactivate_a_completed_rollback(manager, backup, monkeypatch):
+    write_json = restore_module.write_json
+    rollback_saved = False
+    later_writes = []
+
+    def no_writes_after_rollback(path, value):
+        nonlocal rollback_saved
+        if rollback_saved:
+            later_writes.append(value['phase'])
+            if len(later_writes) == 1:
+                raise OSError(errno.EIO, 'simulated failure after durable rollback')
+        write_json(path, value)
+        rollback_saved |= value['phase'] == 'rolled_back'
+
+    def identity(*args, **kwargs):
+        if manager.docker.starts == 1:
+            raise AgentError('not healthy')
+        return IDENTITY
+
+    with monkeypatch.context() as patch:
+        patch.setattr(manager, 'plex_identity', identity)
+        patch.setattr(restore_module, 'write_json', no_writes_after_rollback)
+        job = run_restore(manager, backup)
+    assert job['phase'] == 'rolled_back'
+    assert 'did not become ready' in job['cause']
+    assert rollback_saved and later_writes == []
+    assert not manager.recovery_blocked()
+    assert manager.docker.target['State']['Running']
+    # Plex is back in use; restarting the agent must preserve newer progress.
+    with sqlite3.connect(manager.database_dir / DATABASE) as db:
+        db.execute('UPDATE metadata_item_settings SET view_count=9 WHERE account_id=1')
+    calls = list(manager.docker.calls)
+    manager.recover()
+    assert manager.docker.calls == calls
+    with sqlite3.connect(manager.database_dir / DATABASE) as db:
+        assert db.execute('SELECT view_count FROM metadata_item_settings WHERE account_id=1').fetchone() == (9,)
+
+
+def test_failed_rollback_commit_still_requires_recovery(manager, backup, monkeypatch):
+    write_json = restore_module.write_json
+
+    def fail_rollback_commit(path, value):
+        if value['phase'] == 'rolled_back':
+            raise OSError(errno.EIO, 'simulated failure before durable rollback')
+        write_json(path, value)
+
+    def identity(*args, **kwargs):
+        if manager.docker.starts == 1:
+            raise AgentError('not healthy')
+        return IDENTITY
+
+    with monkeypatch.context() as patch:
+        patch.setattr(manager, 'plex_identity', identity)
+        patch.setattr(restore_module, 'write_json', fail_rollback_commit)
+        job = run_restore(manager, backup)
+    assert job['phase'] == 'recovery_failed'
+    assert 'did not become ready' in job['cause']
+    assert manager.recovery_blocked()
+    manager.recover()
+    assert manager.read_job(JOB)['phase'] == 'rolled_back'
+    assert not manager.recovery_blocked()
+
+
 @pytest.mark.parametrize('crash_point', ['stopping', 'snapshot', 'replace', 'start'])
 def test_crash_recovery_uses_journal_and_does_not_leave_plex_stopped(manager, backup, monkeypatch, crash_point):
     class Crash(BaseException):

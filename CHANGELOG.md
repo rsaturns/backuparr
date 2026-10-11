@@ -14,6 +14,8 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- A completed Plex rollback cannot be reactivated by a failed diagnostic write, preserving changes made after Plex resumes running.
+- The Plex restore agent limits incomplete HTTP headers to three seconds, including byte-by-byte senders, while retaining the longer timeout for authenticated uploads.
 - Plex restores now block further operations if the journal cannot be written or an earlier operation remains unfinished, preventing a later rollback from overwriting a newer restore.
 - The Plex restore agent authenticates uploads before reading their bodies, so unauthenticated requests cannot spool archives to its state volume.
 - Plex database exports named `databaseBackup.db`, including names with an appended UUID, are now accepted alongside the on-disk library filename. Restore instructions explain how to rename the downloaded snapshot.

@@ -10,22 +10,28 @@ import time
 import pytest
 
 from plex_restore_agent.__main__ import create_server
+from plex_restore_agent.__main__ import HeaderLimitedRequest
 from plex_restore_agent.server import create_app
 from test_plex_restore_agent import AGENT_TOKEN, DATABASE, JOB, backup, manager
 
 
 @pytest.fixture
-def http_agent(manager):
+def http_server(manager):
     server = create_server(create_app(manager, AGENT_TOKEN), '127.0.0.1', 0)
     server.prepare()
     thread = threading.Thread(target=server.serve, daemon=True)
     thread.start()
     try:
-        yield server.socket.getsockname()
+        yield server
     finally:
         server.stop()
         thread.join(timeout=5)
         assert not thread.is_alive()
+
+
+@pytest.fixture
+def http_agent(http_server):
+    return http_server.socket.getsockname()
 
 
 def partial_put(address, headers, body=b''):
@@ -135,3 +141,106 @@ def test_interrupted_authenticated_upload_never_stops_plex(http_agent, manager):
     assert not manager.lock.locked()
     assert not manager.recovery_blocked()
     assert manager.docker.calls == []
+
+
+@pytest.mark.parametrize('drip', [False, True])
+def test_four_incomplete_headers_cannot_hold_all_workers(http_server, http_agent, monkeypatch, drip):
+    http_server.header_timeout = 0.5
+    entered = 0
+    entered_lock = threading.Lock()
+    all_entered = threading.Event()
+    stop_dripping = threading.Event()
+    parse_request = HeaderLimitedRequest.parse_request
+
+    def count_headers(request):
+        nonlocal entered
+        with entered_lock:
+            entered += 1
+            if entered == 4:
+                all_entered.set()
+        return parse_request(request)
+
+    monkeypatch.setattr(HeaderLimitedRequest, 'parse_request', count_headers)
+    connections = []
+
+    def drip_headers():
+        while not stop_dripping.wait(0.03):
+            for connection in connections:
+                try:
+                    connection.sendall(b'x')
+                except OSError:
+                    pass
+
+    thread = threading.Thread(target=drip_headers, daemon=True)
+    try:
+        for _ in range(4):
+            connection = socket.create_connection(http_agent, timeout=2)
+            connections.append(connection)
+            connection.sendall(b'GET /v1/health HTTP/1.1\r\nHost: localhost\r\nX-Slow: ')
+        assert all_entered.wait(2)
+        if drip:
+            thread.start()
+        # This request queues behind all four occupied workers. A byte drip
+        # must not extend the header deadline like an inactivity timeout would.
+        client = http.client.HTTPConnection(*http_agent, timeout=2)
+        try:
+            client.request('GET', '/v1/health', headers={'Authorization': 'Bearer ' + AGENT_TOKEN})
+            response = client.getresponse()
+            assert response.status == 200
+            response.read()
+        finally:
+            client.close()
+    finally:
+        stop_dripping.set()
+        if drip:
+            thread.join(2)
+        for connection in connections:
+            connection.close()
+
+
+@pytest.mark.parametrize('partial', ['request-line', 'authenticated-headers'])
+def test_header_deadline_closes_incomplete_requests_without_admitting_upload(
+        http_server, http_agent, manager, partial):
+    http_server.header_timeout = 0.3
+    with socket.create_connection(http_agent, timeout=2) as connection:
+        data = 'PUT /v1/restores/' + JOB + ' HTTP/1.'
+        if partial == 'authenticated-headers':
+            data += ('1\r\nHost: localhost\r\nAuthorization: Bearer ' + AGENT_TOKEN + '\r\n'
+                     'Content-Type: application/zip\r\nContent-Length: 100\r\n'
+                     'X-Plex-Token: plex-token\r\nX-Plex-Machine-Identifier: fixture-server\r\n')
+        connection.sendall(data.encode())
+        # No terminating CRLF and no upload body. Cheroot rejects the truncated
+        # headers once the deadline interrupts the read, then closes the socket.
+        response = http.client.HTTPResponse(connection)
+        response.begin()
+        assert response.status == 400
+        response.read()
+        assert connection.recv(1) == b''
+    assert manager.read_job(JOB) is None
+    assert manager.docker.calls == []
+
+
+def test_accepted_upload_can_pause_longer_than_header_deadline(http_server, http_agent, manager, backup):
+    http_server.header_timeout = http_server.timeout = 0.3
+    http_server.upload_timeout = 3
+    with socket.create_connection(http_agent, timeout=3) as connection:
+        headers = ('PUT /v1/restores/' + JOB + ' HTTP/1.1\r\nHost: localhost\r\n'
+                   'Authorization: Bearer ' + AGENT_TOKEN + '\r\n'
+                   'X-Plex-Token: plex-token\r\nX-Plex-Machine-Identifier: fixture-server\r\n'
+                   'Content-Type: application/zip\r\n' + f'Content-Length: {len(backup)}\r\n\r\n')
+        connection.sendall(headers.encode() + backup[:32])
+        deadline = time.monotonic() + 2
+        while manager.read_job(JOB) is None:
+            assert time.monotonic() < deadline
+            time.sleep(0.01)
+        time.sleep(0.6)
+        connection.sendall(backup[32:])
+        response = http.client.HTTPResponse(connection)
+        response.begin()
+        assert response.status == 202
+        response.read()
+    deadline = time.monotonic() + 3
+    while manager.read_job(JOB)['phase'] != 'complete':
+        assert time.monotonic() < deadline
+        time.sleep(0.01)
+    assert not manager.recovery_blocked()

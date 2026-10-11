@@ -121,6 +121,9 @@ original restart policy. If the agent dies mid-operation, it rolls back from
 its durable journal on startup. It never silently resumes applying an archive
 after a crash. Backuparr can continue polling across that restart; a timeout
 does not cancel the agent's operation.
+The failure reason is recorded before rollback, alongside its journal state.
+Once `rolled_back` is durably saved, startup recovery leaves that operation alone;
+there is no later diagnostic write that can make it pending again.
 
 **Keep the state volume.** Successful and failed operations retain their
 `/state/<restore-id>/rollback/` folder and `job.json`. These are sensitive files
@@ -148,7 +151,11 @@ Plex. Preserve the journal for diagnosis.
 Every request requires `Authorization: Bearer <agent-token>`. Authentication is
 checked before reading or saving the body. The HTTP server closes each connection
 after its response, so rejected uploads do not have to finish before receiving
-an error. No CORS is enabled and the API accepts no container IDs, shell commands
+an error. Request lines and headers must finish within three seconds, including
+clients that keep sending individual bytes. An admitted, authenticated upload
+has a separate 900-second inactivity timeout while streaming its body; its total
+duration is not limited to three seconds.
+No CORS is enabled and the API accepts no container IDs, shell commands
 or filesystem paths from clients. Configuration fixes the one labelled target
 container at startup.
 

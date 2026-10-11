@@ -257,11 +257,11 @@ class RestoreManager:
         path.unlink(missing_ok=True)
         sync_directory(self.database_dir)
 
-    def rollback(self, job, token=None):
+    def rollback(self, job, token=None, cause=None):
         self.validate_target(job["container_id"])
         # A failed write may have filled the disk with an incomplete staging file.
         self.cleanup_staging(job)
-        self.save(job, "rolling_back")
+        self.save(job, "rolling_back", **({"cause": cause} if cause else {}))
         self.docker.restart_policy(job["container_id"], {"Name": "no", "MaximumRetryCount": 0})
         self.docker.stop(job["container_id"])
         # Before snapshot_ready no database file has been changed.
@@ -348,9 +348,9 @@ class RestoreManager:
 
     def recover_job(self, job, token=None, cause=None):
         try:
-            self.rollback(job, token)
-            if cause:
-                self.save(job, cause=cause)
+            # Record diagnostics before rollback, so the durable rolled_back
+            # result is the last write. Nothing may downgrade that result.
+            self.rollback(job, token, cause)
         except Exception:
             self.fail_job(job, "recovery_failed", (
                 "Automatic recovery could not finish. Do not start another restore. "

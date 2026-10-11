@@ -90,6 +90,9 @@ def create_app(manager, token):
             sync_directory(manager.state_dir)
             job = {"id": job_id, "phase": "uploading"}
             manager.save(job)
+            begin_upload = request.environ.get("plex_restore_agent.begin_upload")
+            if begin_upload is not None:
+                begin_upload()
             with (directory / "upload.zip").open("xb") as output:
                 os.chmod(output.name, 0o600)
                 received = 0
