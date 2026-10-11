@@ -2,8 +2,12 @@
 from contextlib import closing
 import io
 import json
+import os
 from pathlib import Path
 import sqlite3
+import subprocess
+import sys
+import textwrap
 import zipfile
 
 import pytest
@@ -154,3 +158,44 @@ def test_corrupt_manifest_crc_is_rejected_before_stopping_plex(manager, backup):
     content = output.getvalue().replace(b'fixture-server', b'fixture-serveX')
     job = run_restore(manager, content)
     assert job['phase'] == 'failed' and manager.docker.calls == []
+
+
+def test_python_backend_setting_cannot_cause_manifest_memory_growth():
+    # Fresh interpreter: ijson reads IJSON_BACKEND once at import time. Legacy
+    # indent=2 exports with 64-byte URL lines triggered linear buffer growth.
+    code = textwrap.dedent('''
+        import gc
+        import io
+        import json
+        import tracemalloc
+        from plex_restore_agent.manifest import read_manifest
+
+        expected = {'format': 'backuparr-plex-export', 'format_version': 1,
+                    'database_archive': 'databases.zip',
+                    'server': {'version': '1.43.3-test', 'machine_identifier': 'fixture-server'}}
+        urls = ['https://images.example.test/posters/' + f'{n:08d}' + '-picture.jpg'
+                for n in range(100000)]
+        content = json.dumps(dict(expected, unavailable_artwork=urls), indent=2).encode()
+        del urls
+        source = io.BytesIO(content)
+        gc.collect()
+        tracemalloc.start()
+        assert read_manifest(source, 20 * 1024**3) == expected
+        _, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+        assert peak < 4 * 1024**2, f'Parser used {peak} bytes for {len(content)} bytes of JSON'
+    ''')
+    result = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True,
+                            cwd=Path(__file__).resolve().parents[1], timeout=30,
+                            env=dict(os.environ, IJSON_BACKEND='python'))
+    assert result.returncode == 0, result.stderr
+
+
+def test_missing_native_parser_fails_before_agent_startup():
+    code = "import sys; sys.modules['ijson.backends.yajl2_c'] = None; import plex_restore_agent.server"
+    result = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True,
+                            cwd=Path(__file__).resolve().parents[1], timeout=10,
+                            env=dict(os.environ, IJSON_BACKEND='python'))
+    assert result.returncode != 0
+    assert "requires ijson's yajl2_c backend" in result.stderr
+    assert 'install the ijson binary wheel or rebuild the agent image' in result.stderr

@@ -1,7 +1,18 @@
 """Read restore metadata without materializing legacy artwork lists."""
 from contextlib import closing, suppress
 
-import ijson
+try:
+    # The Python fallback can retain previously parsed text at chunk boundaries.
+    # Select the bounded C parser explicitly, regardless of IJSON_BACKEND.
+    from ijson.backends.yajl2_c import basic_parse_coro
+except ImportError:
+    raise RuntimeError(
+        "Plex restore agent requires ijson's yajl2_c backend; "
+        "install the ijson binary wheel or rebuild the agent image"
+    ) from None
+
+from ijson.common import JSONError
+from ijson.utils import sendable_list
 
 from plex_restore_agent.docker import AgentError
 
@@ -28,8 +39,8 @@ class ManifestStream:
 
 
 def manifest_events(stream):
-    events = ijson.sendable_list()
-    parser = ijson.basic_parse_coro(events)
+    events = sendable_list()
+    parser = basic_parse_coro(events)
     try:
         while chunk := stream.read(64 * 1024):
             parser.send(chunk)
@@ -41,7 +52,7 @@ def manifest_events(stream):
     finally:
         # Explicitly close even after an I/O error or an early schema rejection.
         # A secondary incomplete-JSON error must not mask the original failure.
-        with suppress(ijson.JSONError):
+        with suppress(JSONError):
             parser.close()
 
 
@@ -52,7 +63,7 @@ def read_manifest(source, limit):
         # input, and let us distinguish literal keys from actual nesting.
         with closing(manifest_events(stream)) as events:
             return collect_manifest(events)
-    except (ijson.JSONError, UnicodeError):
+    except (JSONError, UnicodeError):
         raise AgentError("Invalid or corrupt Plex backup manifest") from None
 
 

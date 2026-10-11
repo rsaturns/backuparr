@@ -43,6 +43,10 @@ memory; new exports keep those lists in `artwork/unavailable.json`. The expanded
 manifest is subject to `MAX_ARCHIVE_BYTES`, with separate bounds on individual
 JSON values and nesting. Corrupt or truncated manifests are rejected before Plex
 is stopped, including malformed data after the server identity.
+The agent requires ijson's `yajl2_c` parser to keep memory bounded. The image
+installs its binary wheel and verifies the import during build; a custom install
+without this backend fails at startup. `IJSON_BACKEND` cannot select a fallback
+for restore manifests.
 
 ## Compose setup
 

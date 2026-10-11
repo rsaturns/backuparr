@@ -14,6 +14,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Plex manifest parsing explicitly requires the native JSON parser, preventing a Python fallback from accumulating large legacy artwork lists in memory.
 - Plex backups with many missing/external images remain automatically restorable: new exports store the image list separately, and the agent streams older large manifests with bounded memory.
 - A completed Plex rollback cannot be reactivated by a failed diagnostic write, preserving changes made after Plex resumes running.
 - The Plex restore agent limits incomplete HTTP headers to three seconds, including byte-by-byte senders, while retaining the longer timeout for authenticated uploads.
