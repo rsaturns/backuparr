@@ -115,6 +115,21 @@
       </div>
 
       <div class="right-col">
+        <div class="card" id="request-headers-card">
+          <h2>Service authentication</h2>
+          <p class="hint">Optional HTTP headers for all apps: connection tests, discovery, backups and restores. Values are stored encrypted.</p>
+          <div id="request-headers-list"></div>
+          <div class="request-headers-actions">
+            <button type="button" class="btn btn-ghost btn-sm" id="add-request-header">Add header</button>
+            <label><input type="checkbox" id="show-request-headers"> Show values</label>
+          </div>
+          <details class="request-headers-help">
+            <summary>Authelia setup &amp; header scope</summary>
+            <p class="hint">For Authelia, use <code>Proxy-Authorization</code> with <code>Basic BASE64(username:password)</code> when its endpoint enables <code>HeaderProxyAuthorization</code>. Basic authentication cannot satisfy a two-factor rule. App API keys are still required and each app's own authentication takes priority.</p>
+            <p class="hint">Headers go to all app URLs you configure, including restore targets. They are not sent to backup storage or notification services. Redirects to another scheme, host or port are blocked.</p>
+            <a href="https://www.authelia.com/configuration/miscellaneous/server-endpoints-authz/" target="_blank" rel="noopener noreferrer">Authelia authentication configuration</a>
+          </details>
+        </div>
         <div class="card destinations-card">
           <h2>Destinations</h2>
           <p class="hint">Choose where backups go - enable as many as you like, every enabled destination gets a copy of every backup.</p>

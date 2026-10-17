@@ -331,6 +331,7 @@ function prowlarrCredentials() {
   return {
     url: appCard("prowlarr").querySelector(".f-url").value.trim(),
     api_key: appCard("prowlarr").querySelector(".f-api_key").value.trim(),
+    request_headers: readRequestHeaders(),
   };
 }
 
@@ -598,6 +599,27 @@ function updateGdriveUI(gdriveCfg) {
   }
 }
 
+function readRequestHeaders() {
+  return Array.from(document.querySelectorAll(".request-header-row"), (row) => ({
+    name: row.querySelector(".header-name").value.trim(),
+    value: row.querySelector(".header-value").value,
+  })).filter(({ name, value }) => name || value);
+}
+
+function addRequestHeader(header = {}) {
+  const row = document.createElement("div");
+  row.className = "request-header-row";
+  row.innerHTML = `<label class="field"><span class="field-label">Header name</span><input class="header-name" type="text" autocomplete="off" spellcheck="false" placeholder="Proxy-Authorization"></label>
+    <label class="field"><span class="field-label">Value</span><input class="header-value" type="password" autocomplete="off" spellcheck="false" placeholder="Basic …"></label>
+    <button type="button" class="btn btn-ghost btn-sm remove-header" aria-label="Remove header">Remove</button>`;
+  row.querySelector(".header-name").value = header.name || "";
+  row.querySelector(".header-value").value = header.value || "";
+  row.querySelector(".header-value").type = document.getElementById("show-request-headers").checked ? "text" : "password";
+  row.querySelector(".remove-header").addEventListener("click", () => row.remove());
+  document.getElementById("request-headers-list").append(row);
+  return row;
+}
+
 async function loadConfig() {
   const cfg = await apiFetch("/api/config");
   document.getElementById("s-retention_days").value = cfg.retention_days || 7;
@@ -605,6 +627,8 @@ async function loadConfig() {
   initSchedulePicker(cfg.cron_schedule);
   document.getElementById("s-notify_url").value = cfg.notify_url || "";
   document.getElementById("s-bazarr_backup_dir").value = cfg.bazarr_backup_dir || "";
+  document.getElementById("request-headers-list").replaceChildren();
+  (cfg.request_headers || []).forEach(addRequestHeader);
   Object.keys(cfg.apps || {}).forEach((appId) => fillAppCard(appId, cfg.apps[appId]));
   Object.keys(cfg.destinations || {}).forEach((destId) => fillDestCard(destId, cfg.destinations[destId]));
   snapshotSettingsState();
@@ -625,6 +649,7 @@ function collectConfig() {
     cron_schedule: document.getElementById("s-cron_schedule").value.trim(),
     notify_url: document.getElementById("s-notify_url").value.trim(),
     bazarr_backup_dir: document.getElementById("s-bazarr_backup_dir").value.trim(),
+    request_headers: readRequestHeaders(),
     apps,
     destinations,
   };
@@ -687,6 +712,7 @@ async function runTest({ btn, resultEl, dot, pendingText, request }) {
 async function testApp(appId) {
   const card = appCard(appId);
   const payload = readAppCard(appId);
+  payload.request_headers = readRequestHeaders();
   await runTest({
     btn: card.querySelector(".test-btn"),
     resultEl: card.querySelector(".test-result"),
@@ -1081,6 +1107,10 @@ function initScheduleEvents() {
 
 function initSettingsEvents() {
   document.getElementById("save-btn").addEventListener("click", saveSettings);
+  document.getElementById("add-request-header").addEventListener("click", () => addRequestHeader().querySelector(".header-name").focus());
+  document.getElementById("show-request-headers").addEventListener("change", (event) => {
+    document.querySelectorAll(".header-value").forEach((input) => { input.type = event.target.checked ? "text" : "password"; });
+  });
   document.getElementById("discover-btn").addEventListener("click", () => discoverServices());
   appCard("prowlarr").querySelectorAll(".f-url, .f-api_key").forEach((input) => {
     input.addEventListener("input", updateDiscoveryButton);

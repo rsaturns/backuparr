@@ -367,12 +367,108 @@ choose when there are several.
 - The URLs are the ones Prowlarr uses; run **Test connection** to confirm
   Backuparr can reach them.
 - On PostgreSQL, or if a login proxy blocks `/backup/`, URLs are still filled
-  in and you enter the missing keys by hand. Backuparr never asks for web-login
-  credentials.
+  in and you enter the missing keys by hand. Global [service authentication
+  headers](#service-authentication-headers) can authenticate discovery through
+  a compatible reverse proxy.
 - Discovery refuses any redirect away from Prowlarr's exact URL, so use its
   final address.
 - Bazarr, Profilarr, Tdarr, Tautulli and Seerr aren't stored in Prowlarr and
   are always configured manually.
+
+### Service authentication headers
+
+In **Settings → Service authentication**, add a header name and its value, then
+save. The same headers are sent to all configured apps for connection tests,
+discovery (including Prowlarr's `/backup/` download), scheduled/manual backups,
+cleanup and restore uploads. Tests and discovery use the values currently in the
+form, even before saving; background backups and restores use saved settings.
+Remove the rows and save to disable them.
+
+Values are masked in the form and encrypted in `config.json` with the same key
+as app API keys. Each app's native authentication and per-request headers take
+priority on a case-insensitive name collision. For example, an app's
+`Authorization: Bearer …` remains intact; use a separate proxy header to
+authenticate both layers. These headers are not sent to cloud destinations,
+OAuth providers or notification webhooks. They do apply to an explicitly entered
+restore target, so only configure trusted app URLs.
+
+With global headers configured, requests must stay on each app's configured
+**scheme, host and port**, including redirects and backup downloads. Use the
+final URL (prefer HTTPS). `BACKUPARR_ALLOW_CROSS_HOST_REDIRECTS` cannot override
+this protection. Without global headers, existing driver behavior is unchanged.
+
+#### Authelia example
+
+Use a dedicated Authelia service account, then add:
+
+| Header name | Value |
+|---|---|
+| `Proxy-Authorization` | `Basic <base64 of username:password>` |
+
+This preserves `Authorization` for apps that need their own Bearer/Basic auth.
+An application's API key is still required. This does not reuse your browser's
+Authelia login; a copied `Cookie` header expires with its session.
+
+Authelia must accept this authentication strategy on the endpoint used by nginx.
+For an installation using `/api/authz/auth-request`, merge the following into
+Authelia's configuration, retaining any other strategies your installation needs:
+
+```yaml
+server:
+  endpoints:
+    authz:
+      auth-request:
+        implementation: AuthRequest
+        authn_strategies:
+          - name: HeaderProxyAuthorization
+            schemes: [Basic]
+          - name: CookieSession
+```
+
+nginx must forward `Proxy-Authorization` to its Authelia auth subrequest. Its
+normal request-header forwarding does this unless your snippets clear or replace
+the header. If needed, add this once to the shared location that proxies to
+Authelia, rather than adding per-service bypass locations:
+
+```nginx
+proxy_set_header Proxy-Authorization $http_proxy_authorization;
+```
+
+**Basic auth is one factor.** A `two_factor` access rule will still deny it.
+Place a rule for the dedicated account before the existing browser-user rules;
+scope its domains to the services you intend to back up:
+
+```yaml
+access_control:
+  rules:
+    - domain: [radarr.example.com, sonarr.example.com, prowlarr.example.com]
+      subject: ['user:backuparr']
+      policy: one_factor
+    # Existing rules, including two_factor for human users, follow here.
+```
+
+Generate the header locally without placing the password in shell history:
+
+```sh
+python3 -c '
+import base64, getpass
+username = input("Authelia service username: ")
+password = getpass.getpass("Password: ")
+print("Basic " + base64.b64encode((username + ":" + password).encode()).decode())
+'
+```
+
+Treat the printed value as a password. Test connection should now succeed; a
+redirect to the Authelia portal means it has not accepted the credentials or its
+access policy still requires browser authentication. Header configuration alone
+does not bypass that policy.
+If nginx exempts `/api/` from authentication, also run a backup or discovery to
+verify access to the protected backup download; the API connection test alone
+cannot verify that path.
+
+References: [Authelia authorization strategies](https://www.authelia.com/configuration/miscellaneous/server-endpoints-authz/),
+[service accounts and Basic authentication](https://www.authelia.com/integration/guides/securing-apps-with-basic-auth/),
+[nginx integration](https://www.authelia.com/integration/proxies/nginx/).
 
 ### Login
 
@@ -523,6 +619,7 @@ These fields live in `config.json`, edited via the web UI or by hand:
 
 | Field | Purpose |
 |---|---|
+| `request_headers` | Global app HTTP headers as `[{"name": "Proxy-Authorization", "value": "Basic …"}]`; values are encrypted at rest; default `[]` |
 | `apps.<name>.enabled/url/api_key` | Per app, as shown in the Settings tab |
 | `apps.bazarr.username/password` | Only if Bazarr's web auth is set to `Basic` |
 | `destinations.local.enabled/path` | Local storage - path defaults to `/config/backuparr/backups` if blank |

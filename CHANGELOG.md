@@ -5,7 +5,12 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- Global service authentication headers in Settings, with encrypted values and
+  Authelia setup instructions. Applied to app connection tests, discovery,
+  backups and restores while retaining app API credentials. Cross-origin
+  redirects are blocked when these headers are configured.
 
 ## [1.2.1-beta] - 2026-10-07
 
