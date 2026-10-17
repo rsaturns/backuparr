@@ -307,6 +307,9 @@ body {
 .request-headers-actions label { font-size: 0.85rem; }
 .request-headers-help { margin-top: 14px; font-size: 0.85rem; }
 .request-headers-help summary { cursor: pointer; }
+.basic-auth-form .field { min-width: 0; }
+.basic-auth-form input { width: 100%; min-width: 0; }
+.basic-auth-form .test-result { margin-bottom: 0; overflow-wrap: anywhere; }
 #request-headers-card code { overflow-wrap: anywhere; }
 @media (max-width: 560px) {
   .request-header-row { grid-template-columns: minmax(0, 1fr) auto; }

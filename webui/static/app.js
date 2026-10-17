@@ -609,8 +609,8 @@ function readRequestHeaders() {
 function addRequestHeader(header = {}) {
   const row = document.createElement("div");
   row.className = "request-header-row";
-  row.innerHTML = `<label class="field"><span class="field-label">Header name</span><input class="header-name" type="text" autocomplete="off" spellcheck="false" placeholder="Proxy-Authorization"></label>
-    <label class="field"><span class="field-label">Value</span><input class="header-value" type="password" autocomplete="off" spellcheck="false" placeholder="Basic …"></label>
+  row.innerHTML = `<label class="field"><span class="field-label">Header name</span><input class="header-name" type="text" autocomplete="off" spellcheck="false" placeholder="X-Custom-Header"></label>
+    <label class="field"><span class="field-label">Value</span><input class="header-value" type="password" autocomplete="off" spellcheck="false" placeholder="Header value"></label>
     <button type="button" class="btn btn-ghost btn-sm remove-header" aria-label="Remove header">Remove</button>`;
   row.querySelector(".header-name").value = header.name || "";
   row.querySelector(".header-value").value = header.value || "";
@@ -618,6 +618,56 @@ function addRequestHeader(header = {}) {
   row.querySelector(".remove-header").addEventListener("click", () => row.remove());
   document.getElementById("request-headers-list").append(row);
   return row;
+}
+
+function updateBasicAuthHeaderOptions() {
+  const names = new Map(["Authorization", "Proxy-Authorization"].map((name) => [name.toLowerCase(), name]));
+  readRequestHeaders().forEach(({ name }) => {
+    if (name) names.set(name.toLowerCase(), name);
+  });
+  document.getElementById("basic-auth-header-options").replaceChildren(...Array.from(names.values(), (name) => {
+    const option = document.createElement("option");
+    option.value = name;
+    return option;
+  }));
+}
+
+function applyBasicAuthHeader(event) {
+  event.preventDefault();
+  const status = document.getElementById("basic-auth-status");
+  const username = document.getElementById("basic-auth-username");
+  const password = document.getElementById("basic-auth-password");
+  const name = document.getElementById("basic-auth-header").value.trim();
+  const fail = (message) => {
+    status.className = "test-result fail";
+    status.textContent = message;
+  };
+  if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name)) return fail("Enter a valid HTTP header name.");
+  if (["host", "content-length", "transfer-encoding", "connection", "trailer", "te", "upgrade", "proxy-connection", "expect"].includes(name.toLowerCase())) {
+    return fail("This header controls HTTP transport and cannot be customized.");
+  }
+  if (!username.value || username.value.includes(":")) return fail("Enter a username without a colon (:).");
+  if (/[\x00-\x1f\x7f]/.test(username.value + password.value)) return fail("Username and password cannot contain control characters.");
+  const rows = Array.from(document.querySelectorAll(".request-header-row"));
+  const matches = rows.filter((row) => row.querySelector(".header-name").value.trim().toLowerCase() === name.toLowerCase());
+  if (matches.length > 1) return fail("Remove duplicate rows for this header before applying credentials.");
+  const headers = readRequestHeaders().filter((header) => header.name.toLowerCase() !== name.toLowerCase());
+  if (headers.length >= 32) return fail("At most 32 headers can be configured. Remove a header first.");
+  // Encode UTF-8 before Base64; btoa alone rejects non-Latin usernames/passwords.
+  const bytes = new TextEncoder().encode(`${username.value}:${password.value}`);
+  if (bytes.length > 12288) return fail("These credentials exceed the request header size limit.");
+  const value = "Basic " + btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""));
+  const totalSize = headers.reduce((size, header) => size + header.name.length + header.value.length, name.length + value.length);
+  if (totalSize > 16384) return fail("Request headers exceed the 16 KiB limit. Shorten the credentials or remove a header.");
+  const row = matches[0] || rows.find((row) => !row.querySelector(".header-name").value.trim() && !row.querySelector(".header-value").value) || addRequestHeader();
+  row.querySelector(".header-name").value = name;
+  row.querySelector(".header-value").value = value;
+  row.querySelector(".header-value").dispatchEvent(new Event("input", { bubbles: true }));
+  username.value = "";
+  password.value = "";
+  status.className = "test-result ok";
+  status.textContent = "Header applied. Save settings to keep this change.";
+  updateBasicAuthHeaderOptions();
 }
 
 async function loadConfig() {
@@ -1107,6 +1157,12 @@ function initScheduleEvents() {
 
 function initSettingsEvents() {
   document.getElementById("save-btn").addEventListener("click", saveSettings);
+  document.getElementById("basic-auth-form").addEventListener("submit", applyBasicAuthHeader);
+  document.getElementById("basic-auth-helper").addEventListener("toggle", updateBasicAuthHeaderOptions);
+  document.getElementById("basic-auth-header").addEventListener("focus", updateBasicAuthHeaderOptions);
+  document.getElementById("basic-auth-form").addEventListener("input", () => {
+    document.getElementById("basic-auth-status").textContent = "";
+  });
   document.getElementById("add-request-header").addEventListener("click", () => addRequestHeader().querySelector(".header-name").focus());
   document.getElementById("show-request-headers").addEventListener("change", (event) => {
     document.querySelectorAll(".header-value").forEach((input) => { input.type = event.target.checked ? "text" : "password"; });

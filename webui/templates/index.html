@@ -123,11 +123,35 @@
             <button type="button" class="btn btn-ghost btn-sm" id="add-request-header">Add header</button>
             <label><input type="checkbox" id="show-request-headers"> Show values</label>
           </div>
+          <details class="request-headers-help" id="basic-auth-helper">
+            <summary>Generate Basic authentication</summary>
+            <p class="hint">Generate a Basic authentication value from a username and password, then apply it to a new or existing header.</p>
+            <form id="basic-auth-form" class="basic-auth-form">
+              <label class="field">
+                <span class="field-label">Target header</span>
+                <input id="basic-auth-header" type="text" value="Authorization" list="basic-auth-header-options" autocomplete="off" spellcheck="false" required aria-describedby="basic-auth-header-hint">
+              </label>
+              <datalist id="basic-auth-header-options">
+                <option value="Authorization"></option>
+                <option value="Proxy-Authorization"></option>
+              </datalist>
+              <p class="hint" id="basic-auth-header-hint">Use the header your server expects: Authorization for HTTP Basic, Proxy-Authorization for a proxy that accepts it, or a custom name. Applying replaces any existing value for that header.</p>
+              <label class="field">
+                <span class="field-label">Username</span>
+                <input id="basic-auth-username" type="text" autocomplete="off" spellcheck="false" required>
+              </label>
+              <label class="field">
+                <span class="field-label">Password</span>
+                <input id="basic-auth-password" type="password" autocomplete="new-password">
+              </label>
+              <button type="submit" class="btn btn-ghost btn-sm">Apply to header</button>
+              <p id="basic-auth-status" class="test-result" role="status" aria-live="polite"></p>
+            </form>
+          </details>
           <details class="request-headers-help">
-            <summary>Authelia setup &amp; header scope</summary>
-            <p class="hint">For Authelia, use <code>Proxy-Authorization</code> with <code>Basic BASE64(username:password)</code> when its endpoint enables <code>HeaderProxyAuthorization</code>. Basic authentication cannot satisfy a two-factor rule. App API keys are still required and each app's own authentication takes priority.</p>
+            <summary>Where headers are used</summary>
+            <p class="hint">App API keys are still required. Each app's own authentication takes priority when it uses the same header name; use a separate header if your proxy supports one.</p>
             <p class="hint">Headers go to all app URLs you configure, including restore targets. They are not sent to backup storage or notification services. Redirects to another scheme, host or port are blocked.</p>
-            <a href="https://www.authelia.com/configuration/miscellaneous/server-endpoints-authz/" target="_blank" rel="noopener noreferrer">Authelia authentication configuration</a>
           </details>
         </div>
         <div class="card destinations-card">

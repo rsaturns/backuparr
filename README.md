@@ -397,78 +397,28 @@ With global headers configured, requests must stay on each app's configured
 final URL (prefer HTTPS). `BACKUPARR_ALLOW_CROSS_HOST_REDIRECTS` cannot override
 this protection. Without global headers, existing driver behavior is unchanged.
 
-#### Authelia example
+#### Basic authentication helper
 
-Use a dedicated Authelia service account, then add:
+Open **Generate Basic authentication**, choose a **Target header**, enter the
+username and password, then click **Apply to header**. Use `Authorization` for
+standard HTTP Basic authentication, `Proxy-Authorization` if your proxy expects
+it, or enter a custom header name. Existing header names are also suggested.
+The helper creates a row or replaces the matching header's value, ignoring
+capitalization. Other headers remain unchanged. Click **Save settings** to persist
+the change; you can still edit every header manually.
 
-| Header name | Value |
-|---|---|
-| `Proxy-Authorization` | `Basic <base64 of username:password>` |
+The helper generates `Basic <base64 of username:password>` locally in your
+browser, using UTF-8 for non-ASCII characters. The username cannot contain a
+colon; passwords can contain colons and may be empty. Credential fields are
+cleared after applying, and only the generated header is saved, encrypted like
+other header values. The generated value is a credential, not encryption; use
+HTTPS when sending it over a network.
 
-This preserves `Authorization` for apps that need their own Bearer/Basic auth.
-An application's API key is still required. This does not reuse your browser's
-Authelia login; a copied `Cookie` header expires with its session.
-
-Authelia must accept this authentication strategy on the endpoint used by nginx.
-For an installation using `/api/authz/auth-request`, merge the following into
-Authelia's configuration, retaining any other strategies your installation needs:
-
-```yaml
-server:
-  endpoints:
-    authz:
-      auth-request:
-        implementation: AuthRequest
-        authn_strategies:
-          - name: HeaderProxyAuthorization
-            schemes: [Basic]
-          - name: CookieSession
-```
-
-nginx must forward `Proxy-Authorization` to its Authelia auth subrequest. Its
-normal request-header forwarding does this unless your snippets clear or replace
-the header. If needed, add this once to the shared location that proxies to
-Authelia, rather than adding per-service bypass locations:
-
-```nginx
-proxy_set_header Proxy-Authorization $http_proxy_authorization;
-```
-
-**Basic auth is one factor.** A `two_factor` access rule will still deny it.
-Place a rule for the dedicated account before the existing browser-user rules;
-scope its domains to the services you intend to back up:
-
-```yaml
-access_control:
-  rules:
-    - domain: [radarr.example.com, sonarr.example.com, prowlarr.example.com]
-      subject: ['user:backuparr']
-      policy: one_factor
-    # Existing rules, including two_factor for human users, follow here.
-```
-
-Generate the header locally without placing the password in shell history:
-
-```sh
-python3 -c '
-import base64, getpass
-username = input("Authelia service username: ")
-password = getpass.getpass("Password: ")
-print("Basic " + base64.b64encode((username + ":" + password).encode()).decode())
-'
-```
-
-Treat the printed value as a password. Test connection should now succeed; a
-redirect to the Authelia portal means it has not accepted the credentials or its
-access policy still requires browser authentication. Header configuration alone
-does not bypass that policy.
-If nginx exempts `/api/` from authentication, also run a backup or discovery to
-verify access to the protected backup download; the API connection test alone
-cannot verify that path.
-
-References: [Authelia authorization strategies](https://www.authelia.com/configuration/miscellaneous/server-endpoints-authz/),
-[service accounts and Basic authentication](https://www.authelia.com/integration/guides/securing-apps-with-basic-auth/),
-[nginx integration](https://www.authelia.com/integration/proxies/nginx/).
+Your server or reverse proxy must accept the chosen header and authentication
+method. This does not reuse your browser's login session. An app's own
+`Authorization` header still takes priority, so use a separate proxy header when
+both layers require authentication. If API endpoints and backup downloads have
+different access rules, run a backup as well as **Test connection** to verify both.
 
 ### Login
 
