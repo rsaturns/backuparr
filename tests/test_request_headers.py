@@ -1,8 +1,11 @@
 """Exercise real requests preparation/redirects and the app entry points."""
 import copy
+from http.cookies import SimpleCookie
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import io
 import json
 from pathlib import Path
+import threading
 from types import SimpleNamespace
 from urllib.parse import urlsplit
 import zipfile
@@ -76,11 +79,12 @@ def test_invalid_headers_fail_without_echoing_values(rows):
 @pytest.mark.parametrize("status", [301, 302, 303, 307, 308])
 @pytest.mark.parametrize("target", ["https://login.example/path?secret=hidden", "http://app.example/path", "https://app.example:8443/path"])
 def test_redirects_cannot_exfiltrate_any_global_header(status, target):
-    app, transport = client(target, status)
+    app, transport = client(target, status, rows=HEADERS + [{"name": "Cookie", "value": "auth_session=fixture"}])
     with pytest.raises(RequestHeadersError) as error:
         app.session.post(app.url + "/restore", files={"backup": ("backup.zip", b"private archive")})
     assert len(transport.sent) == 1
     assert transport.sent[0].headers["Proxy-Authorization"] == SECRET
+    assert transport.sent[0].headers["Cookie"] == "auth_session=fixture"
     assert SECRET not in str(error.value) and "hidden" not in str(error.value)
 
 
@@ -102,6 +106,89 @@ def test_app_auth_and_upload_content_type_win_case_insensitively():
     assert headers["X-Api-Key"] == "native-key"
     assert headers["Content-Type"].startswith("multipart/form-data;")
     assert headers["Proxy-Authorization"] == SECRET
+
+
+@pytest.mark.parametrize("existing, expected", [
+    ("routing=backend1", 'routing=backend1; auth_session=fixture; preference="dark=mode"; empty='),
+    ("auth_session=renewed; empty=", 'auth_session=renewed; empty=; preference="dark=mode"'),
+    ("Auth_session=native", 'Auth_session=native; auth_session=fixture; preference="dark=mode"; empty='),
+])
+def test_configured_cookies_fill_missing_names_without_replacing_app_cookies(existing, expected):
+    app, transport = client(rows=[{"name": "cOoKiE", "value": 'auth_session=fixture; preference="dark=mode"; empty='}])
+    app.session.get(app.url, headers={"Cookie": existing})
+    assert transport.sent[0].headers["Cookie"] == expected
+
+
+@pytest.mark.parametrize("server_cookie", ["routing=backend1", "auth_session=renewed"])
+def test_cookie_auth_survives_set_cookie_during_backup_restore_and_redirects(tmp_path, server_cookie):
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w") as output:
+        output.writestr("config.xml", "<Config />")
+    zip_bytes, sent = archive.getvalue(), []
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def handle_request(self):
+            body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            cookies = SimpleCookie(self.headers.get("Cookie", ""))
+            sent.append((self.command, self.path, cookies, body))
+            authenticated = cookies.get("auth_session") and cookies["auth_session"].value in {"fixture", "renewed"}
+            data = {}
+            location = None
+            if self.path == "/redirect":
+                location = "/api/v3/system/status"
+            elif self.path == "/backup/manual/config.zip":
+                location = "/backup/manual/final.zip"
+            elif self.path == "/api/v3/system/status":
+                data = {"version": "fixture"}
+            elif self.path == "/api/v3/command":
+                data = {"id": 1}
+            elif self.path == "/api/v3/command/1":
+                data = {"status": "completed"}
+            elif self.path == "/api/v3/system/backup":
+                data = [{"id": 1, "type": "manual", "path": "/backup/manual/config.zip"}]
+            content = zip_bytes if self.path == "/backup/manual/final.zip" else json.dumps(data).encode()
+            self.send_response((302 if location else 200) if authenticated else 401)
+            self.send_header("Set-Cookie", server_cookie + "; Path=/")
+            if location:
+                self.send_header("Location", location)
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+
+        do_GET = do_POST = do_DELETE = handle_request
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    def new_app():
+        app = backup.build_app("radarr", {"url": f"http://127.0.0.1:{server.server_port}", "api_key": "native-key",
+                                         "request_headers": [{"name": "Cookie", "value": "auth_session=fixture"}]})
+        app.session.trust_env = False
+        return app
+
+    try:
+        assert new_app().test_connection() == "radarr fixture reachable"
+        app = new_app()
+        local_zip = app.backup(tmp_path)
+        assert Path(local_zip).read_bytes() == zip_bytes
+        assert any(method == "DELETE" for method, *_ in sent)
+        app.session.get(app.url + "/redirect").raise_for_status()
+        new_app().restore_upload(local_zip)
+        assert any(path.endswith("/restore/upload") and b"config.xml" in body for _, path, _, body in sent)
+        assert sent[-1][1].endswith("/system/restart")
+        assert all("auth_session" in cookies for _, _, cookies, _ in sent)
+        name, value = server_cookie.split("=", 1)
+        for _, path, cookies, _ in sent:
+            if path.endswith(("/command/1", "/final.zip", "/system/restart")):
+                assert cookies[name].value == value
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
 
 
 def test_clients_without_settings_have_no_headers_or_new_redirect_restrictions():

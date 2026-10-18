@@ -392,6 +392,10 @@ authenticate both layers. These headers are not sent to cloud destinations,
 OAuth providers or notification webhooks. They do apply to an explicitly entered
 restore target, so only configure trusted app URLs.
 
+For a `Cookie` header, configured cookies are added alongside app/server cookies.
+An existing cookie of the same name takes priority, including a session cookie
+renewed by the server. Cookie names are case sensitive.
+
 With global headers configured, requests must stay on each app's configured
 **scheme, host and port**, including redirects and backup downloads. Use the
 final URL (prefer HTTPS). `BACKUPARR_ALLOW_CROSS_HOST_REDIRECTS` cannot override

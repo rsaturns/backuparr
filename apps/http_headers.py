@@ -53,6 +53,17 @@ def _origin(url):
         raise RequestHeadersError("Use a valid HTTP or HTTPS app URL for request headers") from None
 
 
+def _merge_cookies(current, defaults):
+    """Fill missing cookie names, preserving app/server values and their encoding."""
+    if not current:
+        return defaults
+    # Cookie pairs are separated by semicolons; names are case sensitive.
+    names = {part.partition("=")[0].strip() for part in current.split(";")}
+    missing = [part.strip() for part in defaults.split(";")
+               if part.strip() and part.partition("=")[0].strip() not in names]
+    return "; ".join([current, *missing])
+
+
 class _HeadersAdapter(requests.adapters.BaseAdapter):
     """Wrap the existing transport, preserving its TLS, proxy and retry setup.
 
@@ -70,7 +81,11 @@ class _HeadersAdapter(requests.adapters.BaseAdapter):
             )
         for name, value in self.headers.items():
             # Native API keys, Bearer/Basic auth and per-request fields take priority.
-            request.headers.setdefault(name, value)
+            if name.lower() == "cookie":
+                # A routing/session cookie must not hide an unrelated auth cookie.
+                request.headers[name] = _merge_cookies(request.headers.get(name), value)
+            else:
+                request.headers.setdefault(name, value)
         return self.adapter.send(request, **kwargs)
 
     def close(self):
