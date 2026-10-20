@@ -1,4 +1,4 @@
-FROM python:3.14-alpine
+FROM python:3.15-alpine
 
 # rclone from its own GitHub release, not apk - apk's build lags
 # upstream and carries known CVEs in its bundled Go dependencies.
