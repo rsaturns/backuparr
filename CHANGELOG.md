@@ -5,6 +5,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.3.0-beta] - 2026-10-28
+
 ### Added
 
 - Service authentication headers in Settings for apps behind an authenticating
