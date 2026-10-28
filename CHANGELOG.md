@@ -16,7 +16,8 @@ _Nothing yet._
   standard or custom headers. Each header goes to all apps or only the apps you
   choose. Applied to app connection tests, discovery, backups and restores while
   retaining app API credentials. Cross-origin redirects are blocked for apps
-  that receive these headers.
+  that receive these headers. Thanks to @vladimir-aubrecht for the
+  contribution (#56).
 
 ### Changed
 
