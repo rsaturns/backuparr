@@ -12,6 +12,11 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   connection tests, discovery, backups and restores while retaining app API
   credentials. Cross-origin redirects are blocked when these headers are configured.
 
+### Changed
+
+- The image now runs on Python 3.15 (`python:3.15-alpine`), and CI runs the
+  test suite on Python 3.15 to match. The pytest floor is raised to 9.2.0.
+
 ## [1.2.1-beta] - 2026-10-07
 
 ### Changed
