@@ -695,8 +695,15 @@ function applyBasicAuthHeader(event) {
   if (/[\x00-\x1f\x7f]/.test(username.value + password.value)) return fail("Username and password cannot contain control characters.");
   const rows = Array.from(document.querySelectorAll(".request-header-row"));
   const matches = rows.filter((row) => row.querySelector(".header-name").value.trim().toLowerCase() === name.toLowerCase());
-  if (matches.length > 1) return fail("Several rows use this header name. Enter the value in the row you want instead.");
-  const headers = readRequestHeaders().filter((header) => header.name.toLowerCase() !== name.toLowerCase());
+  // Rows scoped to different apps may share a name: fill the one left empty for this credential.
+  const empty = matches.filter((row) => !row.querySelector(".header-value").value);
+  if (matches.length > 1 && empty.length !== 1) {
+    return fail("Several rows use this header name. Clear the value of the row to replace, or add a row with this name and no value.");
+  }
+  const target = empty[0] || matches[0] || rows.find((row) => !row.querySelector(".header-name").value.trim() && !row.querySelector(".header-value").value);
+  const otherRows = target ? rows.filter((row) => row !== target) : rows;
+  const headers = otherRows.map((row) => ({ name: row.querySelector(".header-name").value.trim(), value: row.querySelector(".header-value").value }))
+    .filter(({ name: other, value: otherValue }) => other || otherValue);
   if (headers.length >= 32) return fail("At most 32 headers can be configured. Remove a header first.");
   // Encode UTF-8 before Base64; btoa alone rejects non-Latin usernames/passwords.
   const bytes = new TextEncoder().encode(`${username.value}:${password.value}`);
@@ -704,7 +711,7 @@ function applyBasicAuthHeader(event) {
   const value = "Basic " + btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""));
   const totalSize = headers.reduce((size, header) => size + header.name.length + header.value.length, name.length + value.length);
   if (totalSize > 16384) return fail("Request headers exceed the 16 KiB limit. Shorten the credentials or remove a header.");
-  const row = matches[0] || rows.find((row) => !row.querySelector(".header-name").value.trim() && !row.querySelector(".header-value").value) || addRequestHeader();
+  const row = target || addRequestHeader();
   row.querySelector(".header-name").value = name;
   row.querySelector(".header-value").value = value;
   row.querySelector(".header-value").dispatchEvent(new Event("input", { bubbles: true }));

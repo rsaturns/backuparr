@@ -414,8 +414,10 @@ username and password, then click **Apply to header**. Use `Authorization` for
 standard HTTP Basic authentication, `Proxy-Authorization` if your proxy expects
 it, or enter a custom header name. Existing header names are also suggested.
 The helper creates a row or replaces the matching header's value, ignoring
-capitalization. Other headers remain unchanged. Click **Save settings** to persist
-the change; you can still edit every header manually.
+capitalization. When several rows share the name (scoped to different apps), it
+fills the one whose value is empty, so add a row with the name and the apps you
+want first. New rows go to all apps. Other headers remain unchanged. Click
+**Save settings** to persist the change; you can still edit every header manually.
 
 The helper generates `Basic <base64 of username:password>` locally in your
 browser, using UTF-8 for non-ASCII characters. The username cannot contain a
