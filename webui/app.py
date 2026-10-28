@@ -26,6 +26,13 @@ import onedrive_oauth
 import rclone_util
 import restore_actions as ra
 import secrets_crypto
+from apps.http_headers import (
+    RequestHeadersError,
+    app_connection_config,
+    configure_app_headers,
+    headers_for_app,
+    validate_request_headers,
+)
 from apps.prowlarr import ProwlarrApp
 from backup import build_app, describe_failure, format_run_message, humanize_error, log_failure, notify, run_backup
 from config_store import (
@@ -496,6 +503,11 @@ def api_meta():
 def _validate_config(data, cfg):
     if not isinstance(data, dict):
         return "expected a JSON object"
+    if "request_headers" in data:
+        try:
+            validate_request_headers(data["request_headers"], APP_NAMES)
+        except RequestHeadersError as exc:
+            return str(exc)
     for key in ("apps", "destinations"):
         section = data.get(key, {})
         if not isinstance(section, dict) or not all(isinstance(entry, dict) for entry in section.values()):
@@ -545,7 +557,7 @@ def api_set_config():
     if error:
         return jsonify({"error": error}), 400
 
-    for key in ("retention_days", "cron_schedule", "notify_url", "bazarr_backup_dir"):
+    for key in ("retention_days", "cron_schedule", "notify_url", "bazarr_backup_dir", "request_headers"):
         if key in data:
             cfg[key] = data[key]
     for name in APP_NAMES:
@@ -570,6 +582,8 @@ def api_test(app_name):
     if meta["status"] != "available":
         return jsonify({"ok": False, "message": f"{meta['label']} isn't available yet"})
     data = request.get_json(force=True, silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({"ok": False, "message": "expected a JSON object"}), 400
     if not data.get("url"):
         return jsonify({"ok": False, "message": "URL is required"}), 400
     if key_required(app_name) and not data.get("api_key"):
@@ -577,6 +591,12 @@ def api_test(app_name):
 
     app_cfg = copy.deepcopy(DEFAULT_APP)
     app_cfg.update(data)
+    try:
+        headers = data["request_headers"] if "request_headers" in data else load_config().get("request_headers", [])
+        validate_request_headers(headers, APP_NAMES)
+    except RequestHeadersError as exc:
+        return jsonify({"ok": False, "message": str(exc)}), 400
+    app_cfg["request_headers"] = headers_for_app(headers, app_name)
     try:
         instance = build_app(app_name, app_cfg)
         message = instance.test_connection()
@@ -607,7 +627,7 @@ def _forget_discovery(job_id):
         DISCOVERY_JOBS.pop(job_id, None)
 
 
-def _discovery_work(job_id, url, api_key):
+def _discovery_work(job_id, url, api_key, request_headers):
     def progress(message):
         with DISCOVERY_JOBS_LOCK:
             if job_id in DISCOVERY_JOBS:
@@ -615,6 +635,7 @@ def _discovery_work(job_id, url, api_key):
 
     try:
         instance = ProwlarrApp(url, api_key, strict_redirects=True)
+        configure_app_headers(instance, request_headers)
         result = discovery.discover_prowlarr(instance, progress)
         outcome = {"state": "completed", "message": "Discovery complete.", "result": result}
     except discovery.DiscoveryError as exc:
@@ -644,6 +665,12 @@ def api_discovery_prowlarr():
     api_key = data.get("api_key")
     if not isinstance(api_key, str) or not api_key.strip():
         return _discovery_response({"error": "Prowlarr's API key is required."}, 400)
+    try:
+        headers = data["request_headers"] if "request_headers" in data else load_config().get("request_headers", [])
+        validate_request_headers(headers, APP_NAMES)
+    except RequestHeadersError as exc:
+        return _discovery_response({"error": str(exc)}, 400)
+    headers = headers_for_app(headers, "prowlarr")
     if not DISCOVERY_RUN_LOCK.acquire(blocking=False):
         return _discovery_response({"error": "Discovery is already running. Try again when it finishes."}, 409)
     # A separate cookie: a stale concurrent response must not clobber the refreshing session cookie.
@@ -653,7 +680,7 @@ def api_discovery_prowlarr():
         _purge_discovery_locked()
         DISCOVERY_JOBS[job_id] = {"owner": owner, "state": "running", "message": "Connecting to Prowlarr..."}
     try:
-        threading.Thread(target=_discovery_work, args=(job_id, data["url"].strip(), api_key.strip()), daemon=True).start()
+        threading.Thread(target=_discovery_work, args=(job_id, data["url"].strip(), api_key.strip(), headers), daemon=True).start()
     except RuntimeError:
         _forget_discovery(job_id)
         DISCOVERY_RUN_LOCK.release()
@@ -1018,7 +1045,7 @@ def api_restore(dest_id, app_name):
     root, error = _destination_root_or_error(cfg, dest_id)
     if error:
         return error
-    app_cfg = cfg["apps"].get(app_name, {})
+    app_cfg = app_connection_config(cfg, app_name)
 
     # One-off target override for this restore only - never written back to
     # config.json. Lets you point a restore at a throwaway/test instance

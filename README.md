@@ -367,12 +367,70 @@ choose when there are several.
 - The URLs are the ones Prowlarr uses; run **Test connection** to confirm
   Backuparr can reach them.
 - On PostgreSQL, or if a login proxy blocks `/backup/`, URLs are still filled
-  in and you enter the missing keys by hand. Backuparr never asks for web-login
-  credentials.
+  in and you enter the missing keys by hand. [Service authentication
+  headers](#service-authentication-headers) that apply to Prowlarr can
+  authenticate discovery through a compatible reverse proxy.
 - Discovery refuses any redirect away from Prowlarr's exact URL, so use its
   final address.
 - Bazarr, Profilarr, Tdarr, Tautulli and Seerr aren't stored in Prowlarr and
   are always configured manually.
+
+### Service authentication headers
+
+In **Settings → Service authentication**, add a header name and its value, then
+save. Each header is used for connection tests, discovery (including Prowlarr's
+`/backup/` download), scheduled/manual backups, cleanup and restore uploads.
+Tests and discovery use the values currently in the form, even before saving;
+background backups and restores use saved settings. Remove the rows and save to
+disable them.
+
+A header goes to **all apps** by default, including apps added in later
+releases. Open **Apps** under a header and clear **All apps** to pick specific
+apps instead, so a credential for one reverse proxy never reaches an app behind
+another. The same header name can be used on several rows as long as no app gets
+it twice, for example a different `Authorization` value for Radarr and Tautulli.
+
+Values are masked in the form and encrypted in `config.json` with the same key
+as app API keys. Each app's native authentication and per-request headers take
+priority on a case-insensitive name collision. For example, an app's
+`Authorization: Bearer …` remains intact; use a separate proxy header to
+authenticate both layers. These headers are not sent to cloud destinations,
+OAuth providers or notification webhooks. They do apply to a restore target
+entered for an app they cover, so only configure trusted app URLs.
+
+For a `Cookie` header, configured cookies are added alongside app/server cookies.
+An existing cookie of the same name takes priority, including a session cookie
+renewed by the server. Cookie names are case sensitive.
+
+For an app with headers configured, requests must stay on its configured
+**scheme, host and port**, including redirects and backup downloads. Use the
+final URL (prefer HTTPS). `BACKUPARR_ALLOW_CROSS_HOST_REDIRECTS` cannot override
+this protection. Apps with no headers keep their existing redirect behavior.
+
+#### Basic authentication helper
+
+Open **Generate Basic authentication**, choose a **Target header**, enter the
+username and password, then click **Apply to header**. Use `Authorization` for
+standard HTTP Basic authentication, `Proxy-Authorization` if your proxy expects
+it, or enter a custom header name. Existing header names are also suggested.
+The helper creates a row or replaces the matching header's value, ignoring
+capitalization. When several rows share the name (scoped to different apps), it
+fills the one whose value is empty, so add a row with the name and the apps you
+want first. New rows go to all apps. Other headers remain unchanged. Click
+**Save settings** to persist the change; you can still edit every header manually.
+
+The helper generates `Basic <base64 of username:password>` locally in your
+browser, using UTF-8 for non-ASCII characters. The username cannot contain a
+colon; passwords can contain colons and may be empty. Credential fields are
+cleared after applying, and only the generated header is saved, encrypted like
+other header values. The generated value is a credential, not encryption; use
+HTTPS when sending it over a network.
+
+Your server or reverse proxy must accept the chosen header and authentication
+method. This does not reuse your browser's login session. An app's own
+`Authorization` header still takes priority, so use a separate proxy header when
+both layers require authentication. If API endpoints and backup downloads have
+different access rules, run a backup as well as **Test connection** to verify both.
 
 ### Login
 
@@ -523,6 +581,7 @@ These fields live in `config.json`, edited via the web UI or by hand:
 
 | Field | Purpose |
 |---|---|
+| `request_headers` | App HTTP headers as `[{"name": "Proxy-Authorization", "value": "Basic …", "apps": ["radarr"]}]`; omit `apps` to send a header to every app; values are encrypted at rest; default `[]` |
 | `apps.<name>.enabled/url/api_key` | Per app, as shown in the Settings tab |
 | `apps.bazarr.username/password` | Only if Bazarr's web auth is set to `Basic` |
 | `destinations.local.enabled/path` | Local storage - path defaults to `/config/backuparr/backups` if blank |

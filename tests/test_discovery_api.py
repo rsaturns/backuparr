@@ -1,5 +1,6 @@
 import importlib
 import threading
+import copy
 
 import pytest
 import requests
@@ -10,6 +11,8 @@ def webui(tmp_path, monkeypatch):
     monkeypatch.setenv("BACKUPARR_SECRET_KEY_PATH", str(tmp_path / "session.key"))
     monkeypatch.setenv("BACKUPARR_LOG_DIR", str(tmp_path / "logs"))
     module = importlib.import_module("webui.app")
+    import config_store
+    monkeypatch.setattr(module, "load_config", lambda: copy.deepcopy(config_store.DEFAULTS))
     monkeypatch.setattr(module.auth_store, "has_credentials", lambda: True)
     monkeypatch.setattr(module, "DISCOVERY_JOBS", {})
     monkeypatch.setattr(module, "DISCOVERY_RUN_LOCK", threading.Lock())

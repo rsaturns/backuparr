@@ -61,10 +61,11 @@ class SabnzbdApp:
         self.url = url.rstrip("/")
         self.api_key = api_key
         self.timeout = timeout
+        self.session = requests.Session()
 
     def _call(self, params):
         payload = {"apikey": self.api_key, "output": "json", **params}
-        res = requests.post(f"{self.url}/api", data=payload, timeout=self.timeout)
+        res = self.session.post(f"{self.url}/api", data=payload, timeout=self.timeout)
         res.raise_for_status()
         data = res.json()
         if isinstance(data, dict) and data.get("status") is False:

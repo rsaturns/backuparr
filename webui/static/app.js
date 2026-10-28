@@ -331,6 +331,7 @@ function prowlarrCredentials() {
   return {
     url: appCard("prowlarr").querySelector(".f-url").value.trim(),
     api_key: appCard("prowlarr").querySelector(".f-api_key").value.trim(),
+    request_headers: readRequestHeaders(),
   };
 }
 
@@ -598,6 +599,129 @@ function updateGdriveUI(gdriveCfg) {
   }
 }
 
+function readRequestHeaders() {
+  return Array.from(document.querySelectorAll(".request-header-row"), (row) => {
+    const header = {
+      name: row.querySelector(".header-name").value.trim(),
+      value: row.querySelector(".header-value").value,
+    };
+    // No "apps" key means every app, including ones added in later releases.
+    if (!row.querySelector(".header-scope-all").checked) {
+      header.apps = Array.from(row.querySelectorAll(".header-scope-app:checked"), (box) => box.value);
+    }
+    return header;
+  }).filter(({ name, value }) => name || value);
+}
+
+function updateHeaderScopeSummary(row) {
+  const all = row.querySelector(".header-scope-all").checked;
+  row.querySelectorAll(".header-scope-app").forEach((box) => {
+    box.disabled = all;
+    if (all) box.checked = true;
+  });
+  const labels = Array.from(row.querySelectorAll(".header-scope-app:checked"), (box) => box.dataset.label);
+  row.querySelector(".header-scope summary").textContent =
+    `Apps: ${all ? "All apps" : labels.join(", ") || "none selected"}`;
+}
+
+function buildHeaderScope(apps) {
+  const scope = document.createElement("details");
+  scope.className = "header-scope";
+  const options = document.createElement("div");
+  options.className = "header-scope-options";
+  const option = (className, value, label, checked) => {
+    const wrap = document.createElement("label");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.className = className;
+    box.value = value;
+    box.dataset.label = label;
+    box.checked = checked;
+    wrap.append(box, ` ${label}`);
+    options.append(wrap);
+  };
+  option("header-scope-all", "", "All apps", !apps);
+  // Keep a saved scope's apps listed even if one stops being "available".
+  APP_META.filter((m) => m.status === "available" || (apps || []).includes(m.id))
+    .forEach((m) => option("header-scope-app", m.id, m.label, !apps || apps.includes(m.id)));
+  scope.append(document.createElement("summary"), options);
+  return scope;
+}
+
+function addRequestHeader(header = {}) {
+  const row = document.createElement("div");
+  row.className = "request-header-row";
+  row.innerHTML = `<label class="field"><span class="field-label">Header name</span><input class="header-name" type="text" autocomplete="off" spellcheck="false" placeholder="X-Custom-Header"></label>
+    <label class="field"><span class="field-label">Value</span><input class="header-value" type="password" autocomplete="off" spellcheck="false" placeholder="Header value"></label>
+    <button type="button" class="btn btn-ghost btn-sm remove-header" aria-label="Remove header">Remove</button>`;
+  row.querySelector(".header-name").value = header.name || "";
+  row.querySelector(".header-value").value = header.value || "";
+  row.querySelector(".header-value").type = document.getElementById("show-request-headers").checked ? "text" : "password";
+  row.querySelector(".remove-header").addEventListener("click", () => row.remove());
+  row.append(buildHeaderScope(header.apps));
+  row.querySelector(".header-scope").addEventListener("change", () => updateHeaderScopeSummary(row));
+  updateHeaderScopeSummary(row);
+  document.getElementById("request-headers-list").append(row);
+  return row;
+}
+
+function updateBasicAuthHeaderOptions() {
+  const names = new Map(["Authorization", "Proxy-Authorization"].map((name) => [name.toLowerCase(), name]));
+  readRequestHeaders().forEach(({ name }) => {
+    if (name) names.set(name.toLowerCase(), name);
+  });
+  document.getElementById("basic-auth-header-options").replaceChildren(...Array.from(names.values(), (name) => {
+    const option = document.createElement("option");
+    option.value = name;
+    return option;
+  }));
+}
+
+function applyBasicAuthHeader(event) {
+  event.preventDefault();
+  const status = document.getElementById("basic-auth-status");
+  const username = document.getElementById("basic-auth-username");
+  const password = document.getElementById("basic-auth-password");
+  const name = document.getElementById("basic-auth-header").value.trim();
+  const fail = (message) => {
+    status.className = "test-result fail";
+    status.textContent = message;
+  };
+  if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name)) return fail("Enter a valid HTTP header name.");
+  if (["host", "content-length", "transfer-encoding", "connection", "trailer", "te", "upgrade", "proxy-connection", "expect"].includes(name.toLowerCase())) {
+    return fail("This header controls HTTP transport and cannot be customized.");
+  }
+  if (!username.value || username.value.includes(":")) return fail("Enter a username without a colon (:).");
+  if (/[\x00-\x1f\x7f]/.test(username.value + password.value)) return fail("Username and password cannot contain control characters.");
+  const rows = Array.from(document.querySelectorAll(".request-header-row"));
+  const matches = rows.filter((row) => row.querySelector(".header-name").value.trim().toLowerCase() === name.toLowerCase());
+  // Rows scoped to different apps may share a name: fill the one left empty for this credential.
+  const empty = matches.filter((row) => !row.querySelector(".header-value").value);
+  if (matches.length > 1 && empty.length !== 1) {
+    return fail("Several rows use this header name. Clear the value of the row to replace, or add a row with this name and no value.");
+  }
+  const target = empty[0] || matches[0] || rows.find((row) => !row.querySelector(".header-name").value.trim() && !row.querySelector(".header-value").value);
+  const otherRows = target ? rows.filter((row) => row !== target) : rows;
+  const headers = otherRows.map((row) => ({ name: row.querySelector(".header-name").value.trim(), value: row.querySelector(".header-value").value }))
+    .filter(({ name: other, value: otherValue }) => other || otherValue);
+  if (headers.length >= 32) return fail("At most 32 headers can be configured. Remove a header first.");
+  // Encode UTF-8 before Base64; btoa alone rejects non-Latin usernames/passwords.
+  const bytes = new TextEncoder().encode(`${username.value}:${password.value}`);
+  if (bytes.length > 12288) return fail("These credentials exceed the request header size limit.");
+  const value = "Basic " + btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""));
+  const totalSize = headers.reduce((size, header) => size + header.name.length + header.value.length, name.length + value.length);
+  if (totalSize > 16384) return fail("Request headers exceed the 16 KiB limit. Shorten the credentials or remove a header.");
+  const row = target || addRequestHeader();
+  row.querySelector(".header-name").value = name;
+  row.querySelector(".header-value").value = value;
+  row.querySelector(".header-value").dispatchEvent(new Event("input", { bubbles: true }));
+  username.value = "";
+  password.value = "";
+  status.className = "test-result ok";
+  status.textContent = "Header applied. Save settings to keep this change.";
+  updateBasicAuthHeaderOptions();
+}
+
 async function loadConfig() {
   const cfg = await apiFetch("/api/config");
   document.getElementById("s-retention_days").value = cfg.retention_days || 7;
@@ -605,6 +729,8 @@ async function loadConfig() {
   initSchedulePicker(cfg.cron_schedule);
   document.getElementById("s-notify_url").value = cfg.notify_url || "";
   document.getElementById("s-bazarr_backup_dir").value = cfg.bazarr_backup_dir || "";
+  document.getElementById("request-headers-list").replaceChildren();
+  (cfg.request_headers || []).forEach(addRequestHeader);
   Object.keys(cfg.apps || {}).forEach((appId) => fillAppCard(appId, cfg.apps[appId]));
   Object.keys(cfg.destinations || {}).forEach((destId) => fillDestCard(destId, cfg.destinations[destId]));
   snapshotSettingsState();
@@ -625,6 +751,7 @@ function collectConfig() {
     cron_schedule: document.getElementById("s-cron_schedule").value.trim(),
     notify_url: document.getElementById("s-notify_url").value.trim(),
     bazarr_backup_dir: document.getElementById("s-bazarr_backup_dir").value.trim(),
+    request_headers: readRequestHeaders(),
     apps,
     destinations,
   };
@@ -687,6 +814,7 @@ async function runTest({ btn, resultEl, dot, pendingText, request }) {
 async function testApp(appId) {
   const card = appCard(appId);
   const payload = readAppCard(appId);
+  payload.request_headers = readRequestHeaders();
   await runTest({
     btn: card.querySelector(".test-btn"),
     resultEl: card.querySelector(".test-result"),
@@ -1081,6 +1209,16 @@ function initScheduleEvents() {
 
 function initSettingsEvents() {
   document.getElementById("save-btn").addEventListener("click", saveSettings);
+  document.getElementById("basic-auth-form").addEventListener("submit", applyBasicAuthHeader);
+  document.getElementById("basic-auth-helper").addEventListener("toggle", updateBasicAuthHeaderOptions);
+  document.getElementById("basic-auth-header").addEventListener("focus", updateBasicAuthHeaderOptions);
+  document.getElementById("basic-auth-form").addEventListener("input", () => {
+    document.getElementById("basic-auth-status").textContent = "";
+  });
+  document.getElementById("add-request-header").addEventListener("click", () => addRequestHeader().querySelector(".header-name").focus());
+  document.getElementById("show-request-headers").addEventListener("change", (event) => {
+    document.querySelectorAll(".header-value").forEach((input) => { input.type = event.target.checked ? "text" : "password"; });
+  });
   document.getElementById("discover-btn").addEventListener("click", () => discoverServices());
   appCard("prowlarr").querySelectorAll(".f-url, .f-api_key").forEach((input) => {
     input.addEventListener("input", updateDiscoveryButton);

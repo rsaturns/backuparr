@@ -5,6 +5,15 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Service authentication headers in Settings for apps behind an authenticating
+  reverse proxy, with encrypted values and a Basic authentication helper for
+  standard or custom headers. Each header goes to all apps or only the apps you
+  choose. Applied to app connection tests, discovery, backups and restores while
+  retaining app API credentials. Cross-origin redirects are blocked for apps
+  that receive these headers.
+
 ### Changed
 
 - The image now runs on Python 3.15 (`python:3.15-alpine`), and CI runs the
