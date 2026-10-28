@@ -303,6 +303,9 @@ body {
 .request-header-row .field { min-width: 0; margin: 0; }
 .request-header-row input { width: 100%; min-width: 0; }
 .request-header-row .remove-header { margin-bottom: 2px; }
+.request-header-row .header-scope { grid-column: 1 / -1; font-size: 0.85rem; }
+.header-scope summary { cursor: pointer; color: var(--text-muted); }
+.header-scope-options { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 6px; }
 .request-headers-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
 .request-headers-actions label { font-size: 0.85rem; }
 .request-headers-help { margin-top: 14px; font-size: 0.85rem; }

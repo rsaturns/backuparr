@@ -1,4 +1,4 @@
-"""Global reverse-proxy credentials, scoped to each configured app origin."""
+"""Reverse-proxy credentials, limited to chosen apps and each app's own origin."""
 from urllib.parse import urlsplit
 import re
 
@@ -16,31 +16,53 @@ _TRANSPORT_HEADERS = {
 }
 
 
-def validate_request_headers(rows):
-    """Validate the settings/API shape and return a case-preserving mapping."""
+def validate_request_headers(rows, app_ids=None):
+    """Validate the settings/API shape and return a case-preserving mapping.
+
+    With app_ids, a row may carry "apps" (a non-empty list of those ids) to
+    limit where it is sent; rows without it go to every app. A name may repeat
+    only on rows that never reach the same app. Without app_ids, rows are one
+    app's already-scoped headers.
+    """
     if not isinstance(rows, list) or len(rows) > 32:
         raise RequestHeadersError("Request headers must be a list of at most 32 name/value pairs")
-    result, seen = {}, set()
+    result, seen = {}, {}
     total = 0
     for index, row in enumerate(rows, 1):
-        if not isinstance(row, dict) or set(row) != {"name", "value"}:
+        allowed = {"name", "value", "apps"} if app_ids is not None else {"name", "value"}
+        if not isinstance(row, dict) or not {"name", "value"} <= set(row) <= allowed:
             raise RequestHeadersError(f"Request header {index} must have a name and value")
         name, value = row["name"], row["value"]
         if not isinstance(name, str) or not _NAME.fullmatch(name):
             raise RequestHeadersError(f"Request header {index} has an invalid name")
         if name.lower() in _TRANSPORT_HEADERS:
             raise RequestHeadersError(f"Request header {index} controls HTTP transport and cannot be customized")
-        if name.lower() in seen:
-            raise RequestHeadersError(f"Request header {index} duplicates another header (names are case insensitive)")
         if (not isinstance(value, str) or any(ord(c) < 32 or ord(c) == 127 or ord(c) > 255 for c in value)
                 or value != value.strip()):
             raise RequestHeadersError(f"Request header {index} has an invalid value; use a single line without surrounding whitespace")
+        scope = [None] if app_ids is None else list(app_ids)
+        if "apps" in row:
+            apps = row["apps"]
+            if (not isinstance(apps, list) or not apps or len(set(apps)) != len(apps)
+                    or not all(isinstance(app, str) and app in app_ids for app in apps)):
+                raise RequestHeadersError(f"Request header {index} must apply to at least one known app")
+            scope = apps
+        if any(name.lower() in seen.get(app, ()) for app in scope):
+            raise RequestHeadersError(
+                f"Request header {index} duplicates another header for the same app (names are case insensitive)"
+            )
         total += len(name) + len(value)
         if total > 16384:
             raise RequestHeadersError("Request headers exceed the 16 KiB limit")
-        seen.add(name.lower())
+        for app in scope:
+            seen.setdefault(app, set()).add(name.lower())
         result[name] = value
     return result
+
+
+def headers_for_app(rows, name):
+    """The name/value rows that apply to one app, without their scope."""
+    return [{"name": row["name"], "value": row["value"]} for row in rows if name in row.get("apps", [name])]
 
 
 def _origin(url):
@@ -102,5 +124,5 @@ def configure_app_headers(app, rows):
 
 
 def app_connection_config(cfg, name):
-    """Runtime-only snapshot; global secrets are never copied into app settings."""
-    return {**cfg["apps"][name], "request_headers": [dict(row) for row in cfg.get("request_headers", [])]}
+    """Runtime-only snapshot; header secrets are never copied into app settings."""
+    return {**cfg["apps"][name], "request_headers": headers_for_app(cfg.get("request_headers", []), name)}

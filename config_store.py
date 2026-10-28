@@ -342,7 +342,7 @@ def load_config():
         container[key] = secrets_crypto.decrypt(raw)
 
     try:
-        validate_request_headers(merged["request_headers"])
+        validate_request_headers(merged["request_headers"], APP_NAMES)
     except RequestHeadersError as exc:
         raise ConfigError(str(exc)) from None
     if needs_migration:
@@ -353,7 +353,7 @@ def load_config():
 
 def save_config(cfg):
     try:
-        validate_request_headers(cfg.get("request_headers", []))
+        validate_request_headers(cfg.get("request_headers", []), APP_NAMES)
     except RequestHeadersError as exc:
         raise ConfigError(str(exc)) from None
     to_write = copy.deepcopy(cfg)

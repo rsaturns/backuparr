@@ -26,8 +26,14 @@ import onedrive_oauth
 import rclone_util
 import restore_actions as ra
 import secrets_crypto
+from apps.http_headers import (
+    RequestHeadersError,
+    app_connection_config,
+    configure_app_headers,
+    headers_for_app,
+    validate_request_headers,
+)
 from apps.prowlarr import ProwlarrApp
-from apps.http_headers import RequestHeadersError, app_connection_config, configure_app_headers, validate_request_headers
 from backup import build_app, describe_failure, format_run_message, humanize_error, log_failure, notify, run_backup
 from config_store import (
     APP_META,
@@ -499,7 +505,7 @@ def _validate_config(data, cfg):
         return "expected a JSON object"
     if "request_headers" in data:
         try:
-            validate_request_headers(data["request_headers"])
+            validate_request_headers(data["request_headers"], APP_NAMES)
         except RequestHeadersError as exc:
             return str(exc)
     for key in ("apps", "destinations"):
@@ -587,10 +593,10 @@ def api_test(app_name):
     app_cfg.update(data)
     try:
         headers = data["request_headers"] if "request_headers" in data else load_config().get("request_headers", [])
-        validate_request_headers(headers)
+        validate_request_headers(headers, APP_NAMES)
     except RequestHeadersError as exc:
         return jsonify({"ok": False, "message": str(exc)}), 400
-    app_cfg["request_headers"] = headers
+    app_cfg["request_headers"] = headers_for_app(headers, app_name)
     try:
         instance = build_app(app_name, app_cfg)
         message = instance.test_connection()
@@ -661,9 +667,10 @@ def api_discovery_prowlarr():
         return _discovery_response({"error": "Prowlarr's API key is required."}, 400)
     try:
         headers = data["request_headers"] if "request_headers" in data else load_config().get("request_headers", [])
-        validate_request_headers(headers)
+        validate_request_headers(headers, APP_NAMES)
     except RequestHeadersError as exc:
         return _discovery_response({"error": str(exc)}, 400)
+    headers = headers_for_app(headers, "prowlarr")
     if not DISCOVERY_RUN_LOCK.acquire(blocking=False):
         return _discovery_response({"error": "Discovery is already running. Try again when it finishes."}, 409)
     # A separate cookie: a stale concurrent response must not clobber the refreshing session cookie.

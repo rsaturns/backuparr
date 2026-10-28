@@ -600,10 +600,52 @@ function updateGdriveUI(gdriveCfg) {
 }
 
 function readRequestHeaders() {
-  return Array.from(document.querySelectorAll(".request-header-row"), (row) => ({
-    name: row.querySelector(".header-name").value.trim(),
-    value: row.querySelector(".header-value").value,
-  })).filter(({ name, value }) => name || value);
+  return Array.from(document.querySelectorAll(".request-header-row"), (row) => {
+    const header = {
+      name: row.querySelector(".header-name").value.trim(),
+      value: row.querySelector(".header-value").value,
+    };
+    // No "apps" key means every app, including ones added in later releases.
+    if (!row.querySelector(".header-scope-all").checked) {
+      header.apps = Array.from(row.querySelectorAll(".header-scope-app:checked"), (box) => box.value);
+    }
+    return header;
+  }).filter(({ name, value }) => name || value);
+}
+
+function updateHeaderScopeSummary(row) {
+  const all = row.querySelector(".header-scope-all").checked;
+  row.querySelectorAll(".header-scope-app").forEach((box) => {
+    box.disabled = all;
+    if (all) box.checked = true;
+  });
+  const labels = Array.from(row.querySelectorAll(".header-scope-app:checked"), (box) => box.dataset.label);
+  row.querySelector(".header-scope summary").textContent =
+    `Apps: ${all ? "All apps" : labels.join(", ") || "none selected"}`;
+}
+
+function buildHeaderScope(apps) {
+  const scope = document.createElement("details");
+  scope.className = "header-scope";
+  const options = document.createElement("div");
+  options.className = "header-scope-options";
+  const option = (className, value, label, checked) => {
+    const wrap = document.createElement("label");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.className = className;
+    box.value = value;
+    box.dataset.label = label;
+    box.checked = checked;
+    wrap.append(box, ` ${label}`);
+    options.append(wrap);
+  };
+  option("header-scope-all", "", "All apps", !apps);
+  // Keep a saved scope's apps listed even if one stops being "available".
+  APP_META.filter((m) => m.status === "available" || (apps || []).includes(m.id))
+    .forEach((m) => option("header-scope-app", m.id, m.label, !apps || apps.includes(m.id)));
+  scope.append(document.createElement("summary"), options);
+  return scope;
 }
 
 function addRequestHeader(header = {}) {
@@ -616,6 +658,9 @@ function addRequestHeader(header = {}) {
   row.querySelector(".header-value").value = header.value || "";
   row.querySelector(".header-value").type = document.getElementById("show-request-headers").checked ? "text" : "password";
   row.querySelector(".remove-header").addEventListener("click", () => row.remove());
+  row.append(buildHeaderScope(header.apps));
+  row.querySelector(".header-scope").addEventListener("change", () => updateHeaderScopeSummary(row));
+  updateHeaderScopeSummary(row);
   document.getElementById("request-headers-list").append(row);
   return row;
 }
@@ -650,7 +695,7 @@ function applyBasicAuthHeader(event) {
   if (/[\x00-\x1f\x7f]/.test(username.value + password.value)) return fail("Username and password cannot contain control characters.");
   const rows = Array.from(document.querySelectorAll(".request-header-row"));
   const matches = rows.filter((row) => row.querySelector(".header-name").value.trim().toLowerCase() === name.toLowerCase());
-  if (matches.length > 1) return fail("Remove duplicate rows for this header before applying credentials.");
+  if (matches.length > 1) return fail("Several rows use this header name. Enter the value in the row you want instead.");
   const headers = readRequestHeaders().filter((header) => header.name.toLowerCase() !== name.toLowerCase());
   if (headers.length >= 32) return fail("At most 32 headers can be configured. Remove a header first.");
   // Encode UTF-8 before Base64; btoa alone rejects non-Latin usernames/passwords.

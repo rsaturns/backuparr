@@ -360,3 +360,72 @@ def test_notifications_never_receive_app_credentials(authed_client, wire):
     authed_client.post("/api/config", json={"request_headers": HEADERS})
     backup.notify("https://ntfy.example/topic", "test", raise_on_error=True)
     assert "Proxy-Authorization" not in wire[-1].headers and "X-Proxy-Token" not in wire[-1].headers
+
+
+APP_IDS = config_store.APP_NAMES
+
+
+@pytest.mark.parametrize("apps", [[], "radarr", ["plex"], ["radarr", "radarr"], [None]])
+def test_invalid_app_scopes_fail_without_echoing_values(apps):
+    with pytest.raises(RequestHeadersError) as error:
+        validate_request_headers([{"name": "X-Test", "value": SECRET, "apps": apps}], APP_IDS)
+    assert SECRET not in str(error.value) and "plex" not in str(error.value)
+
+
+def test_scoped_rows_are_only_accepted_with_known_app_ids():
+    with pytest.raises(RequestHeadersError):
+        validate_request_headers([{"name": "X-Test", "value": SECRET, "apps": ["radarr"]}])
+
+
+def test_a_name_may_repeat_only_for_apps_that_never_share_it():
+    disjoint = [{"name": "Authorization", "value": "Basic a", "apps": ["radarr", "sonarr"]},
+                {"name": "authorization", "value": "Basic b", "apps": ["tautulli"]}]
+    validate_request_headers(disjoint, APP_IDS)
+    for overlapping in ([*disjoint, {"name": "AUTHORIZATION", "value": "Basic c", "apps": ["sonarr"]}],
+                        [{"name": "Authorization", "value": "Basic a"}, disjoint[1]]):
+        with pytest.raises(RequestHeadersError, match="same app"):
+            validate_request_headers(overlapping, APP_IDS)
+
+
+def test_each_app_receives_only_the_headers_scoped_to_it():
+    rows = [{"name": "X-Everyone", "value": "all"},
+            {"name": "Authorization", "value": "Basic a", "apps": ["radarr"]},
+            {"name": "Authorization", "value": "Basic b", "apps": ["tautulli", "sonarr"]}]
+    cfg = {"apps": {name: {"url": "https://app.example"} for name in APP_IDS}, "request_headers": rows}
+    connection = {name: backup.app_connection_config(cfg, name)["request_headers"] for name in APP_IDS}
+    assert connection["radarr"] == [{"name": "X-Everyone", "value": "all"}, {"name": "Authorization", "value": "Basic a"}]
+    assert connection["sonarr"] == connection["tautulli"] == [{"name": "X-Everyone", "value": "all"},
+                                                              {"name": "Authorization", "value": "Basic b"}]
+    assert connection["prowlarr"] == [{"name": "X-Everyone", "value": "all"}]
+
+
+def test_settings_keep_header_scopes_and_encrypt_only_values(authed_client):
+    rows = [{"name": "Proxy-Authorization", "value": SECRET, "apps": ["radarr", "tautulli"]}]
+    assert authed_client.post("/api/config", json={"request_headers": rows}).status_code == 200
+    assert authed_client.get("/api/config").json["request_headers"] == rows
+    on_disk = json.loads(Path(config_store.CONFIG_PATH).read_text())["request_headers"][0]
+    assert on_disk["apps"] == ["radarr", "tautulli"] and on_disk["value"].startswith("enc:v1:")
+    bad = [{"name": "Proxy-Authorization", "value": SECRET, "apps": ["unknown"]}]
+    assert authed_client.post("/api/config", json={"request_headers": bad}).status_code == 400
+
+
+def test_connection_test_sends_only_headers_scoped_to_the_tested_app(authed_client, wire):
+    rows = [{"name": "Proxy-Authorization", "value": SECRET, "apps": ["radarr"]}]
+    base = {"url": "https://app.example", "api_key": "native-key", "request_headers": rows}
+    assert authed_client.post("/api/test/radarr", json=base).json["ok"]
+    assert wire[-1].headers["Proxy-Authorization"] == SECRET
+    assert authed_client.post("/api/test/sonarr", json=base).json["ok"]
+    assert "Proxy-Authorization" not in wire[-1].headers
+
+
+@pytest.mark.parametrize("apps, sent", [(["prowlarr"], True), (["radarr"], False)])
+def test_discovery_sends_only_headers_scoped_to_prowlarr(authed_client, isolated_webui, inline, monkeypatch, wire, apps, sent):
+    def discover(app, progress):
+        app.session.get(app.url + "/api/v1/applications")
+        return {"candidates": [], "warnings": []}
+
+    monkeypatch.setattr(isolated_webui.discovery, "discover_prowlarr", discover)
+    rows = [{"name": "Proxy-Authorization", "value": SECRET, "apps": apps}]
+    response = authed_client.post("/api/discovery/prowlarr", json={"url": "https://app.example", "api_key": "native-key", "request_headers": rows})
+    assert authed_client.get("/api/discovery/prowlarr/" + response.json["job_id"]).json["state"] == "completed"
+    assert ("Proxy-Authorization" in wire[-1].headers) is sent

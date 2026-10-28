@@ -367,9 +367,9 @@ choose when there are several.
 - The URLs are the ones Prowlarr uses; run **Test connection** to confirm
   Backuparr can reach them.
 - On PostgreSQL, or if a login proxy blocks `/backup/`, URLs are still filled
-  in and you enter the missing keys by hand. Global [service authentication
-  headers](#service-authentication-headers) can authenticate discovery through
-  a compatible reverse proxy.
+  in and you enter the missing keys by hand. [Service authentication
+  headers](#service-authentication-headers) that apply to Prowlarr can
+  authenticate discovery through a compatible reverse proxy.
 - Discovery refuses any redirect away from Prowlarr's exact URL, so use its
   final address.
 - Bazarr, Profilarr, Tdarr, Tautulli and Seerr aren't stored in Prowlarr and
@@ -378,28 +378,34 @@ choose when there are several.
 ### Service authentication headers
 
 In **Settings → Service authentication**, add a header name and its value, then
-save. The same headers are sent to all configured apps for connection tests,
-discovery (including Prowlarr's `/backup/` download), scheduled/manual backups,
-cleanup and restore uploads. Tests and discovery use the values currently in the
-form, even before saving; background backups and restores use saved settings.
-Remove the rows and save to disable them.
+save. Each header is used for connection tests, discovery (including Prowlarr's
+`/backup/` download), scheduled/manual backups, cleanup and restore uploads.
+Tests and discovery use the values currently in the form, even before saving;
+background backups and restores use saved settings. Remove the rows and save to
+disable them.
+
+A header goes to **all apps** by default, including apps added in later
+releases. Open **Apps** under a header and clear **All apps** to pick specific
+apps instead, so a credential for one reverse proxy never reaches an app behind
+another. The same header name can be used on several rows as long as no app gets
+it twice, for example a different `Authorization` value for Radarr and Tautulli.
 
 Values are masked in the form and encrypted in `config.json` with the same key
 as app API keys. Each app's native authentication and per-request headers take
 priority on a case-insensitive name collision. For example, an app's
 `Authorization: Bearer …` remains intact; use a separate proxy header to
 authenticate both layers. These headers are not sent to cloud destinations,
-OAuth providers or notification webhooks. They do apply to an explicitly entered
-restore target, so only configure trusted app URLs.
+OAuth providers or notification webhooks. They do apply to a restore target
+entered for an app they cover, so only configure trusted app URLs.
 
 For a `Cookie` header, configured cookies are added alongside app/server cookies.
 An existing cookie of the same name takes priority, including a session cookie
 renewed by the server. Cookie names are case sensitive.
 
-With global headers configured, requests must stay on each app's configured
+For an app with headers configured, requests must stay on its configured
 **scheme, host and port**, including redirects and backup downloads. Use the
 final URL (prefer HTTPS). `BACKUPARR_ALLOW_CROSS_HOST_REDIRECTS` cannot override
-this protection. Without global headers, existing driver behavior is unchanged.
+this protection. Apps with no headers keep their existing redirect behavior.
 
 #### Basic authentication helper
 
@@ -573,7 +579,7 @@ These fields live in `config.json`, edited via the web UI or by hand:
 
 | Field | Purpose |
 |---|---|
-| `request_headers` | Global app HTTP headers as `[{"name": "Proxy-Authorization", "value": "Basic …"}]`; values are encrypted at rest; default `[]` |
+| `request_headers` | App HTTP headers as `[{"name": "Proxy-Authorization", "value": "Basic …", "apps": ["radarr"]}]`; omit `apps` to send a header to every app; values are encrypted at rest; default `[]` |
 | `apps.<name>.enabled/url/api_key` | Per app, as shown in the Settings tab |
 | `apps.bazarr.username/password` | Only if Bazarr's web auth is set to `Basic` |
 | `destinations.local.enabled/path` | Local storage - path defaults to `/config/backuparr/backups` if blank |
