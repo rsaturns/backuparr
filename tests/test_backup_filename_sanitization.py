@@ -70,7 +70,8 @@ def test_bazarr_restore_file_stays_readable_by_bazarr_under_a_private_umask(tmp_
 
     previous = os.umask(0o077)
     try:
-        with patch.object(app.session, "patch", return_value=MagicMock()):
+        with patch.object(app.session, "get", return_value=MagicMock()), \
+             patch.object(app.session, "patch", return_value=MagicMock()):
             app.restore_from_file(str(source), str(bazarr_dir))
     finally:
         os.umask(previous)

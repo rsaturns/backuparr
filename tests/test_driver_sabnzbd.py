@@ -134,6 +134,16 @@ def test_plain_sections_restore_key_by_key(app, api):
     assert calls(api)[0] == {"mode": "set_config", "section": "misc", "keyword": "bandwidth_perc", "value": "41"}
 
 
+def test_list_settings_restore_as_one_comma_separated_value(app, api):
+    # Sent as a list, requests repeats the field and SABnzbd keeps only the
+    # first entry - a truncated host_whitelist locks out proxied access.
+    app.restore(config(misc={"host_whitelist": ["sabnzbd", "sab.example.com"], "email_to": []}), never)
+    assert calls(api) == [
+        {"mode": "set_config", "section": "misc", "keyword": "host_whitelist", "value": "sabnzbd, sab.example.com"},
+        {"mode": "set_config", "section": "misc", "keyword": "email_to", "value": ""},
+    ]
+
+
 def test_the_credentials_the_restore_itself_uses_are_never_rewritten(app, api, caplog):
     summary = app.restore(config(misc={"api_key": "new", "nzb_key": "new", "port": "8080"}), never)
     assert summary["misc_keys_restored"] == ["misc.port"] and "api_key" in caplog.text

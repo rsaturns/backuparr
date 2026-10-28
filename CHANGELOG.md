@@ -19,6 +19,15 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The image now runs on Python 3.15 (`python:3.15-alpine`), and CI runs the
   test suite on Python 3.15 to match. The pytest floor is raised to 9.2.0.
 
+### Fixed
+
+- SABnzbd restore kept only the first entry of list settings such as
+  `host_whitelist`, so a restore could lock out access through a reverse proxy.
+  List settings are now restored in full.
+- Bazarr restore behind a reverse proxy reported a failure (HTTP 502) although
+  the restore succeeded. Backuparr also now checks that Bazarr is reachable
+  before it starts a restore.
+
 ## [1.2.1-beta] - 2026-10-07
 
 ### Changed
