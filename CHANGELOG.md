@@ -5,7 +5,19 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+
+- Plex servers that require secure connections can be backed up: Plex's
+  certificate is issued for its `plex.direct` address, which many routers
+  refuse to resolve, so Backuparr now connects to the address that name spells
+  out itself, still verifying the certificate. **Get Plex token** fills in the
+  server's local `plex.direct` address along with the token.
+- Plex connection failures now say why, like every other app's: a hostname
+  that doesn't resolve, a refused connection, a timeout or a TLS error, instead
+  of "could not reach /:/prefs". An `https://` address with an IP explains to
+  use the server's `plex.direct` address. The README's Plex note explains that
+  Plex usually runs with host networking, so its URL needs the host's address
+  rather than the container name.
 
 ## [1.6.0-beta] - 2026-10-28
 

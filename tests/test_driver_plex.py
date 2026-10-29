@@ -339,3 +339,165 @@ def test_restore_refuses_a_file_that_isnt_a_plex_backup(folder, tmp_path):
     other.write_bytes(archive())  # Plex's raw export, not a Backuparr archive.
     with pytest.raises(PlexError, match="isn't a Plex backup made by Backuparr"):
         stopped(folder).restore_from_file(str(other))
+
+
+# --- connection failures -------------------------------------------------------
+
+def unused_port():
+    import socket
+    with socket.socket() as s:
+        s.bind(('127.0.0.1', 0))
+        return s.getsockname()[1]
+
+
+@pytest.mark.parametrize('case, expected', [
+    ('dns', "couldn't resolve hostname 'plex' - check the URL"),
+    ('refused', 'connection refused by'),
+    ('tls', 'TLS/SSL error talking to plex.example:32400 - check http:// vs https://'),
+])
+def test_a_failed_connection_says_why(request, folder, monkeypatch, case, expected):
+    # Plex's usual host networking leaves http://plex:32400 unresolvable from
+    # Backuparr's network: the message has to say why, like for other apps.
+    if case == 'dns':
+        request.getfixturevalue('dns_down')
+        url = 'http://plex:32400'
+    elif case == 'refused':
+        url = f'http://127.0.0.1:{unused_port()}'
+    else:
+        url = 'https://plex.example:32400'
+
+        def bad_certificate(*args, **kwargs):
+            raise requests.exceptions.SSLError("hostname 'plex.example' doesn't match '*.abc.plex.direct'")
+        monkeypatch.setattr(requests.adapters.HTTPAdapter, 'send', bad_certificate)
+    app = PlexApp(url, 'private-plex-token', data_dir=str(folder))
+    with pytest.raises(requests.ConnectionError) as caught:
+        app.test_connection()
+    message = backup.humanize_error(caught.value, url, app='plex')
+    assert expected in message and 'private-plex-token' not in message
+
+
+# --- plex.direct addresses -------------------------------------------------------
+
+@pytest.mark.parametrize('host, address', [
+    ('192-168-2-25.abc123def.plex.direct', '192.168.2.25'),
+    ('10-0-0-1.ABC123.plex.direct', '10.0.0.1'),
+    ('192-168-2-256.abc123.plex.direct', None),
+    ('192.168.2.25', None), ('plex', None), ('evil-plex.direct', None), (None, None),
+])
+def test_a_plex_direct_name_spells_out_its_address(host, address):
+    assert plex.plex_direct_address(host) == address
+
+
+@pytest.fixture(scope='module')
+def plex_tls(tmp_path_factory):
+    """A Plex stand-in on 127.0.0.1 with a CA-signed *.abc123.plex.direct
+    certificate - like Plex's own, which is never issued for its IP."""
+    import datetime
+    import ssl
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.x509.oid import NameOID
+
+    root = tmp_path_factory.mktemp('tls')
+    now = datetime.datetime.now(datetime.timezone.utc)
+
+    def certificate(subject, issuer, key, signer, extensions):
+        builder = (x509.CertificateBuilder().subject_name(subject).issuer_name(issuer).public_key(key.public_key())
+                   .serial_number(x509.random_serial_number()).not_valid_before(now - datetime.timedelta(days=1))
+                   .not_valid_after(now + datetime.timedelta(days=1)))
+        for extension, critical in extensions:
+            builder = builder.add_extension(extension, critical=critical)
+        return builder.sign(signer, hashes.SHA256())
+
+    ca_key, leaf_key = ec.generate_private_key(ec.SECP256R1()), ec.generate_private_key(ec.SECP256R1())
+    ca_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, 'Test CA')])
+    ca = certificate(ca_name, ca_name, ca_key, ca_key, [
+        (x509.BasicConstraints(ca=True, path_length=None), True),
+        (x509.KeyUsage(digital_signature=True, key_cert_sign=True, crl_sign=True, content_commitment=False,
+                       key_encipherment=False, data_encipherment=False, key_agreement=False,
+                       encipher_only=False, decipher_only=False), True),
+        (x509.SubjectKeyIdentifier.from_public_key(ca_key.public_key()), False)])
+    leaf = certificate(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, '*.abc123.plex.direct')]), ca_name,
+                       leaf_key, ca_key, [
+                           (x509.SubjectAlternativeName([x509.DNSName('*.abc123.plex.direct')]), False),
+                           (x509.AuthorityKeyIdentifier.from_issuer_public_key(ca_key.public_key()), False)])
+    (root / 'ca.pem').write_bytes(ca.public_bytes(serialization.Encoding.PEM))
+    (root / 'leaf.pem').write_bytes(leaf.public_bytes(serialization.Encoding.PEM))
+    (root / 'leaf.key').write_bytes(leaf_key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+                                                           serialization.NoEncryption()))
+
+    received = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            received.append(dict(self.headers))
+            body = (f'<MediaContainer version="1.43.5" machineIdentifier="{SERVER_ID}">'
+                    '<Setting id="FriendlyName" value="Lab"/></MediaContainer>').encode()
+            self.send_response(200)
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(root / 'leaf.pem', root / 'leaf.key')
+    server.socket = context.wrap_socket(server.socket, server_side=True)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield {'port': server.server_address[1], 'ca': str(root / 'ca.pem'), 'received': received}
+    server.shutdown()
+
+
+@pytest.fixture
+def lookups(monkeypatch):
+    """Records every name lookup; plex.direct names fail, as behind a router
+    with DNS-rebinding protection."""
+    import socket
+    seen, real = [], socket.getaddrinfo
+
+    def getaddrinfo(host, *args, **kwargs):
+        seen.append(host)
+        if str(host).endswith('plex.direct'):
+            raise socket.gaierror(-2, 'Name does not resolve')
+        return real(host, *args, **kwargs)
+
+    monkeypatch.setattr(socket, 'getaddrinfo', getaddrinfo)
+    return seen
+
+
+def test_a_plex_direct_url_works_without_dns_and_still_verifies_the_certificate(plex_tls, lookups, folder):
+    app = PlexApp(f"https://127-0-0-1.abc123.plex.direct:{plex_tls['port']}", 'private-plex-token', data_dir=str(folder))
+    app.session.verify = plex_tls['ca']
+    assert app.test_connection() == 'plex 1.43.5 reachable, owner access OK, data folder OK'
+    assert not any(str(host).endswith('plex.direct') for host in lookups)
+
+
+def test_another_servers_plex_direct_name_fails_verification(plex_tls, lookups, folder):
+    app = PlexApp(f"https://127-0-0-1.fff999.plex.direct:{plex_tls['port']}", 'private-plex-token', data_dir=str(folder))
+    app.session.verify = plex_tls['ca']
+    with pytest.raises(requests.exceptions.SSLError):
+        app.test_connection()
+
+
+def test_https_to_plexs_ip_explains_the_plex_direct_address(plex_tls, folder):
+    app = PlexApp(f"https://127.0.0.1:{plex_tls['port']}", 'private-plex-token', data_dir=str(folder))
+    app.session.verify = plex_tls['ca']
+    with pytest.raises(PlexError, match=rf"isn't issued for 127.0.0.1 - use its https://127-0-0-1.<id>.plex.direct:{plex_tls['port']} address \(Get Plex token fills it in\)"):
+        app.test_connection()
+
+
+def test_service_headers_reach_plex_at_its_plex_direct_address(plex_tls, lookups, folder):
+    url = f"https://127-0-0-1.abc123.plex.direct:{plex_tls['port']}"
+    cfg = {'url': url, 'api_key': 'private-plex-token', 'data_dir': str(folder),
+           'request_headers': [{'name': 'X-Proxy-Token', 'value': 'proxy-secret'}]}
+    app = build_app('plex', cfg)
+    app.session.verify = plex_tls['ca']
+    plex_tls['received'].clear()
+    app.test_connection()
+    assert plex_tls['received'] and all(h['X-Proxy-Token'] == 'proxy-secret' and h['X-Plex-Token'] == 'private-plex-token'
+                                        for h in plex_tls['received'])

@@ -395,7 +395,19 @@ function applyPlexToken(flow, server) {
     stopPlexLogin("Plex details changed. Sign in again to get a token.");
     return;
   }
-  stopPlexLogin(`Token filled for ${server.name}. Check the server URL, test the connection, then save settings.`);
+  // The server's own plex.direct address replaces an empty URL or one that
+  // points at the same machine: Plex's certificate is issued for that name.
+  const urlInput = card.querySelector(".f-url");
+  let host = "";
+  try { host = new URL(urlInput.value.trim()).hostname; } catch (_) { /* Empty or not a URL. */ }
+  const useUrl = server.url && (!urlInput.value.trim() || host === server.address || host.endsWith(".plex.direct"));
+  stopPlexLogin(useUrl
+    ? `Token and URL filled for ${server.name}. Test the connection, then save settings.`
+    : `Token filled for ${server.name}. Check the server URL${server.url ? ` (its secure local address is ${server.url})` : ""}, test the connection, then save settings.`);
+  if (useUrl) {
+    urlInput.value = server.url;
+    urlInput.dispatchEvent(new Event("input", { bubbles: true }));
+  }
   const input = card.querySelector(".f-api_key");
   input.value = server.api_key;
   input.dispatchEvent(new Event("input", { bubbles: true }));
