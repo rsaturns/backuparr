@@ -24,3 +24,7 @@ services:
       # the official image, /config/data/data/backups in linuxserver's).
       # Read-write so Backuparr can restore and tidy up.
       # - /share/Container/jellyfin/config/data/backups:/mnt/jellyfin-backups
+      # Needed to back up Emby - the folder Emby has at /config (both the official
+      # and linuxserver images). Read-only is enough for backups; read-write to
+      # restore.
+      # - /share/Container/emby/config:/mnt/emby:ro

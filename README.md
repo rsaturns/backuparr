@@ -9,14 +9,16 @@
 > included. Reviewed and maintained by a human.
 
 Scheduled config/database backups for Radarr, Sonarr, Prowlarr, Profilarr,
-Bazarr, Tdarr, SABnzbd, Tautulli, and Jellyfin (Seerr coming soon), sent to every
+Bazarr, Tdarr, SABnzbd, Tautulli, Jellyfin, and Emby (Seerr coming soon), sent to every
 destination you enable: Local storage, Google Drive, OneDrive, and Dropbox.
 Apps, URLs/API keys, destinations, schedule, retention,
 and restores are all configured and triggered from the web UI, not env vars.
 
 Every app is backed up through **its own HTTP API**, never by reading its
-config volume directly. The one mount is Jellyfin's backups folder: its API
-creates a backup but can't download it (see the [Jellyfin note](#jellyfin-note)).
+config volume directly - except two media servers that need a mount:
+Jellyfin's backups folder, because its API creates a backup but can't download
+it (see the [Jellyfin note](#jellyfin-note)), and Emby's data folder, because
+Emby has no backup API (see the [Emby note](#emby-note)).
 
 To recover after a host failure, re-create the containers from your compose
 file, then restore each app from its latest backup (see
@@ -35,6 +37,7 @@ See [CHANGELOG.md](CHANGELOG.md) for release history.
     - [Tautulli backup note](#tautulli-backup-note)
     - [Tautulli restore note](#tautulli-restore-note)
     - [Jellyfin note](#jellyfin-note)
+    - [Emby note](#emby-note)
     - [Bazarr auth note](#bazarr-auth-note)
     - [Tdarr auth note](#tdarr-auth-note)
   - [Environment variables](#environment-variables)
@@ -63,14 +66,14 @@ See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## Architecture
 
-<img src="webui/static/architecture-diagram.svg" alt="Radarr, Sonarr, Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, Tautulli, and Jellyfin each feed Backuparr over their own HTTP API; Backuparr uploads each backup via rclone to Local storage, Google Drive, Microsoft OneDrive, and Dropbox" width="100%">
+<img src="webui/static/architecture-diagram.svg" alt="Radarr, Sonarr, Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, Tautulli, Jellyfin, and Emby each feed Backuparr; Backuparr uploads each backup via rclone to Local storage, Google Drive, Microsoft OneDrive, and Dropbox" width="100%">
 
 ## Why not reuse an existing tool?
 
 [Zerka30/servarr-backup](https://github.com/Zerka30/servarr-backup) does
 this for Radarr/Sonarr/Prowlarr via S3. Backuparr extends the same idea
 (trigger the app's own backup API, download it, upload it) to Profilarr,
-Bazarr, Tdarr, Tautulli, and Jellyfin, and uses a pick-your-destinations model built
+Bazarr, Tdarr, Tautulli, Jellyfin, and Emby, and uses a pick-your-destinations model built
 on [rclone](https://rclone.org/): Local out of the box, Google Drive via an
 in-app "Connect" button, and OneDrive and Dropbox via a one-time
 `rclone authorize` paste, with no need to run rclone's interactive config wizard yourself.
@@ -86,6 +89,7 @@ in-app "Connect" button, and OneDrive and Dropbox via a one-time
 | SABnzbd | `GET /sabnzbd/api?mode=get_config` to back up; `mode=set_config` per key to restore | SABnzbd's API returns every password field (e.g. a Usenet server password) as `**********`, with no way to get the real value. Restore recreates each Usenet server and every plain `misc`-style setting via the API, and asks for each server's real password (fields left out of the API call are untouched, so a skipped password isn't overwritten with a blank). Categories, RSS feeds, and sorters aren't auto-restored. |
 | Tautulli | `GET /api/v2?cmd=download_database` and `cmd=download_config` - each streams a fresh copy directly, no trigger/poll step | The database comes back with Plex tokens nulled out; the config is only lightly sanitized - see the [Tautulli backup note](#tautulli-backup-note). Restore uploads each separately via `cmd=import_database` and `cmd=import_config` (multipart) - see the [Tautulli restore note](#tautulli-restore-note). |
 | Jellyfin | `POST /Backup/Create` (database only) writes Jellyfin's own backup archive to its backups folder; Backuparr copies it from there and removes Jellyfin's copy | Needs Jellyfin 10.11 or newer and its backups folder mounted into Backuparr - see the [Jellyfin note](#jellyfin-note). Restore copies the archive back into that folder and calls `POST /Backup/Restore`; Jellyfin restarts to apply it. |
+| Emby | Reads Emby's mounted data folder: copies its settings, plugins, playlists and collections, and snapshots each database with SQLite's online backup while Emby runs | Emby has no backup API (its Backup & Restore plugin needs Emby Premiere), so its data folder is mounted into Backuparr - see the [Emby note](#emby-note). Restore writes the files back while Emby is stopped. |
 | Seerr | *(none)* | Not implemented - Seerr has no backup/restore API. Shown on the Settings tab as "Coming soon". |
 
 ### Profilarr backup note
@@ -185,6 +189,53 @@ the folder holds the backups Jellyfin lists, once there are any.
   header, so a [service authentication header](#service-authentication-headers)
   for a proxy in front of Jellyfin must use another name (such as Cloudflare
   Access's `CF-Access-Client-Id`/`CF-Access-Client-Secret`).
+
+### Emby note
+
+Emby has no API to export or import its data - its own Backup & Restore plugin
+needs Emby Premiere - so Backuparr reads **Emby's data folder** directly: the
+folder Emby has at `/config`, in both the official `emby/embyserver` image and
+`lscr.io/linuxserver/emby`. Mount it into Backuparr:
+
+```yaml
+    volumes:
+      # with Emby's /config at /share/Container/emby/config
+      - /share/Container/emby/config:/mnt/emby:ro   # drop :ro to restore from the web UI
+```
+
+Then fill in the Emby card: the URL, an API key from Emby's **Settings >
+Advanced > API Keys**, and **Data folder** = `/mnt/emby`. **Test connection**
+checks the key, and that the folder is this Emby server's own (by its server
+id).
+
+- **What's in the backup:** the files Emby's manual-backup guide lists - its
+  databases (users, watched state and playback progress, favourites,
+  playlists, collections, libraries, logins and API keys), server and user
+  settings, plugins, and the playlist and collection folders. Metadata images,
+  cache, logs and transcoding files are left out; a library scan brings them
+  back. The databases are copied with SQLite's online backup, which takes a
+  consistent snapshot while Emby keeps running, so backups don't need Emby
+  stopped. The archive holds users' password hashes and Emby's API keys, so
+  protect every destination accordingly.
+- **Read-only is enough for backups.** To restore from the web UI, mount the
+  folder read-write and run Backuparr with Emby's `PUID`/`PGID` (or otherwise
+  give it write access to Emby's files).
+- **Restore needs Emby stopped** (`docker stop emby`): rewriting a running
+  server's databases would corrupt them, so Backuparr refuses while Emby is
+  running - it checks Emby's API and the databases' `-wal` files. It replaces
+  Emby's databases, settings, plugins, playlists and collections with the
+  backup's, so anything added since is lost; start Emby again afterwards. On a
+  new install, start Emby once first (the setup wizard can be skipped) so it
+  creates its data folder, then stop it and restore. A backup can't be
+  restored onto an older Emby than the one that made it - update Emby first.
+  API keys are restored too, so the key Backuparr used when the backup was
+  taken works again afterwards - and since Emby is stopped, the restore itself
+  doesn't need a working key. After a rebuild, keep that key in Settings; use
+  **Restore to a different target** only if the URL or data folder changed.
+- **To restore by hand** (for example with a read-only mount): stop Emby,
+  extract the archive into Emby's `/config` folder - overwriting what's there,
+  and deleting any `data/*.db-wal` and `data/*.db-shm` files - then start Emby.
+  `backuparr-emby.json` in the archive is only Backuparr's own manifest.
 
 ### Bazarr auth note
 
@@ -351,6 +402,8 @@ services:
       #- /share/Container/bazarr/backup:/mnt/bazarr-backup
       # Needed to back up Jellyfin - its backups folder (see the Jellyfin note).
       #- /share/Container/jellyfin/config/data/backups:/mnt/jellyfin-backups
+      # Needed to back up Emby - its /config folder (see the Emby note).
+      #- /share/Container/emby/config:/mnt/emby:ro
 ```
 
 ```sh
@@ -426,7 +479,7 @@ choose when there are several.
   authenticate discovery through a compatible reverse proxy.
 - Discovery refuses any redirect away from Prowlarr's exact URL, so use its
   final address.
-- Bazarr, Profilarr, Tdarr, Tautulli, Jellyfin and Seerr aren't stored in Prowlarr and
+- Bazarr, Profilarr, Tdarr, Tautulli, Jellyfin, Emby and Seerr aren't stored in Prowlarr and
   are always configured manually.
 
 ### Service authentication headers
@@ -580,6 +633,9 @@ throwaway copy first.
   mounted read-write; Jellyfin restarts itself to apply the backup. It
   replaces Jellyfin's users and API keys too - see the [Jellyfin
   note](#jellyfin-note) before restoring onto a fresh install.
+- **Emby** - stop Emby first; Backuparr writes the backup into Emby's data
+  folder, which must be mounted read-write, then you start Emby again. It
+  replaces Emby's users and API keys too - see the [Emby note](#emby-note).
 
 ## Notifications
 
@@ -643,6 +699,7 @@ These fields live in `config.json`, edited via the web UI or by hand:
 | `apps.<name>.enabled/url/api_key` | Per app, as shown in the Settings tab |
 | `apps.bazarr.username/password` | Only if Bazarr's web auth is set to `Basic` |
 | `apps.jellyfin.backup_dir` | Local path to Jellyfin's mounted backups folder - required for Jellyfin |
+| `apps.emby.data_dir` | Local path to Emby's mounted data folder (its `/config`) - required for Emby |
 | `destinations.local.enabled/path` | Local storage - path defaults to `/config/backuparr/backups` if blank |
 | `destinations.gdrive.enabled/client_id/client_secret/developer_key` | Google Drive OAuth client + API key, set via the Setup guide |
 | `destinations.gdrive.refresh_token/folder_id/folder_name` | Set automatically by the Connect/Choose folder buttons - don't hand-edit |

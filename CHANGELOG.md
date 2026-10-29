@@ -5,7 +5,14 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- Emby backup and restore. Emby has no backup API, so its data folder (its
+  `/config`) is mounted into Backuparr and set as the new **Data folder**
+  field; a read-only mount is enough for backups. A backup holds Emby's
+  databases (users, watch history, playlists, collections and libraries),
+  settings and plugins, without metadata images or cache, and is taken while
+  Emby runs. A restore writes them back while Emby is stopped (#49).
 
 ## [1.4.0-beta] - 2026-10-28
 
