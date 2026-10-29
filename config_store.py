@@ -2,11 +2,14 @@
 shared by backup.py and the web UI."""
 import copy
 import json
+import logging
 import os
 import tempfile
 
 import secrets_crypto
 from apps.http_headers import RequestHeadersError, validate_request_headers
+
+log = logging.getLogger("backuparr.config_store")
 
 CONFIG_PATH = os.environ.get("BACKUPARR_CONFIG", "/config/backuparr/config.json")
 
@@ -380,6 +383,29 @@ def _secret_fields(cfg):
     return fields
 
 
+def _merge_defaults(data):
+    merged = copy.deepcopy(DEFAULTS)
+    for key, value in data.items():
+        if key not in ("apps", "destinations"):
+            merged[key] = value
+    for name in APP_NAMES:
+        merged["apps"][name].update(data.get("apps", {}).get(name, {}))
+    for name in DEST_NAMES:
+        merged["destinations"][name].update(data.get("destinations", {}).get(name, {}))
+    return merged
+
+
+def _stored_secret_fields():
+    """The secret fields as config.json holds them now (still encrypted),
+    in _secret_fields() order, or [] if it can't be read."""
+    try:
+        with open(CONFIG_PATH) as f:
+            data = json.load(f)
+        return _secret_fields(_merge_defaults(data)) if isinstance(data, dict) else []
+    except (OSError, ValueError, ConfigError, AttributeError, TypeError):
+        return []
+
+
 def load_config():
     if not os.path.exists(CONFIG_PATH):
         cfg = copy.deepcopy(DEFAULTS)
@@ -396,14 +422,7 @@ def load_config():
     if not isinstance(data, dict):
         raise ConfigError(f"{CONFIG_PATH} should hold a JSON object - fix it, or delete the file to start over with defaults")
 
-    merged = copy.deepcopy(DEFAULTS)
-    for key, value in data.items():
-        if key not in ("apps", "destinations"):
-            merged[key] = value
-    for name in APP_NAMES:
-        merged["apps"][name].update(data.get("apps", {}).get(name, {}))
-    for name in DEST_NAMES:
-        merged["destinations"][name].update(data.get("destinations", {}).get(name, {}))
+    merged = _merge_defaults(data)
 
     # Decrypt in place; a legacy plaintext value gets re-saved encrypted.
     needs_migration = False
@@ -429,8 +448,23 @@ def save_config(cfg):
     except RequestHeadersError as exc:
         raise ConfigError(str(exc)) from None
     to_write = copy.deepcopy(cfg)
-    for container, key in _secret_fields(to_write):
-        container[key] = secrets_crypto.encrypt(container.get(key, ""))
+    stored = _stored_secret_fields()
+    kept = 0
+    for index, (container, key) in enumerate(_secret_fields(to_write)):
+        value = container.get(key, "")
+        old = stored[index] if index < len(stored) else None
+        # A secret the current key can't decrypt loads as "" - saving that
+        # would erase it for good. Keep it encrypted as it is, unless a new
+        # value was entered (or a header row was replaced).
+        if (not value and old is not None and old[0].get("name") == container.get("name")
+                and secrets_crypto.undecryptable(old[0].get(old[1], ""))):
+            container[key] = old[0][old[1]]
+            kept += 1
+            continue
+        container[key] = secrets_crypto.encrypt(value)
+    if kept:
+        log.warning("kept %d stored secret(s) that the current encryption key can't decrypt - "
+                    "restore the original key (secrets.key or BACKUPARR_SECRETS_KEY) to use them again", kept)
 
     config_dir = os.path.dirname(CONFIG_PATH)
     os.makedirs(config_dir, exist_ok=True)

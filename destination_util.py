@@ -4,6 +4,7 @@ branching beyond "which id is this". Local, gdrive, onedrive, and dropbox
 all have real backends.
 """
 import os
+import re
 
 import dropbox_oauth
 import gdrive_oauth
@@ -13,6 +14,30 @@ from config_store import DEFAULT_LOCAL_DIR
 
 class DestinationError(RuntimeError):
     pass
+
+
+def is_backup_name(app, name):
+    """Backuparr names every archive <app>_YYYYMMDD_HHMMSS.<ext> inside an
+    <app>/ folder. Those are the only files retention and reset may delete:
+    a destination folder can hold other files too."""
+    return re.fullmatch(rf"{re.escape(app)}_\d{{8}}_\d{{6}}\.[A-Za-z0-9.]+", name) is not None
+
+
+def remove_local_backups(root, apps):
+    """Deletes Backuparr's own archives under a local destination, and each
+    app folder left empty - never other files, nor the folder itself."""
+    for app in apps:
+        folder = os.path.join(root, app)
+        if not os.path.isdir(folder):
+            continue
+        for name in os.listdir(folder):
+            path = os.path.join(folder, name)
+            if is_backup_name(app, name) and os.path.isfile(path) and not os.path.islink(path):
+                os.remove(path)
+        try:
+            os.rmdir(folder)
+        except OSError:
+            pass  # Not empty: something else lives there.
 
 
 def local_root(dest_cfg):

@@ -103,3 +103,71 @@ def test_an_unusable_config_file_raises_a_message_that_says_what_to_do(content):
         config_store.load_config()
     message = str(caught.value)
     assert config_store.CONFIG_PATH in message and "delete the file to start over" in message
+
+
+def _set_key(monkeypatch, key):
+    monkeypatch.setattr(secrets_crypto, "_fernet", None)
+    if key:
+        monkeypatch.setenv("BACKUPARR_SECRETS_KEY", key)
+    else:
+        monkeypatch.delenv("BACKUPARR_SECRETS_KEY", raising=False)
+
+
+def test_a_save_under_the_wrong_key_keeps_secrets_it_cant_read(monkeypatch, caplog):
+    cfg = config_store.load_config()
+    cfg["apps"]["radarr"]["api_key"] = "real-radarr-key"
+    cfg["apps"]["nzbget"]["password"] = "real-nzbget-pass"
+    cfg["request_headers"] = [{"name": "X-Proxy-Token", "value": "real-token"}]
+    config_store.save_config(cfg)
+
+    # The key is wrong for a while (say, a mistyped BACKUPARR_SECRETS_KEY) and
+    # someone saves a setting: the secrets load blank but must not be erased.
+    _set_key(monkeypatch, "A" * 43 + "=")
+    cfg = config_store.load_config()
+    assert cfg["apps"]["radarr"]["api_key"] == ""
+    cfg["retention_days"] = 9
+    cfg["apps"]["sonarr"]["api_key"] = "typed-under-the-new-key"
+    config_store.save_config(cfg)
+    assert "kept 3 stored secret(s)" in caplog.text
+
+    _set_key(monkeypatch, None)  # The original key is back.
+    cfg = config_store.load_config()
+    assert cfg["apps"]["radarr"]["api_key"] == "real-radarr-key"
+    assert cfg["apps"]["nzbget"]["password"] == "real-nzbget-pass"
+    assert cfg["request_headers"][0]["value"] == "real-token"
+    assert cfg["retention_days"] == 9
+    # Written under the other key, so the original key can't read it.
+    assert cfg["apps"]["sonarr"]["api_key"] == ""
+
+
+def test_a_value_entered_under_the_new_key_replaces_the_unreadable_one(monkeypatch):
+    cfg = config_store.load_config()
+    cfg["apps"]["radarr"]["api_key"] = "old-key"
+    config_store.save_config(cfg)
+    _set_key(monkeypatch, "A" * 43 + "=")
+    cfg = config_store.load_config()
+    cfg["apps"]["radarr"]["api_key"] = "re-entered-key"
+    config_store.save_config(cfg)
+    assert config_store.load_config()["apps"]["radarr"]["api_key"] == "re-entered-key"
+
+
+def test_clearing_a_readable_secret_still_clears_it():
+    cfg = config_store.load_config()
+    cfg["apps"]["radarr"]["api_key"] = "some-key"
+    config_store.save_config(cfg)
+    cfg = config_store.load_config()
+    cfg["apps"]["radarr"]["api_key"] = ""
+    config_store.save_config(cfg)
+    assert config_store.load_config()["apps"]["radarr"]["api_key"] == ""
+
+
+def test_a_replaced_header_row_doesnt_inherit_an_unreadable_value(monkeypatch):
+    cfg = config_store.load_config()
+    cfg["request_headers"] = [{"name": "X-Old", "value": "old-secret"}]
+    config_store.save_config(cfg)
+    _set_key(monkeypatch, "A" * 43 + "=")
+    cfg = config_store.load_config()
+    cfg["request_headers"] = [{"name": "X-New", "value": ""}]
+    config_store.save_config(cfg)
+    _set_key(monkeypatch, None)
+    assert config_store.load_config()["request_headers"] == [{"name": "X-New", "value": ""}]

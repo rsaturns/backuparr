@@ -294,9 +294,17 @@ def test_jellyfin_restore_needs_its_backups_folder(restore, authed_client):
 
 
 def test_nzbget_restore_uses_its_credentials_and_says_it_reloads(restore, authed_client):
+    restore["results"]["nzbget"] = {"kind": "nzbget", "reloaded": True}
     start(authed_client, "nzbget")
     assert restore["calls"][-1][2]["username"] == "nzbget" and restore["calls"][-1][2]["password"] == "nzbget-pass"
     assert result(authed_client)["message"] == "nzbget restore complete, NZBGet is reloading to apply it"
+
+
+def test_nzbget_restore_says_to_restart_when_the_reload_isnt_confirmed(restore, authed_client):
+    restore["results"]["nzbget"] = {"kind": "nzbget", "reloaded": False}
+    start(authed_client, "nzbget")
+    outcome = result(authed_client)
+    assert outcome["ok"] is True and "restart NZBGet to apply them" in outcome["message"]
 
 
 def test_emby_restore_uses_its_data_folder_and_says_to_start_emby(restore, authed_client):
@@ -419,3 +427,10 @@ def test_override_can_supply_a_target_for_an_unconfigured_app(restore, authed_cl
     authed_client.post("/api/config", json={"apps": {"radarr": {"enabled": False, "url": "", "api_key": ""}}})
     assert start(authed_client, "radarr").status_code == 400
     assert start(authed_client, "radarr", override={"url": "http://new:7878", "api_key": "k"}).status_code == 200
+
+
+def test_a_restore_waits_for_a_running_backup(restore, authed_client, isolated_webui, monkeypatch):
+    monkeypatch.setitem(isolated_webui.RUN_STATE, "running", True)
+    response = start(authed_client)
+    assert response.status_code == 409 and "a backup is running" in response.get_json()["error"]
+    assert not [c for c in restore["calls"] if c[0] == "restore"]

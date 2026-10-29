@@ -57,7 +57,7 @@ def test_run_backup_names_each_archive_by_its_real_format(tmp_path, monkeypatch)
     monkeypatch.setattr(backup.destination_util, "remote_root", lambda dest_id, cfg: "/dest")
     monkeypatch.setattr(backup, "build_app", lambda name, cfg: Fake(kinds[name]))
     monkeypatch.setattr(backup.rclone_util, "copyto", lambda src, dst: uploaded.append(dst))
-    monkeypatch.setattr(backup.rclone_util, "delete_older_than", lambda *a: None)
+    monkeypatch.setattr(backup, "apply_retention", lambda *args: None)
 
     ok, failed = backup.run_backup({"apps": {n: {} for n in kinds}, "destinations": {"local": {}}})
 
@@ -90,3 +90,28 @@ def effective_umask(value):
 ])
 def test_entrypoint_umask_defaults_private_and_rejects_bad_values(value, expected):
     assert effective_umask(value) == expected
+
+
+PROXY_BLOCK = re.search(r'FORCE_HTTPS_LOWER=.*?\nfi\n', ENTRYPOINT.read_text(), re.S).group(0)
+
+
+def waitress_args(**env):
+    script = 'WAITRESS_ARGS=()\n' + PROXY_BLOCK + 'printf "%s\\n" "${WAITRESS_ARGS[@]}"'
+    clean = {k: v for k, v in os.environ.items() if not k.startswith("BACKUPARR_")}
+    out = subprocess.run(["bash", "-c", script], env={**clean, **env}, capture_output=True, text=True, check=True)
+    return [line for line in out.stdout.splitlines() if line]
+
+
+def test_plain_http_trusts_no_proxy_headers():
+    assert waitress_args() == []
+
+
+def test_https_alone_never_trusts_a_forwarded_client_address():
+    # Anyone reaching the port directly could forge X-Forwarded-For to dodge the login lockout.
+    args = waitress_args(BACKUPARR_FORCE_HTTPS="true")
+    assert args == ['--trusted-proxy=*', '--trusted-proxy-headers=x-forwarded-proto x-forwarded-host']
+
+
+def test_a_named_proxy_is_the_only_source_of_client_addresses():
+    args = waitress_args(BACKUPARR_FORCE_HTTPS="yes", BACKUPARR_TRUSTED_PROXY="172.18.0.5")
+    assert args == ['--trusted-proxy=172.18.0.5', '--trusted-proxy-headers=x-forwarded-proto x-forwarded-for x-forwarded-host']

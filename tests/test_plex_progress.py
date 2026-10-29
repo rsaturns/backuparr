@@ -80,7 +80,7 @@ def test_progress_reaches_live_web_status_before_backup_finishes(authed_client, 
     monkeypatch.setattr(logging.getLogger('backuparr.apps.plex'), 'level', logging.INFO)
     # Keep the real worker thread, HTTP status route and live log handler.
     try:
-        assert authed_client.post('/api/backup/run').status_code == 200
+        assert authed_client.post('/api/backup/run', json={}).status_code == 200
         assert entered.wait(5)
         status = authed_client.get('/api/backup/status').json
         assert status['running'] is True

@@ -266,8 +266,8 @@ def test_notification_test_sends_a_message_and_reports_failures(authed_client, i
 # --- destination tests -----------------------------------------------------
 
 def test_destination_test_rejects_unknown_ids(authed_client):
-    assert authed_client.post("/api/test-destination/nope").status_code == 404
-    not_connected = authed_client.post("/api/test-destination/dropbox").get_json()
+    assert authed_client.post("/api/test-destination/nope", json={}).status_code == 404
+    not_connected = authed_client.post("/api/test-destination/dropbox", json={}).get_json()
     assert not_connected["ok"] is False and "rclone authorize dropbox" in not_connected["message"]
 
 
@@ -286,13 +286,13 @@ def test_local_destination_test_reports_an_unusable_path(authed_client, tmp_path
 
 
 def test_cloud_destinations_must_be_connected_first(authed_client):
-    assert "Connect Google Drive" in authed_client.post("/api/test-destination/gdrive").get_json()["message"]
-    assert "rclone authorize onedrive" in authed_client.post("/api/test-destination/onedrive").get_json()["message"]
+    assert "Connect Google Drive" in authed_client.post("/api/test-destination/gdrive", json={}).get_json()["message"]
+    assert "rclone authorize onedrive" in authed_client.post("/api/test-destination/onedrive", json={}).get_json()["message"]
 
 
 @pytest.mark.parametrize("dest_id, label", [("onedrive", "OneDrive"), ("dropbox", "Dropbox")])
 def test_testing_with_a_pasted_but_unconnected_token_points_at_connect(authed_client, dest_id, label):
-    plain = authed_client.post(f"/api/test-destination/{dest_id}").get_json()
+    plain = authed_client.post(f"/api/test-destination/{dest_id}", json={}).get_json()
     assert plain["ok"] is False and f"rclone authorize {dest_id}" in plain["message"]
 
     pasted = authed_client.post(f"/api/test-destination/{dest_id}", json={"token_pasted": True}).get_json()
@@ -318,11 +318,11 @@ def test_cloud_destination_test_checks_the_remote(authed_client, isolated_webui,
     cfg["destinations"]["onedrive"].update(token="{}")
     cfg["destinations"]["dropbox"].update(token="{}")
     isolated_webui.save_config(cfg)
-    drive_result = authed_client.post("/api/test-destination/gdrive").get_json()
+    drive_result = authed_client.post("/api/test-destination/gdrive", json={}).get_json()
     assert drive_result["ok"] is True and '"Backups"' in drive_result["message"]
-    one_result = authed_client.post("/api/test-destination/onedrive").get_json()
+    one_result = authed_client.post("/api/test-destination/onedrive", json={}).get_json()
     assert one_result["ok"] is True and "OneDrive" in one_result["message"]
-    dropbox_result = authed_client.post("/api/test-destination/dropbox").get_json()
+    dropbox_result = authed_client.post("/api/test-destination/dropbox", json={}).get_json()
     assert dropbox_result["ok"] is True and "Dropbox" in dropbox_result["message"]
     assert checked == ["backuparr-gdrive:", "backuparr-onedrive:", "backuparr-dropbox:Backuparr"]
 
@@ -336,7 +336,7 @@ def test_cloud_destination_test_reports_a_rejected_remote(authed_client, isolate
         raise isolated_webui.rclone_util.RcloneError("invalid_grant: token expired")
 
     monkeypatch.setattr(isolated_webui.rclone_util, "check_remote", reject)
-    result = authed_client.post("/api/test-destination/gdrive").get_json()
+    result = authed_client.post("/api/test-destination/gdrive", json={}).get_json()
     assert result["ok"] is False and "invalid_grant" in result["message"]
 
 

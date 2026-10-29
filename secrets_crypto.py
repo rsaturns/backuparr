@@ -61,6 +61,18 @@ def encrypt(value):
     return PREFIX + token
 
 
+def undecryptable(value):
+    """True for a stored encrypted value the current key can't open - one
+    written with another key, kept as is until the right key is back."""
+    if not value or not value.startswith(PREFIX):
+        return False
+    try:
+        _get_fernet().decrypt(value[len(PREFIX):].encode("ascii"))
+        return False
+    except InvalidToken:
+        return True
+
+
 def decrypt(value):
     """Reverses encrypt(). A value without the enc:v1: prefix is legacy
     plaintext, returned unchanged - save_config() re-encrypts it next run.

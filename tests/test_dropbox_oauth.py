@@ -104,7 +104,7 @@ def test_backups_upload_under_the_backuparr_folder(tmp_path, monkeypatch):
     monkeypatch.setattr(backup.destination_util, "sync", lambda c: None)
     monkeypatch.setattr(backup, "build_app", lambda name, app_cfg: FakeApp())
     monkeypatch.setattr(backup.rclone_util, "copyto", lambda src, dst: uploaded.append(dst))
-    monkeypatch.setattr(backup.rclone_util, "delete_older_than", lambda root, age: retention.append(root))
+    monkeypatch.setattr(backup, "apply_retention", lambda root, days: retention.append(root))
     ok, failed = backup.run_backup(cfg)
     assert (ok, failed) == (["radarr"], [])
     assert len(uploaded) == 1 and uploaded[0].startswith("backuparr-dropbox:Backuparr/radarr/radarr_")

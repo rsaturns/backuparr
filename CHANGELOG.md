@@ -5,7 +5,45 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Security
+
+- Another website could make a visitor's browser reset Backuparr - deleting
+  its settings, keys, login and local backups - because the reset needs no
+  login and the API accepted plain-text request bodies. Every change to
+  Backuparr (settings, backups, restores, reset, first-run setup) now has to
+  be sent as JSON, which other sites can't do without permission.
+- With `BACKUPARR_FORCE_HTTPS`, Backuparr took a client's address from
+  `X-Forwarded-For` whoever sent it, so the login lockout could be dodged by
+  connecting to the port directly. It now trusts that header only from the
+  proxy named in the new `BACKUPARR_TRUSTED_PROXY` setting.
+- The CI workflow runs with read-only repository access.
+
+### Fixed
+
+- Retention and Reset only delete Backuparr's own archives
+  (`<app>/<app>_<date>_<time>.<ext>`). Before, retention deleted every old file
+  in the destination folder and Reset deleted the whole Local storage folder,
+  which could remove unrelated files when Local storage pointed at a shared
+  folder.
+- Retention always keeps each app's newest backup, so an app that keeps
+  failing or was switched off doesn't lose its last good backup.
+- NZBGet: restoring settings with accented or non-Latin characters (paths,
+  category names, passwords) no longer corrupts them.
+- NZBGet: if NZBGet doesn't confirm the reload after a restore, the restore now
+  says to restart NZBGet instead of reporting that it's reloading.
+- NZBGet: a setting containing an unusual Unicode line separator no longer
+  breaks a restore.
+- If the encryption key changes, saving settings no longer erases the stored
+  API keys, passwords and tokens: they're kept encrypted until the original key
+  is back.
+- A Tdarr restore checks every collection in the backup before wiping
+  anything, so a damaged backup can't leave Tdarr half restored.
+- Tautulli and Profilarr backups fail when the app returns an error instead of
+  the file, rather than saving the error as a backup.
+- A backup and a restore can no longer run at the same time; a scheduled backup
+  during a restore is skipped and logged.
+- Bazarr's download error no longer points at environment variables that don't
+  exist; it says to fill in the Basic auth fields on Bazarr's card.
 
 ## [1.8.0-beta] - 2026-10-29
 

@@ -74,8 +74,8 @@ def test_login_accepts_the_right_password_and_rejects_the_wrong_one(anonymous):
 
 def test_login_trims_the_username_and_ignores_a_missing_body(anonymous):
     assert anonymous.post("/api/login", json=creds(" admin ")).status_code == 200
-    assert anonymous.post("/api/logout").status_code == 200
-    assert anonymous.post("/api/login", data="garbage", content_type="text/plain").status_code == 401
+    assert anonymous.post("/api/logout", json={}).status_code == 200
+    assert anonymous.post("/api/login", data="garbage", content_type="application/json").status_code == 401
 
 
 def test_an_already_logged_in_visitor_skips_the_login_page(anonymous):
@@ -86,13 +86,13 @@ def test_an_already_logged_in_visitor_skips_the_login_page(anonymous):
 
 def test_logout_ends_the_session(anonymous):
     anonymous.post("/api/login", json=creds())
-    assert anonymous.post("/api/logout").status_code == 200
+    assert anonymous.post("/api/logout", json={}).status_code == 200
     assert anonymous.get("/api/meta").status_code == 401
     assert anonymous.get("/").headers["Location"] == "/login"
 
 
 def test_logout_works_without_a_session(anonymous):
-    assert anonymous.post("/api/logout").status_code == 200
+    assert anonymous.post("/api/logout", json={}).status_code == 200
 
 
 def test_sessions_are_permanent_cookies_that_script_cannot_read(anonymous):
@@ -193,7 +193,7 @@ def seed_state(webui, client):
     client.post("/api/config", json={"apps": {"radarr": {"enabled": True, "url": "http://r", "api_key": "k"}}})
     backups = os.path.join(webui.destination_util.DEFAULT_LOCAL_DIR)
     os.makedirs(os.path.join(backups, "radarr"))
-    open(os.path.join(backups, "radarr", "radarr_1.zip"), "w").write("data")
+    open(os.path.join(backups, "radarr", "radarr_20261001_030000.zip"), "w").write("data")
     for path in (os.environ["RCLONE_CONFIG"], os.environ["RCLONE_CONFIG_PASS_FILE"]):
         open(path, "w").write("x")
     return backups
@@ -213,7 +213,7 @@ def test_reset_wipes_all_local_state_and_returns_to_setup(isolated_webui, authed
     response = anonymous.post("/api/reset", json={"confirm": isolated_webui.RESET_CONFIRM_PHRASE})
     assert response.status_code == 200
 
-    assert not os.path.exists(backups)
+    assert os.listdir(backups) == []  # Backuparr's archives and their app folder are gone
     for path in (isolated_webui.CONFIG_PATH, auth_store.AUTH_PATH, os.environ["RCLONE_CONFIG"],
                  os.environ["RCLONE_CONFIG_PASS_FILE"], os.environ["BACKUPARR_SECRET_KEY_PATH"],
                  isolated_webui.secrets_crypto.KEY_PATH):
@@ -221,12 +221,23 @@ def test_reset_wipes_all_local_state_and_returns_to_setup(isolated_webui, authed
     assert anonymous.get("/").headers["Location"] == "/setup"
 
 
-def test_reset_removes_a_custom_local_backup_folder(isolated_webui, authed_client, tmp_path):
+def test_reset_removes_only_backuparrs_archives_from_a_custom_local_folder(isolated_webui, authed_client, tmp_path):
+    # A custom path may be a share that holds other files: only Backuparr's
+    # own <app>/<app>_<timestamp> archives (and app folders left empty) go.
     custom = tmp_path / "nas"
     (custom / "radarr").mkdir(parents=True)
+    (custom / "radarr" / "radarr_20261001_030000.zip").write_text("backup")
+    (custom / "sonarr").mkdir()
+    (custom / "sonarr" / "sonarr_20261001_030000.zip").write_text("backup")
+    (custom / "sonarr" / "notes.txt").write_text("mine")
+    (custom / "photos").mkdir()
+    (custom / "photos" / "holiday.jpg").write_text("mine")
+    (custom / "radarr_20261001_030000.zip").write_text("not in an app folder")
     authed_client.post("/api/config", json={"destinations": {"local": {"path": str(custom)}}})
     authed_client.post("/api/reset", json={"confirm": isolated_webui.RESET_CONFIRM_PHRASE})
-    assert not custom.exists()
+    assert sorted(p.relative_to(custom).as_posix() for p in custom.rglob("*")) == [
+        "photos", "photos/holiday.jpg", "radarr_20261001_030000.zip", "sonarr", "sonarr/notes.txt",
+    ]
 
 
 def test_reset_signs_out_the_caller_and_tolerates_missing_files(isolated_webui, authed_client):

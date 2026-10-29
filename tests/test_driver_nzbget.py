@@ -176,18 +176,42 @@ def test_restore_saves_the_backups_options_in_order_then_reloads(app, nzbget, tm
     archive = make_backup(app, tmp_path)
     nzbget.options = [{"Name": "MainDir", "Value": "/elsewhere"}, {"Name": "ControlPort", "Value": "6789"}]
     nzbget.calls.clear()
-    app.restore_from_file(archive)
+    assert app.restore_from_file(archive) is True
     assert nzbget.calls == ["loadconfig", "saveconfig", "reload"]
     assert nzbget.saved == OPTIONS
     # NZBGet reads each entry's strings in order: Name, then Value.
     assert all(list(o) == ["Name", "Value"] for o in nzbget.saved)
 
 
-def test_a_reload_that_drops_the_connection_still_counts(app, nzbget, tmp_path):
+@pytest.mark.parametrize("failure", [requests.ConnectionError("reset by peer"), requests.Timeout("slow"),
+                                     {"name": "JSONRPCError", "code": 1, "message": "busy"}])
+def test_an_unconfirmed_reload_is_reported_not_hidden(app, nzbget, tmp_path, caplog, failure):
     archive = make_backup(app, tmp_path)
-    nzbget.errors["reload"] = requests.ConnectionError("reset by peer")
-    app.restore_from_file(archive)
+    nzbget.errors["reload"] = failure
+    assert app.restore_from_file(archive) is False
     assert nzbget.saved == OPTIONS
+    assert "didn't confirm the reload" in caplog.text and "restart NZBGet" in caplog.text
+
+
+@pytest.mark.parametrize("value", ["/downloads/Séries", "映画", "pässwörd 🔑", "Ωmega"])
+def test_non_ascii_values_are_sent_as_raw_utf8(app, nzbget, tmp_path, value):
+    # NZBGet turns a \uXXXX escape into one byte, so escapes would corrupt
+    # these values: they must travel as raw UTF-8, like NZBGet's own web UI sends.
+    nzbget.options = [dict(o) for o in OPTIONS] + [{"Name": "Category2.Name", "Value": value}]
+    archive = make_backup(app, tmp_path)
+    nzbget.sent.clear()
+    app.restore_from_file(archive)
+    save = next(r for r in nzbget.sent if b'"saveconfig"' in r.body)
+    assert value.encode("utf-8") in save.body and b"\\u" not in save.body
+    assert save.headers["Content-Type"] == "application/json; charset=utf-8"
+    assert {"Name": "Category2.Name", "Value": value} in nzbget.saved
+
+
+def test_a_value_with_a_unicode_line_separator_survives(app, nzbget, tmp_path):
+    odd = "a\u2028b\u0085c\x0bd"
+    nzbget.options = [dict(o) for o in OPTIONS] + [{"Name": "Category3.Name", "Value": odd}]
+    app.restore_from_file(make_backup(app, tmp_path))
+    assert {"Name": "Category3.Name", "Value": odd} in nzbget.saved
 
 
 def test_restore_without_full_access_writes_nothing(app, nzbget, tmp_path):
@@ -220,6 +244,9 @@ def test_restore_refuses_a_file_that_isnt_an_nzbget_backup(app, nzbget, tmp_path
         zf.writestr(CONFIG, "MainDir=/downloads\n")
     with pytest.raises(NzbgetError, match="isn't an NZBGet backup made by Backuparr"):
         app.restore_from_file(str(other))
+    (tmp_path / "not_a_zip.zip").write_bytes(b"plain text")
+    with pytest.raises(NzbgetError, match="isn't an NZBGet backup made by Backuparr"):
+        app.restore_from_file(str(tmp_path / "not_a_zip.zip"))
     assert nzbget.sent == []
 
 
@@ -247,5 +274,5 @@ def test_the_restore_action_uses_the_username_and_password(app, nzbget, tmp_path
     archive = make_backup(app, tmp_path)
     nzbget.sent.clear()
     cfg = {"url": "http://nzbget:6789", "api_key": "", "username": "nzbget", "password": "control-pass"}
-    assert restore_actions.restore_app("nzbget", cfg, str(tmp_path), archive) == {"kind": "nzbget"}
+    assert restore_actions.restore_app("nzbget", cfg, str(tmp_path), archive) == {"kind": "nzbget", "reloaded": True}
     assert nzbget.saved == OPTIONS and all(r.headers["Authorization"] == AUTH for r in nzbget.sent)

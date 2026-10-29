@@ -108,14 +108,6 @@ def delete_file(remote_path):
     _run(["deletefile", remote_path])
 
 
-def delete_older_than(remote_dir, min_age):
-    """min_age e.g. '14d'."""
-    try:
-        _run(["delete", "--min-age", min_age, remote_dir])
-    except RcloneError as exc:
-        logger.warning("retention cleanup failed for %s: %s", remote_dir, exc)
-
-
 def lsf(remote_dir):
     """Returns [] instead of raising when the directory doesn't exist yet."""
     try:

@@ -1,6 +1,7 @@
 """Restore logic for the web UI: one implementation per app. See apps/*.py
 for the actual API mechanics; this module just wires config + rclone + zip
-handling around them.
+handling around them. Each app is built by backup.build_app, exactly as a
+backup builds it, so headers and credentials can't drift between the two.
 """
 import json
 import os
@@ -9,21 +10,11 @@ import tempfile
 import zipfile
 
 import rclone_util
-from apps.bazarr import BazarrApp
-from apps.http_headers import configure_app_headers
-from apps.emby import EmbyApp
-from apps.jellyfin import JellyfinApp
-from apps.nzbget import NzbgetApp
-from apps.plex import PlexApp
-from apps.prowlarr import ProwlarrApp
-from apps.radarr import RadarrApp
-from apps.sabnzbd import MASKED, SabnzbdApp
-from apps.seerr import SeerrApp
-from apps.sonarr import SonarrApp
-from apps.tautulli import TautulliApp
-from apps.tdarr import TdarrApp
+from apps.sabnzbd import MASKED
+from backup import build_app
 
-UPLOAD_RESTORE_APPS = {"radarr": RadarrApp, "sonarr": SonarrApp, "prowlarr": ProwlarrApp}
+# Restored by uploading the archive to the app, which then restarts.
+UPLOAD_RESTORE_APPS = {"radarr", "sonarr", "prowlarr"}
 
 # Backup filenames are always <app>_<timestamp>.<ext> (.zip, or .tar.gz for
 # Profilarr). filename can come straight from a request body, so reject
@@ -68,60 +59,41 @@ def extract_zip(local_zip, dest_dir):
 
 
 def restore_upload_app(name, app_cfg, local_zip):
-    app_cls = UPLOAD_RESTORE_APPS[name]
-    app = app_cls(app_cfg["url"], app_cfg["api_key"])
-    configure_app_headers(app, app_cfg.get("request_headers", []))
-    return app.restore_upload(local_zip)
+    return build_app(name, app_cfg).restore_upload(local_zip)
 
 
 def restore_bazarr(app_cfg, local_zip, backup_dir):
-    app = BazarrApp(app_cfg["url"], app_cfg["api_key"])
-    configure_app_headers(app, app_cfg.get("request_headers", []))
-    return app.restore_from_file(local_zip, backup_dir)
+    return build_app("bazarr", app_cfg).restore_from_file(local_zip, backup_dir)
 
 
 def restore_tdarr(app_cfg, tmp_dir, local_zip):
     extract_dir = extract_zip(local_zip, os.path.join(tmp_dir, "extracted"))
-    app = TdarrApp(app_cfg["url"], api_key=app_cfg.get("api_key") or None)
-    configure_app_headers(app, app_cfg.get("request_headers", []))
-    app.restore(extract_dir)
+    build_app("tdarr", app_cfg).restore(extract_dir)
 
 
 def restore_tautulli(app_cfg, tmp_dir, local_zip):
     extract_dir = extract_zip(local_zip, os.path.join(tmp_dir, "extracted"))
-    app = TautulliApp(app_cfg["url"], app_cfg["api_key"])
-    configure_app_headers(app, app_cfg.get("request_headers", []))
-    return app.restore(extract_dir)
+    return build_app("tautulli", app_cfg).restore(extract_dir)
 
 
 def restore_jellyfin(app_cfg, local_zip):
-    app = JellyfinApp(app_cfg["url"], app_cfg["api_key"], backup_dir=app_cfg.get("backup_dir") or None)
-    configure_app_headers(app, app_cfg.get("request_headers", []))
-    app.restore_from_file(local_zip)
+    build_app("jellyfin", app_cfg).restore_from_file(local_zip)
 
 
 def restore_emby(app_cfg, local_zip):
-    app = EmbyApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
-    configure_app_headers(app, app_cfg.get("request_headers", []))
-    app.restore_from_file(local_zip)
+    build_app("emby", app_cfg).restore_from_file(local_zip)
 
 
 def restore_plex(app_cfg, local_zip):
-    app = PlexApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
-    configure_app_headers(app, app_cfg.get("request_headers", []))
-    app.restore_from_file(local_zip)
+    build_app("plex", app_cfg).restore_from_file(local_zip)
 
 
 def restore_nzbget(app_cfg, local_zip):
-    app = NzbgetApp(app_cfg["url"], app_cfg.get("username") or None, app_cfg.get("password") or None)
-    configure_app_headers(app, app_cfg.get("request_headers", []))
-    app.restore_from_file(local_zip)
+    return build_app("nzbget", app_cfg).restore_from_file(local_zip)
 
 
 def restore_seerr(app_cfg, local_zip):
-    app = SeerrApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
-    configure_app_headers(app, app_cfg.get("request_headers", []))
-    app.restore_from_file(local_zip)
+    build_app("seerr", app_cfg).restore_from_file(local_zip)
 
 
 def load_sabnzbd_config(tmp_dir, local_zip):
@@ -140,9 +112,7 @@ def sabnzbd_server_summary(config):
 
 
 def restore_sabnzbd(app_cfg, config, password_prompt):
-    app = SabnzbdApp(app_cfg["url"], app_cfg["api_key"])
-    configure_app_headers(app, app_cfg.get("request_headers", []))
-    return app.restore(config, password_prompt)
+    return build_app("sabnzbd", app_cfg).restore(config, password_prompt)
 
 
 def restore_app(app_name, app_cfg, tmp_dir, local_zip, *, bazarr_backup_dir=None, sabnzbd_config=None, sabnzbd_password_prompt=None):
@@ -182,8 +152,7 @@ def restore_app(app_name, app_cfg, tmp_dir, local_zip, *, bazarr_backup_dir=None
         restore_seerr(app_cfg, local_zip)
         return {"kind": "seerr"}
     if app_name == "nzbget":
-        restore_nzbget(app_cfg, local_zip)
-        return {"kind": "nzbget"}
+        return {"kind": "nzbget", "reloaded": restore_nzbget(app_cfg, local_zip)}
     if app_name == "tautulli":
         return {"kind": "tautulli", "summary": restore_tautulli(app_cfg, tmp_dir, local_zip)}
     if app_name == "sabnzbd":

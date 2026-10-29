@@ -12,6 +12,13 @@ const APP_CREDENTIAL_EDIT_REVISION = new Map();
 const APP_DISCOVERY_UPDATES = new Map();
 
 async function apiFetch(url, opts) {
+  opts = { ...opts };
+  if (opts.method && opts.method !== "GET" && opts.method !== "DELETE") {
+    // The server only accepts JSON for state changes, which a form or
+    // simple request from another site can't send.
+    opts.headers = { "Content-Type": "application/json", ...opts.headers };
+    if (opts.body === undefined) opts.body = "{}";
+  }
   const res = await fetch(url, opts);
   if (res.status === 401 && !AUTH_DISABLED) {
     // Session expired - bounce to login instead of surfacing a raw 401 toast.

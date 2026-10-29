@@ -47,9 +47,17 @@ WAITRESS_ARGS=(--host="${WEBUI_HOST}" --port="${WEBUI_PORT}" --threads=6)
 # Without --trusted-proxy, waitress silently drops incoming
 # X-Forwarded-Proto/-For/-Host headers before the WSGI app ever sees them
 # - ProxyFix alone isn't enough, since it never gets a header to read.
+# The client address (X-Forwarded-For) is only taken from the proxy named
+# in BACKUPARR_TRUSTED_PROXY: from anyone else it could be forged to dodge
+# the login lockout. Without it, every login counts against the proxy's
+# own address.
 FORCE_HTTPS_LOWER="$(printf '%s' "${BACKUPARR_FORCE_HTTPS:-}" | tr '[:upper:]' '[:lower:]')"
 if [ "$FORCE_HTTPS_LOWER" = "1" ] || [ "$FORCE_HTTPS_LOWER" = "true" ] || [ "$FORCE_HTTPS_LOWER" = "yes" ]; then
-    WAITRESS_ARGS+=(--trusted-proxy="*" --trusted-proxy-headers="x-forwarded-proto x-forwarded-for x-forwarded-host")
+    if [ -n "${BACKUPARR_TRUSTED_PROXY:-}" ]; then
+        WAITRESS_ARGS+=(--trusted-proxy="$BACKUPARR_TRUSTED_PROXY" --trusted-proxy-headers="x-forwarded-proto x-forwarded-for x-forwarded-host")
+    else
+        WAITRESS_ARGS+=(--trusted-proxy="*" --trusted-proxy-headers="x-forwarded-proto x-forwarded-host")
+    fi
 fi
 
 # Backups hold API keys and credentials, so new files are owner-only

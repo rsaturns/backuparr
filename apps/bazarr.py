@@ -105,8 +105,8 @@ class BazarrApp:
             if res.status_code == 401:
                 raise BazarrError(
                     "bazarr: download unauthorized - if Settings > General > Security is set to "
-                    "'Forms', switch it to 'None' or 'Basic' (and set BAZARR_USERNAME/BAZARR_PASSWORD) "
-                    "for automated backups to work"
+                    "'Forms', switch it to 'None' or 'Basic' (and fill in the Basic auth username and "
+                    "password on Bazarr's card) for automated backups to work"
                 )
             res.raise_for_status()
 

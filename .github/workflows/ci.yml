@@ -18,6 +18,10 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Tests and a validate-only build need nothing but read access.
+permissions:
+  contents: read
+
 jobs:
   # Job name is referenced by branch protection as a required status
   # check - keep it stable.

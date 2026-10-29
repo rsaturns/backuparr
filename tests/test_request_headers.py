@@ -411,7 +411,7 @@ def test_scheduled_backup_and_web_restore_send_headers_at_every_phase(authed_cli
         else:
             uploaded.append(dst)
     monkeypatch.setattr(backup.rclone_util, "copyto", copyto)
-    monkeypatch.setattr(backup.rclone_util, "delete_older_than", lambda *a: None)
+    monkeypatch.setattr(backup, "apply_retention", lambda *a: None)
     monkeypatch.setattr(backup.destination_util, "remote_root", lambda *a: "/dest")
     cfg = config_store.load_config()
     cfg["request_headers"] = HEADERS
@@ -432,10 +432,10 @@ def test_scheduled_backup_and_web_restore_send_headers_at_every_phase(authed_cli
                                           ("jellyfin", "restore_from_file"), ("emby", "restore_from_file"), ("plex", "restore_from_file"),
                                           ("seerr", "restore_from_file"), ("nzbget", "restore_from_file")])
 def test_other_restore_drivers_receive_global_headers(name, method, monkeypatch, tmp_path, wire):
-    classes = {"bazarr": restore_actions.BazarrApp, "tdarr": restore_actions.TdarrApp,
-               "tautulli": restore_actions.TautulliApp, "sabnzbd": restore_actions.SabnzbdApp,
-               "jellyfin": restore_actions.JellyfinApp, "emby": restore_actions.EmbyApp, "plex": restore_actions.PlexApp,
-               "seerr": restore_actions.SeerrApp, "nzbget": restore_actions.NzbgetApp}
+    classes = {"bazarr": backup.BazarrApp, "tdarr": backup.TdarrApp,
+               "tautulli": backup.TautulliApp, "sabnzbd": backup.SabnzbdApp,
+               "jellyfin": backup.JellyfinApp, "emby": backup.EmbyApp, "plex": backup.PlexApp,
+               "seerr": backup.SeerrApp, "nzbget": backup.NzbgetApp}
     def restore(app, *args):
         app.session.post(app.url + "/restore")
         return {}

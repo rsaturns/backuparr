@@ -12,6 +12,10 @@ option list replaces the current settings, and reload applies them. That
 includes the backup's Control username and password: after restoring onto
 an install with other credentials, Backuparr needs the backup's.
 
+Requests are sent as raw UTF-8 JSON, like NZBGet's own web UI: NZBGet's
+parser turns a \\uXXXX escape into a single byte, so an escaped "é" or "日"
+would be written to nzbget.conf corrupted.
+
 Only the Control user (full access) can do either: the restricted user gets
 "***" for passwords and other security options, and both it and the
 add-only user are refused saveconfig.
@@ -48,7 +52,10 @@ def format_options(options):
 
 def parse_options(text):
     options = []
-    for line in text.splitlines():
+    # Only "\n" separates options (format_options writes nothing else);
+    # str.splitlines() would also split a value at U+2028, U+0085 and others.
+    for line in text.split("\n"):
+        line = line.removesuffix("\r")
         if not line.strip() or line.lstrip().startswith("#"):
             continue
         name, sep, value = line.partition("=")
@@ -56,14 +63,6 @@ def parse_options(text):
             raise NzbgetError(f"nzbget: unexpected line in {CONFIG}: {line[:60]!r}")
         options.append({"Name": name.strip(), "Value": value.strip()})
     return options
-
-
-def is_nzbget_backup(path):
-    try:
-        with zipfile.ZipFile(path) as zf:
-            return {MANIFEST, CONFIG} <= set(zf.namelist()) and zf.testzip() is None
-    except zipfile.BadZipFile:
-        return False
 
 
 class NzbgetApp:
@@ -75,8 +74,9 @@ class NzbgetApp:
             self.session.auth = (username or "", password or "")
 
     def _call(self, method, *params, timeout=None):
+        body = json.dumps({"method": method, "params": list(params)}, ensure_ascii=False).encode("utf-8")
         res = self.session.post(
-            f"{self.url}/jsonrpc", json={"method": method, "params": list(params)},
+            f"{self.url}/jsonrpc", data=body, headers={"Content-Type": "application/json; charset=utf-8"},
             timeout=timeout or self.timeout, allow_redirects=False,
         )
         if res.status_code == 401:
@@ -140,14 +140,19 @@ class NzbgetApp:
 
     def restore_from_file(self, local_zip_path):
         """Replaces NZBGet's settings with the backup's, then reloads NZBGet
-        to apply them."""
-        if not is_nzbget_backup(local_zip_path):
-            raise NzbgetError("nzbget: this file isn't an NZBGet backup made by Backuparr")
-        with zipfile.ZipFile(local_zip_path) as zf:
-            try:
-                options = parse_options(zf.read(CONFIG).decode("utf-8"))
-            except UnicodeDecodeError:
-                raise NzbgetError(f"nzbget: {CONFIG} in the backup isn't text") from None
+        to apply them. Returns whether the reload was confirmed: if it
+        wasn't, the settings are saved but NZBGet runs the old ones until it
+        restarts."""
+        try:
+            with zipfile.ZipFile(local_zip_path) as zf:
+                if not {MANIFEST, CONFIG} <= set(zf.namelist()) or zf.testzip() is not None:
+                    raise NzbgetError("nzbget: this file isn't an NZBGet backup made by Backuparr")
+                text = zf.read(CONFIG).decode("utf-8")
+        except zipfile.BadZipFile:
+            raise NzbgetError("nzbget: this file isn't an NZBGet backup made by Backuparr") from None
+        except UnicodeDecodeError:
+            raise NzbgetError(f"nzbget: {CONFIG} in the backup isn't text") from None
+        options = parse_options(text)
         names = {o["Name"].lower() for o in options}
         if "controlport" not in names or "maindir" not in names:
             raise NzbgetError(f"nzbget: {CONFIG} in the backup doesn't hold NZBGet's settings")
@@ -159,9 +164,8 @@ class NzbgetApp:
             raise NzbgetError("nzbget: NZBGet couldn't write its settings file - check that nzbget.conf is writable")
         logger.info("nzbget: restored %d settings - reloading NZBGet to apply them", len(options))
         try:
-            self._call("reload", timeout=10)
+            return self._call("reload", timeout=10) is True
         except (requests.RequestException, NzbgetError) as exc:
-            # The settings are saved; NZBGet may drop the connection as it
-            # reloads, or now want the backup's credentials.
-            logger.info("nzbget: reload didn't answer (%s) - NZBGet applies the settings when it restarts",
-                        type(exc).__name__)
+            logger.warning("nzbget: the settings are saved, but NZBGet didn't confirm the reload (%s) - "
+                           "restart NZBGet to apply them", type(exc).__name__)
+            return False
