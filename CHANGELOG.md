@@ -5,7 +5,16 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- Seerr backup and restore. Seerr has no backup API, so its config folder (its
+  `/app/config`) is mounted into Backuparr and set as the new **Data folder**
+  field; a read-only mount is enough for backups. A backup holds Seerr's
+  database - users, requests, issues, the blocklist - copied with SQLite's
+  online backup so Seerr keeps running, and `settings.json` with every setting
+  and Seerr's API key. Restoring writes both back while Seerr is stopped, and
+  refuses a backup from a newer Seerr. Only Seerr's default SQLite database is
+  supported, not PostgreSQL.
 
 ## [1.6.1-beta] - 2026-10-29
 

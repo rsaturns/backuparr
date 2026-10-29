@@ -43,7 +43,7 @@ def test_history_groups_files_by_app_newest_first(authed_client, rclone):
     assert history["radarr"][0] == {"name": "radarr_3.zip", "size": 7, "mod_time": "2026-01-03T00:00:00Z"}
     assert [f["name"] for f in history["sonarr"]] == ["sonarr_2.zip"]
     assert "stranger" not in history and "lonely.zip" not in history
-    assert "seerr" not in history and set(history) == {a for a in APP_NAMES if a != "seerr"}
+    assert set(history) == set(APP_NAMES)
     assert rclone["lsjson"][0][1] is True
 
 

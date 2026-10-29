@@ -17,6 +17,7 @@ from apps.plex import PlexApp
 from apps.prowlarr import ProwlarrApp
 from apps.radarr import RadarrApp
 from apps.sabnzbd import MASKED, SabnzbdApp
+from apps.seerr import SeerrApp
 from apps.sonarr import SonarrApp
 from apps.tautulli import TautulliApp
 from apps.tdarr import TdarrApp
@@ -110,6 +111,12 @@ def restore_plex(app_cfg, local_zip):
     app.restore_from_file(local_zip)
 
 
+def restore_seerr(app_cfg, local_zip):
+    app = SeerrApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
+    configure_app_headers(app, app_cfg.get("request_headers", []))
+    app.restore_from_file(local_zip)
+
+
 def load_sabnzbd_config(tmp_dir, local_zip):
     extract_dir = extract_zip(local_zip, os.path.join(tmp_dir, "extracted"))
     with open(os.path.join(extract_dir, "sabnzbd_config.json")) as f:
@@ -141,7 +148,7 @@ def restore_app(app_name, app_cfg, tmp_dir, local_zip, *, bazarr_backup_dir=None
 
     Returns a small dict describing what happened, shaped per app:
       {"kind": "upload"} - radarr/sonarr/prowlarr
-      {"kind": "bazarr"} / {"kind": "tdarr"} / {"kind": "jellyfin"} / {"kind": "emby"} / {"kind": "plex"}
+      {"kind": "bazarr"} / {"kind": "tdarr"} / {"kind": "jellyfin"} / {"kind": "emby"} / {"kind": "plex"} / {"kind": "seerr"}
       {"kind": "tautulli", "summary": {...}} / {"kind": "sabnzbd", "summary": {...}}
     """
     if app_name in UPLOAD_RESTORE_APPS:
@@ -164,6 +171,9 @@ def restore_app(app_name, app_cfg, tmp_dir, local_zip, *, bazarr_backup_dir=None
     if app_name == "plex":
         restore_plex(app_cfg, local_zip)
         return {"kind": "plex"}
+    if app_name == "seerr":
+        restore_seerr(app_cfg, local_zip)
+        return {"kind": "seerr"}
     if app_name == "tautulli":
         return {"kind": "tautulli", "summary": restore_tautulli(app_cfg, tmp_dir, local_zip)}
     if app_name == "sabnzbd":

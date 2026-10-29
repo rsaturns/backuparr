@@ -6,7 +6,7 @@ import pytest
 import requests
 
 import destination_util
-from config_store import APP_NAMES, DEST_NAMES
+from config_store import APP_NAMES, DEST_NAMES, app_meta
 
 
 def save(client, body):
@@ -31,7 +31,7 @@ def test_a_new_install_has_every_app_off_and_local_storage_on(authed_client):
 def test_meta_and_destinations_describe_what_the_ui_can_configure(authed_client):
     apps = authed_client.get("/api/meta").get_json()
     assert {a["id"] for a in apps} == set(APP_NAMES)
-    assert next(a for a in apps if a["id"] == "seerr")["status"] == "coming_soon"
+    assert all(a["status"] == "available" for a in apps)
     destinations = authed_client.get("/api/destinations").get_json()
     assert [d["id"] for d in destinations] == DEST_NAMES
 
@@ -55,7 +55,7 @@ def test_the_dashboard_shows_the_release_version(authed_client, isolated_webui):
     ({"apps": {"nope": {}}}, "unknown app"),
     ({"apps": {"radarr": {"enabled": True}}}, "URL is required"),
     ({"apps": {"radarr": {"enabled": True, "url": "http://r"}}}, "API key is required"),
-    ({"apps": {"seerr": {"enabled": True, "url": "http://s", "api_key": "k"}}}, "isn't available yet"),
+    ({"apps": {"seerr": {"enabled": True, "url": "http://s", "api_key": "k"}}}, "Data folder is required"),
     ({"destinations": {"nope": {}}}, "unknown destination"),
     ({"destinations": {"dropbox": {"enabled": True}}}, "connect it first"),
     ({"destinations": {"gdrive": {"enabled": True}}}, "Client ID is required"),
@@ -90,6 +90,13 @@ def test_emby_needs_its_data_folder_and_keeps_it(authed_client, isolated_webui):
     assert refused.status_code == 400 and refused.get_json()["error"] == "emby: Data folder is required to enable it"
     assert save(authed_client, {"apps": {"emby": {**app, "data_dir": "/mnt/emby"}}}).status_code == 200
     assert stored(isolated_webui)["apps"]["emby"]["data_dir"] == "/mnt/emby"
+
+
+def test_seerr_needs_its_data_folder_and_keeps_it(authed_client, isolated_webui):
+    app = {"enabled": True, "url": "http://seerr:5055", "api_key": "k"}
+    assert save(authed_client, {"apps": {"seerr": app}}).status_code == 400
+    assert save(authed_client, {"apps": {"seerr": {**app, "data_dir": "/mnt/seerr"}}}).status_code == 200
+    assert stored(isolated_webui)["apps"]["seerr"]["data_dir"] == "/mnt/seerr"
 
 
 def test_plex_needs_its_token_and_data_folder_and_keeps_them(authed_client, isolated_webui):
@@ -174,10 +181,17 @@ class StubApp:
         return self.message
 
 
-def test_testing_an_unknown_or_unavailable_app(authed_client):
+def test_testing_an_unknown_or_unavailable_app(authed_client, monkeypatch):
     assert authed_client.post("/api/test/nope", json={}).status_code == 404
-    unavailable = authed_client.post("/api/test/seerr", json={"url": "http://s", "api_key": "k"}).get_json()
+    monkeypatch.setitem(app_meta("tautulli"), "status", "coming_soon")
+    unavailable = authed_client.post("/api/test/tautulli", json={"url": "http://t", "api_key": "k"}).get_json()
     assert unavailable["ok"] is False and "isn't available yet" in unavailable["message"]
+
+
+def test_a_coming_soon_app_cant_be_enabled(authed_client, monkeypatch):
+    monkeypatch.setitem(app_meta("tautulli"), "status", "coming_soon")
+    response = save(authed_client, {"apps": {"tautulli": {"enabled": True, "url": "http://t", "api_key": "k"}}})
+    assert response.status_code == 400 and "isn't available yet" in response.get_json()["error"]
 
 
 def test_testing_needs_a_url_and_where_required_a_key(authed_client):
@@ -319,6 +333,7 @@ def test_restore_override_fields_are_the_url_key_and_the_apps_own_extras(isolate
     assert fields("jellyfin") == {"url", "api_key", "backup_dir"}
     assert fields("emby") == {"url", "api_key", "data_dir"}
     assert fields("plex") == {"url", "api_key", "data_dir"}
+    assert fields("seerr") == {"url", "api_key", "data_dir"}
     assert fields("unknown") == {"url", "api_key"}
 
 

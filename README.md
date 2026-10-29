@@ -9,18 +9,19 @@
 > included. Reviewed and maintained by a human.
 
 Scheduled config/database backups for Radarr, Sonarr, Prowlarr, Profilarr,
-Bazarr, Tdarr, SABnzbd, Tautulli, Jellyfin, Emby, and Plex (Seerr coming soon), sent to every
+Bazarr, Tdarr, SABnzbd, Tautulli, Jellyfin, Emby, Plex, and Seerr, sent to every
 destination you enable: Local storage, Google Drive, OneDrive, and Dropbox.
 Apps, URLs/API keys, destinations, schedule, retention,
 and restores are all configured and triggered from the web UI, not env vars.
 
 Every app is backed up through **its own HTTP API**, never by reading its
-config volume directly - except two media servers that need a mount:
+config volume directly - except the apps that need a mount:
 Jellyfin's backups folder, because its API creates a backup but can't download
-it (see the [Jellyfin note](#jellyfin-note)), and Emby's data folder, because
-Emby has no backup API (see the [Emby note](#emby-note)). Plex's database comes
-through its API, but its settings and server identity only from its data folder
-(see the [Plex note](#plex-note)).
+it (see the [Jellyfin note](#jellyfin-note)), and Emby's and Seerr's data
+folders, because they have no backup API (see the [Emby note](#emby-note) and
+the [Seerr note](#seerr-note)). Plex's database comes through its API, but its
+settings and server identity only from its data folder (see the [Plex
+note](#plex-note)).
 
 To recover after a host failure, re-create the containers from your compose
 file, then restore each app from its latest backup (see
@@ -41,6 +42,7 @@ See [CHANGELOG.md](CHANGELOG.md) for release history.
     - [Jellyfin note](#jellyfin-note)
     - [Emby note](#emby-note)
     - [Plex note](#plex-note)
+    - [Seerr note](#seerr-note)
     - [Bazarr auth note](#bazarr-auth-note)
     - [Tdarr auth note](#tdarr-auth-note)
   - [Environment variables](#environment-variables)
@@ -69,14 +71,14 @@ See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## Architecture
 
-<img src="webui/static/architecture-diagram.svg" alt="Radarr, Sonarr, Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, Tautulli, Jellyfin, Emby, and Plex each feed Backuparr; Backuparr uploads each backup via rclone to Local storage, Google Drive, Microsoft OneDrive, and Dropbox" width="100%">
+<img src="webui/static/architecture-diagram.svg" alt="Radarr, Sonarr, Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, Tautulli, Jellyfin, Emby, Plex, and Seerr each feed Backuparr; Backuparr uploads each backup via rclone to Local storage, Google Drive, Microsoft OneDrive, and Dropbox" width="100%">
 
 ## Why not reuse an existing tool?
 
 [Zerka30/servarr-backup](https://github.com/Zerka30/servarr-backup) does
 this for Radarr/Sonarr/Prowlarr via S3. Backuparr extends the same idea
 (trigger the app's own backup API, download it, upload it) to Profilarr,
-Bazarr, Tdarr, Tautulli, Jellyfin, Emby, and Plex, and uses a pick-your-destinations model built
+Bazarr, Tdarr, Tautulli, Jellyfin, Emby, Plex, and Seerr, and uses a pick-your-destinations model built
 on [rclone](https://rclone.org/): Local out of the box, Google Drive via an
 in-app "Connect" button, and OneDrive and Dropbox via a one-time
 `rclone authorize` paste, with no need to run rclone's interactive config wizard yourself.
@@ -94,7 +96,7 @@ in-app "Connect" button, and OneDrive and Dropbox via a one-time
 | Jellyfin | `POST /Backup/Create` (database only) writes Jellyfin's own backup archive to its backups folder; Backuparr copies it from there and removes Jellyfin's copy | Needs Jellyfin 10.11 or newer and its backups folder mounted into Backuparr - see the [Jellyfin note](#jellyfin-note). Restore copies the archive back into that folder and calls `POST /Backup/Restore`; Jellyfin restarts to apply it. |
 | Emby | Reads Emby's mounted data folder: copies its settings, plugins, playlists and collections, and snapshots each database with SQLite's online backup while Emby runs | Emby has no backup API (its Backup & Restore plugin needs Emby Premiere), so its data folder is mounted into Backuparr - see the [Emby note](#emby-note). Restore writes the files back while Emby is stopped. |
 | Plex | `GET /diagnostics/databases` - Plex's own "Download Database" export of its library database - plus `Preferences.xml` (settings and server identity) from Plex's mounted data folder | Needs the server owner's Plex token and Plex's data folder mounted into Backuparr. Restore writes both back while Plex is stopped, so a rebuilt server keeps its identity and shared users - see the [Plex note](#plex-note). |
-| Seerr | *(none)* | Not implemented - Seerr has no backup/restore API. Shown on the Settings tab as "Coming soon". |
+| Seerr | Reads Seerr's mounted config folder: snapshots its database with SQLite's online backup while Seerr runs, and copies `settings.json` | Seerr has no backup API, so its config folder is mounted into Backuparr - see the [Seerr note](#seerr-note). Restore writes both back while Seerr is stopped. Only Seerr's default SQLite database is supported, not PostgreSQL. |
 
 ### Profilarr backup note
 
@@ -327,6 +329,56 @@ Plex server's own (by its server id).
   `Plug-in Support/Databases` (deleting its `-wal` and `-shm` files) and its
   `Preferences.xml` in the `Plex Media Server` folder, then start Plex.
 
+### Seerr note
+
+Seerr has no API to export or import its data, so Backuparr reads **Seerr's
+config folder** directly - the folder Seerr has at `/app/config` in the
+official `ghcr.io/seerr-team/seerr` image. Mount it into Backuparr:
+
+```yaml
+    volumes:
+      # with Seerr's /app/config at /share/Container/seerr/config
+      - /share/Container/seerr/config:/mnt/seerr:ro   # drop :ro to restore from the web UI
+```
+
+Then fill in the Seerr card: the URL, the API key from Seerr's **Settings >
+General**, and **Data folder** = `/mnt/seerr`. **Test connection** checks the
+key, and that the folder is this Seerr's own (by its client id). Seerr only
+accepts its API key once its setup is finished.
+
+- **What's in the backup:** the two things [Seerr's backup
+  guide](https://docs.seerr.dev/using-seerr/backups/) lists - its database
+  (users, requests, issues, the blocklist and watchlists) and `settings.json`
+  (everything on Seerr's Settings pages: the Plex, Jellyfin or Emby
+  connection, Radarr and Sonarr, notification agents, and Seerr's API key).
+  The image cache and logs are left out. The database is copied with SQLite's
+  online backup, so backups don't need Seerr stopped.
+- **Only SQLite is supported** - Seerr's default. With PostgreSQL the data
+  lives in the database server, not the folder; back it up with `pg_dump` as
+  Seerr's guide describes.
+- **The archive is sensitive:** `settings.json` holds the media server's token
+  or API key, the Radarr and Sonarr API keys, notification credentials, and
+  Seerr's own API key. Protect every destination accordingly.
+- **Read-only is enough for backups.** To restore from the web UI, mount the
+  folder read-write and run Backuparr as Seerr's user - `1000:1000` in the
+  official image (or otherwise give it write access to Seerr's files).
+- **Restore needs Seerr stopped** (`docker stop seerr`): rewriting a running
+  server's database would corrupt it, so Backuparr refuses while Seerr is
+  running - it checks Seerr's API, and that nothing else has the database
+  open. It replaces Seerr's database and `settings.json` with the backup's, so
+  anything added since is lost; start Seerr again afterwards. A backup from a
+  newer Seerr than the one installed is refused - update Seerr first; an older
+  one is upgraded by Seerr when it starts.
+- **Rebuilding:** start the new Seerr once so it creates its config folder
+  (there's no need to finish the setup), stop it, then restore. Seerr's API key
+  is restored too, so keep the original key in Settings. (If you set Seerr's
+  `API_KEY` environment variable, that key wins instead.)
+- **To restore by hand** (for example with a read-only mount): stop Seerr, put
+  the archive's `db/db.sqlite3` in Seerr's `db` folder - deleting any
+  `db.sqlite3-wal` and `db.sqlite3-shm` files there - and `settings.json` in
+  its config folder, then start Seerr. `backuparr-seerr.json` in the archive is
+  only Backuparr's own manifest.
+
 ### Bazarr auth note
 
 Bazarr's `/system/backup/download/...` route follows **Settings > General >
@@ -496,6 +548,8 @@ services:
       #- /share/Container/emby/config:/mnt/emby:ro
       # Needed to back up Plex - its "Plex Media Server" folder (see the Plex note).
       #- "/share/Container/plex/Library/Application Support/Plex Media Server:/mnt/plex:ro"
+      # Needed to back up Seerr - its /app/config folder (see the Seerr note).
+      #- /share/Container/seerr/config:/mnt/seerr:ro
 ```
 
 ```sh
@@ -732,6 +786,10 @@ throwaway copy first.
   `Preferences.xml` into Plex's data folder, which must be mounted read-write,
   then you start Plex again. A rebuilt server comes back as the same server,
   with its shared users - see the [Plex note](#plex-note).
+- **Seerr** - stop Seerr first; Backuparr writes the database and
+  `settings.json` into Seerr's config folder, which must be mounted read-write,
+  then you start Seerr again. It replaces Seerr's users, settings and API key
+  too - see the [Seerr note](#seerr-note).
 
 ## Notifications
 
@@ -797,6 +855,7 @@ These fields live in `config.json`, edited via the web UI or by hand:
 | `apps.jellyfin.backup_dir` | Local path to Jellyfin's mounted backups folder - required for Jellyfin |
 | `apps.emby.data_dir` | Local path to Emby's mounted data folder (its `/config`) - required for Emby |
 | `apps.plex.data_dir` | Local path to Plex's mounted `Plex Media Server` folder - required for Plex |
+| `apps.seerr.data_dir` | Local path to Seerr's mounted config folder (its `/app/config`) - required for Seerr |
 | `destinations.local.enabled/path` | Local storage - path defaults to `/config/backuparr/backups` if blank |
 | `destinations.gdrive.enabled/client_id/client_secret/developer_key` | Google Drive OAuth client + API key, set via the Setup guide |
 | `destinations.gdrive.refresh_token/folder_id/folder_name` | Set automatically by the Connect/Choose folder buttons - don't hand-edit |
