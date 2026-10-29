@@ -321,7 +321,8 @@ function fillAppCard(appId, cfg) {
   const urlInput = card.querySelector(".f-url");
   if (!urlInput) return; // coming_soon app - no body/fields rendered
   urlInput.value = cfg.url || "";
-  card.querySelector(".f-api_key").value = cfg.api_key || "";
+  const keyInput = card.querySelector(".f-api_key");
+  if (keyInput) keyInput.value = cfg.api_key || ""; // absent for apps without an API key
   card.querySelectorAll(".f-extra").forEach((input) => {
     input.value = cfg[input.dataset.field] || "";
   });
@@ -348,10 +349,11 @@ function readAppCard(appId) {
   const card = appCard(appId);
   const urlInput = card.querySelector(".f-url");
   if (!urlInput) return { enabled: false }; // coming_soon app
+  const keyInput = card.querySelector(".f-api_key");
   const out = {
     enabled: card.querySelector(".f-enabled").checked,
     url: urlInput.value.trim(),
-    api_key: card.querySelector(".f-api_key").value.trim(),
+    api_key: keyInput ? keyInput.value.trim() : "",
   };
   card.querySelectorAll(".f-extra").forEach((input) => {
     out[input.dataset.field] = input.value;
@@ -1686,13 +1688,15 @@ function renderRestoreOverride() {
   urlLabel.innerHTML = `<span class="field-label">URL</span><input type="text" id="r-ovr-url" placeholder="${meta.url_placeholder || ""}" autocomplete="off">`;
   block.appendChild(urlLabel);
 
-  const keyLabel = document.createElement("label");
-  keyLabel.className = "field";
-  const keyHint = !meta.key_required
-    ? `<span class="muted">(optional${meta.key_help ? ` &mdash; ${meta.key_help}` : ""})</span>`
-    : meta.key_help ? `<span class="muted">(${meta.key_help})</span>` : "";
-  keyLabel.innerHTML = `<span class="field-label">${meta.key_label || "API key"} ${keyHint}</span><input type="password" id="r-ovr-api_key" autocomplete="off">`;
-  block.appendChild(keyLabel);
+  if (!meta.no_api_key) {
+    const keyLabel = document.createElement("label");
+    keyLabel.className = "field";
+    const keyHint = !meta.key_required
+      ? `<span class="muted">(optional${meta.key_help ? ` &mdash; ${meta.key_help}` : ""})</span>`
+      : meta.key_help ? `<span class="muted">(${meta.key_help})</span>` : "";
+    keyLabel.innerHTML = `<span class="field-label">${meta.key_label || "API key"} ${keyHint}</span><input type="password" id="r-ovr-api_key" autocomplete="off">`;
+    block.appendChild(keyLabel);
+  }
 
   (meta.extra_fields || []).forEach((f) => {
     const label = document.createElement("label");
@@ -1715,7 +1719,7 @@ function readRestoreOverride() {
   if (!document.getElementById("r-override-toggle").checked) return null;
   const override = {
     url: document.getElementById("r-ovr-url").value.trim(),
-    api_key: document.getElementById("r-ovr-api_key").value.trim(),
+    api_key: document.getElementById("r-ovr-api_key")?.value.trim() || "",
   };
   document.querySelectorAll("#r-override .r-ovr-extra").forEach((input) => {
     override[input.dataset.field] = input.value.trim();
@@ -1790,6 +1794,14 @@ function renderRestoreExtra() {
       "<strong>Stop Emby first</strong> - the restore is refused while it's running. " +
       "It replaces Emby's databases and settings with the backup's - users, watch history, playlists, collections and API keys. " +
       "Anything added since is lost. Start Emby again afterwards.";
+    extraRoot.appendChild(block);
+  } else if (appId === "nzbget") {
+    const block = document.createElement("div");
+    block.className = "extra-field-block";
+    block.innerHTML =
+      "<strong>Replaces NZBGet's settings</strong> with the backup's - news servers and their passwords, categories, paths, " +
+      "extension settings, and the username and password. NZBGet reloads to apply them; the queue and history are kept. " +
+      "If the backup's username or password differ from the ones in Settings, update them there afterwards.";
     extraRoot.appendChild(block);
   } else if (appId === "seerr") {
     const block = document.createElement("div");

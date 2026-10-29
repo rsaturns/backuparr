@@ -23,6 +23,7 @@ body:
         - Bazarr
         - Tdarr
         - SABnzbd
+        - NZBGet
         - Tautulli
         - Jellyfin
         - Emby

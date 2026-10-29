@@ -99,6 +99,22 @@ def test_seerr_needs_its_data_folder_and_keeps_it(authed_client, isolated_webui)
     assert stored(isolated_webui)["apps"]["seerr"]["data_dir"] == "/mnt/seerr"
 
 
+def test_nzbget_needs_no_api_key_and_keeps_its_credentials(authed_client, isolated_webui):
+    app = {"enabled": True, "url": "http://nzbget:6789", "username": "nzbget", "password": "pass"}
+    assert save(authed_client, {"apps": {"nzbget": app}}).status_code == 200
+    on_disk = stored(isolated_webui)["apps"]["nzbget"]
+    assert on_disk["username"] == "nzbget" and on_disk["password"].startswith("enc:")
+    assert {k: authed_client.get("/api/config").get_json()["apps"]["nzbget"][k] for k in app} == app
+
+
+def test_the_nzbget_card_has_no_api_key_field(authed_client):
+    page = authed_client.get("/").get_data(as_text=True)
+    card = page[page.index('data-app="nzbget"'):]
+    card = card[:card.index('class="app-card-actions"')]
+    assert 'class="f-api_key"' not in card
+    assert 'data-field="username"' in card and 'type="password" class="f-extra" data-field="password"' in card
+
+
 def test_plex_needs_its_token_and_data_folder_and_keeps_them(authed_client, isolated_webui):
     app = {"enabled": True, "url": "http://plex:32400"}
     refused = save(authed_client, {"apps": {"plex": app}})
@@ -334,6 +350,7 @@ def test_restore_override_fields_are_the_url_key_and_the_apps_own_extras(isolate
     assert fields("emby") == {"url", "api_key", "data_dir"}
     assert fields("plex") == {"url", "api_key", "data_dir"}
     assert fields("seerr") == {"url", "api_key", "data_dir"}
+    assert fields("nzbget") == {"url", "api_key", "username", "password"}
     assert fields("unknown") == {"url", "api_key"}
 
 
