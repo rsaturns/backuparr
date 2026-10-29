@@ -5,6 +5,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.5.0-beta] - 2026-10-28
+
 ### Added
 
 - Emby backup and restore. Emby has no backup API, so its data folder (its
