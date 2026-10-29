@@ -28,3 +28,7 @@ services:
       # and linuxserver images). Read-only is enough for backups; read-write to
       # restore.
       # - /share/Container/emby/config:/mnt/emby:ro
+      # Needed to back up Plex - its "Plex Media Server" folder, Library/
+      # Application Support/Plex Media Server inside Plex's /config.
+      # Read-only is enough for backups; read-write to restore.
+      # - "/share/Container/plex/Library/Application Support/Plex Media Server:/mnt/plex:ro"

@@ -29,6 +29,7 @@ from apps.bazarr import BazarrApp, BazarrError
 from apps.http_headers import RequestHeadersError, app_connection_config, configure_app_headers
 from apps.emby import EmbyApp, EmbyError
 from apps.jellyfin import JellyfinApp, JellyfinError
+from apps.plex import PlexApp, PlexError
 from apps.profilarr import ProfilarrApp, ProfilarrError
 from apps.prowlarr import ProwlarrApp
 from apps.radarr import RadarrApp
@@ -66,6 +67,7 @@ _CLEAN_MESSAGE_ERRORS = (
     destination_util.DestinationError,
     JellyfinError,
     EmbyError,
+    PlexError,
     ProfilarrError,
     rclone_util.RcloneError,
     SabnzbdError,
@@ -226,6 +228,8 @@ def _build_app(name, app_cfg):
         return JellyfinApp(app_cfg["url"], app_cfg["api_key"], backup_dir=app_cfg.get("backup_dir") or None)
     if name == "emby":
         return EmbyApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
+    if name == "plex":
+        return PlexApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
     raise ValueError(f"Unknown app: {name}")
 
 

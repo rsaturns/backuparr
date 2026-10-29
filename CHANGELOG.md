@@ -5,7 +5,17 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- Plex backup and restore. A backup holds Plex's own database export, taken
+  through its API with the server owner's Plex token (libraries, playlists,
+  collections and every user's watched state, progress and ratings), and
+  `Preferences.xml` with the server's settings and identity, read from Plex's
+  data folder, which is mounted into Backuparr and set as the new **Data
+  folder** field. A restore writes both back while Plex is stopped, so a
+  rebuilt server comes back as the same server and shared users keep their
+  access. A **Get Plex token** button signs in on Plex's website and fills in
+  the token (#48). Thanks to @vladimir-aubrecht for the contribution (#55).
 
 ## [1.5.0-beta] - 2026-10-28
 

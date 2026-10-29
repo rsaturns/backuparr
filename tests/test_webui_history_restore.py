@@ -172,6 +172,7 @@ def configure(client, **apps):
                 ("radarr", "sonarr", "prowlarr", "bazarr", "tdarr", "tautulli", "sabnzbd", "profilarr")}
     defaults["jellyfin"] = {"enabled": True, "url": "http://jellyfin:1", "api_key": "jellyfin-key", "backup_dir": "/mnt/jellyfin"}
     defaults["emby"] = {"enabled": True, "url": "http://emby:1", "api_key": "emby-key", "data_dir": "/mnt/emby"}
+    defaults["plex"] = {"enabled": True, "url": "http://plex:1", "api_key": "plex-key", "data_dir": "/mnt/plex"}
     body["apps"].update({name: {**defaults[name], **extra} for name, extra in {**{n: {} for n in defaults}, **apps}.items()})
     assert client.post("/api/config", json=body).status_code == 200
 
@@ -295,6 +296,20 @@ def test_emby_restore_uses_its_data_folder_and_says_to_start_emby(restore, authe
     start(authed_client, "emby")
     assert restore["calls"][-1][2]["data_dir"] == "/mnt/emby"
     assert result(authed_client)["message"] == "emby restore complete, start Emby again to load it"
+
+
+def test_plex_restore_uses_its_data_folder_and_says_to_start_plex(restore, authed_client):
+    start(authed_client, "plex")
+    assert restore["calls"][-1][2]["data_dir"] == "/mnt/plex"
+    assert result(authed_client)["message"] == "plex restore complete, start Plex again to load it"
+
+
+def test_plex_restore_needs_its_data_folder(restore, authed_client):
+    authed_client.post("/api/config", json={"apps": {"plex": {"enabled": False, "data_dir": ""}}})
+    refused = start(authed_client, "plex")
+    assert refused.status_code == 400 and refused.get_json()["error"] == "plex: Data folder is not configured"
+    assert start(authed_client, "plex", override={"data_dir": "/mnt/other"}).status_code == 200
+    assert restore["calls"][-1][2]["data_dir"] == "/mnt/other"
 
 
 def test_emby_restore_needs_its_data_folder(restore, authed_client):

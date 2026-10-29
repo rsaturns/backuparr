@@ -26,6 +26,7 @@ body:
         - Tautulli
         - Jellyfin
         - Emby
+        - Plex
         - Web UI / general
         - Not app-specific
     validations:

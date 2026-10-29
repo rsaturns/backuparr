@@ -9,7 +9,7 @@
 > included. Reviewed and maintained by a human.
 
 Scheduled config/database backups for Radarr, Sonarr, Prowlarr, Profilarr,
-Bazarr, Tdarr, SABnzbd, Tautulli, Jellyfin, and Emby (Seerr coming soon), sent to every
+Bazarr, Tdarr, SABnzbd, Tautulli, Jellyfin, Emby, and Plex (Seerr coming soon), sent to every
 destination you enable: Local storage, Google Drive, OneDrive, and Dropbox.
 Apps, URLs/API keys, destinations, schedule, retention,
 and restores are all configured and triggered from the web UI, not env vars.
@@ -18,7 +18,9 @@ Every app is backed up through **its own HTTP API**, never by reading its
 config volume directly - except two media servers that need a mount:
 Jellyfin's backups folder, because its API creates a backup but can't download
 it (see the [Jellyfin note](#jellyfin-note)), and Emby's data folder, because
-Emby has no backup API (see the [Emby note](#emby-note)).
+Emby has no backup API (see the [Emby note](#emby-note)). Plex's database comes
+through its API, but its settings and server identity only from its data folder
+(see the [Plex note](#plex-note)).
 
 To recover after a host failure, re-create the containers from your compose
 file, then restore each app from its latest backup (see
@@ -38,6 +40,7 @@ See [CHANGELOG.md](CHANGELOG.md) for release history.
     - [Tautulli restore note](#tautulli-restore-note)
     - [Jellyfin note](#jellyfin-note)
     - [Emby note](#emby-note)
+    - [Plex note](#plex-note)
     - [Bazarr auth note](#bazarr-auth-note)
     - [Tdarr auth note](#tdarr-auth-note)
   - [Environment variables](#environment-variables)
@@ -66,14 +69,14 @@ See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## Architecture
 
-<img src="webui/static/architecture-diagram.svg" alt="Radarr, Sonarr, Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, Tautulli, Jellyfin, and Emby each feed Backuparr; Backuparr uploads each backup via rclone to Local storage, Google Drive, Microsoft OneDrive, and Dropbox" width="100%">
+<img src="webui/static/architecture-diagram.svg" alt="Radarr, Sonarr, Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, Tautulli, Jellyfin, Emby, and Plex each feed Backuparr; Backuparr uploads each backup via rclone to Local storage, Google Drive, Microsoft OneDrive, and Dropbox" width="100%">
 
 ## Why not reuse an existing tool?
 
 [Zerka30/servarr-backup](https://github.com/Zerka30/servarr-backup) does
 this for Radarr/Sonarr/Prowlarr via S3. Backuparr extends the same idea
 (trigger the app's own backup API, download it, upload it) to Profilarr,
-Bazarr, Tdarr, Tautulli, Jellyfin, and Emby, and uses a pick-your-destinations model built
+Bazarr, Tdarr, Tautulli, Jellyfin, Emby, and Plex, and uses a pick-your-destinations model built
 on [rclone](https://rclone.org/): Local out of the box, Google Drive via an
 in-app "Connect" button, and OneDrive and Dropbox via a one-time
 `rclone authorize` paste, with no need to run rclone's interactive config wizard yourself.
@@ -90,6 +93,7 @@ in-app "Connect" button, and OneDrive and Dropbox via a one-time
 | Tautulli | `GET /api/v2?cmd=download_database` and `cmd=download_config` - each streams a fresh copy directly, no trigger/poll step | The database comes back with Plex tokens nulled out; the config is only lightly sanitized - see the [Tautulli backup note](#tautulli-backup-note). Restore uploads each separately via `cmd=import_database` and `cmd=import_config` (multipart) - see the [Tautulli restore note](#tautulli-restore-note). |
 | Jellyfin | `POST /Backup/Create` (database only) writes Jellyfin's own backup archive to its backups folder; Backuparr copies it from there and removes Jellyfin's copy | Needs Jellyfin 10.11 or newer and its backups folder mounted into Backuparr - see the [Jellyfin note](#jellyfin-note). Restore copies the archive back into that folder and calls `POST /Backup/Restore`; Jellyfin restarts to apply it. |
 | Emby | Reads Emby's mounted data folder: copies its settings, plugins, playlists and collections, and snapshots each database with SQLite's online backup while Emby runs | Emby has no backup API (its Backup & Restore plugin needs Emby Premiere), so its data folder is mounted into Backuparr - see the [Emby note](#emby-note). Restore writes the files back while Emby is stopped. |
+| Plex | `GET /diagnostics/databases` - Plex's own "Download Database" export of its library database - plus `Preferences.xml` (settings and server identity) from Plex's mounted data folder | Needs the server owner's Plex token and Plex's data folder mounted into Backuparr. Restore writes both back while Plex is stopped, so a rebuilt server keeps its identity and shared users - see the [Plex note](#plex-note). |
 | Seerr | *(none)* | Not implemented - Seerr has no backup/restore API. Shown on the Settings tab as "Coming soon". |
 
 ### Profilarr backup note
@@ -236,6 +240,74 @@ id).
   extract the archive into Emby's `/config` folder - overwriting what's there,
   and deleting any `data/*.db-wal` and `data/*.db-shm` files - then start Emby.
   `backuparr-emby.json` in the archive is only Backuparr's own manifest.
+
+### Plex note
+
+A Plex backup has two parts:
+
+- **The library database**, from Plex's own API: `GET /diagnostics/databases`
+  is Plex's **Download Database** export, a consistent snapshot Plex makes
+  itself. It holds the libraries, metadata, playlists, collections, and every
+  user's watched state, progress and ratings.
+- **`Preferences.xml`**, the server's settings and its **identity** - the id
+  plex.tv knows your server by, which the libraries you share with other Plex
+  users are attached to. Plex's API can't export it, so Backuparr reads it from
+  Plex's data folder. Restoring it is what brings a rebuilt server back as the
+  *same* server: without it, a reinstall shows up as a new server, and every
+  user has to be invited and given access again.
+
+Images, media, caches, codecs and plugins are left out; a library scan brings
+the images back. Plex's export doesn't include its separate blobs database.
+
+Mount Plex's data folder - `Library/Application Support/Plex Media Server`
+inside Plex's `/config`, in both the official `plexinc/pms-docker` image and
+`lscr.io/linuxserver/plex` - into Backuparr:
+
+```yaml
+    volumes:
+      # with Plex's /config at /share/Container/plex
+      - "/share/Container/plex/Library/Application Support/Plex Media Server:/mnt/plex:ro"   # drop :ro to restore from the web UI
+```
+
+Then fill in the Plex card with the URL (for example `http://plex:32400`), the
+**server owner's** Plex token, and **Data folder** = `/mnt/plex`. The easiest
+way to get the token is **Get Plex token**: sign in on Plex's own website with
+the owner's account (your password and two-factor code never reach Backuparr),
+and the token is filled in - pick the server matching the URL if you own
+several. If the sign-in window is blocked, use the **Open Plex sign-in** link.
+This needs internet access to plex.tv, but not a publicly reachable Backuparr.
+You can also paste a token by hand - see Plex's guide to [finding your
+token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/).
+The token is sent in the `X-Plex-Token` header, and Backuparr follows a
+redirect only when it stays on the same server, so the token never goes to
+another host. **Test connection** checks the token, and that the folder is this
+Plex server's own (by its server id).
+
+- **The archive is sensitive:** besides your users' accounts, `Preferences.xml`
+  holds the server's own sign-in token for plex.tv. Protect every destination
+  accordingly.
+- **Read-only is enough for backups.** To restore from the web UI, mount the
+  folder read-write and run Backuparr with Plex's `PUID`/`PGID` (or otherwise
+  give it write access to Plex's files).
+- **Restore needs Plex stopped** (`docker stop plex`): rewriting a running
+  server's database would corrupt it, so Backuparr refuses while Plex is
+  running - it checks Plex's API and the databases' `-wal` files. It replaces
+  Plex's library database and `Preferences.xml` with the backup's, so anything
+  added since is lost; start Plex again afterwards. A backup from a newer Plex
+  than the one installed is refused - update Plex first; an older one is
+  upgraded by Plex when it starts.
+- **Rebuilding a server:** start the new Plex once so it creates its data
+  folder (there's no need to finish the setup or sign in), stop it, then
+  restore. It comes back as the original server - same id, settings, sign-in
+  and shared users - so keep the original server's Plex token in Settings.
+  Never run the original server and the restored copy at the same time: plex.tv
+  would see two servers with one identity.
+- **To restore by hand**, follow Plex's guides to [restoring the
+  database](https://support.plex.tv/articles/202485658-restore-a-database-backed-up-via-scheduled-tasks/)
+  and [moving a server](https://support.plex.tv/articles/201370363-move-an-install-to-another-system/):
+  stop Plex, put the archive's `com.plexapp.plugins.library.db` in
+  `Plug-in Support/Databases` (deleting its `-wal` and `-shm` files) and its
+  `Preferences.xml` in the `Plex Media Server` folder, then start Plex.
 
 ### Bazarr auth note
 
@@ -404,6 +476,8 @@ services:
       #- /share/Container/jellyfin/config/data/backups:/mnt/jellyfin-backups
       # Needed to back up Emby - its /config folder (see the Emby note).
       #- /share/Container/emby/config:/mnt/emby:ro
+      # Needed to back up Plex - its "Plex Media Server" folder (see the Plex note).
+      #- "/share/Container/plex/Library/Application Support/Plex Media Server:/mnt/plex:ro"
 ```
 
 ```sh
@@ -479,7 +553,7 @@ choose when there are several.
   authenticate discovery through a compatible reverse proxy.
 - Discovery refuses any redirect away from Prowlarr's exact URL, so use its
   final address.
-- Bazarr, Profilarr, Tdarr, Tautulli, Jellyfin, Emby and Seerr aren't stored in Prowlarr and
+- Bazarr, Profilarr, Tdarr, Tautulli, Jellyfin, Emby, Plex and Seerr aren't stored in Prowlarr and
   are always configured manually.
 
 ### Service authentication headers
@@ -636,6 +710,10 @@ throwaway copy first.
 - **Emby** - stop Emby first; Backuparr writes the backup into Emby's data
   folder, which must be mounted read-write, then you start Emby again. It
   replaces Emby's users and API keys too - see the [Emby note](#emby-note).
+- **Plex** - stop Plex first; Backuparr writes the library database and
+  `Preferences.xml` into Plex's data folder, which must be mounted read-write,
+  then you start Plex again. A rebuilt server comes back as the same server,
+  with its shared users - see the [Plex note](#plex-note).
 
 ## Notifications
 
@@ -700,6 +778,7 @@ These fields live in `config.json`, edited via the web UI or by hand:
 | `apps.bazarr.username/password` | Only if Bazarr's web auth is set to `Basic` |
 | `apps.jellyfin.backup_dir` | Local path to Jellyfin's mounted backups folder - required for Jellyfin |
 | `apps.emby.data_dir` | Local path to Emby's mounted data folder (its `/config`) - required for Emby |
+| `apps.plex.data_dir` | Local path to Plex's mounted `Plex Media Server` folder - required for Plex |
 | `destinations.local.enabled/path` | Local storage - path defaults to `/config/backuparr/backups` if blank |
 | `destinations.gdrive.enabled/client_id/client_secret/developer_key` | Google Drive OAuth client + API key, set via the Setup guide |
 | `destinations.gdrive.refresh_token/folder_id/folder_name` | Set automatically by the Connect/Choose folder buttons - don't hand-edit |

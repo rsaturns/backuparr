@@ -17,6 +17,7 @@ import backup
 import config_store
 import restore_actions
 from apps.emby import EmbyError
+from apps.plex import PlexError
 from apps.http_headers import RequestHeadersError, configure_app_headers, validate_request_headers
 
 
@@ -271,6 +272,26 @@ def test_emby_sends_headers_without_losing_its_key(monkeypatch, tmp_path):
     assert sent[0].headers["Proxy-Authorization"] == SECRET and sent[0].headers["X-Emby-Token"] == "native-key"
 
 
+def test_plex_sends_headers_without_losing_its_token(monkeypatch):
+    sent = []
+
+    def send(_adapter, request, **kwargs):
+        sent.append(request.copy())
+        body = b'<MediaContainer version="1.43.5" machineIdentifier="server"><Setting id="FriendlyName"/></MediaContainer>'
+        response = requests.Response()
+        response.request, response.url, response.status_code, response._content = request, request.url, 200, body
+        response.raw = io.BytesIO(body)
+        return response
+
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", send)
+    cfg = {"url": "https://app.example", "api_key": "native-key", "request_headers": HEADERS}
+    with pytest.raises(PlexError, match="set the data folder"):
+        backup.build_app("plex", cfg).test_connection()
+    assert [r.url for r in sent] == ["https://app.example/:/prefs", "https://app.example/identity"]
+    assert all(r.headers["Proxy-Authorization"] == SECRET and r.headers["X-Plex-Token"] == "native-key" for r in sent)
+    assert all("native-key" not in r.url for r in sent)
+
+
 def test_settings_encrypt_all_header_values_and_allow_removal(authed_client, caplog):
     assert authed_client.get("/api/config").json["request_headers"] == []
     assert authed_client.post("/api/config", json={"request_headers": HEADERS}).status_code == 200
@@ -374,11 +395,11 @@ def test_scheduled_backup_and_web_restore_send_headers_at_every_phase(authed_cli
 
 
 @pytest.mark.parametrize("name, method", [("bazarr", "restore_from_file"), ("tdarr", "restore"), ("tautulli", "restore"), ("sabnzbd", "restore"),
-                                          ("jellyfin", "restore_from_file"), ("emby", "restore_from_file")])
+                                          ("jellyfin", "restore_from_file"), ("emby", "restore_from_file"), ("plex", "restore_from_file")])
 def test_other_restore_drivers_receive_global_headers(name, method, monkeypatch, tmp_path, wire):
     classes = {"bazarr": restore_actions.BazarrApp, "tdarr": restore_actions.TdarrApp,
                "tautulli": restore_actions.TautulliApp, "sabnzbd": restore_actions.SabnzbdApp,
-               "jellyfin": restore_actions.JellyfinApp, "emby": restore_actions.EmbyApp}
+               "jellyfin": restore_actions.JellyfinApp, "emby": restore_actions.EmbyApp, "plex": restore_actions.PlexApp}
     def restore(app, *args):
         app.session.post(app.url + "/restore")
         return {}
@@ -399,11 +420,11 @@ def test_notifications_never_receive_app_credentials(authed_client, wire):
 APP_IDS = config_store.APP_NAMES
 
 
-@pytest.mark.parametrize("apps", [[], "radarr", ["plex"], ["radarr", "radarr"], [None]])
+@pytest.mark.parametrize("apps", [[], "radarr", ["nzbget"], ["radarr", "radarr"], [None]])
 def test_invalid_app_scopes_fail_without_echoing_values(apps):
     with pytest.raises(RequestHeadersError) as error:
         validate_request_headers([{"name": "X-Test", "value": SECRET, "apps": apps}], APP_IDS)
-    assert SECRET not in str(error.value) and "plex" not in str(error.value)
+    assert SECRET not in str(error.value) and "nzbget" not in str(error.value)
 
 
 def test_scoped_rows_are_only_accepted_with_known_app_ids():

@@ -16,7 +16,7 @@ class ConfigError(RuntimeError):
     truncated by a full disk, ...). The message says what to do about it."""
 
 
-APP_NAMES = ["radarr", "sonarr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "tautulli", "jellyfin", "emby", "seerr"]
+APP_NAMES = ["radarr", "sonarr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "tautulli", "jellyfin", "emby", "plex", "seerr"]
 
 DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "password": ""}
 
@@ -93,6 +93,23 @@ APP_META = [
             {"name": "data_dir", "label": "Data folder", "type": "text", "required": True,
              "placeholder": "/mnt/emby",
              "help": "Emby's /config folder as mounted here; read-write to restore"},
+        ],
+    },
+    {
+        "id": "plex",
+        "label": "Plex",
+        "icon": "plex.svg",
+        "status": "available",
+        "key_required": True,
+        "key_label": "Plex token",
+        "url_placeholder": "http://plex:32400",
+        # The database comes from Plex's API; the server's settings and
+        # identity (Preferences.xml) from its mounted data folder - see
+        # apps/plex.py.
+        "extra_fields": [
+            {"name": "data_dir", "label": "Data folder", "type": "text", "required": True,
+             "placeholder": "/mnt/plex",
+             "help": "Plex's \"Plex Media Server\" folder as mounted here; read-write to restore"},
         ],
     },
     {
