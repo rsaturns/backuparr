@@ -5,6 +5,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.4.0-beta] - 2026-10-28
+
 ### Added
 
 - Jellyfin backup and restore (Jellyfin 10.11 or newer), through Jellyfin's own
