@@ -30,7 +30,7 @@ def api(monkeypatch):
         sent.append({"url": url, "data": data, "timeout": timeout, **kwargs})
         return replies.pop(0) if replies else Reply({"status": True})
 
-    monkeypatch.setattr(sabnzbd.requests, "post", post)
+    monkeypatch.setattr(sabnzbd.requests.Session, "post", lambda self, *args, **kwargs: post(*args, **kwargs))
     return type("Api", (), {"sent": sent, "replies": replies})
 
 
@@ -132,6 +132,16 @@ def test_plain_sections_restore_key_by_key(app, api):
     summary = app.restore(config(misc={"bandwidth_perc": "41", "port": "8080"}, logging={"log_level": "1"}), never)
     assert summary["misc_keys_restored"] == ["misc.bandwidth_perc", "misc.port", "logging.log_level"]
     assert calls(api)[0] == {"mode": "set_config", "section": "misc", "keyword": "bandwidth_perc", "value": "41"}
+
+
+def test_list_settings_restore_as_one_comma_separated_value(app, api):
+    # Sent as a list, requests repeats the field and SABnzbd keeps only the
+    # first entry - a truncated host_whitelist locks out proxied access.
+    app.restore(config(misc={"host_whitelist": ["sabnzbd", "sab.example.com"], "email_to": []}), never)
+    assert calls(api) == [
+        {"mode": "set_config", "section": "misc", "keyword": "host_whitelist", "value": "sabnzbd, sab.example.com"},
+        {"mode": "set_config", "section": "misc", "keyword": "email_to", "value": ""},
+    ]
 
 
 def test_the_credentials_the_restore_itself_uses_are_never_rewritten(app, api, caplog):

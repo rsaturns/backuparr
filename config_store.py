@@ -6,6 +6,7 @@ import os
 import tempfile
 
 import secrets_crypto
+from apps.http_headers import RequestHeadersError, validate_request_headers
 
 CONFIG_PATH = os.environ.get("BACKUPARR_CONFIG", "/config/backuparr/config.json")
 
@@ -15,7 +16,7 @@ class ConfigError(RuntimeError):
     truncated by a full disk, ...). The message says what to do about it."""
 
 
-APP_NAMES = ["radarr", "sonarr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "tautulli", "plex", "seerr"]
+APP_NAMES = ["radarr", "sonarr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "tautulli", "jellyfin", "emby", "plex", "seerr"]
 
 DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "password": ""}
 
@@ -63,17 +64,53 @@ APP_META = [
     {"id": "sabnzbd", "label": "SABnzbd", "icon": "sabnzbd.svg", "status": "available", "key_required": True, "url_placeholder": "http://sabnzbd:8080", "extra_fields": []},
     {"id": "tautulli", "label": "Tautulli", "icon": "tautulli.svg", "status": "available", "key_required": True, "url_placeholder": "http://tautulli:8181", "extra_fields": []},
     {
-        "id": "plex", "label": "Plex", "icon": "plex.svg",
-        "status": "available", "key_required": True, "key_label": "Plex token",
-        "url_placeholder": "http://plex:32400",
+        "id": "jellyfin",
+        "label": "Jellyfin",
+        "icon": "jellyfin.svg",
+        "status": "available",
+        "key_required": True,
+        "url_placeholder": "http://jellyfin:8096",
+        "key_help": "Dashboard > API Keys",
+        # Jellyfin's API can't download a backup, so its backups folder is
+        # mounted into this container - see apps/jellyfin.py.
         "extra_fields": [
-            {"name": "restore_agent_url", "label": "Restore agent URL", "type": "text",
-             "help": "Optional, only for automated database restore"},
-            {"name": "restore_agent_token", "label": "Restore agent token", "type": "password",
-             "help": "Separate from your Plex token"},
+            {"name": "backup_dir", "label": "Backups folder", "type": "text", "required": True,
+             "placeholder": "/mnt/jellyfin-backups",
+             "help": "Jellyfin's backups folder as mounted here; read-write to restore"},
         ],
-        "backup_help": "Use the server owner's Plex token. Library databases including all users' local watched/progress data, API server/library settings, metadata and artwork. No native Preferences.xml, media or plugin files. The optional restore agent recovers the database; settings and artwork need manual recovery.",
-        "restore_supported": True,
+    },
+    {
+        "id": "emby",
+        "label": "Emby",
+        "icon": "emby.svg",
+        "status": "available",
+        "key_required": True,
+        "url_placeholder": "http://emby:8096",
+        "key_help": "Settings > Advanced > API Keys",
+        # Emby has no backup API, so its data folder is mounted into this
+        # container - see apps/emby.py.
+        "extra_fields": [
+            {"name": "data_dir", "label": "Data folder", "type": "text", "required": True,
+             "placeholder": "/mnt/emby",
+             "help": "Emby's /config folder as mounted here; read-write to restore"},
+        ],
+    },
+    {
+        "id": "plex",
+        "label": "Plex",
+        "icon": "plex.svg",
+        "status": "available",
+        "key_required": True,
+        "key_label": "Plex token",
+        "url_placeholder": "http://plex:32400",
+        # The database comes from Plex's API; the server's settings and
+        # identity (Preferences.xml) from its mounted data folder - see
+        # apps/plex.py.
+        "extra_fields": [
+            {"name": "data_dir", "label": "Data folder", "type": "text", "required": True,
+             "placeholder": "/mnt/plex",
+             "help": "Plex's \"Plex Media Server\" folder as mounted here; read-write to restore"},
+        ],
     },
     {
         "id": "seerr",
@@ -293,6 +330,7 @@ DESTINATION_META = [
 ]
 
 DEFAULTS = {
+    "request_headers": [],
     "retention_days": 7,
     "cron_schedule": "0 3 * * *",
     "notify_url": "",
@@ -300,20 +338,22 @@ DEFAULTS = {
     "apps": {name: dict(DEFAULT_APP) for name in APP_NAMES},
     "destinations": {name: dict(DEFAULT_DEST[name]) for name in DEST_NAMES},
 }
-DEFAULTS["apps"]["plex"].update(restore_agent_url="", restore_agent_token="")
 
 def _secret_fields(cfg):
     """(container_dict, key) for every value encrypted at rest - an
     explicit allowlist, not "encrypt everything"."""
     fields = [(cfg["apps"][name], "api_key") for name in APP_NAMES]
     fields.append((cfg["apps"]["bazarr"], "password"))
-    fields.append((cfg["apps"]["plex"], "restore_agent_token"))
     fields.append((cfg["destinations"]["gdrive"], "client_secret"))
     fields.append((cfg["destinations"]["gdrive"], "developer_key"))
     fields.append((cfg["destinations"]["gdrive"], "refresh_token"))
     fields.append((cfg["destinations"]["onedrive"], "token"))
     fields.append((cfg["destinations"]["dropbox"], "token"))
     fields.append((cfg, "notify_url"))
+    rows = cfg.get("request_headers", [])
+    if not isinstance(rows, list) or any(not isinstance(row, dict) or not isinstance(row.get("value"), str) for row in rows):
+        raise ConfigError("request_headers must be a list of name/value pairs")
+    fields.extend((row, "value") for row in rows)
     return fields
 
 
@@ -350,6 +390,10 @@ def load_config():
             needs_migration = True
         container[key] = secrets_crypto.decrypt(raw)
 
+    try:
+        validate_request_headers(merged["request_headers"], APP_NAMES)
+    except RequestHeadersError as exc:
+        raise ConfigError(str(exc)) from None
     if needs_migration:
         save_config(merged)
 
@@ -357,6 +401,10 @@ def load_config():
 
 
 def save_config(cfg):
+    try:
+        validate_request_headers(cfg.get("request_headers", []), APP_NAMES)
+    except RequestHeadersError as exc:
+        raise ConfigError(str(exc)) from None
     to_write = copy.deepcopy(cfg)
     for container, key in _secret_fields(to_write):
         container[key] = secrets_crypto.encrypt(container.get(key, ""))

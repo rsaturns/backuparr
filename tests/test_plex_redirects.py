@@ -1,12 +1,7 @@
-import io
-import json
-import zipfile
-
 import pytest
 import requests
 
 from apps.plex import PlexApp, PlexError
-from test_driver_plex import driver
 
 
 def response(status, location=None, body=b'picture'):
@@ -56,8 +51,6 @@ def test_cross_origin_redirect_never_sends_a_second_request(monkeypatch, locatio
         app._get('/diagnostics/databases')
     assert len(calls) == 1
     assert 'do-not-log' not in str(caught.value) and 'private-token' not in str(caught.value)
-    assert app._get('/library/metadata/7/thumb/42', missing_ok=True) is None
-    assert len(calls) == 2  # one initial request per call, zero cross-host calls
 
 
 def test_redirect_loop_is_bounded(monkeypatch):
@@ -67,28 +60,3 @@ def test_redirect_loop_is_bounded(monkeypatch):
     with pytest.raises(PlexError, match='too many redirects'):
         app._get('/diagnostics/databases')
     assert len(calls) == 6
-
-
-def test_external_artwork_redirect_is_recorded_without_losing_database_backup(tmp_path, monkeypatch):
-    def pages(params):
-        if params['type'] == 18:
-            return b'<MediaContainer totalSize="0" offset="0"/>'
-        return b'<MediaContainer totalSize="1" offset="0"><Video ratingKey="7" thumb="/library/metadata/7/thumb/42"/></MediaContainer>'
-    app = driver(routes={
-        '/library/sections': b'<MediaContainer><Directory key="1" type="movie"/></MediaContainer>',
-        '/library/sections/1/prefs': b'<MediaContainer/>', '/library/sections/1/all': pages,
-    })
-    get = app.session.get
-
-    def redirected(url, **kwargs):
-        if '/thumb/' in url:
-            return response(302, 'https://cdn.example/image')
-        return get(url, **kwargs)
-
-    monkeypatch.setattr(app.session, 'get', redirected)
-    with zipfile.ZipFile(app.backup(str(tmp_path))) as archive:
-        manifest = json.loads(archive.read('manifest.json'))
-        assert manifest['unavailable_artwork_count'] == 1
-        assert json.loads(archive.read(manifest['unavailable_artwork_file'])) == ['/library/metadata/7/thumb/42']
-        assert manifest['server']['machine_identifier'] == 'fixture-server'
-        assert zipfile.is_zipfile(io.BytesIO(archive.read('databases.zip')))

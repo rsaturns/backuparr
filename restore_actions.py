@@ -10,8 +10,10 @@ import zipfile
 
 import rclone_util
 from apps.bazarr import BazarrApp
+from apps.http_headers import configure_app_headers
+from apps.emby import EmbyApp
+from apps.jellyfin import JellyfinApp
 from apps.plex import PlexApp
-from apps.plex_restore import PlexRestoreAgent
 from apps.prowlarr import ProwlarrApp
 from apps.radarr import RadarrApp
 from apps.sabnzbd import MASKED, SabnzbdApp
@@ -66,24 +68,46 @@ def extract_zip(local_zip, dest_dir):
 def restore_upload_app(name, app_cfg, local_zip):
     app_cls = UPLOAD_RESTORE_APPS[name]
     app = app_cls(app_cfg["url"], app_cfg["api_key"])
+    configure_app_headers(app, app_cfg.get("request_headers", []))
     return app.restore_upload(local_zip)
 
 
 def restore_bazarr(app_cfg, local_zip, backup_dir):
     app = BazarrApp(app_cfg["url"], app_cfg["api_key"])
+    configure_app_headers(app, app_cfg.get("request_headers", []))
     return app.restore_from_file(local_zip, backup_dir)
 
 
 def restore_tdarr(app_cfg, tmp_dir, local_zip):
     extract_dir = extract_zip(local_zip, os.path.join(tmp_dir, "extracted"))
     app = TdarrApp(app_cfg["url"], api_key=app_cfg.get("api_key") or None)
+    configure_app_headers(app, app_cfg.get("request_headers", []))
     app.restore(extract_dir)
 
 
 def restore_tautulli(app_cfg, tmp_dir, local_zip):
     extract_dir = extract_zip(local_zip, os.path.join(tmp_dir, "extracted"))
     app = TautulliApp(app_cfg["url"], app_cfg["api_key"])
+    configure_app_headers(app, app_cfg.get("request_headers", []))
     return app.restore(extract_dir)
+
+
+def restore_jellyfin(app_cfg, local_zip):
+    app = JellyfinApp(app_cfg["url"], app_cfg["api_key"], backup_dir=app_cfg.get("backup_dir") or None)
+    configure_app_headers(app, app_cfg.get("request_headers", []))
+    app.restore_from_file(local_zip)
+
+
+def restore_emby(app_cfg, local_zip):
+    app = EmbyApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
+    configure_app_headers(app, app_cfg.get("request_headers", []))
+    app.restore_from_file(local_zip)
+
+
+def restore_plex(app_cfg, local_zip):
+    app = PlexApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
+    configure_app_headers(app, app_cfg.get("request_headers", []))
+    app.restore_from_file(local_zip)
 
 
 def load_sabnzbd_config(tmp_dir, local_zip):
@@ -103,6 +127,7 @@ def sabnzbd_server_summary(config):
 
 def restore_sabnzbd(app_cfg, config, password_prompt):
     app = SabnzbdApp(app_cfg["url"], app_cfg["api_key"])
+    configure_app_headers(app, app_cfg.get("request_headers", []))
     return app.restore(config, password_prompt)
 
 
@@ -116,16 +141,12 @@ def restore_app(app_name, app_cfg, tmp_dir, local_zip, *, bazarr_backup_dir=None
 
     Returns a small dict describing what happened, shaped per app:
       {"kind": "upload"} - radarr/sonarr/prowlarr
-      {"kind": "bazarr"} / {"kind": "tdarr"}
+      {"kind": "bazarr"} / {"kind": "tdarr"} / {"kind": "jellyfin"} / {"kind": "emby"} / {"kind": "plex"}
       {"kind": "tautulli", "summary": {...}} / {"kind": "sabnzbd", "summary": {...}}
     """
     if app_name in UPLOAD_RESTORE_APPS:
         restore_upload_app(app_name, app_cfg, local_zip)
         return {"kind": "upload"}
-    if app_name == "plex":
-        agent = PlexRestoreAgent(app_cfg.get("restore_agent_url"), app_cfg.get("restore_agent_token"))
-        plex = PlexApp(app_cfg["url"], app_cfg["api_key"])
-        return {"kind": "plex", "summary": agent.restore(local_zip, plex)}
     if app_name == "bazarr":
         if not bazarr_backup_dir:
             raise ValueError("bazarr restore requires bazarr_backup_dir")
@@ -134,6 +155,15 @@ def restore_app(app_name, app_cfg, tmp_dir, local_zip, *, bazarr_backup_dir=None
     if app_name == "tdarr":
         restore_tdarr(app_cfg, tmp_dir, local_zip)
         return {"kind": "tdarr"}
+    if app_name == "jellyfin":
+        restore_jellyfin(app_cfg, local_zip)
+        return {"kind": "jellyfin"}
+    if app_name == "emby":
+        restore_emby(app_cfg, local_zip)
+        return {"kind": "emby"}
+    if app_name == "plex":
+        restore_plex(app_cfg, local_zip)
+        return {"kind": "plex"}
     if app_name == "tautulli":
         return {"kind": "tautulli", "summary": restore_tautulli(app_cfg, tmp_dir, local_zip)}
     if app_name == "sabnzbd":

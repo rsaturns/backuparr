@@ -61,10 +61,11 @@ class SabnzbdApp:
         self.url = url.rstrip("/")
         self.api_key = api_key
         self.timeout = timeout
+        self.session = requests.Session()
 
     def _call(self, params):
         payload = {"apikey": self.api_key, "output": "json", **params}
-        res = requests.post(f"{self.url}/api", data=payload, timeout=self.timeout)
+        res = self.session.post(f"{self.url}/api", data=payload, timeout=self.timeout)
         res.raise_for_status()
         data = res.json()
         if isinstance(data, dict) and data.get("status") is False:
@@ -93,6 +94,11 @@ class SabnzbdApp:
         return dest_dir
 
     def set_value(self, section, keyword, value):
+        # get_config returns list settings (host_whitelist, ...) as JSON lists,
+        # but set_config takes one comma-separated value: a list would be sent
+        # as repeated form fields, and SABnzbd keeps only the first.
+        if isinstance(value, list):
+            value = ", ".join(str(item) for item in value)
         self._call({"mode": "set_config", "section": section, "keyword": keyword, "value": value})
 
     def set_server(self, name, fields):

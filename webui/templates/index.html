@@ -81,7 +81,7 @@
               <label class="field">
                 <span class="field-label">
                   {{ m.key_label | default("API key") }}
-                  {% if not m.key_required %}<span class="muted">(optional{% if m.key_help %} &mdash; {{ m.key_help }}{% endif %})</span>{% endif %}
+                  {% if not m.key_required %}<span class="muted">(optional{% if m.key_help %} &mdash; {{ m.key_help }}{% endif %})</span>{% elif m.key_help %}<span class="muted">({{ m.key_help }})</span>{% endif %}
                 </span>
                 <input type="password" class="f-api_key" autocomplete="off">
                 {% if m.id in ('radarr', 'sonarr', 'sabnzbd') %}<span class="discovery-key-status hidden" role="status"></span>{% endif %}
@@ -98,29 +98,18 @@
                 <select id="plex-server-select"></select>
               </label>
               {% endif %}
-              {% if m.id == 'plex' %}
-              <details class="extra-field-block">
-                <summary>Automatic restore (optional)</summary>
-                <p class="hint">Connect a restore agent to recover the Plex library database, including watched state and progress.</p>
-              {% endif %}
               {% for f in m.extra_fields %}
               <label class="field">
                 <span class="field-label">{{ f.label }} {% if f.help %}<span class="muted">({{ f.help }})</span>{% endif %}</span>
-                <input type="{{ f.type }}" class="f-extra" data-field="{{ f.name }}" autocomplete="off">
+                <input type="{{ f.type }}" class="f-extra" data-field="{{ f.name }}"{% if f.placeholder %} placeholder="{{ f.placeholder }}"{% endif %} autocomplete="off">
               </label>
               {% endfor %}
-              {% if m.id == 'plex' %}
-              <button type="button" class="btn btn-ghost btn-sm" id="plex-agent-test-btn">Test restore agent</button>
-              <p class="hint" id="plex-agent-status" role="status" aria-live="polite"></p>
-              </details>
-              {% endif %}
               {% if m.id == 'bazarr' %}
               <label class="field">
                 <span class="field-label">Backup folder <span class="muted">(local path, only needed to restore Bazarr)</span></span>
                 <input type="text" id="s-bazarr_backup_dir" placeholder="/mnt/bazarr-backup">
               </label>
               {% endif %}
-              {% if m.backup_help %}<p class="hint">{{ m.backup_help }}</p>{% endif %}
               <div class="app-card-actions">
                 <button type="button" class="btn btn-ghost btn-sm test-btn">Test connection</button>
                 {% if m.id == 'prowlarr' %}<button type="button" class="btn btn-primary btn-sm" id="discover-btn" disabled>Discover services</button><span class="help-tip" tabindex="0" role="img" aria-label="Reads the apps and download clients connected to Prowlarr, through its API, and fills in the URL and API key of your Radarr, Sonarr and SABnzbd." data-tip="Reads the apps and download clients connected to Prowlarr, through its API, and fills in the URL and API key of your Radarr, Sonarr and SABnzbd.">?</span>{% endif %}
@@ -218,6 +207,46 @@
             </div>
             {% endfor %}
           </div>
+        </div>
+
+        <div class="card" id="request-headers-card">
+          <h2>Service authentication</h2>
+          <p class="hint">Optional HTTP headers for apps behind an authenticating reverse proxy, used for connection tests, discovery, backups and restores. Each header goes to all apps or only the ones you pick. Values are stored encrypted.</p>
+          <div id="request-headers-list"></div>
+          <div class="request-headers-actions">
+            <button type="button" class="btn btn-ghost btn-sm" id="add-request-header">Add header</button>
+            <label><input type="checkbox" id="show-request-headers"> Show values</label>
+          </div>
+          <details class="request-headers-help" id="basic-auth-helper">
+            <summary>Generate Basic authentication</summary>
+            <p class="hint">Generate a Basic authentication value from a username and password, then apply it to a new or existing header.</p>
+            <form id="basic-auth-form" class="basic-auth-form">
+              <label class="field">
+                <span class="field-label">Target header</span>
+                <input id="basic-auth-header" type="text" value="Authorization" list="basic-auth-header-options" autocomplete="off" spellcheck="false" required aria-describedby="basic-auth-header-hint">
+              </label>
+              <datalist id="basic-auth-header-options">
+                <option value="Authorization"></option>
+                <option value="Proxy-Authorization"></option>
+              </datalist>
+              <p class="hint" id="basic-auth-header-hint">Use the header your server expects: Authorization for HTTP Basic, Proxy-Authorization for a proxy that accepts it, or a custom name. Applying replaces the value of the row with that name; to add another row with the same name for different apps, add it with an empty value first.</p>
+              <label class="field">
+                <span class="field-label">Username</span>
+                <input id="basic-auth-username" type="text" autocomplete="off" spellcheck="false" required>
+              </label>
+              <label class="field">
+                <span class="field-label">Password</span>
+                <input id="basic-auth-password" type="password" autocomplete="new-password">
+              </label>
+              <button type="submit" class="btn btn-ghost btn-sm">Apply to header</button>
+              <p id="basic-auth-status" class="test-result" role="status" aria-live="polite"></p>
+            </form>
+          </details>
+          <details class="request-headers-help">
+            <summary>Where headers are used</summary>
+            <p class="hint">App API keys are still required. Each app's own authentication takes priority when it uses the same header name; use a separate header if your proxy supports one.</p>
+            <p class="hint">Each header goes to the URLs of the apps it applies to, including a restore target entered for one of them. The same name can be used for different apps, with a different value for each. Headers are not sent to backup storage or notification services. Redirects to another scheme, host or port are blocked.</p>
+          </details>
         </div>
 
         <div class="card">

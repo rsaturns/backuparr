@@ -1,7 +1,11 @@
 """Trigger each configured app's own backup mechanism over its API, zip the
 result if needed, and upload it to the configured rclone remote. No app
 config volumes are read directly - everything goes through each app's
-HTTP API. Settings come from config_store, not environment variables.
+HTTP API, except that Jellyfin's API can't download the backup it creates,
+so that one archive is picked up from Jellyfin's mounted backups folder, and
+Emby has no backup API at all, so its files are read from its mounted data
+folder.
+Settings come from config_store, not environment variables.
 """
 import errno
 import json
@@ -22,6 +26,9 @@ import requests
 import destination_util
 import rclone_util
 from apps.bazarr import BazarrApp, BazarrError
+from apps.http_headers import RequestHeadersError, app_connection_config, configure_app_headers
+from apps.emby import EmbyApp, EmbyError
+from apps.jellyfin import JellyfinApp, JellyfinError
 from apps.plex import PlexApp, PlexError
 from apps.profilarr import ProfilarrApp, ProfilarrError
 from apps.prowlarr import ProwlarrApp
@@ -54,9 +61,12 @@ except OSError:
 
 # Errors whose message was written for humans (and carries no URL or key).
 _CLEAN_MESSAGE_ERRORS = (
+    RequestHeadersError,
     BazarrError,
     ConfigError,
     destination_util.DestinationError,
+    JellyfinError,
+    EmbyError,
     PlexError,
     ProfilarrError,
     rclone_util.RcloneError,
@@ -189,8 +199,10 @@ def log_failure(logger, summary, exc, url=None, app=None):
 
 
 def build_app(name, app_cfg):
-    if name == "plex":
-        return PlexApp(app_cfg["url"], app_cfg["api_key"])
+    return configure_app_headers(_build_app(name, app_cfg), app_cfg.get("request_headers", []))
+
+
+def _build_app(name, app_cfg):
     if name == "radarr":
         return RadarrApp(app_cfg["url"], app_cfg["api_key"])
     if name == "sonarr":
@@ -212,6 +224,12 @@ def build_app(name, app_cfg):
         return SabnzbdApp(app_cfg["url"], app_cfg["api_key"])
     if name == "tautulli":
         return TautulliApp(app_cfg["url"], app_cfg["api_key"])
+    if name == "jellyfin":
+        return JellyfinApp(app_cfg["url"], app_cfg["api_key"], backup_dir=app_cfg.get("backup_dir") or None)
+    if name == "emby":
+        return EmbyApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
+    if name == "plex":
+        return PlexApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
     raise ValueError(f"Unknown app: {name}")
 
 
@@ -339,7 +357,7 @@ def run_backup(cfg, on_progress=None, should_cancel=None):
             if on_progress:
                 on_progress(i, len(apps), name)
             log.info("=== %s ===", name)
-            app_cfg = cfg["apps"][name]
+            app_cfg = app_connection_config(cfg, name)
 
             work_dir = os.path.join(run_tmp, name)
             archive_path = None

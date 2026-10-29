@@ -28,11 +28,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      # Same Python as the python:3.14-alpine image the app ships in.
+      # Same Python as the python:3.15-alpine image the app ships in.
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: "3.14"
+          python-version: "3.15"
 
       - name: Install Python dependencies
         run: pip install -r requirements.txt -r requirements-dev.txt
@@ -70,13 +70,3 @@ jobs:
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Build optional Plex restore agent (no push)
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: plex_restore_agent/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: false
-          cache-from: type=gha,scope=plex-agent-ci
-          cache-to: type=gha,mode=max,scope=plex-agent-ci

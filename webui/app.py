@@ -26,6 +26,13 @@ import onedrive_oauth
 import rclone_util
 import restore_actions as ra
 import secrets_crypto
+from apps.http_headers import (
+    RequestHeadersError,
+    app_connection_config,
+    configure_app_headers,
+    headers_for_app,
+    validate_request_headers,
+)
 from apps.prowlarr import ProwlarrApp
 from webui.plex_auth import PlexAuthError, PlexLogin
 from backup import build_app, describe_failure, format_run_message, humanize_error, log_failure, notify, run_backup
@@ -53,6 +60,13 @@ from config_store import (
 def _restore_override_fields(app_name):
     meta = app_meta(app_name) or {}
     return {"url", "api_key"} | {f["name"] for f in meta.get("extra_fields", [])}
+
+
+def _missing_required_field(app_name, app_data):
+    """Label of the first required extra field (e.g. Jellyfin's backups
+    folder) left empty, or None."""
+    meta = app_meta(app_name) or {}
+    return next((f["label"] for f in meta.get("extra_fields", []) if f.get("required") and not app_data.get(f["name"])), None)
 
 app = Flask(__name__)
 log = logging.getLogger("backuparr.webui")
@@ -499,6 +513,11 @@ def api_meta():
 def _validate_config(data, cfg):
     if not isinstance(data, dict):
         return "expected a JSON object"
+    if "request_headers" in data:
+        try:
+            validate_request_headers(data["request_headers"], APP_NAMES)
+        except RequestHeadersError as exc:
+            return str(exc)
     for key in ("apps", "destinations"):
         section = data.get(key, {})
         if not isinstance(section, dict) or not all(isinstance(entry, dict) for entry in section.values()):
@@ -525,6 +544,9 @@ def _validate_config(data, cfg):
             return f"{name}: a URL is required to enable it"
         if app_data.get("enabled") and key_required(name) and not app_data.get("api_key"):
             return f"{name}: {meta.get('key_label', 'an API key')} is required to enable it"
+        missing = app_data.get("enabled") and _missing_required_field(name, app_data)
+        if missing:
+            return f"{name}: {missing} is required to enable it"
     for name, dest_data in data.get("destinations", {}).items():
         if name not in DEST_NAMES:
             return f"unknown destination: {name}"
@@ -548,14 +570,14 @@ def api_set_config():
     if error:
         return jsonify({"error": error}), 400
 
-    for key in ("retention_days", "cron_schedule", "notify_url", "bazarr_backup_dir"):
+    for key in ("retention_days", "cron_schedule", "notify_url", "bazarr_backup_dir", "request_headers"):
         if key in data:
             cfg[key] = data[key]
     for name in APP_NAMES:
         if name in data.get("apps", {}):
             incoming = data["apps"][name]
-            allowed = set(DEFAULT_APP) | _restore_override_fields(name)
-            cfg["apps"][name].update({k: v for k, v in incoming.items() if k in allowed})
+            fields = set(DEFAULT_APP) | {f["name"] for f in app_meta(name).get("extra_fields", [])}
+            cfg["apps"][name].update({k: v for k, v in incoming.items() if k in fields})
     for name in DEST_NAMES:
         if name in data.get("destinations", {}):
             incoming = data["destinations"][name]
@@ -574,6 +596,8 @@ def api_test(app_name):
     if meta["status"] != "available":
         return jsonify({"ok": False, "message": f"{meta['label']} isn't available yet"})
     data = request.get_json(force=True, silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({"ok": False, "message": "expected a JSON object"}), 400
     if not data.get("url"):
         return jsonify({"ok": False, "message": "URL is required"}), 400
     if key_required(app_name) and not data.get("api_key"):
@@ -582,25 +606,15 @@ def api_test(app_name):
     app_cfg = copy.deepcopy(DEFAULT_APP)
     app_cfg.update(data)
     try:
+        headers = data["request_headers"] if "request_headers" in data else load_config().get("request_headers", [])
+        validate_request_headers(headers, APP_NAMES)
+    except RequestHeadersError as exc:
+        return jsonify({"ok": False, "message": str(exc)}), 400
+    app_cfg["request_headers"] = headers_for_app(headers, app_name)
+    try:
         instance = build_app(app_name, app_cfg)
         message = instance.test_connection()
         return jsonify({"ok": True, "message": message})
-    except Exception as exc:
-        return jsonify({"ok": False, "message": humanize_error(exc)})
-
-
-@app.post("/api/plex/restore-agent/test")
-def api_plex_restore_agent_test():
-    from apps.plex import PlexApp
-    from apps.plex_restore import PlexRestoreAgent
-
-    data = request.get_json(silent=True)
-    if not isinstance(data, dict):
-        return jsonify({"ok": False, "message": "Expected a JSON object"}), 400
-    try:
-        agent = PlexRestoreAgent(data.get("restore_agent_url"), data.get("restore_agent_token"))
-        plex = PlexApp(data.get("url"), data.get("api_key"))
-        return jsonify({"ok": True, "message": agent.test_connection(plex)})
     except Exception as exc:
         return jsonify({"ok": False, "message": humanize_error(exc)})
 
@@ -696,7 +710,7 @@ def _forget_discovery(job_id):
         DISCOVERY_JOBS.pop(job_id, None)
 
 
-def _discovery_work(job_id, url, api_key):
+def _discovery_work(job_id, url, api_key, request_headers):
     def progress(message):
         with DISCOVERY_JOBS_LOCK:
             if job_id in DISCOVERY_JOBS:
@@ -704,6 +718,7 @@ def _discovery_work(job_id, url, api_key):
 
     try:
         instance = ProwlarrApp(url, api_key, strict_redirects=True)
+        configure_app_headers(instance, request_headers)
         result = discovery.discover_prowlarr(instance, progress)
         outcome = {"state": "completed", "message": "Discovery complete.", "result": result}
     except discovery.DiscoveryError as exc:
@@ -733,6 +748,12 @@ def api_discovery_prowlarr():
     api_key = data.get("api_key")
     if not isinstance(api_key, str) or not api_key.strip():
         return _discovery_response({"error": "Prowlarr's API key is required."}, 400)
+    try:
+        headers = data["request_headers"] if "request_headers" in data else load_config().get("request_headers", [])
+        validate_request_headers(headers, APP_NAMES)
+    except RequestHeadersError as exc:
+        return _discovery_response({"error": str(exc)}, 400)
+    headers = headers_for_app(headers, "prowlarr")
     if not DISCOVERY_RUN_LOCK.acquire(blocking=False):
         return _discovery_response({"error": "Discovery is already running. Try again when it finishes."}, 409)
     # A separate cookie: a stale concurrent response must not clobber the refreshing session cookie.
@@ -742,7 +763,7 @@ def api_discovery_prowlarr():
         _purge_discovery_locked()
         DISCOVERY_JOBS[job_id] = {"owner": owner, "state": "running", "message": "Connecting to Prowlarr..."}
     try:
-        threading.Thread(target=_discovery_work, args=(job_id, data["url"].strip(), api_key.strip()), daemon=True).start()
+        threading.Thread(target=_discovery_work, args=(job_id, data["url"].strip(), api_key.strip(), headers), daemon=True).start()
     except RuntimeError:
         _forget_discovery(job_id)
         DISCOVERY_RUN_LOCK.release()
@@ -998,11 +1019,20 @@ def _restore_work(app_name, root, app_cfg, data, bazarr_backup_dir):
             ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
             RESTORE_RUN_STATE["message"] = "tdarr restore complete"
 
+        elif app_name == "jellyfin":
+            log.info("restore: copying the backup into jellyfin's backups folder...")
+            ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
+            RESTORE_RUN_STATE["message"] = "jellyfin restore started, Jellyfin is restarting to apply it"
+
+        elif app_name == "emby":
+            log.info("restore: writing the backup into emby's data folder...")
+            ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
+            RESTORE_RUN_STATE["message"] = "emby restore complete, start Emby again to load it"
+
         elif app_name == "plex":
-            log.info("restore: uploading Plex backup to its restore agent...")
-            result = ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
-            RESTORE_RUN_STATE["summary"] = result["summary"]
-            RESTORE_RUN_STATE["message"] = result["summary"]["message"]
+            log.info("restore: writing the backup into plex's data folder...")
+            ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
+            RESTORE_RUN_STATE["message"] = "plex restore complete, start Plex again to load it"
 
         elif app_name == "tautulli":
             log.info("restore: restoring tautulli...")
@@ -1113,7 +1143,7 @@ def api_restore(dest_id, app_name):
     root, error = _destination_root_or_error(cfg, dest_id)
     if error:
         return error
-    app_cfg = cfg["apps"].get(app_name, {})
+    app_cfg = app_connection_config(cfg, app_name)
 
     # One-off target override for this restore only - never written back to
     # config.json. Lets you point a restore at a throwaway/test instance
@@ -1131,8 +1161,9 @@ def api_restore(dest_id, app_name):
 
     if not app_cfg.get("url") or (key_required(app_name) and not app_cfg.get("api_key")):
         return jsonify({"error": f"{app_name} is not configured"}), 400
-    if app_name == "plex" and not all(app_cfg.get(key) for key in ("restore_agent_url", "restore_agent_token")):
-        return jsonify({"error": "Configure the optional Plex restore agent URL and token in Settings first"}), 400
+    missing = _missing_required_field(app_name, app_cfg)
+    if missing:
+        return jsonify({"error": f"{app_name}: {missing} is not configured"}), 400
 
     bazarr_backup_dir = None
     if app_name == "bazarr":

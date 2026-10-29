@@ -43,6 +43,9 @@ SOURCES = [
     ("Tdarr", os.path.join(ICONS, "tdarr.png"), "png"),
     ("SABnzbd", os.path.join(ICONS, "sabnzbd.svg"), "svg"),
     ("Tautulli", os.path.join(ICONS, "tautulli.svg"), "svg"),
+    ("Jellyfin", os.path.join(ICONS, "jellyfin.svg"), "svg"),
+    ("Emby", os.path.join(ICONS, "emby.svg"), "svg"),
+    ("Plex", os.path.join(ICONS, "plex.svg"), "svg"),
 ]
 
 DESTS = [

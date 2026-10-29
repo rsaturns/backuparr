@@ -333,6 +333,7 @@ function prowlarrCredentials() {
   return {
     url: appCard("prowlarr").querySelector(".f-url").value.trim(),
     api_key: appCard("prowlarr").querySelector(".f-api_key").value.trim(),
+    request_headers: readRequestHeaders(),
   };
 }
 
@@ -716,6 +717,129 @@ function updateGdriveUI(gdriveCfg) {
   }
 }
 
+function readRequestHeaders() {
+  return Array.from(document.querySelectorAll(".request-header-row"), (row) => {
+    const header = {
+      name: row.querySelector(".header-name").value.trim(),
+      value: row.querySelector(".header-value").value,
+    };
+    // No "apps" key means every app, including ones added in later releases.
+    if (!row.querySelector(".header-scope-all").checked) {
+      header.apps = Array.from(row.querySelectorAll(".header-scope-app:checked"), (box) => box.value);
+    }
+    return header;
+  }).filter(({ name, value }) => name || value);
+}
+
+function updateHeaderScopeSummary(row) {
+  const all = row.querySelector(".header-scope-all").checked;
+  row.querySelectorAll(".header-scope-app").forEach((box) => {
+    box.disabled = all;
+    if (all) box.checked = true;
+  });
+  const labels = Array.from(row.querySelectorAll(".header-scope-app:checked"), (box) => box.dataset.label);
+  row.querySelector(".header-scope summary").textContent =
+    `Apps: ${all ? "All apps" : labels.join(", ") || "none selected"}`;
+}
+
+function buildHeaderScope(apps) {
+  const scope = document.createElement("details");
+  scope.className = "header-scope";
+  const options = document.createElement("div");
+  options.className = "header-scope-options";
+  const option = (className, value, label, checked) => {
+    const wrap = document.createElement("label");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.className = className;
+    box.value = value;
+    box.dataset.label = label;
+    box.checked = checked;
+    wrap.append(box, ` ${label}`);
+    options.append(wrap);
+  };
+  option("header-scope-all", "", "All apps", !apps);
+  // Keep a saved scope's apps listed even if one stops being "available".
+  APP_META.filter((m) => m.status === "available" || (apps || []).includes(m.id))
+    .forEach((m) => option("header-scope-app", m.id, m.label, !apps || apps.includes(m.id)));
+  scope.append(document.createElement("summary"), options);
+  return scope;
+}
+
+function addRequestHeader(header = {}) {
+  const row = document.createElement("div");
+  row.className = "request-header-row";
+  row.innerHTML = `<label class="field"><span class="field-label">Header name</span><input class="header-name" type="text" autocomplete="off" spellcheck="false" placeholder="X-Custom-Header"></label>
+    <label class="field"><span class="field-label">Value</span><input class="header-value" type="password" autocomplete="off" spellcheck="false" placeholder="Header value"></label>
+    <button type="button" class="btn btn-ghost btn-sm remove-header" aria-label="Remove header">Remove</button>`;
+  row.querySelector(".header-name").value = header.name || "";
+  row.querySelector(".header-value").value = header.value || "";
+  row.querySelector(".header-value").type = document.getElementById("show-request-headers").checked ? "text" : "password";
+  row.querySelector(".remove-header").addEventListener("click", () => row.remove());
+  row.append(buildHeaderScope(header.apps));
+  row.querySelector(".header-scope").addEventListener("change", () => updateHeaderScopeSummary(row));
+  updateHeaderScopeSummary(row);
+  document.getElementById("request-headers-list").append(row);
+  return row;
+}
+
+function updateBasicAuthHeaderOptions() {
+  const names = new Map(["Authorization", "Proxy-Authorization"].map((name) => [name.toLowerCase(), name]));
+  readRequestHeaders().forEach(({ name }) => {
+    if (name) names.set(name.toLowerCase(), name);
+  });
+  document.getElementById("basic-auth-header-options").replaceChildren(...Array.from(names.values(), (name) => {
+    const option = document.createElement("option");
+    option.value = name;
+    return option;
+  }));
+}
+
+function applyBasicAuthHeader(event) {
+  event.preventDefault();
+  const status = document.getElementById("basic-auth-status");
+  const username = document.getElementById("basic-auth-username");
+  const password = document.getElementById("basic-auth-password");
+  const name = document.getElementById("basic-auth-header").value.trim();
+  const fail = (message) => {
+    status.className = "test-result fail";
+    status.textContent = message;
+  };
+  if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name)) return fail("Enter a valid HTTP header name.");
+  if (["host", "content-length", "transfer-encoding", "connection", "trailer", "te", "upgrade", "proxy-connection", "expect"].includes(name.toLowerCase())) {
+    return fail("This header controls HTTP transport and cannot be customized.");
+  }
+  if (!username.value || username.value.includes(":")) return fail("Enter a username without a colon (:).");
+  if (/[\x00-\x1f\x7f]/.test(username.value + password.value)) return fail("Username and password cannot contain control characters.");
+  const rows = Array.from(document.querySelectorAll(".request-header-row"));
+  const matches = rows.filter((row) => row.querySelector(".header-name").value.trim().toLowerCase() === name.toLowerCase());
+  // Rows scoped to different apps may share a name: fill the one left empty for this credential.
+  const empty = matches.filter((row) => !row.querySelector(".header-value").value);
+  if (matches.length > 1 && empty.length !== 1) {
+    return fail("Several rows use this header name. Clear the value of the row to replace, or add a row with this name and no value.");
+  }
+  const target = empty[0] || matches[0] || rows.find((row) => !row.querySelector(".header-name").value.trim() && !row.querySelector(".header-value").value);
+  const otherRows = target ? rows.filter((row) => row !== target) : rows;
+  const headers = otherRows.map((row) => ({ name: row.querySelector(".header-name").value.trim(), value: row.querySelector(".header-value").value }))
+    .filter(({ name: other, value: otherValue }) => other || otherValue);
+  if (headers.length >= 32) return fail("At most 32 headers can be configured. Remove a header first.");
+  // Encode UTF-8 before Base64; btoa alone rejects non-Latin usernames/passwords.
+  const bytes = new TextEncoder().encode(`${username.value}:${password.value}`);
+  if (bytes.length > 12288) return fail("These credentials exceed the request header size limit.");
+  const value = "Basic " + btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""));
+  const totalSize = headers.reduce((size, header) => size + header.name.length + header.value.length, name.length + value.length);
+  if (totalSize > 16384) return fail("Request headers exceed the 16 KiB limit. Shorten the credentials or remove a header.");
+  const row = target || addRequestHeader();
+  row.querySelector(".header-name").value = name;
+  row.querySelector(".header-value").value = value;
+  row.querySelector(".header-value").dispatchEvent(new Event("input", { bubbles: true }));
+  username.value = "";
+  password.value = "";
+  status.className = "test-result ok";
+  status.textContent = "Header applied. Save settings to keep this change.";
+  updateBasicAuthHeaderOptions();
+}
+
 async function loadConfig() {
   const cfg = await apiFetch("/api/config");
   document.getElementById("s-retention_days").value = cfg.retention_days || 7;
@@ -723,6 +847,8 @@ async function loadConfig() {
   initSchedulePicker(cfg.cron_schedule);
   document.getElementById("s-notify_url").value = cfg.notify_url || "";
   document.getElementById("s-bazarr_backup_dir").value = cfg.bazarr_backup_dir || "";
+  document.getElementById("request-headers-list").replaceChildren();
+  (cfg.request_headers || []).forEach(addRequestHeader);
   Object.keys(cfg.apps || {}).forEach((appId) => fillAppCard(appId, cfg.apps[appId]));
   Object.keys(cfg.destinations || {}).forEach((destId) => fillDestCard(destId, cfg.destinations[destId]));
   snapshotSettingsState();
@@ -743,6 +869,7 @@ function collectConfig() {
     cron_schedule: document.getElementById("s-cron_schedule").value.trim(),
     notify_url: document.getElementById("s-notify_url").value.trim(),
     bazarr_backup_dir: document.getElementById("s-bazarr_backup_dir").value.trim(),
+    request_headers: readRequestHeaders(),
     apps,
     destinations,
   };
@@ -805,6 +932,7 @@ async function runTest({ btn, resultEl, dot, pendingText, request }) {
 async function testApp(appId) {
   const card = appCard(appId);
   const payload = readAppCard(appId);
+  payload.request_headers = readRequestHeaders();
   await runTest({
     btn: card.querySelector(".test-btn"),
     resultEl: card.querySelector(".test-result"),
@@ -1201,26 +1329,15 @@ function initSettingsEvents() {
   document.getElementById("save-btn").addEventListener("click", saveSettings);
   document.getElementById("plex-token-btn").addEventListener("click", startPlexLogin);
   document.getElementById("plex-auth-cancel").addEventListener("click", () => stopPlexLogin("Plex sign-in cancelled."));
-  document.getElementById("plex-agent-test-btn").addEventListener("click", async () => {
-    const button = document.getElementById("plex-agent-test-btn");
-    const status = document.getElementById("plex-agent-status");
-    const card = appCard("plex");
-    const data = { url: card.querySelector(".f-url").value.trim(), api_key: card.querySelector(".f-api_key").value.trim() };
-    card.querySelectorAll(".f-extra").forEach((input) => { data[input.dataset.field] = input.value.trim(); });
-    button.disabled = true;
-    status.textContent = "Checking restore agent...";
-    try {
-      const result = await apiFetch("/api/plex/restore-agent/test", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
-      });
-      status.textContent = result.message;
-      status.className = `hint ${result.ok ? "ok" : "fail"}`;
-    } catch (error) {
-      status.textContent = error.message;
-      status.className = "hint fail";
-    } finally {
-      button.disabled = false;
-    }
+  document.getElementById("basic-auth-form").addEventListener("submit", applyBasicAuthHeader);
+  document.getElementById("basic-auth-helper").addEventListener("toggle", updateBasicAuthHeaderOptions);
+  document.getElementById("basic-auth-header").addEventListener("focus", updateBasicAuthHeaderOptions);
+  document.getElementById("basic-auth-form").addEventListener("input", () => {
+    document.getElementById("basic-auth-status").textContent = "";
+  });
+  document.getElementById("add-request-header").addEventListener("click", () => addRequestHeader().querySelector(".header-name").focus());
+  document.getElementById("show-request-headers").addEventListener("change", (event) => {
+    document.querySelectorAll(".header-value").forEach((input) => { input.type = event.target.checked ? "text" : "password"; });
   });
   document.getElementById("discover-btn").addEventListener("click", () => discoverServices());
   appCard("prowlarr").querySelectorAll(".f-url, .f-api_key").forEach((input) => {
@@ -1559,7 +1676,9 @@ function renderRestoreOverride() {
 
   const keyLabel = document.createElement("label");
   keyLabel.className = "field";
-  const keyHint = !meta.key_required ? `<span class="muted">(optional${meta.key_help ? ` &mdash; ${meta.key_help}` : ""})</span>` : "";
+  const keyHint = !meta.key_required
+    ? `<span class="muted">(optional${meta.key_help ? ` &mdash; ${meta.key_help}` : ""})</span>`
+    : meta.key_help ? `<span class="muted">(${meta.key_help})</span>` : "";
   keyLabel.innerHTML = `<span class="field-label">${meta.key_label || "API key"} ${keyHint}</span><input type="password" id="r-ovr-api_key" autocomplete="off">`;
   block.appendChild(keyLabel);
 
@@ -1567,7 +1686,7 @@ function renderRestoreOverride() {
     const label = document.createElement("label");
     label.className = "field";
     const help = f.help ? `<span class="muted">(${f.help})</span>` : "";
-    label.innerHTML = `<span class="field-label">${f.label} ${help}</span><input type="${f.type}" class="r-ovr-extra" data-field="${f.name}" autocomplete="off">`;
+    label.innerHTML = `<span class="field-label">${f.label} ${help}</span><input type="${f.type}" class="r-ovr-extra" data-field="${f.name}" placeholder="${f.placeholder || ""}" autocomplete="off">`;
     block.appendChild(label);
   });
 
@@ -1633,13 +1752,32 @@ function renderRestoreExtra() {
   if (appId === "plex") {
     const block = document.createElement("div");
     block.className = "extra-field-block";
-    block.textContent = "Requires the optional Plex restore agent. Plex will stop while its library database is replaced, including all users' local watched state, progress and ratings. Use a backup from this server and the same Plex version. The agent keeps a rollback copy and restarts Plex. Settings, artwork files and plugins are not applied.";
+    block.innerHTML =
+      "<strong>Stop Plex first</strong> - the restore is refused while it's running. " +
+      "It replaces Plex's library database and settings with the backup's - libraries, playlists, collections, every user's watched state, " +
+      "and the server's identity, so a rebuilt server comes back as the same server with its shared users. " +
+      "Anything added since is lost. Never run the original server at the same time. Start Plex again afterwards.";
     extraRoot.appendChild(block);
   } else if (appId === "tdarr") {
     const block = document.createElement("div");
     block.className = "extra-field-block";
     block.innerHTML =
       '<strong style="color:var(--danger)">Destructive:</strong> this wipes each Tdarr database collection before repopulating it from the backup.';
+    extraRoot.appendChild(block);
+  } else if (appId === "jellyfin") {
+    const block = document.createElement("div");
+    block.className = "extra-field-block";
+    block.innerHTML =
+      "<strong>Replaces Jellyfin's database and settings</strong> with the backup's - users, watch history, libraries and API keys. " +
+      "Anything added since is lost. Jellyfin restarts to apply it.";
+    extraRoot.appendChild(block);
+  } else if (appId === "emby") {
+    const block = document.createElement("div");
+    block.className = "extra-field-block";
+    block.innerHTML =
+      "<strong>Stop Emby first</strong> - the restore is refused while it's running. " +
+      "It replaces Emby's databases and settings with the backup's - users, watch history, playlists, collections and API keys. " +
+      "Anything added since is lost. Start Emby again afterwards.";
     extraRoot.appendChild(block);
   } else if (appId === "bazarr") {
     const block = document.createElement("div");

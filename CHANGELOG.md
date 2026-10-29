@@ -7,22 +7,63 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- Plex backups now log each export phase, library metadata counts and periodic database/artwork download progress in the live run log.
-- Plex native database backups preserving all users' local watched/progress data, plus API server/library settings, metadata and artwork, with manual restore guidance.
-- A **Get Plex token** button signs in through Plex's own website and fills the token for a server you own, with a server selector when needed.
-- An optional Plex restore agent restores the library database through Backuparr's Restore tab. It works with the existing Plex Docker image, validates the container/data mount and backup version, preserves rollback copies and recovers interrupted restores. Includes compose setup and explicit restore limitations.
+- Plex backup and restore. A backup holds Plex's own database export, taken
+  through its API with the server owner's Plex token (libraries, playlists,
+  collections and every user's watched state, progress and ratings), and
+  `Preferences.xml` with the server's settings and identity, read from Plex's
+  data folder, which is mounted into Backuparr and set as the new **Data
+  folder** field. A restore writes both back while Plex is stopped, so a
+  rebuilt server comes back as the same server and shared users keep their
+  access. A **Get Plex token** button signs in on Plex's website and fills in
+  the token (#48). Thanks to @vladimir-aubrecht for the contribution (#55).
+
+## [1.5.0-beta] - 2026-10-28
+
+### Added
+
+- Emby backup and restore. Emby has no backup API, so its data folder (its
+  `/config`) is mounted into Backuparr and set as the new **Data folder**
+  field; a read-only mount is enough for backups. A backup holds Emby's
+  databases (users, watch history, playlists, collections and libraries),
+  settings and plugins, without metadata images or cache, and is taken while
+  Emby runs. A restore writes them back while Emby is stopped (#49).
+
+## [1.4.0-beta] - 2026-10-28
+
+### Added
+
+- Jellyfin backup and restore (Jellyfin 10.11 or newer), through Jellyfin's own
+  backup API: the database (users, watch history, playlists, libraries and
+  settings) and config files, without metadata or trickplay images. Jellyfin's
+  API can't download a backup, so its backups folder is mounted into Backuparr
+  and set as the new **Backups folder** field; a restore copies the archive back
+  there and Jellyfin restarts to apply it (#47).
+
+## [1.3.0-beta] - 2026-10-28
+
+### Added
+
+- Service authentication headers in Settings for apps behind an authenticating
+  reverse proxy, with encrypted values and a Basic authentication helper for
+  standard or custom headers. Each header goes to all apps or only the apps you
+  choose. Applied to app connection tests, discovery, backups and restores while
+  retaining app API credentials. Cross-origin redirects are blocked for apps
+  that receive these headers. Thanks to @vladimir-aubrecht for the
+  contribution (#56).
+
+### Changed
+
+- The image now runs on Python 3.15 (`python:3.15-alpine`), and CI runs the
+  test suite on Python 3.15 to match. The pytest floor is raised to 9.2.0.
 
 ### Fixed
 
-- Plex manifest parsing explicitly requires the native JSON parser, preventing a Python fallback from accumulating large legacy artwork lists in memory.
-- Plex backups with many missing/external images remain automatically restorable: new exports store the image list separately, and the agent streams older large manifests with bounded memory.
-- A completed Plex rollback cannot be reactivated by a failed diagnostic write, preserving changes made after Plex resumes running.
-- The Plex restore agent limits incomplete HTTP headers to three seconds, including byte-by-byte senders, while retaining the longer timeout for authenticated uploads.
-- Plex restores now block further operations if the journal cannot be written or an earlier operation remains unfinished, preventing a later rollback from overwriting a newer restore.
-- The Plex restore agent authenticates uploads before reading their bodies, so unauthenticated requests cannot spool archives to its state volume.
-- Plex database exports named `databaseBackup.db`, including names with an appended UUID, are now accepted alongside the on-disk library filename. Restore instructions explain how to rename the downloaded snapshot.
-- Missing Plex artwork (HTTP 404) is recorded in the backup instead of discarding the database backup. Other download failures still fail the backup.
-- Plex's own same-origin redirects are followed without forwarding the token to other hosts, ports or protocols. External artwork redirects are recorded as unavailable; other redirect failures identify the requested endpoint.
+- SABnzbd restore kept only the first entry of list settings such as
+  `host_whitelist`, so a restore could lock out access through a reverse proxy.
+  List settings are now restored in full.
+- Bazarr restore behind a reverse proxy reported a failure (HTTP 502) although
+  the restore succeeded. Backuparr also now checks that Bazarr is reachable
+  before it starts a restore.
 
 ## [1.2.1-beta] - 2026-10-07
 

@@ -1,32 +1,88 @@
-"""Plex's native database export. This is not a full Plex data-directory backup."""
+"""Backup/restore driver for Plex Media Server.
+
+A backup holds two things:
+- The library database (com.plexapp.plugins.library.db), from Plex's own
+  API with the server owner's Plex token: GET /diagnostics/databases is
+  the "Download Database" export, a consistent snapshot Plex makes itself.
+  The database holds the libraries, metadata, playlists, collections and
+  every user's watched state, progress and ratings. Its custom SQLite
+  tokenizer means only Plex can check or rebuild it, which is why the
+  snapshot comes from Plex rather than from the file.
+- Preferences.xml, the server's settings and its identity
+  (ProcessedMachineIdentifier, which plex.tv knows the server - and the
+  libraries shared with other accounts - by). Plex's API can't export it,
+  so it's read from Plex's data folder ("Plex Media Server", in Plex's
+  /config at Library/Application Support/Plex Media Server in both the
+  official and linuxserver images), mounted into Backuparr as data_dir.
+Images, media, caches and codecs are left out.
+
+A restore writes both back while Plex is stopped, as Plex's guide to
+moving a server does by hand: a rebuilt server comes back as the same
+server, so users keep their access. A running Plex keeps a .db-wal file next
+to its databases, so any -wal file means Plex is running - or was not shut
+down cleanly - and the restore is refused before anything is written.
+
+Auth: the token goes in the X-Plex-Token header, never the URL.
+"""
 import json
 import logging
 import os
 import re
+import shutil
+import sqlite3
+import tempfile
 import time
-from pathlib import Path
-from urllib.parse import urljoin, urlsplit
 import xml.etree.ElementTree as ET
 import zipfile
+from pathlib import Path
+from urllib.parse import quote, urljoin, urlsplit
 
 import requests
-from apps.plex_archive import library_databases
-
 
 logger = logging.getLogger(f"backuparr.{__name__}")
+
+MANIFEST = "backuparr-plex.json"
+LIBRARY_DB = "com.plexapp.plugins.library.db"
+PREFERENCES = "Preferences.xml"
+_DATABASES = ("Plug-in Support", "Databases")
 _PROGRESS_INTERVAL = 10
 _MIB = 1024 * 1024
-_MEDIA_LABELS = {1: "movies", 2: "shows", 3: "seasons", 4: "episodes",
-                 8: "artists", 9: "albums", 10: "tracks", 13: "photos",
-                 14: "photo albums", 18: "collections"}
+
+# Plex's export names the snapshot databaseBackup.db, sometimes with a UUID
+# appended; other variants use the on-disk name.
+_EXPORTED_DB = re.compile(
+    r"(?:com\.plexapp\.plugins\.library\.db|databaseBackup\.db"
+    r"(?:[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})?)", re.IGNORECASE,
+)
 
 
 class PlexError(RuntimeError):
     pass
 
 
+def schema_version(path):
+    """Newest migration Plex applied to a library database. Plex migrates
+    an older database forward on startup, but can't open a newer one."""
+    db = sqlite3.connect(f"file:{quote(str(path))}?mode=ro&immutable=1", uri=True)
+    try:
+        row = db.execute("SELECT max(CAST(version AS INTEGER)) FROM schema_migrations").fetchone()
+    except sqlite3.Error as exc:
+        raise PlexError(f"plex: {os.path.basename(path)} isn't a readable Plex library database ({exc})") from None
+    finally:
+        db.close()
+    return row[0] or 0
+
+
+def is_plex_backup(path):
+    try:
+        with zipfile.ZipFile(path) as zf:
+            return {MANIFEST, LIBRARY_DB, PREFERENCES} <= set(zf.namelist()) and zf.testzip() is None
+    except zipfile.BadZipFile:
+        return False
+
+
 class PlexApp:
-    def __init__(self, url, api_key, timeout=30):
+    def __init__(self, url, api_key, data_dir=None, timeout=30):
         try:
             parsed = urlsplit(url)
             valid = (parsed.scheme in ("http", "https") and parsed.hostname
@@ -39,16 +95,17 @@ class PlexApp:
         if not isinstance(api_key, str) or not api_key.strip():
             raise PlexError("plex: the server owner's Plex token is required")
         self.url = url.rstrip("/")
+        self.data_dir = data_dir or None
         self.timeout = timeout
         self.session = requests.Session()
         self.session.headers.update({"X-Plex-Token": api_key})
 
-    def _get(self, path, *, missing_ok=False, **kwargs):
+    def _get(self, path, **kwargs):
         url = self.url + path
         origin = urlsplit(self.url)
         endpoint = urlsplit(path).path
-        # Plex itself can redirect artwork. Follow only same-origin redirects,
-        # explicitly: Requests forwards custom X-Plex-Token headers cross-host.
+        # Follow only same-origin redirects, explicitly: Requests would
+        # forward the custom X-Plex-Token header to another host.
         for hop in range(6):
             try:
                 response = self.session.get(url, allow_redirects=False, **kwargs)
@@ -69,8 +126,6 @@ class PlexApp:
             except ValueError:
                 safe = False
             if not safe:
-                if missing_ok and location:
-                    return None  # Record unavailable artwork in the manifest.
                 raise PlexError(f"plex: redirect refused at {endpoint}; destination must stay on the configured server and protocol")
             if hop == 5:
                 raise PlexError(f"plex: too many redirects at {endpoint}; check the server URL and proxy")
@@ -79,8 +134,6 @@ class PlexApp:
         if response.status_code != 200:
             status = response.status_code
             response.close()
-            if status == 404 and missing_ok:
-                return None
             if status in (401, 403):
                 raise PlexError("plex: access denied; use the server owner's Plex token")
             if 300 <= status < 400:
@@ -88,71 +141,8 @@ class PlexApp:
             raise PlexError(f"plex: HTTP {status} at {endpoint}")
         return response
 
-    def test_connection(self):
-        # /identity can succeed without a valid token; prefs requires owner access.
-        with self._get("/:/prefs", timeout=self.timeout) as response:
-            try:
-                root = ET.fromstring(response.content)
-            except ET.ParseError:
-                raise PlexError("plex: expected Plex settings; check the server URL and proxy") from None
-            if root.tag != "MediaContainer" or root.find("Setting") is None:
-                raise PlexError("plex: the response is not Plex server settings")
-        return "Plex owner access verified (databases, API settings and artwork)"
-
-    def identity(self):
-        root, _ = self._xml("/identity")
-        version, identifier = root.get("version"), root.get("machineIdentifier")
-        if not version or not identifier:
-            raise PlexError("plex: server identity is missing its version or identifier")
-        return {"version": version, "machine_identifier": identifier}
-
-    def _download_databases(self, dest_dir):
-        os.makedirs(dest_dir, exist_ok=True)
-        archive = Path(dest_dir) / "plex-databases.zip"
-        try:
-            logger.info("plex: requesting database export; waiting for Plex to prepare the snapshot...")
-            with self._get("/diagnostics/databases", timeout=(self.timeout, 600), stream=True) as response:
-                logger.info("plex: downloading database export...")
-                downloaded, last_report = 0, time.monotonic()
-                with archive.open("wb") as output:
-                    os.chmod(archive, 0o600)
-                    for chunk in response.iter_content(chunk_size=1024 * 1024):
-                        output.write(chunk)
-                        downloaded += len(chunk)
-                        now = time.monotonic()
-                        if now - last_report >= _PROGRESS_INTERVAL:
-                            logger.info("plex: database download: %.1f MiB received", downloaded / _MIB)
-                            last_report = now
-            logger.info("plex: database downloaded (%.1f MiB); validating archive...", downloaded / _MIB)
-            with zipfile.ZipFile(archive) as zf:
-                # Accept Plex's diagnostic snapshot name, including its UUID,
-                # as well as the on-disk name used by other backup variants.
-                databases = library_databases(zf)
-                if not databases:
-                    raise PlexError("plex: export does not contain the Plex library database")
-                if len(databases) > 1:
-                    raise PlexError("plex: export contains multiple Plex library databases")
-                with zf.open(databases[0]) as db:
-                    if db.read(16) != b"SQLite format 3\0":
-                        raise PlexError("plex: export contains an invalid library database")
-                if zf.testzip() is not None:
-                    raise PlexError("plex: database export is corrupt")
-            logger.info("plex: database archive validated")
-        except requests.RequestException:
-            archive.unlink(missing_ok=True)
-            raise PlexError("plex: database download interrupted; retry the backup") from None
-        except (zipfile.BadZipFile, NotImplementedError, RuntimeError) as exc:
-            archive.unlink(missing_ok=True)
-            if isinstance(exc, PlexError):
-                raise
-            raise PlexError("plex: expected a readable database ZIP; check the URL and proxy") from None
-        except BaseException:
-            archive.unlink(missing_ok=True)
-            raise
-        return str(archive)
-
-    def _xml(self, path, **params):
-        with self._get(path, timeout=self.timeout, params=params) as response:
+    def _xml(self, path):
+        with self._get(path, timeout=self.timeout) as response:
             data = response.content
         try:
             root = ET.fromstring(data)
@@ -162,170 +152,170 @@ class PlexApp:
             raise PlexError("plex: expected a Plex MediaContainer response")
         return root, data
 
-    def _metadata_pages(self, section, media_type):
-        start, total, seen = 0, None, set()
-        label = _MEDIA_LABELS.get(media_type, "items")
-        logger.info("plex: library %s: reading %s metadata...", section, label)
-        while True:
-            params = {"X-Plex-Container-Start": start, "X-Plex-Container-Size": 500}
-            if media_type is not None:
-                params["type"] = media_type
-            root, data = self._xml(f"/library/sections/{section}/all", **params)
-            items = [item for item in root if item.tag in ("Directory", "Video", "Track", "Photo")]
-            try:
-                count = int(root.attrib["totalSize"])
-                offset = int(root.get("offset", "0"))
-            except (KeyError, ValueError):
-                raise PlexError("plex: missing library pagination metadata") from None
-            if count < 0 or offset != start or (total is not None and count != total):
-                raise PlexError("plex: library changed during export; retry when scans are idle")
-            total = count
-            for item in items:
-                key = item.get("ratingKey")
-                if not key or key in seen:
-                    raise PlexError("plex: duplicate or missing library item ID")
-                seen.add(key)
-            logger.info("plex: library %s: %s metadata read %d/%d", section, label, start + len(items), total)
-            yield start, data, items
-            start += len(items)
-            if start == total:
-                return
-            if not items or start > total:
-                raise PlexError("plex: incomplete library metadata export")
+    def identity(self):
+        root, _ = self._xml("/identity")
+        version, identifier = root.get("version"), root.get("machineIdentifier")
+        if not version or not identifier:
+            raise PlexError("plex: server identity is missing its version or identifier")
+        return {"version": version, "machine_identifier": identifier}
+
+    def _path(self, *parts):
+        return os.path.join(self.data_dir, *parts)
+
+    def _require_folder(self, machine_identifier=None):
+        if not self.data_dir:
+            raise PlexError("plex: set the data folder - Plex's \"Plex Media Server\" folder, mounted into this container")
+        if not os.path.isdir(self.data_dir):
+            raise PlexError(
+                f"plex: data folder {self.data_dir} doesn't exist in this container - mount Plex's "
+                "\"Plex Media Server\" folder there (Library/Application Support/Plex Media Server in Plex's /config)"
+            )
+        if not os.path.isfile(self._path(*_DATABASES, LIBRARY_DB)) or not os.path.isfile(self._path(PREFERENCES)):
+            raise PlexError(
+                f"plex: {self.data_dir} doesn't look like Plex's data folder (no Preferences.xml or library database) - "
+                "mount Library/Application Support/Plex Media Server from Plex's /config (a new install creates it on first start)"
+            )
+        if machine_identifier:
+            folder_id = self._preferences(self._path(PREFERENCES)).get("ProcessedMachineIdentifier")
+            if folder_id and folder_id != machine_identifier:
+                raise PlexError(
+                    f"plex: {self.data_dir} holds another Plex server's data (server {folder_id}, "
+                    f"this server is {machine_identifier}) - check the volume mount"
+                )
+
+    @staticmethod
+    def _preferences(path):
+        try:
+            root = ET.parse(path).getroot()
+        except (ET.ParseError, OSError) as exc:
+            raise PlexError(f"plex: can't read {os.path.basename(path)} ({exc})") from None
+        if root.tag != "Preferences":
+            raise PlexError(f"plex: {os.path.basename(path)} isn't Plex's settings file")
+        return root
+
+    def test_connection(self):
+        # /identity answers without a token; the settings need owner access.
+        root, _ = self._xml("/:/prefs")
+        if root.find("Setting") is None:
+            raise PlexError("plex: the response is not Plex server settings")
+        identity = self.identity()
+        self._require_folder(identity["machine_identifier"])
+        message = f"plex {identity['version']} reachable, owner access OK"
+        if not os.access(self._path(*_DATABASES), os.W_OK):
+            return message + "; data folder is read-only, so backups work but restores won't"
+        return message + ", data folder OK"
+
+    def _download_database(self, dest_dir):
+        """Downloads Plex's database export and extracts the library
+        database as dest_dir/com.plexapp.plugins.library.db."""
+        export = Path(dest_dir) / "plex-databases.zip"
+        target = Path(dest_dir) / LIBRARY_DB
+        try:
+            logger.info("plex: requesting database export; waiting for Plex to prepare the snapshot...")
+            with self._get("/diagnostics/databases", timeout=(self.timeout, 600), stream=True) as response:
+                logger.info("plex: downloading database export...")
+                downloaded, last_report = 0, time.monotonic()
+                with export.open("wb") as output:
+                    for chunk in response.iter_content(chunk_size=_MIB):
+                        output.write(chunk)
+                        downloaded += len(chunk)
+                        now = time.monotonic()
+                        if now - last_report >= _PROGRESS_INTERVAL:
+                            logger.info("plex: database download: %.1f MiB received", downloaded / _MIB)
+                            last_report = now
+            logger.info("plex: database downloaded (%.1f MiB); validating it...", downloaded / _MIB)
+            with zipfile.ZipFile(export) as zf:
+                databases = [i for i in zf.infolist()
+                             if not i.is_dir() and _EXPORTED_DB.fullmatch(i.filename.replace("\\", "/").split("/")[-1])]
+                if len(databases) != 1:
+                    raise PlexError("plex: the export doesn't hold exactly one library database")
+                with zf.open(databases[0]) as src, target.open("wb") as dst:
+                    shutil.copyfileobj(src, dst, _MIB)
+            with target.open("rb") as db:
+                if db.read(16) != b"SQLite format 3\0":
+                    raise PlexError("plex: the export holds an invalid library database")
+            return schema_version(target)
+        except BaseException as exc:
+            target.unlink(missing_ok=True)
+            if isinstance(exc, requests.RequestException):
+                raise PlexError("plex: database download interrupted; retry the backup") from None
+            if isinstance(exc, (zipfile.BadZipFile, NotImplementedError)):
+                raise PlexError("plex: expected a database ZIP; check the URL and proxy") from None
+            raise
+        finally:
+            export.unlink(missing_ok=True)
 
     def backup(self, dest_dir):
-        started = time.monotonic()
         logger.info("plex: checking server identity...")
         identity = self.identity()
-        logger.info("plex: server identity verified")
-        database = Path(self._download_databases(dest_dir))
-        archive = Path(dest_dir) / "plex-backup.zip"
-        complete = False
+        self._require_folder(identity["machine_identifier"])
+        os.makedirs(dest_dir, exist_ok=True)
         try:
+            schema = self._download_database(dest_dir)
             if self.identity() != identity:
-                raise PlexError("plex: server identity or version changed during the database export; retry after the server is stable")
-            with archive.open("wb") as output:
-                os.chmod(archive, 0o600)
-                with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-                    logger.info("plex: adding database export to backup archive...")
-                    zf.write(database, "databases.zip")
-                    logger.info("plex: database export added; exporting server settings...")
-                    _, prefs = self._xml("/:/prefs")
-                    zf.writestr("server-preferences.xml", prefs)
-                    logger.info("plex: server settings exported; reading library list...")
-                    sections, data = self._xml("/library/sections")
-                    zf.writestr("library-sections.xml", data)
-                    libraries = sections.findall("Directory")
-                    logger.info("plex: library list exported (%d libraries)", len(libraries))
-                    artwork, skipped_artwork = set(), set()
-                    kinds = {"movie": (1, 18), "show": (2, 3, 4, 18),
-                             "artist": (8, 9, 10, 18), "photo": (13, 14)}
-                    for library_number, section in enumerate(libraries, start=1):
-                        key = section.get("key", "")
-                        if not re.fullmatch(r"[0-9]+", key):
-                            raise PlexError("plex: invalid library section ID")
-                        logger.info("plex: library %d/%d (ID %s): exporting settings...", library_number, len(libraries), key)
-                        _, prefs = self._xml(f"/library/sections/{key}/prefs")
-                        zf.writestr(f"library-preferences/{key}.xml", prefs)
-                        logger.info("plex: library %s: settings exported", key)
-                        for media_type in kinds.get(section.get("type"), (None,)):
-                            for start, page, items in self._metadata_pages(key, media_type):
-                                zf.writestr(f"metadata/{key}/{media_type or 'all'}-{start}.xml", page)
-                                for item in items:
-                                    for attribute in ("thumb", "art", "banner"):
-                                        path = item.get(attribute)
-                                        if not path:
-                                            continue
-                                        parsed = urlsplit(path)
-                                        if (not parsed.scheme and not parsed.netloc
-                                                and parsed.path.startswith("/library/metadata/")
-                                                and ".." not in parsed.path.split("/")):
-                                            artwork.add(path)
-                                        else:
-                                            skipped_artwork.add(path)
-                        logger.info("plex: library %d/%d (ID %s) exported", library_number, len(libraries), key)
-                    image_index = []
-                    artwork_bytes, last_artwork_report = 0, time.monotonic()
-                    logger.info("plex: downloading artwork (%d files; %d external URLs skipped)...", len(artwork), len(skipped_artwork))
+                raise PlexError("plex: server identity or version changed during the database export; retry once the server is stable")
+            shutil.copyfile(self._path(PREFERENCES), os.path.join(dest_dir, PREFERENCES))
+            self._preferences(os.path.join(dest_dir, PREFERENCES))  # A complete file, not one Plex was rewriting.
+            manifest = {"plex_version": identity["version"], "machine_identifier": identity["machine_identifier"],
+                        "schema_version": schema}
+            with open(os.path.join(dest_dir, MANIFEST), "w") as f:
+                json.dump(manifest, f, indent=2)
+        except BaseException:
+            for name in (LIBRARY_DB, PREFERENCES, MANIFEST):
+                Path(dest_dir, name).unlink(missing_ok=True)
+            raise
+        logger.info("plex: backed up the library database and server settings from Plex %s", identity["version"])
+        return dest_dir
 
-                    def artwork_progress(processed):
-                        nonlocal last_artwork_report
-                        now = time.monotonic()
-                        if now - last_artwork_report >= _PROGRESS_INTERVAL:
-                            logger.info("plex: artwork: %d/%d processed, %d saved, %.1f MiB received",
-                                        processed, len(artwork), len(image_index), artwork_bytes / _MIB)
-                            last_artwork_report = now
-
-                    for number, path in enumerate(sorted(artwork)):
-                        response = self._get(path, missing_ok=True, timeout=(self.timeout, 120), stream=True)
-                        if response is None:
-                            skipped_artwork.add(path)
-                            artwork_progress(number + 1)
-                            continue
-                        with response:
-                            mime = response.headers.get("Content-Type", "")
-                            if not mime.lower().startswith("image/"):
-                                raise PlexError("plex: artwork endpoint did not return an image")
-                            filename = f"artwork/{number}"
-                            with zf.open(filename, "w", force_zip64=True) as image:
-                                for chunk in response.iter_content(1024 * 1024):
-                                    image.write(chunk)
-                                    artwork_bytes += len(chunk)
-                                    artwork_progress(number)
-                            image_index.append({"path": path, "file": filename, "content_type": mime})
-                        artwork_progress(number + 1)
-                    logger.info("plex: artwork export complete: %d saved, %d unavailable or external", len(image_index), len(skipped_artwork))
-                    logger.info("plex: writing manifest and restore instructions; finalizing archive...")
-                    zf.writestr("artwork/index.json", json.dumps(image_index, indent=2))
-                    zf.writestr("artwork/unavailable.json", json.dumps(sorted(skipped_artwork), indent=2))
-                    zf.writestr("manifest.json", json.dumps({
-                        "format": "backuparr-plex-export", "format_version": 1,
-                        "server": identity,
-                        "database_archive": "databases.zip", "artwork_count": len(image_index),
-                        "unavailable_artwork_file": "artwork/unavailable.json",
-                        "unavailable_artwork_count": len(skipped_artwork),
-                        "limitations": [
-                            "Preferences are an API reference export, not a native Preferences.xml file.",
-                            "No media, subtitle files, codecs, caches, plugin binaries or opaque plugin data.",
-                            "Artwork includes library thumbnails/backgrounds/banners exposed by the server; external image URLs are listed but not fetched with the Plex token.",
-                            "Plex cloud-only account data is excluded. API settings/artwork reads are not atomic with the native database export.",
-                            "The optional Plex restore agent restores the library database on the same server/version. API settings and artwork need separate manual recovery.",
-                        ],
-                    }, indent=2))
-                    zf.writestr("RESTORE.txt", (
-                        "Plex backup: databases, API settings, metadata and artwork\n\n"
-                        "databases.zip is Plex's unchanged native database export. It includes\n"
-                        "locally stored watched/unwatched state, progress and ratings for all users.\n"
-                        "Use Backuparr's Restore tab with the optional Plex restore agent for\n"
-                        "database recovery on the same server and Plex version. It preserves a\n"
-                        "rollback copy, stops the container, restores the database and restarts it.\n"
-                        "Settings and image files are not applied by the agent.\n\n"
-                        "Alternatively, to restore manually:\n"
-                        "Stop Plex before restoring. Extract databases.zip, then rename its\n"
-                        "databaseBackup.db (possibly followed by a UUID) to\n"
-                        "com.plexapp.plugins.library.db. If the archive\n"
-                        "already uses com.plexapp.plugins.library.db, keep that name.\n"
-                        "Keep a copy of the target databases before replacing them and remove\n"
-                        "stale -wal/-shm companions as directed by Plex's official guide:\n"
-                        "https://support.plex.tv/articles/202485658-restore-a-database-backed-up-via-scheduled-tasks/\n\n"
-                        "server-preferences.xml and library-preferences/ are API response exports,\n"
-                        "NOT native Preferences.xml files. Reapply reviewed settings in Settings,\n"
-                        "or PUT /:/prefs and /library/sections/{id}/prefs using setting IDs/values.\n"
-                        "Omit read-only/token/identity fields; match current library IDs.\n"
-                        "The database preserves playlist/collection data; metadata XML and artwork\n"
-                        "help recover images separately: use Edit > Poster/Background to upload the\n"
-                        "exported files. Use artwork/index.json to match image files\n"
-                        "to their old item URLs; IDs can change after rebuilding a library.\n"
-                        "Check manifest.json for missing data and artwork/unavailable.json\n"
-                        "for unavailable image URLs. Protect these sensitive archives.\n"
-                    ))
-            logger.info("plex: backup archive ready (%.1f MiB, %.1f seconds)",
-                        archive.stat().st_size / _MIB, time.monotonic() - started)
-            complete = True
+    def _check_stopped(self):
+        open_dbs = sorted(n for n in os.listdir(self._path(*_DATABASES)) if n.endswith(".db-wal"))
+        if open_dbs:
+            raise PlexError(
+                f"plex: stop Plex before restoring - its databases are in use (found {open_dbs[0]}). "
+                "If Plex is already stopped, it didn't shut down cleanly: start it, then stop it again"
+            )
+        try:
+            running = self.session.get(f"{self.url}/identity", timeout=5, allow_redirects=False).ok
         except requests.RequestException:
-            raise PlexError("plex: artwork download interrupted; retry the backup") from None
-        finally:
-            database.unlink(missing_ok=True)
-            if not complete:
-                archive.unlink(missing_ok=True)
-        return str(archive)
+            running = False
+        if running:
+            raise PlexError("plex: stop Plex before restoring - it's still answering at " + self.url)
+
+    def restore_from_file(self, local_zip_path):
+        """Writes the backup's library database and Preferences.xml over
+        Plex's while Plex is stopped. Files are rewritten in place, so they
+        keep Plex's owner and permissions."""
+        if not is_plex_backup(local_zip_path):
+            raise PlexError("plex: this file isn't a Plex backup made by Backuparr")
+        self._require_folder()
+        databases = self._path(*_DATABASES)
+        target = os.path.join(databases, LIBRARY_DB)
+        preferences = self._path(PREFERENCES)
+        if not all(os.access(p, os.W_OK) for p in (databases, target, preferences)):
+            raise PlexError(
+                f"plex: Plex's databases in {self.data_dir} aren't writable - mount the data folder "
+                "read-write to restore, and run Backuparr with Plex's PUID:PGID"
+            )
+        self._check_stopped()
+
+        with tempfile.TemporaryDirectory(prefix="plex-restore-") as work:
+            with zipfile.ZipFile(local_zip_path) as zf:
+                restored = zf.extract(LIBRARY_DB, work)
+                restored_prefs = zf.extract(PREFERENCES, work)
+            server_id = self._preferences(restored_prefs).get("ProcessedMachineIdentifier")
+            backup_schema, installed = schema_version(restored), schema_version(target)
+            if backup_schema > installed:
+                raise PlexError(
+                    "plex: this backup comes from a newer Plex than the one installed (database schema "
+                    f"{backup_schema}, installed {installed}) - update Plex first"
+                )
+            # "wb" truncates in place: owner and mode stay Plex's.
+            for src_path, dst_path in ((restored, target), (restored_prefs, preferences)):
+                with open(src_path, "rb") as src, open(dst_path, "wb") as dst:
+                    shutil.copyfileobj(src, dst, _MIB)
+        # No -wal exists (checked above), so a -shm index is stale.
+        shm = target + "-shm"
+        if os.path.exists(shm):
+            os.remove(shm)
+        logger.info("plex: restored the library database and server settings (server %s) into %s - start Plex to load them",
+                    server_id or "?", self.data_dir)

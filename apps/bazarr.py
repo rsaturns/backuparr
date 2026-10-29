@@ -138,6 +138,9 @@ class BazarrApp:
         written under a renamed bazarr_backup_v<stem>.zip rather than
         reusing the source filename as-is.
         """
+        # Check Bazarr answers before the restore request: after it, a dropped
+        # connection or a proxy's gateway error means a restart, not an outage.
+        self.list_backups()
         stem = os.path.splitext(os.path.basename(local_zip_path))[0]
         filename = f"bazarr_backup_v{stem}.zip"
         target = os.path.join(bazarr_backup_dir, filename)
@@ -157,6 +160,10 @@ class BazarrApp:
             # sending is the expected outcome of a successful restore, not
             # a failure.
             logger.info("bazarr: connection dropped as expected during restart")
+            return None
+        if res.status_code in (502, 503, 504):
+            # The same dropped connection, as reported by a reverse proxy.
+            logger.info("bazarr: proxy returned HTTP %s as expected during restart", res.status_code)
             return None
         res.raise_for_status()
         return res
