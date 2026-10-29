@@ -1034,6 +1034,11 @@ def _restore_work(app_name, root, app_cfg, data, bazarr_backup_dir):
             ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
             RESTORE_RUN_STATE["message"] = "plex restore complete, start Plex again to load it"
 
+        elif app_name == "nzbget":
+            log.info("restore: restoring nzbget settings...")
+            ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
+            RESTORE_RUN_STATE["message"] = "nzbget restore complete, NZBGet is reloading to apply it"
+
         elif app_name == "seerr":
             log.info("restore: writing the backup into seerr's data folder...")
             ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)

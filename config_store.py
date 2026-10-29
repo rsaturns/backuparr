@@ -16,7 +16,7 @@ class ConfigError(RuntimeError):
     truncated by a full disk, ...). The message says what to do about it."""
 
 
-APP_NAMES = ["radarr", "sonarr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "tautulli", "jellyfin", "emby", "plex", "seerr"]
+APP_NAMES = ["radarr", "sonarr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr"]
 
 DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "password": ""}
 
@@ -62,6 +62,23 @@ APP_META = [
         "key_help": "Only if Tdarr's API auth token is enabled",
     },
     {"id": "sabnzbd", "label": "SABnzbd", "icon": "sabnzbd.svg", "status": "available", "key_required": True, "url_placeholder": "http://sabnzbd:8080", "extra_fields": []},
+    {
+        "id": "nzbget",
+        "label": "NZBGet",
+        "icon": "nzbget.svg",
+        "status": "available",
+        # NZBGet has no API key: its JSON-RPC API takes the username and
+        # password of the Control user - see apps/nzbget.py.
+        "key_required": False,
+        "no_api_key": True,
+        "url_placeholder": "http://nzbget:6789",
+        "extra_fields": [
+            {"name": "username", "label": "Username", "type": "text",
+             "help": "Settings > Security > ControlUsername"},
+            {"name": "password", "label": "Password", "type": "password",
+             "help": "Settings > Security > ControlPassword"},
+        ],
+    },
     {"id": "tautulli", "label": "Tautulli", "icon": "tautulli.svg", "status": "available", "key_required": True, "url_placeholder": "http://tautulli:8181", "extra_fields": []},
     {
         "id": "jellyfin",
@@ -349,6 +366,7 @@ def _secret_fields(cfg):
     explicit allowlist, not "encrypt everything"."""
     fields = [(cfg["apps"][name], "api_key") for name in APP_NAMES]
     fields.append((cfg["apps"]["bazarr"], "password"))
+    fields.append((cfg["apps"]["nzbget"], "password"))
     fields.append((cfg["destinations"]["gdrive"], "client_secret"))
     fields.append((cfg["destinations"]["gdrive"], "developer_key"))
     fields.append((cfg["destinations"]["gdrive"], "refresh_token"))

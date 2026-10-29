@@ -9,511 +9,52 @@
 > included. Reviewed and maintained by a human.
 
 Scheduled config/database backups for Radarr, Sonarr, Prowlarr, Profilarr,
-Bazarr, Tdarr, SABnzbd, Tautulli, Jellyfin, Emby, Plex, and Seerr, sent to every
-destination you enable: Local storage, Google Drive, OneDrive, and Dropbox.
-Apps, URLs/API keys, destinations, schedule, retention,
-and restores are all configured and triggered from the web UI, not env vars.
+Bazarr, Tdarr, SABnzbd, NZBGet, Tautulli, Jellyfin, Emby, Plex, and Seerr, sent
+to every destination you enable: Local storage, Google Drive, OneDrive, and
+Dropbox. Everything - apps, destinations, schedule, retention and restores - is
+set up in the web UI, not env vars.
 
-Every app is backed up through **its own HTTP API**, never by reading its
-config volume directly - except the apps that need a mount:
-Jellyfin's backups folder, because its API creates a backup but can't download
-it (see the [Jellyfin note](#jellyfin-note)), and Emby's and Seerr's data
-folders, because they have no backup API (see the [Emby note](#emby-note) and
-the [Seerr note](#seerr-note)). Plex's database comes through its API, but its
-settings and server identity only from its data folder (see the [Plex
-note](#plex-note)).
-
-To recover after a host failure, re-create the containers from your compose
-file, then restore each app from its latest backup (see
-[Restoring after a disaster](#restoring-after-a-disaster)).
+Most apps are backed up through their own API. Jellyfin, Emby, Plex and Seerr
+also need a folder mounted into Backuparr - see the [per-app
+notes](#per-app-backup-method).
 
 See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## Table of contents
 
-- [Backuparr](#backuparr)
-  - [Table of contents](#table-of-contents)
-  - [Architecture](#architecture)
-  - [Why not reuse an existing tool?](#why-not-reuse-an-existing-tool)
-  - [Per-app backup method (read this before deploying)](#per-app-backup-method-read-this-before-deploying)
-    - [Profilarr backup note](#profilarr-backup-note)
-    - [Tautulli backup note](#tautulli-backup-note)
-    - [Tautulli restore note](#tautulli-restore-note)
-    - [Jellyfin note](#jellyfin-note)
-    - [Emby note](#emby-note)
-    - [Plex note](#plex-note)
-    - [Seerr note](#seerr-note)
-    - [Bazarr auth note](#bazarr-auth-note)
-    - [Tdarr auth note](#tdarr-auth-note)
-  - [Environment variables](#environment-variables)
-    - [Advanced: file locations](#advanced-file-locations)
-  - [Destinations](#destinations)
-    - [Local storage](#local-storage)
-    - [Google Drive](#google-drive)
-    - [OneDrive](#onedrive)
-    - [Dropbox](#dropbox)
-  - [Deploying](#deploying)
-    - [Pull the published image (recommended)](#pull-the-published-image-recommended)
-    - [Or build from source](#or-build-from-source)
-    - [Prowlarr discovery](#prowlarr-discovery)
-    - [Login](#login)
-    - [Encryption at rest](#encryption-at-rest)
-  - [Restoring after a disaster](#restoring-after-a-disaster)
-  - [Notifications](#notifications)
-    - [Discord](#discord)
-    - [Slack](#slack)
-    - [Telegram](#telegram)
-    - [Gotify (self-hosted)](#gotify-self-hosted)
-    - [ntfy.sh, Healthchecks.io, or anything else](#ntfysh-healthchecksio-or-anything-else)
-  - [Configuration reference](#configuration-reference)
-  - [Credits](#credits)
-  - [License](#license)
-
-## Architecture
-
-<img src="webui/static/architecture-diagram.svg" alt="Radarr, Sonarr, Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, Tautulli, Jellyfin, Emby, Plex, and Seerr each feed Backuparr; Backuparr uploads each backup via rclone to Local storage, Google Drive, Microsoft OneDrive, and Dropbox" width="100%">
-
-## Why not reuse an existing tool?
-
-[Zerka30/servarr-backup](https://github.com/Zerka30/servarr-backup) does
-this for Radarr/Sonarr/Prowlarr via S3. Backuparr extends the same idea
-(trigger the app's own backup API, download it, upload it) to Profilarr,
-Bazarr, Tdarr, Tautulli, Jellyfin, Emby, Plex, and Seerr, and uses a pick-your-destinations model built
-on [rclone](https://rclone.org/): Local out of the box, Google Drive via an
-in-app "Connect" button, and OneDrive and Dropbox via a one-time
-`rclone authorize` paste, with no need to run rclone's interactive config wizard yourself.
-
-## Per-app backup method (read this before deploying)
-
-| App | Method | Notes |
-|---|---|---|
-| Radarr / Sonarr / Prowlarr | `POST .../system/backup` to trigger, download the result, `DELETE` it server-side | The apps' official manual-backup zip. Restore is a multipart upload to `.../system/backup/restore/upload` - fully automated, no filesystem access. |
-| Profilarr | `POST /api/v1/backups` to trigger (async job, polled via `GET /api/v1/jobs/{id}`), download the newest result, `DELETE` it server-side | Backup only - Profilarr's restore has no public API; see the [Profilarr backup note](#profilarr-backup-note). |
-| Bazarr | `POST /api/system/backups` to trigger, poll `GET` until the new file appears, download it, `DELETE` it server-side | The download route (`/system/backup/download/<file>`) is gated by Bazarr's web-auth setting, **not** the API key - see the [Bazarr auth note](#bazarr-auth-note). Bazarr has no upload-restore endpoint, so restore writes the file into Bazarr's backup folder, then an API call triggers the restore and restart. |
-| Tdarr | `POST /api/v2/cruddb` with `mode: getAll` for every internal DB collection (library settings, flows, global settings, node registrations, staged/output/statistics) | Fully API-driven both ways. Restore does `removeAll` then re-`insert`s each document one at a time (no bulk-insert mode) - destructive, asks for confirmation. |
-| SABnzbd | `GET /sabnzbd/api?mode=get_config` to back up; `mode=set_config` per key to restore | SABnzbd's API returns every password field (e.g. a Usenet server password) as `**********`, with no way to get the real value. Restore recreates each Usenet server and every plain `misc`-style setting via the API, and asks for each server's real password (fields left out of the API call are untouched, so a skipped password isn't overwritten with a blank). Categories, RSS feeds, and sorters aren't auto-restored. |
-| Tautulli | `GET /api/v2?cmd=download_database` and `cmd=download_config` - each streams a fresh copy directly, no trigger/poll step | The database comes back with Plex tokens nulled out; the config is only lightly sanitized - see the [Tautulli backup note](#tautulli-backup-note). Restore uploads each separately via `cmd=import_database` and `cmd=import_config` (multipart) - see the [Tautulli restore note](#tautulli-restore-note). |
-| Jellyfin | `POST /Backup/Create` (database only) writes Jellyfin's own backup archive to its backups folder; Backuparr copies it from there and removes Jellyfin's copy | Needs Jellyfin 10.11 or newer and its backups folder mounted into Backuparr - see the [Jellyfin note](#jellyfin-note). Restore copies the archive back into that folder and calls `POST /Backup/Restore`; Jellyfin restarts to apply it. |
-| Emby | Reads Emby's mounted data folder: copies its settings, plugins, playlists and collections, and snapshots each database with SQLite's online backup while Emby runs | Emby has no backup API (its Backup & Restore plugin needs Emby Premiere), so its data folder is mounted into Backuparr - see the [Emby note](#emby-note). Restore writes the files back while Emby is stopped. |
-| Plex | `GET /diagnostics/databases` - Plex's own "Download Database" export of its library database - plus `Preferences.xml` (settings and server identity) from Plex's mounted data folder | Needs the server owner's Plex token and Plex's data folder mounted into Backuparr. Restore writes both back while Plex is stopped, so a rebuilt server keeps its identity and shared users - see the [Plex note](#plex-note). |
-| Seerr | Reads Seerr's mounted config folder: snapshots its database with SQLite's online backup while Seerr runs, and copies `settings.json` | Seerr has no backup API, so its config folder is mounted into Backuparr - see the [Seerr note](#seerr-note). Restore writes both back while Seerr is stopped. Only Seerr's default SQLite database is supported, not PostgreSQL. |
-
-### Profilarr backup note
-
-Profilarr sanitizes the backup before it leaves the server, stripping arr
-instance URLs/API keys, sync configs, notification webhook URLs/tokens, user
-accounts and sessions, personal access tokens for linked databases, and
-AI/TMDB API keys. After a restore, re-add those by hand.
-
-Restore isn't automated: Profilarr's restore is a browser-session-only form
-outside its `/api/v1` REST API, and only stages a pending restore that is
-applied at the next container restart. Profilarr therefore doesn't appear on
-the **Restore** tab. To restore by hand:
-
-1. Download the backup from Backuparr's **History** tab.
-2. Upload it in Profilarr's own **Settings > Backups** and restore it there.
-3. Restart the Profilarr container and re-add whatever was stripped above.
-
-### Tautulli backup note
-
-`download_database` nulls out Plex user/server tokens server-side.
-`download_config` only strips `PMS_TOKEN`/`JWT_SECRET` - **the Tautulli API
-key and any notification agent credentials in config.ini (webhook URLs,
-tokens, etc.) are in the backup in plain text.**
-
-Backuparr's own `config.json` secrets are encrypted (see [Encryption at
-rest](#encryption-at-rest)), but treat every destination holding Tautulli
-backups as holding a live Tautulli API key, and rotate it in Tautulli's
-Settings if a destination is ever compromised.
-
-### Tautulli restore note
-
-Tautulli's `import_config` API call only **stages** the uploaded config.
-Applying it takes a second request to a web route (`/restart_import_config`)
-that Tautulli protects with its login, and Backuparr makes that request for
-you right after the upload:
-
-- **No login set up in Tautulli** (Settings > Web Interface): the import
-  starts and Tautulli restarts by itself.
-- **Login enabled:** an API key can't use that route, so the config stays
-  staged and nothing changes yet. The Restore tab (and the log) says so and
-  shows the URL: log in to Tautulli, open
-  `<your Tautulli URL>/restart_import_config`, and the import runs and
-  Tautulli restarts. The staged import is held in Tautulli's memory: if
-  Tautulli restarts before you open that URL, its page still says "Importing a
-  Config" but nothing is applied, so run the restore again.
-
-The database can't be restored over the API at all (an upstream Tautulli bug),
-so Backuparr skips it and says so; import `tautulli.db` by hand from Tautulli's
-Settings > Import & Backup > Import Database.
-
-### Jellyfin note
-
-Jellyfin (10.11 or newer) creates backups through its API, but has no endpoint
-to download or upload one. So Backuparr needs **Jellyfin's backups folder**
-mounted into its container - only that folder, not the rest of Jellyfin's
-config. Inside Jellyfin's container it is `/config/data/backups` in the official
-`jellyfin/jellyfin` image and `/config/data/data/backups` in
-`lscr.io/linuxserver/jellyfin`; mount the matching host folder:
-
-```yaml
-    volumes:
-      # official image, with Jellyfin's /config at /share/Container/jellyfin/config
-      - /share/Container/jellyfin/config/data/backups:/mnt/jellyfin-backups
-      # or linuxserver image, with Jellyfin's /config at /share/Container/jellyfin
-      # - /share/Container/jellyfin/data/data/backups:/mnt/jellyfin-backups
-```
-
-If the path is wrong, **Test connection** and the backup log name the folder
-Jellyfin actually wrote to.
-
-Then fill in the Jellyfin card: the URL, an API key from Jellyfin's
-**Dashboard > API Keys** (a user's sign-in token can't manage backups), and
-**Backups folder** = `/mnt/jellyfin-backups`. **Test connection** checks that
-the folder holds the backups Jellyfin lists, once there are any.
-
-- **What's in the backup:** Jellyfin's database - users, watched state and
-  playback progress, playlists, collections, libraries, server settings and API
-  keys - plus its config files. Metadata images, trickplay images and
-  subtitles are left out; a library scan brings them back. The archive holds
-  users' password hashes and Jellyfin's API keys, so protect every
-  destination accordingly.
-- **Mount the folder read-write**, writable by Backuparr's `PUID`/`PGID` (the
-  simplest is the same user Jellyfin runs as). Backuparr removes Jellyfin's
-  copy of each archive after taking it, and a restore writes into the folder.
-  Read-only, backups still work, but Jellyfin's copies stay in the folder and
-  restores can't run.
-- **Restore** replaces Jellyfin's database and settings with the backup's, so
-  anything added since is lost. Jellyfin restarts in place and applies the
-  backup on startup, and the archive stays in its backups folder (delete it
-  there when you no longer need it). API keys are restored too: a key created
-  after the backup - for example on a freshly reinstalled Jellyfin - is gone
-  afterwards, while the key Backuparr used when the backup was taken works
-  again. After a rebuild, put the new install's key in **Restore to a
-  different target** rather than in Settings.
-- **Reverse proxy:** Jellyfin only accepts its API key in the `Authorization`
-  header, so a [service authentication header](#service-authentication-headers)
-  for a proxy in front of Jellyfin must use another name (such as Cloudflare
-  Access's `CF-Access-Client-Id`/`CF-Access-Client-Secret`).
-
-### Emby note
-
-Emby has no API to export or import its data - its own Backup & Restore plugin
-needs Emby Premiere - so Backuparr reads **Emby's data folder** directly: the
-folder Emby has at `/config`, in both the official `emby/embyserver` image and
-`lscr.io/linuxserver/emby`. Mount it into Backuparr:
-
-```yaml
-    volumes:
-      # with Emby's /config at /share/Container/emby/config
-      - /share/Container/emby/config:/mnt/emby:ro   # drop :ro to restore from the web UI
-```
-
-Then fill in the Emby card: the URL, an API key from Emby's **Settings >
-Advanced > API Keys**, and **Data folder** = `/mnt/emby`. **Test connection**
-checks the key, and that the folder is this Emby server's own (by its server
-id).
-
-- **What's in the backup:** the files Emby's manual-backup guide lists - its
-  databases (users, watched state and playback progress, favourites,
-  playlists, collections, libraries, logins and API keys), server and user
-  settings, plugins, and the playlist and collection folders. Metadata images,
-  cache, logs and transcoding files are left out; a library scan brings them
-  back. The databases are copied with SQLite's online backup, which takes a
-  consistent snapshot while Emby keeps running, so backups don't need Emby
-  stopped. The archive holds users' password hashes and Emby's API keys, so
-  protect every destination accordingly.
-- **Read-only is enough for backups.** To restore from the web UI, mount the
-  folder read-write and run Backuparr with Emby's `PUID`/`PGID` (or otherwise
-  give it write access to Emby's files).
-- **Restore needs Emby stopped** (`docker stop emby`): rewriting a running
-  server's databases would corrupt them, so Backuparr refuses while Emby is
-  running - it checks Emby's API and the databases' `-wal` files. It replaces
-  Emby's databases, settings, plugins, playlists and collections with the
-  backup's, so anything added since is lost; start Emby again afterwards. On a
-  new install, start Emby once first (the setup wizard can be skipped) so it
-  creates its data folder, then stop it and restore. A backup can't be
-  restored onto an older Emby than the one that made it - update Emby first.
-  API keys are restored too, so the key Backuparr used when the backup was
-  taken works again afterwards - and since Emby is stopped, the restore itself
-  doesn't need a working key. After a rebuild, keep that key in Settings; use
-  **Restore to a different target** only if the URL or data folder changed.
-- **To restore by hand** (for example with a read-only mount): stop Emby,
-  extract the archive into Emby's `/config` folder - overwriting what's there,
-  and deleting any `data/*.db-wal` and `data/*.db-shm` files - then start Emby.
-  `backuparr-emby.json` in the archive is only Backuparr's own manifest.
-
-### Plex note
-
-A Plex backup has two parts:
-
-- **The library database**, from Plex's own API: `GET /diagnostics/databases`
-  is Plex's **Download Database** export, a consistent snapshot Plex makes
-  itself. It holds the libraries, metadata, playlists, collections, and every
-  user's watched state, progress and ratings.
-- **`Preferences.xml`**, the server's settings and its **identity** - the id
-  plex.tv knows your server by, which the libraries you share with other Plex
-  users are attached to. Plex's API can't export it, so Backuparr reads it from
-  Plex's data folder. Restoring it is what brings a rebuilt server back as the
-  *same* server: without it, a reinstall shows up as a new server, and every
-  user has to be invited and given access again.
-
-Images, media, caches, codecs and plugins are left out; a library scan brings
-the images back. Plex's export doesn't include its separate blobs database.
-
-Mount Plex's data folder - `Library/Application Support/Plex Media Server`
-inside Plex's `/config`, in both the official `plexinc/pms-docker` image and
-`lscr.io/linuxserver/plex` - into Backuparr:
-
-```yaml
-    volumes:
-      # with Plex's /config at /share/Container/plex
-      - "/share/Container/plex/Library/Application Support/Plex Media Server:/mnt/plex:ro"   # drop :ro to restore from the web UI
-```
-
-Then fill in the Plex card with the URL, the **server owner's** Plex token, and
-**Data folder** = `/mnt/plex`. Plex usually runs with `network_mode: host`, so
-it isn't on Backuparr's Docker network and `http://plex:32400` won't resolve:
-use the host's address instead. Which form depends on Plex's **Secure
-connections** setting:
-
-- **Preferred** (the default): `http://192.168.1.10:32400` works.
-- **Required**: use the server's own HTTPS address,
-  `https://192-168-1-10.<id>.plex.direct:32400` - Plex's certificate is issued
-  for that name, never for the IP, so `https://192.168.1.10:32400` fails the
-  certificate check. **Get Plex token** fills this address in for you. Many
-  routers block `plex.direct` names (DNS-rebinding protection), so Backuparr
-  doesn't look them up: the name spells out its address, and Backuparr
-  connects there directly while still verifying the certificate against the
-  full name.
-
-Only a Plex container on the same Docker network can be reached by its
-container name.
-
-The easiest way to get the token is **Get Plex token**: sign in on Plex's own
-website with the owner's account (your password and two-factor code never reach
-Backuparr), and the token - plus the server's `plex.direct` address, when the
-URL is empty or points at the same machine - is filled in. Pick the server
-matching the URL if you own several. If the sign-in window is blocked, use the **Open Plex sign-in** link.
-This needs internet access to plex.tv, but not a publicly reachable Backuparr.
-You can also paste a token by hand - see Plex's guide to [finding your
-token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/).
-The token is sent in the `X-Plex-Token` header, and Backuparr follows a
-redirect only when it stays on the same server, so the token never goes to
-another host. **Test connection** checks the token, and that the folder is this
-Plex server's own (by its server id).
-
-- **The archive is sensitive:** besides your users' accounts, `Preferences.xml`
-  holds the server's own sign-in token for plex.tv. Protect every destination
-  accordingly.
-- **Read-only is enough for backups.** To restore from the web UI, mount the
-  folder read-write and run Backuparr with Plex's `PUID`/`PGID` (or otherwise
-  give it write access to Plex's files).
-- **Restore needs Plex stopped** (`docker stop plex`): rewriting a running
-  server's database would corrupt it, so Backuparr refuses while Plex is
-  running - it checks Plex's API and the databases' `-wal` files. It replaces
-  Plex's library database and `Preferences.xml` with the backup's, so anything
-  added since is lost; start Plex again afterwards. A backup from a newer Plex
-  than the one installed is refused - update Plex first; an older one is
-  upgraded by Plex when it starts.
-- **Rebuilding a server:** start the new Plex once so it creates its data
-  folder (there's no need to finish the setup or sign in), stop it, then
-  restore. It comes back as the original server - same id, settings, sign-in
-  and shared users - so keep the original server's Plex token in Settings.
-  Never run the original server and the restored copy at the same time: plex.tv
-  would see two servers with one identity.
-- **To restore by hand**, follow Plex's guides to [restoring the
-  database](https://support.plex.tv/articles/202485658-restore-a-database-backed-up-via-scheduled-tasks/)
-  and [moving a server](https://support.plex.tv/articles/201370363-move-an-install-to-another-system/):
-  stop Plex, put the archive's `com.plexapp.plugins.library.db` in
-  `Plug-in Support/Databases` (deleting its `-wal` and `-shm` files) and its
-  `Preferences.xml` in the `Plex Media Server` folder, then start Plex.
-
-### Seerr note
-
-Seerr has no API to export or import its data, so Backuparr reads **Seerr's
-config folder** directly - the folder Seerr has at `/app/config` in the
-official `ghcr.io/seerr-team/seerr` image. Mount it into Backuparr:
-
-```yaml
-    volumes:
-      # with Seerr's /app/config at /share/Container/seerr/config
-      - /share/Container/seerr/config:/mnt/seerr:ro   # drop :ro to restore from the web UI
-```
-
-Then fill in the Seerr card: the URL, the API key from Seerr's **Settings >
-General**, and **Data folder** = `/mnt/seerr`. **Test connection** checks the
-key, and that the folder is this Seerr's own (by its client id). Seerr only
-accepts its API key once its setup is finished.
-
-- **What's in the backup:** the two things [Seerr's backup
-  guide](https://docs.seerr.dev/using-seerr/backups/) lists - its database
-  (users, requests, issues, the blocklist and watchlists) and `settings.json`
-  (everything on Seerr's Settings pages: the Plex, Jellyfin or Emby
-  connection, Radarr and Sonarr, notification agents, and Seerr's API key).
-  The image cache and logs are left out. The database is copied with SQLite's
-  online backup, so backups don't need Seerr stopped.
-- **Only SQLite is supported** - Seerr's default. With PostgreSQL the data
-  lives in the database server, not the folder; back it up with `pg_dump` as
-  Seerr's guide describes.
-- **The archive is sensitive:** `settings.json` holds the media server's token
-  or API key, the Radarr and Sonarr API keys, notification credentials, and
-  Seerr's own API key. Protect every destination accordingly.
-- **Read-only is enough for backups.** To restore from the web UI, mount the
-  folder read-write and run Backuparr as Seerr's user - `1000:1000` in the
-  official image (or otherwise give it write access to Seerr's files).
-- **Restore needs Seerr stopped** (`docker stop seerr`): rewriting a running
-  server's database would corrupt it, so Backuparr refuses while Seerr is
-  running - it checks Seerr's API, and that nothing else has the database
-  open. It replaces Seerr's database and `settings.json` with the backup's, so
-  anything added since is lost; start Seerr again afterwards. A backup from a
-  newer Seerr than the one installed is refused - update Seerr first; an older
-  one is upgraded by Seerr when it starts.
-- **Rebuilding:** start the new Seerr once so it creates its config folder
-  (there's no need to finish the setup), stop it, then restore. Seerr's API key
-  is restored too, so keep the original key in Settings. (If you set Seerr's
-  `API_KEY` environment variable, that key wins instead.)
-- **To restore by hand** (for example with a read-only mount): stop Seerr, put
-  the archive's `db/db.sqlite3` in Seerr's `db` folder - deleting any
-  `db.sqlite3-wal` and `db.sqlite3-shm` files there - and `settings.json` in
-  its config folder, then start Seerr. `backuparr-seerr.json` in the archive is
-  only Backuparr's own manifest.
-
-### Bazarr auth note
-
-Bazarr's `/system/backup/download/...` route follows **Settings > General >
-Security**, not your API key:
-- `None` - works out of the box.
-- `Basic` - fill in the "Basic auth username/password" fields on Bazarr's
-  card.
-- `Forms` - not supported for automated download; switch to `None` or
-  `Basic`, or authenticate at your reverse proxy instead.
-
-### Tdarr auth note
-
-If Tdarr's server settings have an API auth token enabled, put it in the
-optional API key field on Tdarr's card; it's sent as `Authorization: Bearer
-<key>`. Use **Test connection** to confirm it works for your version, and
-leave it blank if Tdarr has no auth (the default).
-
-## Environment variables
-
-App-level settings (apps, URLs/API keys, destinations, schedule, retention)
-live in `config.json` and are edited in the web UI (see [Configuration
-reference](#configuration-reference)). The deployment-level settings below
-are set in your compose file's `environment:` block.
-
-| Env var | Default | Purpose |
-|---|---|---|
-| `WEBUI_HOST` | `0.0.0.0` | Address the web UI listens on. With `network_mode: host`, set `127.0.0.1` to allow connections only through the host's loopback interface. |
-| `WEBUI_PORT` | `8990` | Port the web UI listens on inside the container |
-| `PUID` / `PGID` | `1000` / `1000` | User/group the container runs as instead of root. Match your host user (`id`) so files on the config volume are owned by you; re-applied on every start |
-| `TZ` | UTC | Timezone: sets the local time the cron schedule fires at, and the timestamps in `backup.log` |
-| `UMASK` | `077` | Permissions of newly created files: the default makes backups readable only by the container user (files `0600`, directories `0700`). Set `022` if something else on the host reads the backup folder as a different user. Files written earlier keep their old permissions. |
-| `LOG_LEVEL` | `INFO` | Python logging level for backup/restore runs, e.g. `DEBUG` when troubleshooting |
-| `BACKUPARR_SECRETS_KEY` | *(auto-generated)* | Overrides the generated `secrets.key` that encrypts `config.json`'s secrets (see [Encryption at rest](#encryption-at-rest)); set it to keep the key off the volume, e.g. a Docker secret |
-| `RCLONE_CONFIG_PASS` | *(auto-generated)* | Overrides the auto-generated password used to encrypt `rclone.conf` |
-| `BACKUPARR_DISABLE_AUTH` | `false` | Set to `true` (or `1`/`yes`) to turn off local login when an authenticating reverse proxy (e.g. Authelia) protects the whole UI and API. Anything else keeps login required. See [Login](#login). |
-| `BACKUPARR_FORCE_HTTPS` | `false` | Set to `true` behind your own TLS-terminating reverse proxy: marks the session cookie `Secure` and trusts the proxy's `X-Forwarded-Proto`/`X-Forwarded-For` headers, so Google Drive OAuth redirect URIs are `https://` and login lockout sees real client IPs. Leave unset for plain HTTP on a LAN, or login will silently fail. |
-| `BACKUPARR_ALLOW_CROSS_HOST_REDIRECTS` | `false` | Set to `true` (or `1`/`yes`) only if an app's configured URL redirects to a *different* host and you can't update the URL to its final address. By default Backuparr refuses such redirects so your API key is never sent to another host; same-host redirects (including http→https) always work. |
-
-For loopback-only access with Docker host networking, set `network_mode: host`
-on the service and `WEBUI_HOST: "127.0.0.1"` in its environment. Remove the
-`ports:` section, since host networking does not use port publishing. A reverse
-proxy running on the host (or also using host networking) can then reach
-Backuparr at `http://127.0.0.1:8990`.
-
-With Docker bridge networking, keep the default `WEBUI_HOST`. To restrict the
-published port to the host, use `ports: ["127.0.0.1:8990:8990"]` instead; binding
-the app to loopback inside a bridge container prevents published-port access.
-
-### Advanced: file locations
-
-Only needed if you move files out of the single `/config/backuparr` mount;
-by default every path below is inside it.
-
-| Env var | Default | What it is |
-|---|---|---|
-| `BACKUPARR_CONFIG` | `/config/backuparr/config.json` | The main config file |
-| `RCLONE_CONFIG` | `/config/backuparr/rclone.conf` | rclone's own remotes config |
-| `RCLONE_CONFIG_PASS_FILE` | `/config/backuparr/rclone.pass` | Generated `rclone.conf` encryption password (ignored if `RCLONE_CONFIG_PASS` is set) |
-| `BACKUPARR_SECRETS_KEY_PATH` | `/config/backuparr/secrets.key` | Generated config-encryption key (ignored if `BACKUPARR_SECRETS_KEY` is set) |
-| `BACKUPARR_SECRET_KEY_PATH` | `/config/backuparr/secret_key` | Flask's session-signing key - **not** `secrets.key` above, which encrypts `config.json`'s secrets |
-| `BACKUPARR_AUTH` | `/config/backuparr/auth.json` | Admin username and password hash from the setup screen |
-| `BACKUPARR_LOG_DIR` | `/var/log/backuparr` | Where `backup.log` (shown on the Run & Status tab) is written |
-
-## Destinations
-
-Enable one or more destinations on the **Settings** tab; every run uploads
-to all of them.
-
-### Local storage
-
-No setup needed. Backups go to `/config/backuparr/backups`, on the same
-volume as `config.json`, so they survive container recreation. Download or
-delete them from the **History** tab. To use a different mounted volume
-(e.g. a NAS share), set a custom path on the Local card.
-
-### Google Drive
-
-Connected entirely from the web UI - no `rclone config` or files to copy.
-On the Google Drive card in **Settings**:
-
-1. Click **Setup guide**. It walks through creating a Google Cloud project,
-   enabling the Drive API, creating an OAuth client and an API key, and shows
-   the exact redirect URI to register. It also has you publish the OAuth app
-   (Audience tab > **Publish App**) - don't skip this: Google expires
-   refresh tokens after 7 days for apps left in Testing status, which breaks
-   the connection weekly until you reconnect.
-2. Paste the Client ID, Client Secret, and API key into the three fields,
-   then **Save settings**. The API key is separate from the OAuth client; the
-   **Choose folder** picker needs it, and loads blank without it.
-3. Click **Connect Google Drive** and approve the consent screen. Backuparr
-   requests only the `drive.file` scope (files/folders it created or you
-   picked, not your whole Drive). Google shows a "Google hasn't verified this
-   app" warning because your app is published but unverified; that's
-   expected - click **Advanced**, then **Go to (your app name) (unsafe)**.
-4. Click **Choose folder** to pick (or create) the Drive folder for backups.
-
-### OneDrive
-
-Uses rclone's built-in Microsoft app, so no Azure account or app
-registration is needed. Personal Microsoft accounts only, not work/school
-(Microsoft 365).
-
-1. On any computer with a browser (not necessarily where Backuparr runs),
-   [download rclone](https://rclone.org/downloads/) (a single binary) and run
-   `rclone authorize onedrive`.
-2. Sign in with your personal Microsoft account at the link it opens or
-   prints, and approve access.
-3. Copy the block rclone prints after "Paste the following into your remote
-   machine --->", paste it into the OneDrive card in **Settings**, and click
-   **Connect OneDrive**.
-
-There's no folder picker: backups go to a dedicated `Apps/Backuparr` folder
-in your OneDrive, created on first connect.
-
-### Dropbox
-
-Uses rclone's built-in Dropbox app, so no Dropbox developer account or app
-registration is needed.
-
-1. On any computer with a browser (not necessarily where Backuparr runs),
-   [download rclone](https://rclone.org/downloads/) (a single binary) and run
-   `rclone authorize dropbox`.
-2. Sign in to Dropbox at the link it opens or prints, and approve access.
-3. Copy the block rclone prints after "Paste the following into your remote
-   machine --->", paste it into the Dropbox card in **Settings**, and click
-   **Connect Dropbox**.
-
-There's no folder picker: backups go to a `Backuparr` folder in your
-Dropbox, created on the first backup.
-
-## Deploying
-
-Add a `backuparr` service to your **existing** compose file (the one that
-defines radarr/sonarr/etc.) so it shares that network and can reach the other
-containers by name.
+- [Quick start](#quick-start)
+  - [Pull the published image (recommended)](#pull-the-published-image-recommended)
+  - [Or build from source](#or-build-from-source)
+  - [First run](#first-run)
+- [Architecture](#architecture)
+- [Why not reuse an existing tool?](#why-not-reuse-an-existing-tool)
+- [Per-app backup method](#per-app-backup-method)
+  - [Profilarr note](#profilarr-note)
+  - [Tautulli note](#tautulli-note)
+  - [Jellyfin note](#jellyfin-note)
+  - [Emby note](#emby-note)
+  - [Plex note](#plex-note)
+  - [Seerr note](#seerr-note)
+  - [NZBGet note](#nzbget-note)
+  - [Bazarr auth note](#bazarr-auth-note)
+  - [Tdarr auth note](#tdarr-auth-note)
+- [Settings and security](#settings-and-security)
+  - [Prowlarr discovery](#prowlarr-discovery)
+  - [Service authentication headers](#service-authentication-headers)
+  - [Login](#login)
+  - [Encryption at rest](#encryption-at-rest)
+- [Environment variables](#environment-variables)
+- [Destinations](#destinations)
+- [Restoring after a disaster](#restoring-after-a-disaster)
+- [Notifications](#notifications)
+- [Configuration reference](#configuration-reference)
+- [Credits](#credits)
+- [License](#license)
+
+## Quick start
+
+Add a `backuparr` service to the compose file that already defines your apps,
+so it shares their network and can reach them by name.
 
 ### Pull the published image (recommended)
 
@@ -527,7 +68,7 @@ services:
       - TZ=America/Los_Angeles
       - PUID=1000
       - PGID=1000
-      # Optional - see Environment variables above.
+      # Optional - see Environment variables.
       #- LOG_LEVEL=INFO
       #- BACKUPARR_FORCE_HTTPS=true
       #- BACKUPARR_DISABLE_AUTH=true
@@ -566,310 +107,523 @@ docker run -d --name backuparr --restart unless-stopped \
   rsaturns/backuparr:latest
 ```
 
-Published for `linux/amd64` and `linux/arm64`. `latest` tracks the most
-recent tagged release, not every commit to `main`. To control upgrades, pin a
-version (e.g. `rsaturns/backuparr:1.7.0-beta`); see [Docker
-Hub](https://hub.docker.com/r/rsaturns/backuparr) for tags.
+Published for `linux/amd64` and `linux/arm64`. `latest` is the newest tagged
+release; pin a version (e.g. `rsaturns/backuparr:1.7.0-beta`) to control
+upgrades. Tags are on [Docker Hub](https://hub.docker.com/r/rsaturns/backuparr).
 
 ### Or build from source
 
-Clone this repo and use its `docker-compose.yml` (or swap the `image:` line
-above for `build: .`):
+Clone this repo and use its `docker-compose.yml` (or replace the `image:` line
+above with `build: .`):
 
 ```sh
 docker compose up -d --build backuparr
 ```
 
-Then open `http://<host>:8990`. The first visit is a one-time setup screen
-to create an admin username and password; after that, every visit requires
-login. On the **Settings** tab:
+### First run
 
-1. For each app you want backed up: switch it on, enter its URL (container
-   name and internal port on the same Compose network, e.g.
-   `http://radarr:7878`, or LAN IP:port for anything on host networking like
-   Tdarr) and API key (from the app's Settings > General), and click **Test
-   connection** before saving. Using Prowlarr? Set it up first (it leads the
-   list) and click **Discover services** to fill in Radarr, Sonarr and
-   SABnzbd - see [Prowlarr discovery](#prowlarr-discovery).
-2. Enable at least one destination. Local needs nothing further; see
-   [Destinations](#destinations) for Google Drive, OneDrive and Dropbox.
-3. Set retention and a schedule (Daily/Weekly/Every few hours with a time
-   picker, or **Advanced** for a raw cron expression).
-4. **Save settings.**
+Open `http://<host>:8990` and create the admin account on the setup screen.
+Then, on the **Settings** tab:
 
-Settings are written to `config.json` on the config volume, so they survive
-container recreation, and schedule changes apply on save with no restart.
+1. Switch on each app to back up, enter its URL (e.g. `http://radarr:7878` on
+   the same Compose network, or `IP:port` for apps on host networking) and its
+   API key, and click **Test connection**. Using Prowlarr? Set it up first and
+   click **Discover services** - see [Prowlarr discovery](#prowlarr-discovery).
+2. Enable at least one [destination](#destinations).
+3. Set retention and a schedule.
+4. Click **Save settings**. Schedule changes apply without a restart.
 
-Use the **Run & Status** tab to run a backup now and watch it live,
-**History** to see (and download or delete) each destination's backups per
-app, and **Restore** for [disaster recovery](#restoring-after-a-disaster).
+**Run & Status** runs a backup now and shows it live, **History** lists, downloads
+and deletes backups, and **Restore** restores them.
+
+## Architecture
+
+<img src="webui/static/architecture-diagram.svg" alt="Radarr, Sonarr, Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, NZBGet, Tautulli, Jellyfin, Emby, Plex, and Seerr each feed Backuparr; Backuparr uploads each backup via rclone to Local storage, Google Drive, Microsoft OneDrive, and Dropbox" width="100%">
+
+## Why not reuse an existing tool?
+
+[Zerka30/servarr-backup](https://github.com/Zerka30/servarr-backup) does this
+for Radarr/Sonarr/Prowlarr to S3. Backuparr covers more apps and sends backups
+through [rclone](https://rclone.org/) to Local storage, Google Drive (connected
+in the UI), and OneDrive or Dropbox (a one-time `rclone authorize` paste) -
+no rclone config wizard needed.
+
+## Per-app backup method
+
+| App | Backup | Restore |
+|---|---|---|
+| Radarr / Sonarr / Prowlarr | The app's own backup zip (`POST /system/backup`), downloaded and then deleted on the server | Uploaded to `/system/backup/restore/upload`; the app restarts itself |
+| Profilarr | The app's own backup (`POST /api/v1/backups`), downloaded and then deleted on the server | Manual only - see the [Profilarr note](#profilarr-note) |
+| Bazarr | The app's own backup (`POST /api/system/backups`), downloaded and then deleted on the server | Written into Bazarr's mounted backup folder, then restored over the API. Downloads depend on Bazarr's web auth - see the [Bazarr auth note](#bazarr-auth-note) |
+| Tdarr | Every internal database collection, read over `/api/v2/cruddb` | Destructive: each collection is wiped, then refilled |
+| SABnzbd | `get_config` over the API. SABnzbd masks every password as `**********` | Settings and Usenet servers over `set_config`; you're asked for each server's password. Categories, RSS feeds and sorters aren't restored |
+| NZBGet | Every setting, real passwords included, over JSON-RPC `loadconfig` | `saveconfig`, then NZBGet reloads - see the [NZBGet note](#nzbget-note) |
+| Tautulli | `download_database` and `download_config` | Config only, via `import_config` - see the [Tautulli note](#tautulli-note) |
+| Jellyfin (10.11+) | Jellyfin's own backup (`POST /Backup/Create`), picked up from its mounted backups folder | Over `POST /Backup/Restore`; Jellyfin restarts - see the [Jellyfin note](#jellyfin-note) |
+| Emby | Settings, plugins, lists and databases from its mounted data folder, while Emby runs | Written back while Emby is stopped - see the [Emby note](#emby-note) |
+| Plex | Plex's database export (`GET /diagnostics/databases`) plus `Preferences.xml` from its mounted data folder | Written back while Plex is stopped; the server keeps its identity - see the [Plex note](#plex-note) |
+| Seerr | Database and `settings.json` from its mounted config folder, while Seerr runs | Written back while Seerr is stopped - see the [Seerr note](#seerr-note) |
+
+For the apps with a mounted folder, read-only is enough for backups; restoring
+from the web UI needs it read-write, with Backuparr running as the app's
+`PUID`/`PGID` (or otherwise able to write the app's files).
+
+### Profilarr note
+
+Profilarr strips secrets from its backups: arr URLs and API keys, sync
+configs, notification webhooks and tokens, user accounts and sessions, linked
+database tokens, and AI/TMDB keys. Re-add them after a restore.
+
+Profilarr's restore has no API, so it isn't on the **Restore** tab. To restore
+by hand: download the backup from Backuparr's **History** tab, upload and
+restore it in Profilarr's **Settings > Backups**, then restart Profilarr.
+
+### Tautulli note
+
+- **Backup:** `download_database` removes Plex tokens, but `download_config`
+  only removes `PMS_TOKEN`/`JWT_SECRET`. **The Tautulli API key and any
+  notification credentials are in the backup in plain text** - rotate the key
+  if a destination is ever compromised.
+- **Restore** uploads the config, then asks Tautulli to apply it. With no login
+  set up in Tautulli, it applies and Tautulli restarts. With a login enabled,
+  the config is only staged: log in to Tautulli and open
+  `<your Tautulli URL>/restart_import_config` (the Restore tab shows it). If
+  Tautulli restarts first, the staged config is lost; restore again.
+- **The database can't be restored over the API** (an upstream Tautulli bug):
+  import `tautulli.db` by hand in Tautulli's **Settings > Import & Backup >
+  Import Database**.
+
+### Jellyfin note
+
+Jellyfin creates backups through its API but can't download or upload them, so
+mount **Jellyfin's backups folder** into Backuparr. It is
+`/config/data/backups` in the official image and `/config/data/data/backups` in
+linuxserver's:
+
+```yaml
+    volumes:
+      # official image, with Jellyfin's /config at /share/Container/jellyfin/config
+      - /share/Container/jellyfin/config/data/backups:/mnt/jellyfin-backups
+      # or linuxserver image, with Jellyfin's /config at /share/Container/jellyfin
+      # - /share/Container/jellyfin/data/data/backups:/mnt/jellyfin-backups
+```
+
+Then fill in the card: the URL, an API key from **Dashboard > API Keys** (a
+user's sign-in token can't manage backups), and **Backups folder** =
+`/mnt/jellyfin-backups`. If the path is wrong, **Test connection** names the
+folder Jellyfin actually uses.
+
+- **What's in the backup:** Jellyfin's database (users, watched state,
+  playlists, collections, libraries, settings and API keys) and config files.
+  Images and subtitles are left out; a library scan brings them back. The
+  archive holds password hashes and API keys.
+- **Mount the folder read-write**: Backuparr removes Jellyfin's copy of each
+  archive after taking it, and a restore writes into the folder. Read-only,
+  backups still work but restores don't.
+- **Restore** replaces Jellyfin's database and settings, then Jellyfin restarts
+  to apply them. The archive stays in Jellyfin's backups folder; delete it
+  there when you're done. API keys come back too: after rebuilding Jellyfin, enter the
+  new install's key under **Restore to a different target**, not in Settings -
+  the key from the backup works again afterwards.
+- **Reverse proxy:** Jellyfin takes its API key only in the `Authorization`
+  header, so a proxy credential needs another header name.
+
+### Emby note
+
+Emby has no backup API, so Backuparr reads **Emby's data folder** (its
+`/config`, in both the official and linuxserver images):
+
+```yaml
+    volumes:
+      - /share/Container/emby/config:/mnt/emby:ro   # drop :ro to restore from the web UI
+```
+
+Then fill in the card: the URL, an API key from **Settings > Advanced > API
+Keys**, and **Data folder** = `/mnt/emby`. **Test connection** also checks that
+the folder belongs to this server.
+
+- **What's in the backup:** the databases (users, watched state, favourites,
+  playlists, collections, libraries, API keys), server and user settings,
+  plugins, and the playlist and collection folders - copied safely while Emby
+  runs. Images, cache, logs and transcodes are left out. The archive holds
+  password hashes and API keys.
+- **Restore needs Emby stopped** (`docker stop emby`); Backuparr refuses while
+  it's running. It replaces everything above, then you start Emby. A backup
+  from a newer Emby is refused. On a new install, start Emby once (the wizard
+  can be skipped) and stop it before restoring. API keys come back too, so keep
+  the original key in Settings.
+- **To restore by hand:** stop Emby, extract the archive into its `/config`
+  folder, delete any `data/*.db-wal` and `data/*.db-shm` files, and start Emby.
+
+### Plex note
+
+A Plex backup has two parts:
+
+- **The library database** - Plex's own **Download Database** export:
+  libraries, metadata, playlists, collections, and every user's watched state
+  and ratings.
+- **`Preferences.xml`** - the server's settings and its **identity**, which
+  shared libraries are tied to. It's read from Plex's data folder. Restoring it
+  brings a rebuilt server back as the *same* server; without it, every shared
+  user has to be invited again.
+
+Images, caches, codecs and plugins are left out; a library scan brings the
+images back.
+
+Mount Plex's data folder - `Library/Application Support/Plex Media Server`
+inside its `/config`, in both the official and linuxserver images:
+
+```yaml
+    volumes:
+      - "/share/Container/plex/Library/Application Support/Plex Media Server:/mnt/plex:ro"   # drop :ro to restore from the web UI
+```
+
+Then fill in the card: the URL, the **server owner's** Plex token, and **Data
+folder** = `/mnt/plex`.
+
+- **URL:** Plex usually runs with host networking, so use the host's address,
+  not `http://plex:32400`. If Plex's **Secure connections** is **Preferred**
+  (the default), `http://192.168.1.10:32400` works. If it's **Required**, use
+  the server's `https://192-168-1-10.<id>.plex.direct:32400` address -
+  Plex's certificate isn't valid for the bare IP. Backuparr connects to
+  `plex.direct` names without a DNS lookup, so routers that block them don't
+  matter.
+- **Token:** click **Get Plex token** and sign in on Plex's website (your
+  password never reaches Backuparr). It fills in the token, and the
+  `plex.direct` address when the URL is empty or points at the same machine.
+  If the popup is blocked, use the **Open Plex sign-in** link. You can also
+  [find a token by hand](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/).
+- **The archive is sensitive:** `Preferences.xml` holds the server's plex.tv
+  sign-in token.
+- **Restore needs Plex stopped** (`docker stop plex`); Backuparr refuses while
+  it's running. It replaces the database and `Preferences.xml`, then you start
+  Plex. A backup from a newer Plex is refused; an older one is upgraded by Plex.
+- **Rebuilding a server:** start the new Plex once (no need to sign in), stop
+  it, then restore. It comes back as the original server with its shared
+  users; keep the original token in Settings. Never run the original and the
+  restored server at the same time.
+- **To restore by hand**, follow Plex's guides to [restoring the
+  database](https://support.plex.tv/articles/202485658-restore-a-database-backed-up-via-scheduled-tasks/)
+  and [moving a server](https://support.plex.tv/articles/201370363-move-an-install-to-another-system/):
+  put `com.plexapp.plugins.library.db` in `Plug-in Support/Databases` (deleting
+  its `-wal` and `-shm` files) and `Preferences.xml` in the `Plex Media Server`
+  folder.
+
+### Seerr note
+
+Seerr has no backup API, so Backuparr reads **Seerr's config folder** (its
+`/app/config`):
+
+```yaml
+    volumes:
+      - /share/Container/seerr/config:/mnt/seerr:ro   # drop :ro to restore from the web UI
+```
+
+Then fill in the card: the URL, the API key from **Settings > General**, and
+**Data folder** = `/mnt/seerr`. Seerr only accepts its API key once its setup
+is finished.
+
+- **What's in the backup:** what [Seerr's backup
+  guide](https://docs.seerr.dev/using-seerr/backups/) lists - the database
+  (users, requests, issues, blocklist) and `settings.json` (every setting,
+  including the media server, Radarr/Sonarr and notification credentials, and
+  Seerr's API key). The image cache and logs are left out.
+- **Only SQLite is supported** (Seerr's default). With PostgreSQL, use
+  `pg_dump` as Seerr's guide describes.
+- **Restore needs Seerr stopped** (`docker stop seerr`); Backuparr refuses while
+  it's running. It replaces the database and `settings.json`, then you start
+  Seerr. A backup from a newer Seerr is refused; an older one is upgraded by
+  Seerr. Run Backuparr as `1000:1000` (Seerr's user in the official image).
+- **Rebuilding:** start the new Seerr once (no need to finish setup), stop it,
+  then restore. Its API key comes back too, so keep the original key in
+  Settings (unless Seerr's `API_KEY` environment variable sets it).
+- **To restore by hand:** stop Seerr, put `db/db.sqlite3` in its `db` folder
+  (deleting any `db.sqlite3-wal` and `db.sqlite3-shm` there) and
+  `settings.json` in its config folder, then start Seerr.
+
+### NZBGet note
+
+NZBGet has no API key. Fill in its card with the **Control** username and
+password from **Settings > Security** (defaults `nzbget`/`tegbzn6789`); the
+restricted and add-only users can't read every setting, so they're refused.
+Leave both blank only if NZBGet has no password.
+
+- **What's in the backup:** every setting in `nzbget.conf` - news servers with
+  their passwords, categories, paths, RSS feeds, scheduler tasks, extension
+  settings and NZBGet's own logins. The file uses NZBGet's **Backup settings**
+  format, so NZBGet's own **Restore settings** can load it too. The queue,
+  history and extension scripts aren't included.
+- **Restore** replaces every setting and reloads NZBGet; the queue and history
+  are kept. Paths come back as they were, so keep NZBGet's volume mounts the
+  same. The backup's username and password come back too - update the card if
+  they differ.
+- **Reverse proxy:** NZBGet's login uses the `Authorization` header, so a proxy
+  credential needs another header name.
+
+### Bazarr auth note
+
+Bazarr's backup download follows its **Settings > General > Security**, not
+the API key:
+- `None` - works as is.
+- `Basic` - fill in the Basic auth username and password on Bazarr's card.
+- `Forms` - not supported; switch to `None` or `Basic`, or authenticate at
+  your reverse proxy.
+
+### Tdarr auth note
+
+If Tdarr has an API auth token enabled, put it in the optional API key field
+on its card (it's sent as `Authorization: Bearer <key>`). Leave it blank if
+Tdarr has no auth (the default).
+
+## Settings and security
 
 ### Prowlarr discovery
 
-Optional - everything can be configured by hand. On the Settings tab, switch on
-the Prowlarr card at the top of the list, enter its URL and API key, and click
-**Discover services**. Backuparr fills in the URLs and API keys of the
-Radarr, Sonarr and SABnzbd instances configured in Prowlarr, and lets you
-choose when there are several.
+Optional. Enter Prowlarr's URL and API key on its card and click **Discover
+services**: Backuparr fills in the URLs and API keys of the Radarr, Sonarr and
+SABnzbd instances Prowlarr knows, letting you choose when there are several.
 
-- Only empty fields are filled, and nothing is enabled or saved until you do
-  so. **Test connection** never runs discovery.
-- Prowlarr masks its apps' API keys, so Backuparr reads them from a temporary
-  Prowlarr backup and deletes it afterwards (existing backups are never
-  touched). Results stay in memory for ten minutes.
-- The URLs are the ones Prowlarr uses; run **Test connection** to confirm
-  Backuparr can reach them.
-- On PostgreSQL, or if a login proxy blocks `/backup/`, URLs are still filled
-  in and you enter the missing keys by hand. [Service authentication
-  headers](#service-authentication-headers) that apply to Prowlarr can
-  authenticate discovery through a compatible reverse proxy.
-- Discovery refuses any redirect away from Prowlarr's exact URL, so use its
-  final address.
-- Bazarr, Profilarr, Tdarr, Tautulli, Jellyfin, Emby, Plex and Seerr aren't stored in Prowlarr and
-  are always configured manually.
+- Only empty fields are filled, and nothing is saved until you save.
+- Prowlarr masks those API keys, so Backuparr reads them from a temporary
+  Prowlarr backup, which it then deletes. With Prowlarr on PostgreSQL, or a
+  login proxy blocking `/backup/`, only the URLs are filled in.
+- The URLs are the ones Prowlarr uses; **Test connection** confirms Backuparr
+  can reach them.
+- Other apps, including NZBGet, are configured by hand.
 
 ### Service authentication headers
 
-In **Settings → Service authentication**, add a header name and its value, then
-save. Each header is used for connection tests, discovery (including Prowlarr's
-`/backup/` download), scheduled/manual backups, cleanup and restore uploads.
-Tests and discovery use the values currently in the form, even before saving;
-background backups and restores use saved settings. Remove the rows and save to
-disable them.
+For apps behind an authenticating reverse proxy, add headers under **Settings
+→ Service authentication**. They're sent with every request to the apps -
+tests, discovery, backups and restores - but never to cloud destinations,
+OAuth providers or notification webhooks. Values are encrypted like API keys.
 
-A header goes to **all apps** by default, including apps added in later
-releases. Open **Apps** under a header and clear **All apps** to pick specific
-apps instead, so a credential for one reverse proxy never reaches an app behind
-another. The same header name can be used on several rows as long as no app gets
-it twice, for example a different `Authorization` value for Radarr and Tautulli.
+- A header goes to **all apps** unless you open **Apps** under it and pick
+  some. One header name can be used on several rows, as long as no app gets it
+  twice.
+- An app's own authentication wins over a header of the same name - Tdarr's
+  and NZBGet's `Authorization`, Jellyfin's `Authorization: MediaBrowser`. Use
+  another header name (such as `Proxy-Authorization`) for the proxy.
+- A configured `Cookie` is added alongside the app's cookies; a cookie the app
+  already set wins.
+- Requests to an app with headers must stay on its configured scheme, host and
+  port, redirects included, so use its final URL.
+  `BACKUPARR_ALLOW_CROSS_HOST_REDIRECTS` doesn't override this.
+- **Generate Basic authentication** turns a username and password into a
+  `Basic …` value for the header you choose, in your browser; only the header
+  is saved.
 
-Values are masked in the form and encrypted in `config.json` with the same key
-as app API keys. Each app's native authentication and per-request headers take
-priority on a case-insensitive name collision. For example, an app's
-`Authorization: Bearer …` (Tdarr) or `Authorization: MediaBrowser …` (Jellyfin)
-remains intact; use a separate proxy header to authenticate both layers. These headers are not sent to cloud destinations,
-OAuth providers or notification webhooks. They do apply to a restore target
-entered for an app they cover, so only configure trusted app URLs.
-
-For a `Cookie` header, configured cookies are added alongside app/server cookies.
-An existing cookie of the same name takes priority, including a session cookie
-renewed by the server. Cookie names are case sensitive.
-
-For an app with headers configured, requests must stay on its configured
-**scheme, host and port**, including redirects and backup downloads. Use the
-final URL (prefer HTTPS). `BACKUPARR_ALLOW_CROSS_HOST_REDIRECTS` cannot override
-this protection. Apps with no headers keep their existing redirect behavior.
-
-#### Basic authentication helper
-
-Open **Generate Basic authentication**, choose a **Target header**, enter the
-username and password, then click **Apply to header**. Use `Authorization` for
-standard HTTP Basic authentication, `Proxy-Authorization` if your proxy expects
-it, or enter a custom header name. Existing header names are also suggested.
-The helper creates a row or replaces the matching header's value, ignoring
-capitalization. When several rows share the name (scoped to different apps), it
-fills the one whose value is empty, so add a row with the name and the apps you
-want first. New rows go to all apps. Other headers remain unchanged. Click
-**Save settings** to persist the change; you can still edit every header manually.
-
-The helper generates `Basic <base64 of username:password>` locally in your
-browser, using UTF-8 for non-ASCII characters. The username cannot contain a
-colon; passwords can contain colons and may be empty. Credential fields are
-cleared after applying, and only the generated header is saved, encrypted like
-other header values. The generated value is a credential, not encryption; use
-HTTPS when sending it over a network.
-
-Your server or reverse proxy must accept the chosen header and authentication
-method. This does not reuse your browser's login session. An app's own
-`Authorization` header still takes priority, so use a separate proxy header when
-both layers require authentication. If API endpoints and backup downloads have
-different access rules, run a backup as well as **Test connection** to verify both.
+If the API and backup downloads have different access rules, run a backup as
+well as **Test connection**.
 
 ### Login
 
-#### Authentication at the reverse proxy
+The admin account from the setup screen is required by default.
 
-Local login is on unless you opt out. If your reverse proxy already
-authenticates every request (e.g. Authelia), set
-`BACKUPARR_DISABLE_AUTH=true` and recreate the container:
+**Authentication at a reverse proxy:** if your proxy (e.g. Authelia) already
+protects every request, set `BACKUPARR_DISABLE_AUTH=true` and recreate the
+container. The UI and API then need no local login, and the setup, login,
+logout and reset endpoints return `403`. **Block direct access to port 8990**:
+anyone who reaches it has full access, stored credentials included.
 
-```yaml
-services:
-  backuparr:
-    environment:
-      BACKUPARR_DISABLE_AUTH: "true"
-```
+**Forgot the password?** Click **Reset Backuparr** on the login screen. After
+two confirmations it wipes local state - every app's API key, every cloud
+connection, the admin account and local backups - and returns to the setup
+screen. Backups already in Google Drive, OneDrive or Dropbox are untouched.
 
-With this set, the UI and API work without a local account or login,
-including on a fresh install. `/login` and `/setup` redirect to the main UI,
-the logout button is hidden, and `/api/setup`, `/api/login`, `/api/logout`
-and `/api/reset` return `403`. Existing credentials and backups are kept;
-remove the setting (or set it to `false`) and recreate the container to
-require login again.
-
-**Protect the entire UI and API at the reverse proxy and block direct access
-to port 8990.** Anyone who can reach Backuparr directly in this mode has full
-access, including backup/restore and stored credentials. Backuparr does not
-read proxy user headers.
-
-#### Local account and password recovery
-
-The admin account from the setup screen is required by default. Forgot the
-password? Click **Reset Backuparr** on the login screen. After you confirm a
-warning and type a confirmation phrase, it wipes local state (every app's API
-key, every cloud destination's connection, the admin account, and local backup
-files) and returns to a fresh install and the setup screen. Anything already
-uploaded to Google Drive, OneDrive or Dropbox is untouched.
-
-**With local authentication enabled, the reset endpoint is reachable without
-logging in**, gated only by a fixed confirmation phrase visible in this
-project's source (`webui/static/login.js`), not a per-install secret. That's
-fine on a trusted LAN behind your firewall, but **don't expose port 8990 to an
-untrusted network** without your own login in front of it at the reverse
-proxy.
-
-Login only protects the app itself. If it's reachable beyond your LAN, put it
-behind a reverse proxy for TLS, as you likely do for Radarr/Sonarr.
+The reset works without logging in, gated only by a confirmation phrase that's
+public in this repo. That's fine on a trusted LAN, but **don't expose port 8990
+to an untrusted network** - put it behind a reverse proxy with its own login
+and TLS.
 
 ### Encryption at rest
 
-Every app's API key, Bazarr's basic-auth password, Google Drive's client
-secret/API key/refresh token, OneDrive's and Dropbox's tokens, and the Notify URL (which can
-embed a Telegram bot token or webhook secret) are encrypted in `config.json`.
-The key is `secrets.key`, generated on first run; set `BACKUPARR_SECRETS_KEY`
-to keep it off the volume entirely (e.g. a Docker secret).
+Every app's API key, Bazarr's and NZBGet's passwords, service authentication
+header values, Google Drive's client secret, API key and refresh token,
+OneDrive's and Dropbox's tokens, and the Notify URL are encrypted in
+`config.json` with `secrets.key`, generated on first run (or set
+`BACKUPARR_SECRETS_KEY` to keep it off the volume). `rclone.conf` is encrypted
+with rclone's own config encryption, using a generated password in
+`rclone.pass` (or `RCLONE_CONFIG_PASS`). It's always on.
 
-`rclone.conf`, which mirrors the Google Drive/OneDrive/Dropbox secrets for rclone, is
-encrypted with rclone's built-in config encryption, using a generated password
-in `rclone.pass` (override with `RCLONE_CONFIG_PASS`).
+Backup archives themselves aren't encrypted, and some hold app credentials
+(see the per-app notes), so protect every destination.
 
-Encryption is always on; there's nothing to enable.
+## Environment variables
+
+App settings live in `config.json` and are edited in the web UI (see the
+[Configuration reference](#configuration-reference)). These are set in your
+compose file:
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `WEBUI_HOST` | `0.0.0.0` | Address the web UI listens on (see below) |
+| `WEBUI_PORT` | `8990` | Port the web UI listens on inside the container |
+| `PUID` / `PGID` | `1000` / `1000` | User/group the container runs as. Match your host user (`id`) so files on the config volume are owned by you |
+| `TZ` | UTC | Timezone for the schedule and `backup.log` timestamps |
+| `UMASK` | `077` | Permissions of new files: by default only the container user can read backups (`0600`/`0700`). Set `022` if another user on the host reads the backup folder |
+| `LOG_LEVEL` | `INFO` | Logging level for backup/restore runs, e.g. `DEBUG` |
+| `BACKUPARR_SECRETS_KEY` | *(generated)* | Replaces the generated `secrets.key` (see [Encryption at rest](#encryption-at-rest)), e.g. from a Docker secret |
+| `RCLONE_CONFIG_PASS` | *(generated)* | Replaces the generated password that encrypts `rclone.conf` |
+| `BACKUPARR_DISABLE_AUTH` | `false` | `true` turns off local login behind an authenticating reverse proxy - see [Login](#login) |
+| `BACKUPARR_FORCE_HTTPS` | `false` | Set `true` behind your own TLS reverse proxy: secure session cookie, and trusts `X-Forwarded-Proto`/`X-Forwarded-For` (needed for Google Drive's `https://` redirect URI). Leave unset on plain HTTP, or login fails |
+| `BACKUPARR_ALLOW_CROSS_HOST_REDIRECTS` | `false` | `true` only if an app's URL redirects to a *different* host and you can't use the final address. By default such redirects are refused so credentials never go to another host |
+
+To listen on loopback only: with bridge networking, publish
+`ports: ["127.0.0.1:8990:8990"]` and leave `WEBUI_HOST` alone (setting it to
+`127.0.0.1` there blocks the published port). With `network_mode: host`, set
+`WEBUI_HOST: "127.0.0.1"` and remove `ports:`.
+
+### Advanced: file locations
+
+Only needed to move files out of the `/config/backuparr` mount, where they all
+live by default.
+
+| Env var | Default | What it is |
+|---|---|---|
+| `BACKUPARR_CONFIG` | `/config/backuparr/config.json` | The main config file |
+| `RCLONE_CONFIG` | `/config/backuparr/rclone.conf` | rclone's remotes config |
+| `RCLONE_CONFIG_PASS_FILE` | `/config/backuparr/rclone.pass` | Generated `rclone.conf` password (ignored if `RCLONE_CONFIG_PASS` is set) |
+| `BACKUPARR_SECRETS_KEY_PATH` | `/config/backuparr/secrets.key` | Generated config-encryption key (ignored if `BACKUPARR_SECRETS_KEY` is set) |
+| `BACKUPARR_SECRET_KEY_PATH` | `/config/backuparr/secret_key` | Session-signing key - not the same as `secrets.key` |
+| `BACKUPARR_AUTH` | `/config/backuparr/auth.json` | Admin username and password hash |
+| `BACKUPARR_LOG_DIR` | `/var/log/backuparr` | Where `backup.log` (shown on Run & Status) is written |
+
+## Destinations
+
+Enable one or more on the **Settings** tab; every run uploads to all of them.
+
+### Local storage
+
+No setup. Backups go to `/config/backuparr/backups`, on the same volume as
+`config.json`. Set a custom path on the Local card to use another mounted
+volume, such as a NAS share.
+
+### Google Drive
+
+Set up from the Google Drive card, with no rclone config:
+
+1. Click **Setup guide** and follow it: it creates a Google Cloud project, the
+   Drive API, an OAuth client and an API key, and shows the redirect URI to
+   register. **Publish the OAuth app** as it says - apps left in Testing lose
+   their connection every 7 days.
+2. Paste the Client ID, Client Secret and API key, then **Save settings**. The
+   **Choose folder** picker needs the API key.
+3. Click **Connect Google Drive** and approve. Backuparr only asks for
+   `drive.file` (files it created or you picked). Google warns the app is
+   unverified; click **Advanced**, then **Go to (your app name) (unsafe)**.
+4. Click **Choose folder** to pick or create the backup folder.
+
+### OneDrive
+
+Uses rclone's built-in Microsoft app - no Azure registration. Personal
+Microsoft accounts only, not work/school (Microsoft 365).
+
+1. On any computer with a browser, [download rclone](https://rclone.org/downloads/)
+   and run `rclone authorize onedrive`.
+2. Sign in and approve access.
+3. Paste the block rclone prints after "Paste the following into your remote
+   machine --->" into the OneDrive card and click **Connect OneDrive**.
+
+Backups go to an `Apps/Backuparr` folder.
+
+### Dropbox
+
+Uses rclone's built-in Dropbox app - no developer account.
+
+1. On any computer with a browser, [download rclone](https://rclone.org/downloads/)
+   and run `rclone authorize dropbox`.
+2. Sign in and approve access.
+3. Paste the block rclone prints after "Paste the following into your remote
+   machine --->" into the Dropbox card and click **Connect Dropbox**.
+
+Backups go to a `Backuparr` folder.
 
 ## Restoring after a disaster
 
-First re-create the app containers from your compose file (their config
-volumes will be empty). Then on the **Restore** tab, pick the source, the app,
-and a backup (newest first), and confirm. Like a backup run, a restore shows
+Re-create the app containers from your compose file, then on the **Restore**
+tab pick the destination, the app and a backup, and confirm. The restore shows
 live progress and a log.
 
-Every restorable app also has a **"Restore to a different target"** checkbox
-to override that app's URL/API key (and extra fields, e.g. Bazarr's Basic auth
-username/password) for this restore only - nothing is written to Settings.
-Use it to restore onto a rebuilt or renamed instance, or to try a restore on a
-throwaway copy first.
+**Restore to a different target** overrides the app's URL, key and other
+fields for that restore only, without changing Settings - for a rebuilt or
+renamed instance, or a trial restore on a throwaway copy.
 
-- **Radarr/Sonarr/Prowlarr** - fully automated; the app restarts itself.
-- **Profilarr** - not available here; see the [Profilarr backup
-  note](#profilarr-backup-note) for the manual steps.
-- **Bazarr** - needs the local path to its config/backup folder, mounted into
-  the Backuparr container (see the commented-out volume in
-  `docker-compose.yml`). Fill in "Bazarr backup folder" unless
-  `bazarr_backup_dir` is already set in Settings.
-- **Tdarr** - destructive (wipes each DB collection before repopulating); the
-  UI warns you before you confirm.
-- **SABnzbd** - choosing a backup loads its Usenet server list and shows which
-  servers need a password (SABnzbd's API never returns the real value; see the
-  table above). Type them in, or leave any blank and set that server's
-  password in SABnzbd afterward.
-- **Tautulli** - restores the config (the database must be imported by hand);
-  Tautulli restarts once the config is applied. With a login enabled in
-  Tautulli the config is only staged and the result tells you how to finish -
-  see the [Tautulli restore note](#tautulli-restore-note).
-- **Jellyfin** - fully automated through its backups folder, which must be
-  mounted read-write; Jellyfin restarts itself to apply the backup. It
-  replaces Jellyfin's users and API keys too - see the [Jellyfin
+- **Radarr / Sonarr / Prowlarr** - automatic; the app restarts.
+- **Profilarr** - manual, see the [Profilarr note](#profilarr-note).
+- **Bazarr** - needs Bazarr's config/backup folder mounted into Backuparr;
+  enter it under "Bazarr backup folder" unless it's set in Settings.
+- **Tdarr** - wipes each database collection before refilling it; you're
+  asked to confirm.
+- **SABnzbd** - asks for each Usenet server's password (leave any blank and
+  set it in SABnzbd later).
+- **NZBGet** - automatic; NZBGet reloads. See the [NZBGet note](#nzbget-note).
+- **Tautulli** - config only, see the [Tautulli note](#tautulli-note).
+- **Jellyfin** - automatic; Jellyfin restarts. See the [Jellyfin
   note](#jellyfin-note) before restoring onto a fresh install.
-- **Emby** - stop Emby first; Backuparr writes the backup into Emby's data
-  folder, which must be mounted read-write, then you start Emby again. It
-  replaces Emby's users and API keys too - see the [Emby note](#emby-note).
-- **Plex** - stop Plex first; Backuparr writes the library database and
-  `Preferences.xml` into Plex's data folder, which must be mounted read-write,
-  then you start Plex again. A rebuilt server comes back as the same server,
-  with its shared users - see the [Plex note](#plex-note).
-- **Seerr** - stop Seerr first; Backuparr writes the database and
-  `settings.json` into Seerr's config folder, which must be mounted read-write,
-  then you start Seerr again. It replaces Seerr's users, settings and API key
-  too - see the [Seerr note](#seerr-note).
+- **Emby, Plex, Seerr** - stop the app first, restore, then start it again. See
+  the [Emby](#emby-note), [Plex](#plex-note) and [Seerr](#seerr-note) notes.
 
 ## Notifications
 
-Set **Notify URL** on the Settings tab (`notify_url` in config.json) to get
-a summary POSTed after every run: one line per app (✅/❌), under a 🎉 header
-if everything succeeded or a ⚠️ header if anything failed. Backuparr
-recognizes common webhook URL shapes and sends the right kind of request
-automatically.
+Set **Notify URL** on the Settings tab to get a summary after every run: one
+✅/❌ line per app. Backuparr recognises the services below from the URL and
+formats the message for them.
 
 ### Discord
 
-1. In the target channel: **Edit Channel > Integrations > Webhooks > New
-   Webhook**, then **Copy Webhook URL**.
-2. Paste that straight into **Notify URL**.
+In the channel: **Edit Channel > Integrations > Webhooks > New Webhook > Copy
+Webhook URL**, and paste it into **Notify URL**.
 
 ### Slack
 
-1. Create an [incoming
-   webhook](https://api.slack.com/messaging/webhooks) for your
-   workspace and channel.
-2. Paste the resulting `https://hooks.slack.com/services/...` URL into
-   **Notify URL**.
+Create an [incoming webhook](https://api.slack.com/messaging/webhooks) and
+paste its `https://hooks.slack.com/services/...` URL into **Notify URL**.
 
 ### Telegram
 
-1. Message [@BotFather](https://t.me/BotFather) to create a bot and get its
-   token.
-2. Get your chat ID: message the bot once, then open
-   `https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser and read
-   `chat.id` (for a group, add the bot to the group first and use the group's
-   negative chat ID).
-3. Set **Notify URL** to:
-   ```
-   https://api.telegram.org/bot<TOKEN>/sendMessage?chat_id=<CHAT_ID>
-   ```
+1. Create a bot with [@BotFather](https://t.me/BotFather) and copy its token.
+2. Message the bot once, then open
+   `https://api.telegram.org/bot<TOKEN>/getUpdates` and read `chat.id` (for a
+   group, add the bot first and use the group's negative ID).
+3. Set **Notify URL** to
+   `https://api.telegram.org/bot<TOKEN>/sendMessage?chat_id=<CHAT_ID>`.
 
-### Gotify (self-hosted)
+### Gotify
 
-1. In Gotify, create an application under **Apps** and copy its token.
-2. Set **Notify URL** to:
-   ```
-   https://<your-gotify-host>/message?token=<APP_TOKEN>
-   ```
+Create an application in Gotify and set **Notify URL** to
+`https://<your-gotify-host>/message?token=<APP_TOKEN>`.
 
 ### ntfy.sh, Healthchecks.io, or anything else
 
-Any URL that doesn't match the shapes above gets the message as a plain-text
-`POST` body, which is [ntfy.sh](https://ntfy.sh)'s native format. Set
-**Notify URL** to `https://ntfy.sh/your-topic-name` (a self-hosted ntfy server
-works the same way). This also works with a
-[healthchecks.io](https://healthchecks.io)-style ping URL, an Uptime Kuma push
-URL, or any webhook logger that accepts raw text.
+Any other URL gets the message as a plain-text `POST`, which is
+[ntfy.sh](https://ntfy.sh)'s format (e.g. `https://ntfy.sh/your-topic`). This
+also works for [healthchecks.io](https://healthchecks.io) ping URLs, Uptime
+Kuma push URLs, and other webhooks that accept raw text.
 
 ## Configuration reference
 
-These fields live in `config.json`, edited via the web UI or by hand:
+`config.json`, edited in the web UI or by hand:
 
 | Field | Purpose |
 |---|---|
-| `request_headers` | App HTTP headers as `[{"name": "Proxy-Authorization", "value": "Basic …", "apps": ["radarr"]}]`; omit `apps` to send a header to every app; values are encrypted at rest; default `[]` |
-| `apps.<name>.enabled/url/api_key` | Per app, as shown in the Settings tab |
-| `apps.bazarr.username/password` | Only if Bazarr's web auth is set to `Basic` |
-| `apps.jellyfin.backup_dir` | Local path to Jellyfin's mounted backups folder - required for Jellyfin |
-| `apps.emby.data_dir` | Local path to Emby's mounted data folder (its `/config`) - required for Emby |
-| `apps.plex.data_dir` | Local path to Plex's mounted `Plex Media Server` folder - required for Plex |
-| `apps.seerr.data_dir` | Local path to Seerr's mounted config folder (its `/app/config`) - required for Seerr |
-| `destinations.local.enabled/path` | Local storage - path defaults to `/config/backuparr/backups` if blank |
-| `destinations.gdrive.enabled/client_id/client_secret/developer_key` | Google Drive OAuth client + API key, set via the Setup guide |
-| `destinations.gdrive.refresh_token/folder_id/folder_name` | Set automatically by the Connect/Choose folder buttons - don't hand-edit |
-| `destinations.onedrive.enabled` | Whether the destination is active |
-| `destinations.onedrive.token/drive_id/drive_type/item_id` | Set automatically by pasting a token from `rclone authorize onedrive` - don't hand-edit |
-| `destinations.dropbox.enabled` | Whether the destination is active |
-| `destinations.dropbox.token` | Set automatically by pasting a token from `rclone authorize dropbox` - don't hand-edit |
-| `retention_days` | Delete backups older than this, per app per destination (default 7) |
-| `cron_schedule` | Standard 5-field cron syntax (default `0 3 * * *`) |
-| `notify_url` | Optional: POST a summary here after every run - see [Notifications](#notifications) above |
-| `bazarr_backup_dir` | Local path to Bazarr's config/backup folder, for restores |
-
-Deployment-level settings are env vars, not `config.json`; see [Environment
-variables](#environment-variables).
+| `apps.<name>.enabled/url/api_key` | Per app, as on the Settings tab |
+| `apps.bazarr.username/password` | Only if Bazarr's web auth is `Basic` |
+| `apps.nzbget.username/password` | NZBGet's Control username and password |
+| `apps.jellyfin.backup_dir` | Jellyfin's mounted backups folder - required |
+| `apps.emby.data_dir` | Emby's mounted data folder (its `/config`) - required |
+| `apps.plex.data_dir` | Plex's mounted `Plex Media Server` folder - required |
+| `apps.seerr.data_dir` | Seerr's mounted config folder (its `/app/config`) - required |
+| `bazarr_backup_dir` | Bazarr's mounted config/backup folder, for restores |
+| `request_headers` | [Service authentication headers](#service-authentication-headers): `[{"name": "Proxy-Authorization", "value": "Basic …", "apps": ["radarr"]}]`; omit `apps` for every app |
+| `destinations.local.enabled/path` | Local storage; the path defaults to `/config/backuparr/backups` |
+| `destinations.gdrive.enabled/client_id/client_secret/developer_key` | Google Drive OAuth client and API key, from the Setup guide |
+| `destinations.gdrive.refresh_token/folder_id/folder_name` | Set by Connect/Choose folder - don't edit |
+| `destinations.onedrive.enabled`, `destinations.dropbox.enabled` | Whether the destination is used |
+| `destinations.onedrive.token/drive_id/drive_type/item_id`, `destinations.dropbox.token` | Set by the Connect buttons - don't edit |
+| `retention_days` | Delete backups older than this, per app and destination (default 7) |
+| `cron_schedule` | 5-field cron schedule (default `0 3 * * *`) |
+| `notify_url` | Optional summary after every run - see [Notifications](#notifications) |
 
 ## Credits
 

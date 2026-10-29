@@ -5,7 +5,29 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- NZBGet backup and restore. NZBGet has no API key, so its card takes the
+  Control username and password (the password is encrypted at rest like API
+  keys). A backup holds every NZBGet setting exactly as `nzbget.conf` stores
+  it - news servers with their real passwords, categories, paths, extension
+  settings - in the format of NZBGet's own **Backup settings**, so it can also
+  be restored through NZBGet's web UI. Restoring replaces NZBGet's settings
+  with the backup's and reloads NZBGet; the queue and history are kept.
+  Test connection refuses NZBGet's restricted and add-only users, which can't
+  read every setting.
+
+### Changed
+
+- The README and the architecture diagram no longer say that app config files
+  are never read directly: the media servers and Seerr are backed up from
+  their mounted folders.
+- The README is shorter and easier to scan: a Quick start with the complete
+  compose example and first-run steps now comes right after the introduction,
+  the per-app table lists each app's backup and restore, the per-app notes drop
+  repeated explanations, and discovery, service authentication headers, login
+  and encryption are grouped under Settings and security. It also now says
+  that backup archives aren't encrypted.
 
 ## [1.7.0-beta] - 2026-10-29
 

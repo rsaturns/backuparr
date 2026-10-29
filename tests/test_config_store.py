@@ -56,6 +56,21 @@ def test_save_and_load_roundtrip_plain_and_encrypted_fields():
     assert secrets_crypto.PREFIX in raw_on_disk
 
 
+def test_nzbget_password_is_encrypted_at_rest_and_a_config_from_before_it_loads():
+    import json
+
+    with open(config_store.CONFIG_PATH, "w") as f:
+        json.dump({"apps": {"radarr": {"enabled": False}}}, f)
+    cfg = config_store.load_config()
+    assert cfg["apps"]["nzbget"]["password"] == ""
+
+    cfg["apps"]["nzbget"].update(enabled=True, url="http://nzbget:6789", username="nzbget", password="plain-nzbget-pass")
+    config_store.save_config(cfg)
+    assert config_store.load_config()["apps"]["nzbget"]["password"] == "plain-nzbget-pass"
+    with open(config_store.CONFIG_PATH) as f:
+        assert "plain-nzbget-pass" not in f.read()
+
+
 def test_a_config_saved_before_dropbox_existed_loads_with_an_empty_token():
     import json
 

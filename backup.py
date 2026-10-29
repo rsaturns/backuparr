@@ -1,10 +1,10 @@
-"""Trigger each configured app's own backup mechanism over its API, zip the
-result if needed, and upload it to the configured rclone remote. No app
-config volumes are read directly - everything goes through each app's
-HTTP API, except that Jellyfin's API can't download the backup it creates,
-so that one archive is picked up from Jellyfin's mounted backups folder, and
-Emby and Seerr have no backup API at all, so their files are read from their
-mounted data folders.
+"""Trigger each configured app's own backup mechanism, zip the result if
+needed, and upload it to the configured rclone remote. Most apps are backed
+up over their HTTP API. A few need their folder mounted into this container:
+Jellyfin's API can't download the backup it creates, so that archive is
+picked up from its mounted backups folder; Emby and Seerr have no backup API,
+so their files are read from their mounted data folders; and Plex's settings
+and server identity come from its mounted data folder.
 Settings come from config_store, not environment variables.
 """
 import errno
@@ -29,6 +29,7 @@ from apps.bazarr import BazarrApp, BazarrError
 from apps.http_headers import RequestHeadersError, app_connection_config, configure_app_headers
 from apps.emby import EmbyApp, EmbyError
 from apps.jellyfin import JellyfinApp, JellyfinError
+from apps.nzbget import NzbgetApp, NzbgetError
 from apps.plex import PlexApp, PlexError
 from apps.profilarr import ProfilarrApp, ProfilarrError
 from apps.prowlarr import ProwlarrApp
@@ -67,6 +68,7 @@ _CLEAN_MESSAGE_ERRORS = (
     ConfigError,
     destination_util.DestinationError,
     JellyfinError,
+    NzbgetError,
     EmbyError,
     PlexError,
     ProfilarrError,
@@ -224,6 +226,8 @@ def _build_app(name, app_cfg):
         return TdarrApp(app_cfg["url"], api_key=app_cfg.get("api_key") or None)
     if name == "sabnzbd":
         return SabnzbdApp(app_cfg["url"], app_cfg["api_key"])
+    if name == "nzbget":
+        return NzbgetApp(app_cfg["url"], app_cfg.get("username") or None, app_cfg.get("password") or None)
     if name == "tautulli":
         return TautulliApp(app_cfg["url"], app_cfg["api_key"])
     if name == "jellyfin":

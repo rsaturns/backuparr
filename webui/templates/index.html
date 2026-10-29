@@ -78,6 +78,7 @@
                 <span class="field-label">URL</span>
                 <input type="text" class="f-url" placeholder="{{ m.url_placeholder }}" autocomplete="off">
               </label>
+              {% if not m.no_api_key %}
               <label class="field">
                 <span class="field-label">
                   {{ m.key_label | default("API key") }}
@@ -86,6 +87,7 @@
                 <input type="password" class="f-api_key" autocomplete="off">
                 {% if m.id in ('radarr', 'sonarr', 'sabnzbd') %}<span class="discovery-key-status hidden" role="status"></span>{% endif %}
               </label>
+              {% endif %}
               {% if m.id == 'plex' %}
               <div class="plex-auth-actions">
                 <button type="button" class="btn btn-ghost btn-sm" id="plex-token-btn">Get Plex token</button>

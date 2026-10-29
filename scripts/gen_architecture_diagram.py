@@ -42,6 +42,7 @@ SOURCES = [
     ("Bazarr", os.path.join(ICONS, "bazarr.svg"), "svg"),
     ("Tdarr", os.path.join(ICONS, "tdarr.png"), "png"),
     ("SABnzbd", os.path.join(ICONS, "sabnzbd.svg"), "svg"),
+    ("NZBGet", os.path.join(ICONS, "nzbget.svg"), "svg"),
     ("Tautulli", os.path.join(ICONS, "tautulli.svg"), "svg"),
     ("Jellyfin", os.path.join(ICONS, "jellyfin.svg"), "svg"),
     ("Emby", os.path.join(ICONS, "emby.svg"), "svg"),
@@ -124,7 +125,7 @@ def build():
 </defs>''',
         f'<rect x="0" y="0" width="{W}" height="{H}" fill="{COLOR["bg"]}"/>',
         f'<text x="40" y="42" font-size="13" letter-spacing="1.5" font-weight="600" fill="{COLOR["muted"]}">BACKUPARR &#8212; ARCHITECTURE</text>',
-        f'<text x="40" y="64" font-size="13" fill="{COLOR["muted"]}">Each app\'s own backup API in, rclone out - config files are never read directly.</text>',
+        f'<text x="40" y="64" font-size="13" fill="{COLOR["muted"]}">Each app\'s own backup API - or its mounted data folder - in, rclone out.</text>',
     ]
 
     src_start_y = centered_start(src_block_h)
