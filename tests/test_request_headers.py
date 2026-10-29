@@ -16,6 +16,7 @@ import requests
 import backup
 import config_store
 import restore_actions
+from apps.emby import EmbyError
 from apps.http_headers import RequestHeadersError, configure_app_headers, validate_request_headers
 
 
@@ -255,6 +256,21 @@ def test_jellyfin_sends_headers_without_losing_its_key(monkeypatch, tmp_path):
     assert all(r.headers["Authorization"] == 'MediaBrowser Token="native-key"' for r in sent)
 
 
+def test_emby_sends_headers_without_losing_its_key(monkeypatch, tmp_path):
+    sent = []
+
+    def send(_adapter, request, **kwargs):
+        sent.append(request.copy())
+        return reply(request, {"Version": "4.10.2.0", "Id": "server"})
+
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", send)
+    cfg = {"url": "https://app.example", "api_key": "native-key", "data_dir": str(tmp_path), "request_headers": HEADERS}
+    with pytest.raises(EmbyError, match="doesn't look like Emby's data folder"):
+        backup.build_app("emby", cfg).test_connection()
+    assert [r.url for r in sent] == ["https://app.example/emby/System/Info"]
+    assert sent[0].headers["Proxy-Authorization"] == SECRET and sent[0].headers["X-Emby-Token"] == "native-key"
+
+
 def test_settings_encrypt_all_header_values_and_allow_removal(authed_client, caplog):
     assert authed_client.get("/api/config").json["request_headers"] == []
     assert authed_client.post("/api/config", json={"request_headers": HEADERS}).status_code == 200
@@ -358,11 +374,11 @@ def test_scheduled_backup_and_web_restore_send_headers_at_every_phase(authed_cli
 
 
 @pytest.mark.parametrize("name, method", [("bazarr", "restore_from_file"), ("tdarr", "restore"), ("tautulli", "restore"), ("sabnzbd", "restore"),
-                                          ("jellyfin", "restore_from_file")])
+                                          ("jellyfin", "restore_from_file"), ("emby", "restore_from_file")])
 def test_other_restore_drivers_receive_global_headers(name, method, monkeypatch, tmp_path, wire):
     classes = {"bazarr": restore_actions.BazarrApp, "tdarr": restore_actions.TdarrApp,
                "tautulli": restore_actions.TautulliApp, "sabnzbd": restore_actions.SabnzbdApp,
-               "jellyfin": restore_actions.JellyfinApp}
+               "jellyfin": restore_actions.JellyfinApp, "emby": restore_actions.EmbyApp}
     def restore(app, *args):
         app.session.post(app.url + "/restore")
         return {}

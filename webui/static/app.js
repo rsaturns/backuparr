@@ -1641,6 +1641,14 @@ function renderRestoreExtra() {
       "<strong>Replaces Jellyfin's database and settings</strong> with the backup's - users, watch history, libraries and API keys. " +
       "Anything added since is lost. Jellyfin restarts to apply it.";
     extraRoot.appendChild(block);
+  } else if (appId === "emby") {
+    const block = document.createElement("div");
+    block.className = "extra-field-block";
+    block.innerHTML =
+      "<strong>Stop Emby first</strong> - the restore is refused while it's running. " +
+      "It replaces Emby's databases and settings with the backup's - users, watch history, playlists, collections and API keys. " +
+      "Anything added since is lost. Start Emby again afterwards.";
+    extraRoot.appendChild(block);
   } else if (appId === "bazarr") {
     const block = document.createElement("div");
     block.className = "extra-field-block";

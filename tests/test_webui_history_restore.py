@@ -171,6 +171,7 @@ def configure(client, **apps):
     defaults = {name: {"enabled": True, "url": f"http://{name}:1", "api_key": f"{name}-key"} for name in
                 ("radarr", "sonarr", "prowlarr", "bazarr", "tdarr", "tautulli", "sabnzbd", "profilarr")}
     defaults["jellyfin"] = {"enabled": True, "url": "http://jellyfin:1", "api_key": "jellyfin-key", "backup_dir": "/mnt/jellyfin"}
+    defaults["emby"] = {"enabled": True, "url": "http://emby:1", "api_key": "emby-key", "data_dir": "/mnt/emby"}
     body["apps"].update({name: {**defaults[name], **extra} for name, extra in {**{n: {} for n in defaults}, **apps}.items()})
     assert client.post("/api/config", json=body).status_code == 200
 
@@ -288,6 +289,20 @@ def test_jellyfin_restore_needs_its_backups_folder(restore, authed_client):
     assert refused.status_code == 400 and refused.get_json()["error"] == "jellyfin: Backups folder is not configured"
     assert start(authed_client, "jellyfin", override={"backup_dir": "/mnt/other"}).status_code == 200
     assert restore["calls"][-1][2]["backup_dir"] == "/mnt/other"
+
+
+def test_emby_restore_uses_its_data_folder_and_says_to_start_emby(restore, authed_client):
+    start(authed_client, "emby")
+    assert restore["calls"][-1][2]["data_dir"] == "/mnt/emby"
+    assert result(authed_client)["message"] == "emby restore complete, start Emby again to load it"
+
+
+def test_emby_restore_needs_its_data_folder(restore, authed_client):
+    authed_client.post("/api/config", json={"apps": {"emby": {"enabled": False, "data_dir": ""}}})
+    refused = start(authed_client, "emby")
+    assert refused.status_code == 400 and refused.get_json()["error"] == "emby: Data folder is not configured"
+    assert start(authed_client, "emby", override={"data_dir": "/mnt/other"}).status_code == 200
+    assert restore["calls"][-1][2]["data_dir"] == "/mnt/other"
 
 
 def test_tautulli_and_sabnzbd_restores_return_their_summary(restore, authed_client):

@@ -25,6 +25,7 @@ body:
         - SABnzbd
         - Tautulli
         - Jellyfin
+        - Emby
         - Web UI / general
         - Not app-specific
     validations:

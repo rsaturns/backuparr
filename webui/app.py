@@ -952,6 +952,11 @@ def _restore_work(app_name, root, app_cfg, data, bazarr_backup_dir):
             ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
             RESTORE_RUN_STATE["message"] = "jellyfin restore started, Jellyfin is restarting to apply it"
 
+        elif app_name == "emby":
+            log.info("restore: writing the backup into emby's data folder...")
+            ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
+            RESTORE_RUN_STATE["message"] = "emby restore complete, start Emby again to load it"
+
         elif app_name == "tautulli":
             log.info("restore: restoring tautulli...")
             result = ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)

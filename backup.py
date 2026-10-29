@@ -2,7 +2,9 @@
 result if needed, and upload it to the configured rclone remote. No app
 config volumes are read directly - everything goes through each app's
 HTTP API, except that Jellyfin's API can't download the backup it creates,
-so that one archive is picked up from Jellyfin's mounted backups folder.
+so that one archive is picked up from Jellyfin's mounted backups folder, and
+Emby has no backup API at all, so its files are read from its mounted data
+folder.
 Settings come from config_store, not environment variables.
 """
 import errno
@@ -25,6 +27,7 @@ import destination_util
 import rclone_util
 from apps.bazarr import BazarrApp, BazarrError
 from apps.http_headers import RequestHeadersError, app_connection_config, configure_app_headers
+from apps.emby import EmbyApp, EmbyError
 from apps.jellyfin import JellyfinApp, JellyfinError
 from apps.profilarr import ProfilarrApp, ProfilarrError
 from apps.prowlarr import ProwlarrApp
@@ -62,6 +65,7 @@ _CLEAN_MESSAGE_ERRORS = (
     ConfigError,
     destination_util.DestinationError,
     JellyfinError,
+    EmbyError,
     ProfilarrError,
     rclone_util.RcloneError,
     SabnzbdError,
@@ -220,6 +224,8 @@ def _build_app(name, app_cfg):
         return TautulliApp(app_cfg["url"], app_cfg["api_key"])
     if name == "jellyfin":
         return JellyfinApp(app_cfg["url"], app_cfg["api_key"], backup_dir=app_cfg.get("backup_dir") or None)
+    if name == "emby":
+        return EmbyApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
     raise ValueError(f"Unknown app: {name}")
 
 
