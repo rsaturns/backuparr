@@ -40,6 +40,7 @@ class PlexAPI:
             body = {"id": 123, "code": "strong-pin-secret", "authToken": "account-secret" if self.claimed else None}
         elif url == "https://clients.plex.tv/api/v2/resources":
             assert kwargs["headers"]["X-Plex-Token"] == "account-secret"
+            assert kwargs["params"] == {"includeHttps": 1, "includeRelay": 0}
             body = self.resources
         else:
             raise AssertionError("Unexpected outbound request")
@@ -213,3 +214,20 @@ def test_pending_logins_are_bounded(authed_client, isolated_webui, plex_api):
     response = authed_client.post("/api/plex/auth", json={})
     assert response.status_code == 429
     assert len(plex_api.calls) == 1
+
+
+def test_the_servers_secure_local_address_comes_along(authed_client, plex_api):
+    # Plex's certificate is issued for its plex.direct name: the local HTTPS
+    # connection from plex.tv gives the URL that works, hash and all.
+    plex_api.resources[0]["connections"] = [
+        {"protocol": "https", "address": "203.0.113.5", "uri": "https://203-0-113-5.abc123.plex.direct:32400", "local": False, "relay": False},
+        {"protocol": "https", "address": "203.0.113.9", "uri": "https://203-0-113-9.abc123.plex.direct:8443", "local": True, "relay": True},
+        {"protocol": "http", "address": "192.168.2.25", "uri": "http://192.168.2.25:32400", "local": True, "relay": False},
+        {"protocol": "https", "address": "192.168.2.25", "uri": "https://192-168-2-25.abc123.plex.direct:32400", "local": True, "relay": False},
+    ]
+    plex_api.claimed = True
+    _, path = start(authed_client)
+    assert authed_client.get(path).json["servers"] == [{
+        "name": "My server", "api_key": "server-secret",
+        "url": "https://192-168-2-25.abc123.plex.direct:32400", "address": "192.168.2.25",
+    }]

@@ -269,12 +269,30 @@ inside Plex's `/config`, in both the official `plexinc/pms-docker` image and
       - "/share/Container/plex/Library/Application Support/Plex Media Server:/mnt/plex:ro"   # drop :ro to restore from the web UI
 ```
 
-Then fill in the Plex card with the URL (for example `http://plex:32400`), the
-**server owner's** Plex token, and **Data folder** = `/mnt/plex`. The easiest
-way to get the token is **Get Plex token**: sign in on Plex's own website with
-the owner's account (your password and two-factor code never reach Backuparr),
-and the token is filled in - pick the server matching the URL if you own
-several. If the sign-in window is blocked, use the **Open Plex sign-in** link.
+Then fill in the Plex card with the URL, the **server owner's** Plex token, and
+**Data folder** = `/mnt/plex`. Plex usually runs with `network_mode: host`, so
+it isn't on Backuparr's Docker network and `http://plex:32400` won't resolve:
+use the host's address instead. Which form depends on Plex's **Secure
+connections** setting:
+
+- **Preferred** (the default): `http://192.168.1.10:32400` works.
+- **Required**: use the server's own HTTPS address,
+  `https://192-168-1-10.<id>.plex.direct:32400` - Plex's certificate is issued
+  for that name, never for the IP, so `https://192.168.1.10:32400` fails the
+  certificate check. **Get Plex token** fills this address in for you. Many
+  routers block `plex.direct` names (DNS-rebinding protection), so Backuparr
+  doesn't look them up: the name spells out its address, and Backuparr
+  connects there directly while still verifying the certificate against the
+  full name.
+
+Only a Plex container on the same Docker network can be reached by its
+container name.
+
+The easiest way to get the token is **Get Plex token**: sign in on Plex's own
+website with the owner's account (your password and two-factor code never reach
+Backuparr), and the token - plus the server's `plex.direct` address, when the
+URL is empty or points at the same machine - is filled in. Pick the server
+matching the URL if you own several. If the sign-in window is blocked, use the **Open Plex sign-in** link.
 This needs internet access to plex.tv, but not a publicly reachable Backuparr.
 You can also paste a token by hand - see Plex's guide to [finding your
 token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/).

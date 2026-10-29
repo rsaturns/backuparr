@@ -23,7 +23,14 @@ to its databases, so any -wal file means Plex is running - or was not shut
 down cleanly - and the restore is refused before anything is written.
 
 Auth: the token goes in the X-Plex-Token header, never the URL.
+
+HTTPS: Plex's certificate is issued for a name like
+192-168-1-10.<id>.plex.direct, not for its IP address. Such a name spells out
+its own address, and routers often block it (DNS-rebinding protection), so
+Backuparr connects to that address itself - no DNS - while still verifying
+the certificate against the full name.
 """
+import ipaddress
 import json
 import logging
 import os
@@ -50,6 +57,8 @@ _MIB = 1024 * 1024
 
 # Plex's export names the snapshot databaseBackup.db, sometimes with a UUID
 # appended; other variants use the on-disk name.
+_PLEX_DIRECT = re.compile(r"^(\d{1,3}(?:-\d{1,3}){3})\.[0-9a-f]+\.plex\.direct$", re.IGNORECASE)
+
 _EXPORTED_DB = re.compile(
     r"(?:com\.plexapp\.plugins\.library\.db|databaseBackup\.db"
     r"(?:[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})?)", re.IGNORECASE,
@@ -81,6 +90,38 @@ def is_plex_backup(path):
         return False
 
 
+def _is_ip(host):
+    try:
+        ipaddress.ip_address(host or "")
+        return True
+    except ValueError:
+        return False
+
+
+def plex_direct_address(host):
+    """The IPv4 address a plex.direct name stands for, or None."""
+    match = _PLEX_DIRECT.match(host or "")
+    if not match:
+        return None
+    try:
+        return str(ipaddress.IPv4Address(match.group(1).replace("-", ".")))
+    except ValueError:
+        return None
+
+
+class _PlexDirectAdapter(requests.adapters.HTTPAdapter):
+    """Connects to the address in a plex.direct name; TLS still checks the
+    certificate (and sends SNI) for the name itself."""
+
+    def build_connection_pool_key_attributes(self, request, verify, cert=None):
+        host_params, pool_kwargs = super().build_connection_pool_key_attributes(request, verify, cert)
+        address = plex_direct_address(host_params["host"])
+        if address and host_params["scheme"] == "https":
+            pool_kwargs["server_hostname"] = pool_kwargs["assert_hostname"] = host_params["host"]
+            host_params["host"] = address
+        return host_params, pool_kwargs
+
+
 class PlexApp:
     def __init__(self, url, api_key, data_dir=None, timeout=30):
         try:
@@ -98,6 +139,7 @@ class PlexApp:
         self.data_dir = data_dir or None
         self.timeout = timeout
         self.session = requests.Session()
+        self.session.mount("https://", _PlexDirectAdapter())
         self.session.headers.update({"X-Plex-Token": api_key})
 
     def _get(self, path, **kwargs):
@@ -107,10 +149,18 @@ class PlexApp:
         # Follow only same-origin redirects, explicitly: Requests would
         # forward the custom X-Plex-Token header to another host.
         for hop in range(6):
+            # A connection failure propagates as is: backup.describe_failure()
+            # names the cause (DNS, refused, timeout, TLS) with only the host.
             try:
                 response = self.session.get(url, allow_redirects=False, **kwargs)
-            except requests.RequestException:
-                raise PlexError(f"plex: could not reach {endpoint}; check server network access") from None
+            except requests.exceptions.SSLError as exc:
+                if _is_ip(origin.hostname):
+                    raise PlexError(
+                        f"plex: Plex's certificate isn't issued for {origin.hostname} - use its "
+                        f"https://{origin.hostname.replace('.', '-')}.<id>.plex.direct:{origin.port or 443} address "
+                        "(Get Plex token fills it in), or http:// if Plex doesn't require secure connections"
+                    ) from exc
+                raise
             if response.status_code not in (301, 302, 303, 307, 308):
                 break
             location = response.headers.get("Location", "")

@@ -5,16 +5,35 @@ The account token is only used to retrieve tokens for servers the user owns.
 """
 import threading
 import time
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 import uuid
 
 import requests
+
+from apps.plex import plex_direct_address
 
 
 class PlexAuthError(RuntimeError):
     def __init__(self, message, status=502):
         super().__init__(message)
         self.status = status
+
+
+def _local_https_connection(connections):
+    """The server's own HTTPS address on the local network - a plex.direct
+    name its certificate is issued for - as {"url", "address"}, or {}."""
+    for connection in connections if isinstance(connections, list) else []:
+        if not isinstance(connection, dict) or connection.get("local") is not True or connection.get("relay"):
+            continue
+        uri = connection.get("uri")
+        try:
+            parts = urlsplit(uri) if isinstance(uri, str) else None
+        except ValueError:
+            continue
+        address = parts and parts.scheme == "https" and plex_direct_address(parts.hostname)
+        if address:
+            return {"url": f"https://{parts.netloc}", "address": address}
+    return {}
 
 
 class PlexLogin:
@@ -83,7 +102,8 @@ class PlexLogin:
                 return {"state": "pending"}
             if not isinstance(token, str) or not token.strip():
                 raise PlexAuthError("Plex returned an invalid token. Try again.")
-            resources = self._request("GET", "https://clients.plex.tv/api/v2/resources", token=token)
+            resources = self._request("GET", "https://clients.plex.tv/api/v2/resources", token=token,
+                                      params={"includeHttps": 1, "includeRelay": 0})
             if not isinstance(resources, list):
                 raise PlexAuthError("Plex returned an invalid server list. Try again.")
             servers = []
@@ -96,8 +116,9 @@ class PlexLogin:
                         and "server" in provides.split(",")
                         and isinstance(access_token, str) and access_token.strip()):
                     name = resource.get("name")
-                    servers.append({"name": name if isinstance(name, str) and name else "Plex server",
-                                    "api_key": access_token})
+                    server = {"name": name if isinstance(name, str) and name else "Plex server", "api_key": access_token}
+                    server.update(_local_https_connection(resource.get("connections")))
+                    servers.append(server)
             if not servers:
                 raise PlexAuthError("No owned Plex servers found. Sign in with the server owner's account.", 400)
             self.servers = servers
