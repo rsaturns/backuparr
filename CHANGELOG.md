@@ -5,6 +5,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.8.0-beta] - 2026-10-29
+
 ### Added
 
 - NZBGet backup and restore. NZBGet has no API key, so its card takes the
