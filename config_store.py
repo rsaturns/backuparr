@@ -116,12 +116,17 @@ APP_META = [
         "id": "seerr",
         "label": "Seerr",
         "icon": "seerr.svg",
-        "status": "coming_soon",
-        # No backup/restore API exists - card shown for visibility only.
+        "status": "available",
         "key_required": True,
-        "url_placeholder": "",
-        "extra_fields": [],
-        "restore_supported": False,
+        "url_placeholder": "http://seerr:5055",
+        "key_help": "Settings > General > API Key",
+        # Seerr has no backup API, so its config folder is mounted into this
+        # container - see apps/seerr.py.
+        "extra_fields": [
+            {"name": "data_dir", "label": "Data folder", "type": "text", "required": True,
+             "placeholder": "/mnt/seerr",
+             "help": "Seerr's /app/config folder as mounted here; read-write to restore"},
+        ],
     },
 ]
 

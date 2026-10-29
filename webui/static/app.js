@@ -1791,6 +1791,15 @@ function renderRestoreExtra() {
       "It replaces Emby's databases and settings with the backup's - users, watch history, playlists, collections and API keys. " +
       "Anything added since is lost. Start Emby again afterwards.";
     extraRoot.appendChild(block);
+  } else if (appId === "seerr") {
+    const block = document.createElement("div");
+    block.className = "extra-field-block";
+    block.innerHTML =
+      "<strong>Stop Seerr first</strong> - the restore is refused while it's running. " +
+      "It replaces Seerr's database and settings with the backup's - users, requests, issues, " +
+      "the media server and Radarr/Sonarr connections, notifications and the API key. " +
+      "Anything added since is lost. Start Seerr again afterwards.";
+    extraRoot.appendChild(block);
   } else if (appId === "bazarr") {
     const block = document.createElement("div");
     block.className = "extra-field-block";

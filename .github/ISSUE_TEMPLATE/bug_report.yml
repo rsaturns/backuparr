@@ -27,6 +27,7 @@ body:
         - Jellyfin
         - Emby
         - Plex
+        - Seerr
         - Web UI / general
         - Not app-specific
     validations:

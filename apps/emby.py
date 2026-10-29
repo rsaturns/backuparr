@@ -41,6 +41,8 @@ import zipfile
 
 import requests
 
+from apps import sqlite_snapshot
+
 logger = logging.getLogger(f"backuparr.{__name__}")
 
 MANIFEST = "backuparr-emby.json"
@@ -73,31 +75,10 @@ def _read_text(path):
         return ""
 
 
-def _open_ro(src):
-    """A running Emby keeps a -wal file next to each database, and a
-    read-only connection reads it consistently through the shared -shm
-    index. A stopped Emby leaves no -wal and the file can't change, so it's
-    opened immutable - which a read-only mount needs, since SQLite can't
-    create the -shm file there."""
-    uri = f"file:{src}?mode=ro"
-    if not os.path.exists(f"{src}-wal"):
-        uri += "&immutable=1"
-    return sqlite3.connect(uri, uri=True, timeout=30)
-
-
 def snapshot_db(src, dest):
     """Copies a live SQLite database with the online backup API, which
     takes a consistent snapshot while Emby keeps writing to it."""
-    source = _open_ro(src)
-    try:
-        target = sqlite3.connect(dest)
-        try:
-            source.backup(target)
-            status = target.execute("PRAGMA quick_check").fetchone()[0]
-        finally:
-            target.close()
-    finally:
-        source.close()
+    status = sqlite_snapshot.snapshot(src, dest)
     if status != "ok":
         raise EmbyError(f"emby: the copy of {os.path.basename(src)} failed SQLite's integrity check ({status})")
 
@@ -154,7 +135,7 @@ class EmbyApp:
         info = self.server_info()
         self._require_folder(info.get("Id"))
         try:
-            db = _open_ro(self._path("data", "library.db"))
+            db = sqlite_snapshot.open_ro(self._path("data", "library.db"))
             try:
                 db.execute("SELECT count(*) FROM sqlite_master").fetchone()
             finally:

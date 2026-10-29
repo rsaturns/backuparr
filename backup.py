@@ -3,8 +3,8 @@ result if needed, and upload it to the configured rclone remote. No app
 config volumes are read directly - everything goes through each app's
 HTTP API, except that Jellyfin's API can't download the backup it creates,
 so that one archive is picked up from Jellyfin's mounted backups folder, and
-Emby has no backup API at all, so its files are read from its mounted data
-folder.
+Emby and Seerr have no backup API at all, so their files are read from their
+mounted data folders.
 Settings come from config_store, not environment variables.
 """
 import errno
@@ -34,6 +34,7 @@ from apps.profilarr import ProfilarrApp, ProfilarrError
 from apps.prowlarr import ProwlarrApp
 from apps.radarr import RadarrApp
 from apps.sabnzbd import SabnzbdApp, SabnzbdError
+from apps.seerr import SeerrApp, SeerrError
 from apps.servarr import ServarrError, UnsafeRedirectError
 from apps.sonarr import SonarrApp
 from apps.tautulli import TautulliApp, TautulliError
@@ -71,6 +72,7 @@ _CLEAN_MESSAGE_ERRORS = (
     ProfilarrError,
     rclone_util.RcloneError,
     SabnzbdError,
+    SeerrError,
     ServarrError,
     TautulliError,
     TdarrError,
@@ -230,6 +232,8 @@ def _build_app(name, app_cfg):
         return EmbyApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
     if name == "plex":
         return PlexApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
+    if name == "seerr":
+        return SeerrApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
     raise ValueError(f"Unknown app: {name}")
 
 

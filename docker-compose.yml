@@ -32,3 +32,6 @@ services:
       # Application Support/Plex Media Server inside Plex's /config.
       # Read-only is enough for backups; read-write to restore.
       # - "/share/Container/plex/Library/Application Support/Plex Media Server:/mnt/plex:ro"
+      # Needed to back up Seerr - the folder Seerr has at /app/config.
+      # Read-only is enough for backups; read-write to restore.
+      # - /share/Container/seerr/config:/mnt/seerr:ro

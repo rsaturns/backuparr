@@ -17,6 +17,7 @@ import backup
 import config_store
 import restore_actions
 from apps.emby import EmbyError
+from apps.seerr import SeerrError
 from apps.plex import PlexError
 from apps.http_headers import RequestHeadersError, configure_app_headers, validate_request_headers
 
@@ -272,6 +273,21 @@ def test_emby_sends_headers_without_losing_its_key(monkeypatch, tmp_path):
     assert sent[0].headers["Proxy-Authorization"] == SECRET and sent[0].headers["X-Emby-Token"] == "native-key"
 
 
+def test_seerr_sends_headers_without_losing_its_key(monkeypatch, tmp_path):
+    sent = []
+
+    def send(_adapter, request, **kwargs):
+        sent.append(request.copy())
+        return reply(request, {"version": "3.5.1", "plexClientIdentifier": "client"})
+
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", send)
+    cfg = {"url": "https://app.example", "api_key": "native-key", "data_dir": str(tmp_path), "request_headers": HEADERS}
+    with pytest.raises(SeerrError, match="doesn't look like Seerr's config folder"):
+        backup.build_app("seerr", cfg).test_connection()
+    assert [r.url for r in sent] == ["https://app.example/api/v1/settings/about", "https://app.example/api/v1/settings/public"]
+    assert all(r.headers["Proxy-Authorization"] == SECRET and r.headers["X-Api-Key"] == "native-key" for r in sent)
+
+
 def test_plex_sends_headers_without_losing_its_token(monkeypatch):
     sent = []
 
@@ -395,11 +411,13 @@ def test_scheduled_backup_and_web_restore_send_headers_at_every_phase(authed_cli
 
 
 @pytest.mark.parametrize("name, method", [("bazarr", "restore_from_file"), ("tdarr", "restore"), ("tautulli", "restore"), ("sabnzbd", "restore"),
-                                          ("jellyfin", "restore_from_file"), ("emby", "restore_from_file"), ("plex", "restore_from_file")])
+                                          ("jellyfin", "restore_from_file"), ("emby", "restore_from_file"), ("plex", "restore_from_file"),
+                                          ("seerr", "restore_from_file")])
 def test_other_restore_drivers_receive_global_headers(name, method, monkeypatch, tmp_path, wire):
     classes = {"bazarr": restore_actions.BazarrApp, "tdarr": restore_actions.TdarrApp,
                "tautulli": restore_actions.TautulliApp, "sabnzbd": restore_actions.SabnzbdApp,
-               "jellyfin": restore_actions.JellyfinApp, "emby": restore_actions.EmbyApp, "plex": restore_actions.PlexApp}
+               "jellyfin": restore_actions.JellyfinApp, "emby": restore_actions.EmbyApp, "plex": restore_actions.PlexApp,
+               "seerr": restore_actions.SeerrApp}
     def restore(app, *args):
         app.session.post(app.url + "/restore")
         return {}
