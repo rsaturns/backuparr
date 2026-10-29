@@ -1,7 +1,9 @@
 """Trigger each configured app's own backup mechanism over its API, zip the
 result if needed, and upload it to the configured rclone remote. No app
 config volumes are read directly - everything goes through each app's
-HTTP API. Settings come from config_store, not environment variables.
+HTTP API, except that Jellyfin's API can't download the backup it creates,
+so that one archive is picked up from Jellyfin's mounted backups folder.
+Settings come from config_store, not environment variables.
 """
 import errno
 import json
@@ -23,6 +25,7 @@ import destination_util
 import rclone_util
 from apps.bazarr import BazarrApp, BazarrError
 from apps.http_headers import RequestHeadersError, app_connection_config, configure_app_headers
+from apps.jellyfin import JellyfinApp, JellyfinError
 from apps.profilarr import ProfilarrApp, ProfilarrError
 from apps.prowlarr import ProwlarrApp
 from apps.radarr import RadarrApp
@@ -58,6 +61,7 @@ _CLEAN_MESSAGE_ERRORS = (
     BazarrError,
     ConfigError,
     destination_util.DestinationError,
+    JellyfinError,
     ProfilarrError,
     rclone_util.RcloneError,
     SabnzbdError,
@@ -214,6 +218,8 @@ def _build_app(name, app_cfg):
         return SabnzbdApp(app_cfg["url"], app_cfg["api_key"])
     if name == "tautulli":
         return TautulliApp(app_cfg["url"], app_cfg["api_key"])
+    if name == "jellyfin":
+        return JellyfinApp(app_cfg["url"], app_cfg["api_key"], backup_dir=app_cfg.get("backup_dir") or None)
     raise ValueError(f"Unknown app: {name}")
 
 

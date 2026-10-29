@@ -20,3 +20,7 @@ services:
       - ./data:/config/backuparr
       # Optional: needed only to restore Bazarr - path to its config/backup folder.
       # - /share/Container/bazarr/backup:/mnt/bazarr-backup
+      # Needed to back up Jellyfin - its backups folder (/config/data/backups in
+      # the official image, /config/data/data/backups in linuxserver's).
+      # Read-write so Backuparr can restore and tidy up.
+      # - /share/Container/jellyfin/config/data/backups:/mnt/jellyfin-backups

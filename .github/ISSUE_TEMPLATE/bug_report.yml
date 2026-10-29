@@ -24,6 +24,7 @@ body:
         - Tdarr
         - SABnzbd
         - Tautulli
+        - Jellyfin
         - Web UI / general
         - Not app-specific
     validations:

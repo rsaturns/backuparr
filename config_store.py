@@ -16,7 +16,7 @@ class ConfigError(RuntimeError):
     truncated by a full disk, ...). The message says what to do about it."""
 
 
-APP_NAMES = ["radarr", "sonarr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "tautulli", "seerr"]
+APP_NAMES = ["radarr", "sonarr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "tautulli", "jellyfin", "seerr"]
 
 DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "password": ""}
 
@@ -63,6 +63,22 @@ APP_META = [
     },
     {"id": "sabnzbd", "label": "SABnzbd", "icon": "sabnzbd.svg", "status": "available", "key_required": True, "url_placeholder": "http://sabnzbd:8080", "extra_fields": []},
     {"id": "tautulli", "label": "Tautulli", "icon": "tautulli.svg", "status": "available", "key_required": True, "url_placeholder": "http://tautulli:8181", "extra_fields": []},
+    {
+        "id": "jellyfin",
+        "label": "Jellyfin",
+        "icon": "jellyfin.svg",
+        "status": "available",
+        "key_required": True,
+        "url_placeholder": "http://jellyfin:8096",
+        "key_help": "Dashboard > API Keys",
+        # Jellyfin's API can't download a backup, so its backups folder is
+        # mounted into this container - see apps/jellyfin.py.
+        "extra_fields": [
+            {"name": "backup_dir", "label": "Backups folder", "type": "text", "required": True,
+             "placeholder": "/mnt/jellyfin-backups",
+             "help": "Jellyfin's backups folder as mounted here; read-write to restore"},
+        ],
+    },
     {
         "id": "seerr",
         "label": "Seerr",
