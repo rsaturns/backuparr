@@ -5,6 +5,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.8.14-beta] - 2026-10-29
+
 ### Security
 
 - Another website could make a visitor's browser reset Backuparr - deleting
