@@ -170,6 +170,7 @@ def configure(client, **apps):
     body = {"bazarr_backup_dir": "/mnt/bazarr", "apps": {}}
     defaults = {name: {"enabled": True, "url": f"http://{name}:1", "api_key": f"{name}-key"} for name in
                 ("radarr", "sonarr", "prowlarr", "bazarr", "tdarr", "tautulli", "sabnzbd", "profilarr")}
+    defaults["jellyfin"] = {"enabled": True, "url": "http://jellyfin:1", "api_key": "jellyfin-key", "backup_dir": "/mnt/jellyfin"}
     body["apps"].update({name: {**defaults[name], **extra} for name, extra in {**{n: {} for n in defaults}, **apps}.items()})
     assert client.post("/api/config", json=body).status_code == 200
 
@@ -273,6 +274,20 @@ def test_each_app_restores_and_reports_its_own_message(restore, authed_client, a
 def test_a_named_file_is_restored_instead_of_the_newest(restore, authed_client):
     start(authed_client, "radarr", file="radarr_20260101_000000.zip")
     assert restore["calls"][0][3] == "radarr_20260101_000000.zip" and result(authed_client)["file"] == "radarr_20260101_000000.zip"
+
+
+def test_jellyfin_restore_uses_its_backups_folder_and_says_it_restarts(restore, authed_client):
+    start(authed_client, "jellyfin")
+    assert restore["calls"][-1][2]["backup_dir"] == "/mnt/jellyfin"
+    assert result(authed_client)["message"] == "jellyfin restore started, Jellyfin is restarting to apply it"
+
+
+def test_jellyfin_restore_needs_its_backups_folder(restore, authed_client):
+    authed_client.post("/api/config", json={"apps": {"jellyfin": {"enabled": False, "backup_dir": ""}}})
+    refused = start(authed_client, "jellyfin")
+    assert refused.status_code == 400 and refused.get_json()["error"] == "jellyfin: Backups folder is not configured"
+    assert start(authed_client, "jellyfin", override={"backup_dir": "/mnt/other"}).status_code == 200
+    assert restore["calls"][-1][2]["backup_dir"] == "/mnt/other"
 
 
 def test_tautulli_and_sabnzbd_restores_return_their_summary(restore, authed_client):

@@ -9,13 +9,14 @@
 > included. Reviewed and maintained by a human.
 
 Scheduled config/database backups for Radarr, Sonarr, Prowlarr, Profilarr,
-Bazarr, Tdarr, SABnzbd, and Tautulli (Seerr coming soon), sent to every
+Bazarr, Tdarr, SABnzbd, Tautulli, and Jellyfin (Seerr coming soon), sent to every
 destination you enable: Local storage, Google Drive, OneDrive, and Dropbox.
 Apps, URLs/API keys, destinations, schedule, retention,
 and restores are all configured and triggered from the web UI, not env vars.
 
 Every app is backed up through **its own HTTP API**, never by reading its
-config volume directly.
+config volume directly. The one mount is Jellyfin's backups folder: its API
+creates a backup but can't download it (see the [Jellyfin note](#jellyfin-note)).
 
 To recover after a host failure, re-create the containers from your compose
 file, then restore each app from its latest backup (see
@@ -33,6 +34,7 @@ See [CHANGELOG.md](CHANGELOG.md) for release history.
     - [Profilarr backup note](#profilarr-backup-note)
     - [Tautulli backup note](#tautulli-backup-note)
     - [Tautulli restore note](#tautulli-restore-note)
+    - [Jellyfin note](#jellyfin-note)
     - [Bazarr auth note](#bazarr-auth-note)
     - [Tdarr auth note](#tdarr-auth-note)
   - [Environment variables](#environment-variables)
@@ -61,14 +63,14 @@ See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## Architecture
 
-<img src="webui/static/architecture-diagram.svg" alt="Radarr, Sonarr, Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, and Tautulli each feed Backuparr over their own HTTP API; Backuparr uploads each backup via rclone to Local storage, Google Drive, Microsoft OneDrive, and Dropbox" width="100%">
+<img src="webui/static/architecture-diagram.svg" alt="Radarr, Sonarr, Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, Tautulli, and Jellyfin each feed Backuparr over their own HTTP API; Backuparr uploads each backup via rclone to Local storage, Google Drive, Microsoft OneDrive, and Dropbox" width="100%">
 
 ## Why not reuse an existing tool?
 
 [Zerka30/servarr-backup](https://github.com/Zerka30/servarr-backup) does
 this for Radarr/Sonarr/Prowlarr via S3. Backuparr extends the same idea
 (trigger the app's own backup API, download it, upload it) to Profilarr,
-Bazarr, Tdarr, and Tautulli, and uses a pick-your-destinations model built
+Bazarr, Tdarr, Tautulli, and Jellyfin, and uses a pick-your-destinations model built
 on [rclone](https://rclone.org/): Local out of the box, Google Drive via an
 in-app "Connect" button, and OneDrive and Dropbox via a one-time
 `rclone authorize` paste, with no need to run rclone's interactive config wizard yourself.
@@ -83,6 +85,7 @@ in-app "Connect" button, and OneDrive and Dropbox via a one-time
 | Tdarr | `POST /api/v2/cruddb` with `mode: getAll` for every internal DB collection (library settings, flows, global settings, node registrations, staged/output/statistics) | Fully API-driven both ways. Restore does `removeAll` then re-`insert`s each document one at a time (no bulk-insert mode) - destructive, asks for confirmation. |
 | SABnzbd | `GET /sabnzbd/api?mode=get_config` to back up; `mode=set_config` per key to restore | SABnzbd's API returns every password field (e.g. a Usenet server password) as `**********`, with no way to get the real value. Restore recreates each Usenet server and every plain `misc`-style setting via the API, and asks for each server's real password (fields left out of the API call are untouched, so a skipped password isn't overwritten with a blank). Categories, RSS feeds, and sorters aren't auto-restored. |
 | Tautulli | `GET /api/v2?cmd=download_database` and `cmd=download_config` - each streams a fresh copy directly, no trigger/poll step | The database comes back with Plex tokens nulled out; the config is only lightly sanitized - see the [Tautulli backup note](#tautulli-backup-note). Restore uploads each separately via `cmd=import_database` and `cmd=import_config` (multipart) - see the [Tautulli restore note](#tautulli-restore-note). |
+| Jellyfin | `POST /Backup/Create` (database only) writes Jellyfin's own backup archive to its backups folder; Backuparr copies it from there and removes Jellyfin's copy | Needs Jellyfin 10.11 or newer and its backups folder mounted into Backuparr - see the [Jellyfin note](#jellyfin-note). Restore copies the archive back into that folder and calls `POST /Backup/Restore`; Jellyfin restarts to apply it. |
 | Seerr | *(none)* | Not implemented - Seerr has no backup/restore API. Shown on the Settings tab as "Coming soon". |
 
 ### Profilarr backup note
@@ -133,6 +136,55 @@ you right after the upload:
 The database can't be restored over the API at all (an upstream Tautulli bug),
 so Backuparr skips it and says so; import `tautulli.db` by hand from Tautulli's
 Settings > Import & Backup > Import Database.
+
+### Jellyfin note
+
+Jellyfin (10.11 or newer) creates backups through its API, but has no endpoint
+to download or upload one. So Backuparr needs **Jellyfin's backups folder**
+mounted into its container - only that folder, not the rest of Jellyfin's
+config. Inside Jellyfin's container it is `/config/data/backups` in the official
+`jellyfin/jellyfin` image and `/config/data/data/backups` in
+`lscr.io/linuxserver/jellyfin`; mount the matching host folder:
+
+```yaml
+    volumes:
+      # official image, with Jellyfin's /config at /share/Container/jellyfin/config
+      - /share/Container/jellyfin/config/data/backups:/mnt/jellyfin-backups
+      # or linuxserver image, with Jellyfin's /config at /share/Container/jellyfin
+      # - /share/Container/jellyfin/data/data/backups:/mnt/jellyfin-backups
+```
+
+If the path is wrong, **Test connection** and the backup log name the folder
+Jellyfin actually wrote to.
+
+Then fill in the Jellyfin card: the URL, an API key from Jellyfin's
+**Dashboard > API Keys** (a user's sign-in token can't manage backups), and
+**Backups folder** = `/mnt/jellyfin-backups`. **Test connection** checks that
+the folder holds the backups Jellyfin lists, once there are any.
+
+- **What's in the backup:** Jellyfin's database - users, watched state and
+  playback progress, playlists, collections, libraries, server settings and API
+  keys - plus its config files. Metadata images, trickplay images and
+  subtitles are left out; a library scan brings them back. The archive holds
+  users' password hashes and Jellyfin's API keys, so protect every
+  destination accordingly.
+- **Mount the folder read-write**, writable by Backuparr's `PUID`/`PGID` (the
+  simplest is the same user Jellyfin runs as). Backuparr removes Jellyfin's
+  copy of each archive after taking it, and a restore writes into the folder.
+  Read-only, backups still work, but Jellyfin's copies stay in the folder and
+  restores can't run.
+- **Restore** replaces Jellyfin's database and settings with the backup's, so
+  anything added since is lost. Jellyfin restarts in place and applies the
+  backup on startup, and the archive stays in its backups folder (delete it
+  there when you no longer need it). API keys are restored too: a key created
+  after the backup - for example on a freshly reinstalled Jellyfin - is gone
+  afterwards, while the key Backuparr used when the backup was taken works
+  again. After a rebuild, put the new install's key in **Restore to a
+  different target** rather than in Settings.
+- **Reverse proxy:** Jellyfin only accepts its API key in the `Authorization`
+  header, so a [service authentication header](#service-authentication-headers)
+  for a proxy in front of Jellyfin must use another name (such as Cloudflare
+  Access's `CF-Access-Client-Id`/`CF-Access-Client-Secret`).
 
 ### Bazarr auth note
 
@@ -297,6 +349,8 @@ services:
       - /share/Container/backuparr:/config/backuparr
       # Optional: needed only to restore Bazarr - path to its config/backup folder.
       #- /share/Container/bazarr/backup:/mnt/bazarr-backup
+      # Needed to back up Jellyfin - its backups folder (see the Jellyfin note).
+      #- /share/Container/jellyfin/config/data/backups:/mnt/jellyfin-backups
 ```
 
 ```sh
@@ -372,7 +426,7 @@ choose when there are several.
   authenticate discovery through a compatible reverse proxy.
 - Discovery refuses any redirect away from Prowlarr's exact URL, so use its
   final address.
-- Bazarr, Profilarr, Tdarr, Tautulli and Seerr aren't stored in Prowlarr and
+- Bazarr, Profilarr, Tdarr, Tautulli, Jellyfin and Seerr aren't stored in Prowlarr and
   are always configured manually.
 
 ### Service authentication headers
@@ -393,8 +447,8 @@ it twice, for example a different `Authorization` value for Radarr and Tautulli.
 Values are masked in the form and encrypted in `config.json` with the same key
 as app API keys. Each app's native authentication and per-request headers take
 priority on a case-insensitive name collision. For example, an app's
-`Authorization: Bearer …` remains intact; use a separate proxy header to
-authenticate both layers. These headers are not sent to cloud destinations,
+`Authorization: Bearer …` (Tdarr) or `Authorization: MediaBrowser …` (Jellyfin)
+remains intact; use a separate proxy header to authenticate both layers. These headers are not sent to cloud destinations,
 OAuth providers or notification webhooks. They do apply to a restore target
 entered for an app they cover, so only configure trusted app URLs.
 
@@ -522,6 +576,10 @@ throwaway copy first.
   Tautulli restarts once the config is applied. With a login enabled in
   Tautulli the config is only staged and the result tells you how to finish -
   see the [Tautulli restore note](#tautulli-restore-note).
+- **Jellyfin** - fully automated through its backups folder, which must be
+  mounted read-write; Jellyfin restarts itself to apply the backup. It
+  replaces Jellyfin's users and API keys too - see the [Jellyfin
+  note](#jellyfin-note) before restoring onto a fresh install.
 
 ## Notifications
 
@@ -584,6 +642,7 @@ These fields live in `config.json`, edited via the web UI or by hand:
 | `request_headers` | App HTTP headers as `[{"name": "Proxy-Authorization", "value": "Basic …", "apps": ["radarr"]}]`; omit `apps` to send a header to every app; values are encrypted at rest; default `[]` |
 | `apps.<name>.enabled/url/api_key` | Per app, as shown in the Settings tab |
 | `apps.bazarr.username/password` | Only if Bazarr's web auth is set to `Basic` |
+| `apps.jellyfin.backup_dir` | Local path to Jellyfin's mounted backups folder - required for Jellyfin |
 | `destinations.local.enabled/path` | Local storage - path defaults to `/config/backuparr/backups` if blank |
 | `destinations.gdrive.enabled/client_id/client_secret/developer_key` | Google Drive OAuth client + API key, set via the Setup guide |
 | `destinations.gdrive.refresh_token/folder_id/folder_name` | Set automatically by the Connect/Choose folder buttons - don't hand-edit |

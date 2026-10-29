@@ -239,6 +239,22 @@ def test_every_available_app_sends_headers_without_losing_its_key(name, wire):
         assert "apikey=native-key" in request.url
 
 
+def test_jellyfin_sends_headers_without_losing_its_key(monkeypatch, tmp_path):
+    sent = []
+
+    def send(_adapter, request, **kwargs):
+        sent.append(request.copy())
+        return reply(request, [] if request.url.endswith("/Backup") else {"Version": "12.4.0"})
+
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", send)
+    cfg = {"url": "https://app.example", "api_key": "native-key", "backup_dir": str(tmp_path), "request_headers": HEADERS}
+    backup.build_app("jellyfin", cfg).test_connection()
+    assert [r.url for r in sent] == ["https://app.example/System/Info", "https://app.example/Backup"]
+    # Jellyfin only takes its key in Authorization, so a proxy needs another header.
+    assert all(r.headers["Proxy-Authorization"] == SECRET for r in sent)
+    assert all(r.headers["Authorization"] == 'MediaBrowser Token="native-key"' for r in sent)
+
+
 def test_settings_encrypt_all_header_values_and_allow_removal(authed_client, caplog):
     assert authed_client.get("/api/config").json["request_headers"] == []
     assert authed_client.post("/api/config", json={"request_headers": HEADERS}).status_code == 200
@@ -341,10 +357,12 @@ def test_scheduled_backup_and_web_restore_send_headers_at_every_phase(authed_cli
     assert "request_headers" not in config_store.load_config()["apps"]["radarr"]
 
 
-@pytest.mark.parametrize("name, method", [("bazarr", "restore_from_file"), ("tdarr", "restore"), ("tautulli", "restore"), ("sabnzbd", "restore")])
+@pytest.mark.parametrize("name, method", [("bazarr", "restore_from_file"), ("tdarr", "restore"), ("tautulli", "restore"), ("sabnzbd", "restore"),
+                                          ("jellyfin", "restore_from_file")])
 def test_other_restore_drivers_receive_global_headers(name, method, monkeypatch, tmp_path, wire):
     classes = {"bazarr": restore_actions.BazarrApp, "tdarr": restore_actions.TdarrApp,
-               "tautulli": restore_actions.TautulliApp, "sabnzbd": restore_actions.SabnzbdApp}
+               "tautulli": restore_actions.TautulliApp, "sabnzbd": restore_actions.SabnzbdApp,
+               "jellyfin": restore_actions.JellyfinApp}
     def restore(app, *args):
         app.session.post(app.url + "/restore")
         return {}

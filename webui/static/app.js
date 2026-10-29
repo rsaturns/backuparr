@@ -1555,7 +1555,9 @@ function renderRestoreOverride() {
 
   const keyLabel = document.createElement("label");
   keyLabel.className = "field";
-  const keyHint = !meta.key_required ? `<span class="muted">(optional${meta.key_help ? ` &mdash; ${meta.key_help}` : ""})</span>` : "";
+  const keyHint = !meta.key_required
+    ? `<span class="muted">(optional${meta.key_help ? ` &mdash; ${meta.key_help}` : ""})</span>`
+    : meta.key_help ? `<span class="muted">(${meta.key_help})</span>` : "";
   keyLabel.innerHTML = `<span class="field-label">API key ${keyHint}</span><input type="password" id="r-ovr-api_key" autocomplete="off">`;
   block.appendChild(keyLabel);
 
@@ -1563,7 +1565,7 @@ function renderRestoreOverride() {
     const label = document.createElement("label");
     label.className = "field";
     const help = f.help ? `<span class="muted">(${f.help})</span>` : "";
-    label.innerHTML = `<span class="field-label">${f.label} ${help}</span><input type="${f.type}" class="r-ovr-extra" data-field="${f.name}" autocomplete="off">`;
+    label.innerHTML = `<span class="field-label">${f.label} ${help}</span><input type="${f.type}" class="r-ovr-extra" data-field="${f.name}" placeholder="${f.placeholder || ""}" autocomplete="off">`;
     block.appendChild(label);
   });
 
@@ -1631,6 +1633,13 @@ function renderRestoreExtra() {
     block.className = "extra-field-block";
     block.innerHTML =
       '<strong style="color:var(--danger)">Destructive:</strong> this wipes each Tdarr database collection before repopulating it from the backup.';
+    extraRoot.appendChild(block);
+  } else if (appId === "jellyfin") {
+    const block = document.createElement("div");
+    block.className = "extra-field-block";
+    block.innerHTML =
+      "<strong>Replaces Jellyfin's database and settings</strong> with the backup's - users, watch history, libraries and API keys. " +
+      "Anything added since is lost. Jellyfin restarts to apply it.";
     extraRoot.appendChild(block);
   } else if (appId === "bazarr") {
     const block = document.createElement("div");

@@ -81,7 +81,7 @@
               <label class="field">
                 <span class="field-label">
                   API key
-                  {% if not m.key_required %}<span class="muted">(optional{% if m.key_help %} &mdash; {{ m.key_help }}{% endif %})</span>{% endif %}
+                  {% if not m.key_required %}<span class="muted">(optional{% if m.key_help %} &mdash; {{ m.key_help }}{% endif %})</span>{% elif m.key_help %}<span class="muted">({{ m.key_help }})</span>{% endif %}
                 </span>
                 <input type="password" class="f-api_key" autocomplete="off">
                 {% if m.id in ('radarr', 'sonarr', 'sabnzbd') %}<span class="discovery-key-status hidden" role="status"></span>{% endif %}
@@ -89,7 +89,7 @@
               {% for f in m.extra_fields %}
               <label class="field">
                 <span class="field-label">{{ f.label }} {% if f.help %}<span class="muted">({{ f.help }})</span>{% endif %}</span>
-                <input type="{{ f.type }}" class="f-extra" data-field="{{ f.name }}" autocomplete="off">
+                <input type="{{ f.type }}" class="f-extra" data-field="{{ f.name }}"{% if f.placeholder %} placeholder="{{ f.placeholder }}"{% endif %} autocomplete="off">
               </label>
               {% endfor %}
               {% if m.id == 'bazarr' %}

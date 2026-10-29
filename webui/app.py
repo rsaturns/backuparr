@@ -60,6 +60,13 @@ def _restore_override_fields(app_name):
     meta = app_meta(app_name) or {}
     return {"url", "api_key"} | {f["name"] for f in meta.get("extra_fields", [])}
 
+
+def _missing_required_field(app_name, app_data):
+    """Label of the first required extra field (e.g. Jellyfin's backups
+    folder) left empty, or None."""
+    meta = app_meta(app_name) or {}
+    return next((f["label"] for f in meta.get("extra_fields", []) if f.get("required") and not app_data.get(f["name"])), None)
+
 app = Flask(__name__)
 log = logging.getLogger("backuparr.webui")
 
@@ -534,6 +541,9 @@ def _validate_config(data, cfg):
             return f"{name}: a URL is required to enable it"
         if app_data.get("enabled") and key_required(name) and not app_data.get("api_key"):
             return f"{name}: an API key is required to enable it"
+        missing = app_data.get("enabled") and _missing_required_field(name, app_data)
+        if missing:
+            return f"{name}: {missing} is required to enable it"
     for name, dest_data in data.get("destinations", {}).items():
         if name not in DEST_NAMES:
             return f"unknown destination: {name}"
@@ -563,7 +573,8 @@ def api_set_config():
     for name in APP_NAMES:
         if name in data.get("apps", {}):
             incoming = data["apps"][name]
-            cfg["apps"][name].update({k: v for k, v in incoming.items() if k in DEFAULT_APP})
+            fields = set(DEFAULT_APP) | {f["name"] for f in app_meta(name).get("extra_fields", [])}
+            cfg["apps"][name].update({k: v for k, v in incoming.items() if k in fields})
     for name in DEST_NAMES:
         if name in data.get("destinations", {}):
             incoming = data["destinations"][name]
@@ -936,6 +947,11 @@ def _restore_work(app_name, root, app_cfg, data, bazarr_backup_dir):
             ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
             RESTORE_RUN_STATE["message"] = "tdarr restore complete"
 
+        elif app_name == "jellyfin":
+            log.info("restore: copying the backup into jellyfin's backups folder...")
+            ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
+            RESTORE_RUN_STATE["message"] = "jellyfin restore started, Jellyfin is restarting to apply it"
+
         elif app_name == "tautulli":
             log.info("restore: restoring tautulli...")
             result = ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
@@ -1063,6 +1079,9 @@ def api_restore(dest_id, app_name):
 
     if not app_cfg.get("url") or (key_required(app_name) and not app_cfg.get("api_key")):
         return jsonify({"error": f"{app_name} is not configured"}), 400
+    missing = _missing_required_field(app_name, app_cfg)
+    if missing:
+        return jsonify({"error": f"{app_name}: {missing} is not configured"}), 400
 
     bazarr_backup_dir = None
     if app_name == "bazarr":

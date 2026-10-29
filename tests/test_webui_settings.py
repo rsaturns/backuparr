@@ -76,6 +76,19 @@ def test_tdarr_needs_no_api_key(authed_client):
     assert save(authed_client, {"apps": {"tdarr": {"enabled": True, "url": "http://tdarr:8266"}}}).status_code == 200
 
 
+def test_jellyfin_needs_its_backups_folder_and_keeps_it(authed_client, isolated_webui):
+    app = {"enabled": True, "url": "http://jellyfin:8096", "api_key": "k"}
+    refused = save(authed_client, {"apps": {"jellyfin": app}})
+    assert refused.status_code == 400 and refused.get_json()["error"] == "jellyfin: Backups folder is required to enable it"
+    assert save(authed_client, {"apps": {"jellyfin": {**app, "backup_dir": "/mnt/jellyfin-backups"}}}).status_code == 200
+    assert stored(isolated_webui)["apps"]["jellyfin"]["backup_dir"] == "/mnt/jellyfin-backups"
+
+
+def test_an_apps_extra_fields_are_saved_only_for_that_app(authed_client, isolated_webui):
+    save(authed_client, {"apps": {"radarr": {"url": "http://r", "backup_dir": "/x"}}})
+    assert "backup_dir" not in stored(isolated_webui)["apps"]["radarr"]
+
+
 # --- saving ----------------------------------------------------------------
 
 def test_settings_round_trip(authed_client):
@@ -285,6 +298,7 @@ def test_restore_override_fields_are_the_url_key_and_the_apps_own_extras(isolate
     fields = isolated_webui._restore_override_fields
     assert fields("radarr") == {"url", "api_key"}
     assert fields("bazarr") == {"url", "api_key", "username", "password"}
+    assert fields("jellyfin") == {"url", "api_key", "backup_dir"}
     assert fields("unknown") == {"url", "api_key"}
 
 
