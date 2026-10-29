@@ -98,11 +98,23 @@ class TdarrApp:
         logger.info("tdarr: restored %d/%d doc(s) into %s", restored, len(docs), collection)
 
     def restore(self, backup_dir):
+        # Every dump is read and checked before the first collection is
+        # wiped, so a damaged file can't leave Tdarr half restored.
+        dumps = {}
         for collection in COLLECTIONS:
             path = os.path.join(backup_dir, f"{collection}.json")
             if not os.path.isfile(path):
                 logger.warning("tdarr: no dump found for %s, skipping", collection)
                 continue
-            with open(path) as f:
-                docs = json.load(f)
+            try:
+                with open(path) as f:
+                    docs = json.load(f)
+            except (OSError, ValueError) as exc:
+                raise TdarrError(f"tdarr: {collection}.json in the backup can't be read ({exc}) - nothing was changed") from exc
+            if not isinstance(docs, list) or not all(isinstance(doc, dict) for doc in docs):
+                raise TdarrError(f"tdarr: {collection}.json in the backup isn't a list of documents - nothing was changed")
+            dumps[collection] = docs
+        if not dumps:
+            raise TdarrError("tdarr: the backup holds no Tdarr collections - nothing was changed")
+        for collection, docs in dumps.items():
             self.restore_collection(collection, docs)

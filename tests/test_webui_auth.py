@@ -56,7 +56,7 @@ def test_auth_enabled_by_default_and_non_opt_in_values(webui):
     assert 'data-auth-disabled="false"' in page
     assert 'id="logout-btn"' in page
 
-    assert client.post("/api/logout").status_code == 200
+    assert client.post("/api/logout", json={}).status_code == 200
     assert client.get("/").headers["Location"] == "/login"
     assert client.get("/api/meta").status_code == 401
     assert client.post("/api/login", json={"username": "admin", "password": "wrong-password"}).status_code == 401

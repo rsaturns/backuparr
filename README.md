@@ -130,7 +130,8 @@ Then, on the **Settings** tab:
    API key, and click **Test connection**. Using Prowlarr? Set it up first and
    click **Discover services** - see [Prowlarr discovery](#prowlarr-discovery).
 2. Enable at least one [destination](#destinations).
-3. Set retention and a schedule.
+3. Set retention and a schedule. Retention deletes each app's backups older
+   than the number of days you set, but always keeps its newest one.
 4. Click **Save settings**. Schedule changes apply without a restart.
 
 **Run & Status** runs a backup now and shows it live, **History** lists, downloads
@@ -357,6 +358,9 @@ Leave both blank only if NZBGet has no password.
   are kept. Paths come back as they were, so keep NZBGet's volume mounts the
   same. The backup's username and password come back too - update the card if
   they differ.
+- **Emoji and other characters outside Unicode's basic range** can't pass
+  through NZBGet's API - NZBGet itself turns each one into `.` (its own Backup
+  settings does the same). Accented and non-Latin text is fine.
 - **Reverse proxy:** NZBGet's login uses the `Authorization` header, so a proxy
   credential needs another header name.
 
@@ -428,13 +432,15 @@ anyone who reaches it has full access, stored credentials included.
 
 **Forgot the password?** Click **Reset Backuparr** on the login screen. After
 two confirmations it wipes local state - every app's API key, every cloud
-connection, the admin account and local backups - and returns to the setup
-screen. Backups already in Google Drive, OneDrive or Dropbox are untouched.
+connection, the admin account and Backuparr's backups in Local storage (other
+files in that folder are left alone) - and returns to the setup screen. Backups
+already in Google Drive, OneDrive or Dropbox are untouched.
 
 The reset works without logging in, gated only by a confirmation phrase that's
-public in this repo. That's fine on a trusted LAN, but **don't expose port 8990
-to an untrusted network** - put it behind a reverse proxy with its own login
-and TLS.
+public in this repo. Other websites can't trigger it (or any other change):
+Backuparr only accepts changes sent as JSON from its own page. Still, **don't
+expose port 8990 to an untrusted network** - put it behind a reverse proxy
+with its own login and TLS.
 
 ### Encryption at rest
 
@@ -445,6 +451,10 @@ OneDrive's and Dropbox's tokens, and the Notify URL are encrypted in
 `BACKUPARR_SECRETS_KEY` to keep it off the volume). `rclone.conf` is encrypted
 with rclone's own config encryption, using a generated password in
 `rclone.pass` (or `RCLONE_CONFIG_PASS`). It's always on.
+
+If the key changes (say, a mistyped `BACKUPARR_SECRETS_KEY`), the stored secrets
+show up blank but aren't lost: saving settings keeps them encrypted as they
+were, and they work again once the original key is back.
 
 Backup archives themselves aren't encrypted, and some hold app credentials
 (see the per-app notes), so protect every destination.
@@ -466,7 +476,8 @@ compose file:
 | `BACKUPARR_SECRETS_KEY` | *(generated)* | Replaces the generated `secrets.key` (see [Encryption at rest](#encryption-at-rest)), e.g. from a Docker secret |
 | `RCLONE_CONFIG_PASS` | *(generated)* | Replaces the generated password that encrypts `rclone.conf` |
 | `BACKUPARR_DISABLE_AUTH` | `false` | `true` turns off local login behind an authenticating reverse proxy - see [Login](#login) |
-| `BACKUPARR_FORCE_HTTPS` | `false` | Set `true` behind your own TLS reverse proxy: secure session cookie, and trusts `X-Forwarded-Proto`/`X-Forwarded-For` (needed for Google Drive's `https://` redirect URI). Leave unset on plain HTTP, or login fails |
+| `BACKUPARR_FORCE_HTTPS` | `false` | Set `true` behind your own TLS reverse proxy: secure session cookie, and trusts `X-Forwarded-Proto` (needed for Google Drive's `https://` redirect URI). Leave unset on plain HTTP, or login fails |
+| `BACKUPARR_TRUSTED_PROXY` | *(none)* | With `BACKUPARR_FORCE_HTTPS`: your proxy's IP address, so the login lockout sees each client's own address from `X-Forwarded-For`. Without it, failed logins all count against the proxy's address |
 | `BACKUPARR_ALLOW_CROSS_HOST_REDIRECTS` | `false` | `true` only if an app's URL redirects to a *different* host and you can't use the final address. By default such redirects are refused so credentials never go to another host |
 
 To listen on loopback only: with bridge networking, publish
@@ -497,7 +508,8 @@ Enable one or more on the **Settings** tab; every run uploads to all of them.
 
 No setup. Backups go to `/config/backuparr/backups`, on the same volume as
 `config.json`. Set a custom path on the Local card to use another mounted
-volume, such as a NAS share.
+volume, such as a NAS share. Backuparr only ever deletes its own archives
+there (`<app>/<app>_<date>_<time>.zip`), so the folder can hold other files.
 
 ### Google Drive
 
@@ -621,7 +633,7 @@ Kuma push URLs, and other webhooks that accept raw text.
 | `destinations.gdrive.refresh_token/folder_id/folder_name` | Set by Connect/Choose folder - don't edit |
 | `destinations.onedrive.enabled`, `destinations.dropbox.enabled` | Whether the destination is used |
 | `destinations.onedrive.token/drive_id/drive_type/item_id`, `destinations.dropbox.token` | Set by the Connect buttons - don't edit |
-| `retention_days` | Delete backups older than this, per app and destination (default 7) |
+| `retention_days` | Delete backups older than this, per app and destination, always keeping each app's newest (default 7) |
 | `cron_schedule` | 5-field cron schedule (default `0 3 * * *`) |
 | `notify_url` | Optional summary after every run - see [Notifications](#notifications) |
 

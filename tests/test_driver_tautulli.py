@@ -1,4 +1,5 @@
 import json
+import re
 
 import pytest
 import requests
@@ -6,6 +7,9 @@ import requests
 from apps.tautulli import TautulliApp, TautulliError
 
 KEY = "tautulli-secret-key"
+
+
+SQLITE = b"SQLite format 3\x00" + b"\x00" * 84
 
 
 class Reply:
@@ -84,16 +88,28 @@ def test_other_http_errors_name_the_command_but_not_the_url():
 # --- backup ----------------------------------------------------------------
 
 def test_backup_downloads_the_database_and_the_config(tmp_path):
-    app = app_with(Reply(content=b"sqlite bytes"), Reply(content=b"[General]\n"))
+    app = app_with(Reply(content=SQLITE), Reply(content=b"[General]\n"))
     out = tmp_path / "nested" / "dump"
     assert app.backup(str(out)) == str(out)
-    assert (out / "tautulli.db").read_bytes() == b"sqlite bytes" and (out / "config.ini").read_bytes() == b"[General]\n"
+    assert (out / "tautulli.db").read_bytes() == SQLITE and (out / "config.ini").read_bytes() == b"[General]\n"
     assert [kw["params"]["cmd"] for _, _, kw in app.session.sent] == ["download_database", "download_config"]
     assert all(kw["timeout"] == 120 for _, _, kw in app.session.sent)
 
 
+@pytest.mark.parametrize("database, config, message", [
+    (b'{"response": {"result": "error", "message": "Database not found"}}', b"[General]\n", "download_database didn't return the file (Database not found)"),
+    (b"<html>login</html>", b"[General]\n", "download_database didn't return the file"),
+    (SQLITE, b'{"response": {"result": "error", "message": "Config not found"}}', "download_config didn't return the file (Config not found)"),
+    (SQLITE, b"", "download_config didn't return the file"),
+])
+def test_an_api_error_isnt_saved_as_a_backup(tmp_path, database, config, message):
+    app = app_with(Reply(content=database), Reply(content=config))
+    with pytest.raises(TautulliError, match=re.escape(message)):
+        app.backup(str(tmp_path / "out"))
+
+
 def test_backup_stops_when_a_download_fails(tmp_path):
-    app = app_with(Reply(content=b"db"), Reply(500))
+    app = app_with(Reply(content=SQLITE), Reply(500))
     with pytest.raises(TautulliError, match="download_config"):
         app.backup(str(tmp_path))
 

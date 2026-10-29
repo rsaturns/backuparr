@@ -178,3 +178,21 @@ def test_a_failing_write_stops_the_restore():
     app.session.post = post
     with pytest.raises(requests.exceptions.HTTPError):
         app.restore_collection("FlowsJSONDB", [{"_id": "a"}])
+
+
+@pytest.mark.parametrize("bad", ["{not json", '{"a": 1}', "[1, 2]"])
+def test_a_damaged_dump_stops_the_restore_before_anything_is_wiped(tmp_path, bad):
+    for collection in COLLECTIONS:
+        (tmp_path / f"{collection}.json").write_text(json.dumps([{"_id": collection}]))
+    (tmp_path / f"{COLLECTIONS[-1]}.json").write_text(bad)
+    app = app_with()
+    with pytest.raises(TdarrError, match="nothing was changed"):
+        app.restore(str(tmp_path))
+    assert writes(app) == []
+
+
+def test_a_backup_with_no_collections_is_refused(tmp_path):
+    app = app_with()
+    with pytest.raises(TdarrError, match="holds no Tdarr collections"):
+        app.restore(str(tmp_path))
+    assert writes(app) == []

@@ -7,8 +7,10 @@ import os
 import zipfile
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from apps.bazarr import BazarrApp
-from apps.profilarr import ProfilarrApp
+from apps.profilarr import ProfilarrApp, ProfilarrError
 
 
 def _valid_zip_bytes():
@@ -48,7 +50,7 @@ def test_profilarr_download_latest_sanitizes_malicious_filename(tmp_path):
 
     fake_response = MagicMock()
     fake_response.status_code = 200
-    fake_response.content = b"fake profilarr backup bytes"
+    fake_response.content = _valid_zip_bytes()
     fake_response.raise_for_status = MagicMock()
 
     with patch.object(
@@ -79,3 +81,12 @@ def test_bazarr_restore_file_stays_readable_by_bazarr_under_a_private_umask(tmp_
     placed = bazarr_dir / "bazarr_backup_vbazarr_20261006_171108.zip"
     assert placed.read_bytes() == source.read_bytes()
     assert placed.stat().st_mode & 0o777 == 0o644
+
+
+def test_profilarr_refuses_a_download_that_isnt_an_archive(tmp_path):
+    app = ProfilarrApp("http://profilarr.example", "fake-api-key")
+    fake_response = MagicMock(status_code=200, content=b'{"error": "unauthorized"}')
+    with patch.object(app, "list_backups", return_value=[{"filename": "backup.tar.gz"}]), \
+            patch.object(app.session, "get", return_value=fake_response):
+        with pytest.raises(ProfilarrError, match="didn't download as a backup archive"):
+            app.download_latest(str(tmp_path))

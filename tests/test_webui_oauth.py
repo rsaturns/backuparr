@@ -150,12 +150,12 @@ def connect_drive(webui):
 def test_the_picker_gets_a_short_lived_token_never_the_refresh_token(authed_client, isolated_webui, monkeypatch):
     connect_drive(isolated_webui)
     monkeypatch.setattr(gdrive_oauth, "refresh_access_token", lambda cid, secret, rt: {"access_token": f"access-from-{rt}"})
-    response = authed_client.post("/api/destinations/gdrive/access-token")
+    response = authed_client.post("/api/destinations/gdrive/access-token", json={})
     assert response.get_json() == {"access_token": "access-from-rt"} and "rt\"" not in response.get_data(as_text=True).replace("access-from-rt", "")
 
 
 def test_the_picker_token_fails_cleanly_when_not_connected_or_rejected(authed_client, isolated_webui, monkeypatch):
-    unconnected = authed_client.post("/api/destinations/gdrive/access-token")
+    unconnected = authed_client.post("/api/destinations/gdrive/access-token", json={})
     assert unconnected.status_code == 400 and "not connected" in unconnected.get_json()["error"]
     connect_drive(isolated_webui)
 
@@ -163,7 +163,7 @@ def test_the_picker_token_fails_cleanly_when_not_connected_or_rejected(authed_cl
         raise requests.exceptions.ConnectionError("refused")
 
     monkeypatch.setattr(gdrive_oauth, "refresh_access_token", revoked)
-    assert authed_client.post("/api/destinations/gdrive/access-token").status_code == 400
+    assert authed_client.post("/api/destinations/gdrive/access-token", json={}).status_code == 400
 
 
 def test_choosing_a_drive_folder(authed_client, isolated_webui):
@@ -178,7 +178,7 @@ def test_choosing_a_drive_folder(authed_client, isolated_webui):
 def test_disconnecting_drive_forgets_the_account_but_keeps_the_client(authed_client, isolated_webui):
     connect_drive(isolated_webui)
     authed_client.post("/api/destinations/gdrive/folder", json={"folder_id": "f1", "folder_name": "Backups"})
-    assert authed_client.post("/api/destinations/gdrive/disconnect").get_json() == {"ok": True}
+    assert authed_client.post("/api/destinations/gdrive/disconnect", json={}).get_json() == {"ok": True}
     cfg = gdrive(isolated_webui)
     assert (cfg["enabled"], cfg["refresh_token"], cfg["folder_id"], cfg["folder_name"]) == (False, "", "", "")
     assert (cfg["client_id"], cfg["client_secret"]) == ("id", "secret")
@@ -230,7 +230,7 @@ def test_disconnecting_onedrive_clears_the_connection(authed_client, isolated_we
     monkeypatch.setattr(onedrive_oauth, "approot_metadata", lambda access: APPROOT)
     monkeypatch.setattr(onedrive_oauth, "sync_rclone_remote", lambda cfg, force=False: None)
     authed_client.post("/api/destinations/onedrive/connect", json={"token_blob": "x"})
-    assert authed_client.post("/api/destinations/onedrive/disconnect").get_json() == {"ok": True}
+    assert authed_client.post("/api/destinations/onedrive/disconnect", json={}).get_json() == {"ok": True}
     cfg = onedrive(isolated_webui)
     assert (cfg["enabled"], cfg["token"], cfg["drive_id"], cfg["drive_type"], cfg["item_id"]) == (False, "", "", "", "")
 
@@ -278,7 +278,7 @@ def test_disconnecting_dropbox_clears_the_connection(authed_client, isolated_web
     monkeypatch.setattr(dropbox_oauth, "verify_access_token", lambda access: None)
     monkeypatch.setattr(dropbox_oauth, "sync_rclone_remote", lambda cfg, force=False: None)
     authed_client.post("/api/destinations/dropbox/connect", json={"token_blob": "x"})
-    assert authed_client.post("/api/destinations/dropbox/disconnect").get_json() == {"ok": True}
+    assert authed_client.post("/api/destinations/dropbox/disconnect", json={}).get_json() == {"ok": True}
     cfg = dropbox(isolated_webui)
     assert (cfg["enabled"], cfg["token"]) == (False, "")
 

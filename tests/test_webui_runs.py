@@ -32,7 +32,7 @@ def test_a_run_reports_progress_results_and_notifies(inline, authed_client, monk
     monkeypatch.setattr(inline, "notify", lambda url, message, **kw: notified.append((url, message)))
     authed_client.post("/api/config", json={"notify_url": "https://ntfy.example/t"})
 
-    response = authed_client.post("/api/backup/run")
+    response = authed_client.post("/api/backup/run", json={})
     assert response.status_code == 200 and response.get_json() == {"started": True}
     state = status(authed_client)
     assert state["running"] is False
@@ -47,7 +47,7 @@ def test_a_run_reports_progress_results_and_notifies(inline, authed_client, monk
 def test_the_run_log_handler_is_removed_afterwards(inline, authed_client, monkeypatch):
     monkeypatch.setattr(inline, "run_backup", lambda cfg, **kw: ([], []))
     before = list(logging.getLogger("backuparr").handlers)
-    authed_client.post("/api/backup/run")
+    authed_client.post("/api/backup/run", json={})
     assert logging.getLogger("backuparr").handlers == before
 
 
@@ -56,7 +56,7 @@ def test_an_unexpected_crash_is_reported_not_raised(inline, authed_client, monke
         raise RuntimeError("kaboom")
 
     monkeypatch.setattr(inline, "run_backup", crash)
-    assert authed_client.post("/api/backup/run").status_code == 200
+    assert authed_client.post("/api/backup/run", json={}).status_code == 200
     state = status(authed_client)
     assert state["failed"] == ["unexpected error: kaboom"] and state["running"] is False and state["finished_at"]
 
@@ -65,7 +65,7 @@ def test_a_second_run_is_refused_while_one_is_in_progress(inline, authed_client,
     started = []
     monkeypatch.setattr(inline, "run_backup", lambda cfg, **kw: started.append(1) or ([], []))
     inline.RUN_STATE["running"] = True
-    response = authed_client.post("/api/backup/run")
+    response = authed_client.post("/api/backup/run", json={})
     assert response.status_code == 409 and "already running" in response.get_json()["error"]
     assert started == []
 
@@ -73,8 +73,8 @@ def test_a_second_run_is_refused_while_one_is_in_progress(inline, authed_client,
 def test_each_run_starts_from_a_clean_state(inline, authed_client, monkeypatch):
     results = iter([(["radarr"], []), ([], ["sonarr: x"])])
     monkeypatch.setattr(inline, "run_backup", lambda cfg, **kw: next(results))
-    authed_client.post("/api/backup/run")
-    authed_client.post("/api/backup/run")
+    authed_client.post("/api/backup/run", json={})
+    authed_client.post("/api/backup/run", json={})
     state = status(authed_client)
     assert (state["ok"], state["failed"]) == ([], ["sonarr: x"])
 
@@ -82,27 +82,27 @@ def test_each_run_starts_from_a_clean_state(inline, authed_client, monkeypatch):
 # --- cancelling ------------------------------------------------------------
 
 def test_cancel_needs_a_run_in_progress(inline, authed_client):
-    response = authed_client.post("/api/backup/cancel")
+    response = authed_client.post("/api/backup/cancel", json={})
     assert response.status_code == 409 and not inline.RUN_CANCEL_EVENT.is_set()
 
 
 def test_cancel_flags_the_running_run_and_the_next_run_clears_it(inline, authed_client, monkeypatch):
     inline.RUN_STATE["running"] = True
-    response = authed_client.post("/api/backup/cancel")
+    response = authed_client.post("/api/backup/cancel", json={})
     assert response.get_json() == {"cancelling": True}
     assert inline.RUN_CANCEL_EVENT.is_set() and inline.RUN_STATE["cancel_requested"] is True
 
     inline.RUN_STATE["running"] = False
     observed = []
     monkeypatch.setattr(inline, "run_backup", lambda cfg, should_cancel=None, **kw: observed.append(should_cancel()) or ([], []))
-    authed_client.post("/api/backup/run")
+    authed_client.post("/api/backup/run", json={})
     assert observed == [False] and inline.RUN_STATE["cancel_requested"] is False
 
 
 def test_a_refused_start_does_not_clear_a_pending_cancel(inline, authed_client):
     inline.RUN_STATE["running"] = True
     inline.RUN_CANCEL_EVENT.set()
-    assert authed_client.post("/api/backup/run").status_code == 409
+    assert authed_client.post("/api/backup/run", json={}).status_code == 409
     assert inline.RUN_CANCEL_EVENT.is_set()
 
 
@@ -250,7 +250,7 @@ def test_a_run_that_cannot_start_for_lack_of_disk_is_reported_in_one_line(inline
 
     monkeypatch.setattr(inline, "run_backup", disk_full)
     with caplog.at_level(logging.INFO):
-        assert authed_client.post("/api/backup/run").status_code == 200
+        assert authed_client.post("/api/backup/run", json={}).status_code == 200
     state = status(authed_client)
     assert state["failed"] == ["backup run stopped: no space left on the device (/tmp/backuparr-run-x)"]
     stopped = [r for r in caplog.records if "backup run stopped" in r.getMessage() and r.levelno == logging.ERROR]
@@ -327,3 +327,26 @@ def test_a_corrupt_config_file_is_explained_not_a_stack_trace(authed_client, inl
         response = authed_client.get("/api/config")
     assert response.status_code == 500 and "isn't valid JSON" in response.get_json()["error"]
     assert not any(r.exc_info for r in caplog.records if "GET /api/config failed" in r.getMessage())
+
+
+def test_a_backup_waits_for_a_running_restore(inline, authed_client, monkeypatch):
+    started = []
+    monkeypatch.setattr(inline, "run_backup", lambda cfg, **kw: started.append(1) or ([], []))
+    monkeypatch.setitem(inline.RESTORE_RUN_STATE, "running", True)
+    response = authed_client.post("/api/backup/run", json={})
+    assert response.status_code == 409 and "a restore is running" in response.get_json()["error"]
+    assert started == [] and inline.RUN_STATE["running"] is False
+
+
+def test_the_scheduler_skips_its_run_during_a_restore(inline, monkeypatch, caplog):
+    monkeypatch.setattr(inline, "run_backup", lambda cfg, **kw: ([], []))
+    monkeypatch.setitem(inline.RESTORE_RUN_STATE, "running", True)
+    monkeypatch.setattr(inline, "load_config", lambda: {"cron_schedule": "* * * * *"})
+    monkeypatch.setitem(inline._scheduler_state, "last_run_minute", None)
+
+    def stop(_seconds):
+        raise SystemExit
+    monkeypatch.setattr(inline.time, "sleep", stop)
+    with pytest.raises(SystemExit):
+        inline._scheduler_loop()
+    assert "a restore is in progress" in caplog.text and inline.RUN_STATE["running"] is False

@@ -17,7 +17,7 @@ import shutil
 import socket
 import tempfile
 import zipfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -40,7 +40,7 @@ from apps.servarr import ServarrError, UnsafeRedirectError
 from apps.sonarr import SonarrApp
 from apps.tautulli import TautulliApp, TautulliError
 from apps.tdarr import TdarrApp, TdarrError
-from config_store import ConfigError, enabled_apps, enabled_destinations
+from config_store import APP_NAMES, ConfigError, enabled_apps, enabled_destinations
 
 LOG_DIR = os.environ.get("BACKUPARR_LOG_DIR", "/var/log/backuparr")
 LOG_FILE = os.path.join(LOG_DIR, "backup.log")
@@ -307,6 +307,35 @@ def format_run_message(ok, failed):
     return "\n".join(lines)
 
 
+def apply_retention(root, retention_days, now=None):
+    """Deletes each app's backups older than retention_days from one
+    destination, always keeping its newest - so an app that keeps failing,
+    or was switched off, still has its last good backup. Only Backuparr's
+    own <app>/<app>_<timestamp> archives are touched; age comes from the
+    timestamp in the name, written in this container's local time."""
+    cutoff = (now or datetime.now()) - timedelta(days=int(retention_days))
+    per_app = {}
+    for entry in rclone_util.lsjson(root, recursive=True):
+        app, sep, name = entry.get("Path", "").partition("/")
+        if entry.get("IsDir") or not sep or app not in APP_NAMES or not destination_util.is_backup_name(app, name):
+            continue
+        per_app.setdefault(app, []).append(name)
+    for app, names in per_app.items():
+        names.sort()  # The timestamp makes name order oldest-first.
+        for name in names[:-1]:
+            try:
+                stamp = datetime.strptime(name[len(app) + 1:len(app) + 16], "%Y%m%d_%H%M%S")
+            except ValueError:
+                continue  # Not a real date, so not a name Backuparr wrote.
+            if stamp >= cutoff:
+                break
+            try:
+                rclone_util.delete_file(f"{root}/{app}/{name}")
+                log.info("retention: removed %s/%s", app, name)
+            except rclone_util.RcloneError as exc:
+                log.warning("retention: couldn't remove %s/%s: %s", app, name, exc.detail)
+
+
 class RunCancelled(Exception):
     pass
 
@@ -424,6 +453,6 @@ def run_backup(cfg, on_progress=None, should_cancel=None):
 
     log.info("Applying retention (%sd) per destination", retention_days)
     for root in dest_roots.values():
-        rclone_util.delete_older_than(root, f"{retention_days}d")
+        apply_retention(root, retention_days)
 
     return ok, failed

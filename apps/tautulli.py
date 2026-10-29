@@ -44,6 +44,7 @@ something fixable from the request side. restore() treats it as best-effort
 restore tautulli.db by hand via Settings > Import & Backup > Import Database
 until Tautulli fixes this.
 """
+import json
 import logging
 import os
 
@@ -96,10 +97,26 @@ class TautulliApp:
             raise TautulliError(f"tautulli: {data.get('message') or 'unexpected response'}")
         return "tautulli reachable"
 
+    @staticmethod
+    def _check_download(cmd, content):
+        """An API error comes back as a JSON body, not an HTTP error: refuse
+        to keep it as a "backup" of the database or config."""
+        if cmd == "download_database":
+            if content.startswith(b"SQLite format 3\x00"):
+                return
+        elif content.strip() and not content.lstrip()[:1] in (b"{", b"<"):
+            return
+        try:
+            message = json.loads(content).get("response", {}).get("message")
+        except (ValueError, AttributeError):
+            message = None
+        raise TautulliError(f"tautulli: {cmd} didn't return the file ({message or 'unexpected response'})")
+
     def backup(self, dest_dir):
         os.makedirs(dest_dir, exist_ok=True)
         for cmd, filename in (("download_database", "tautulli.db"), ("download_config", "config.ini")):
             res = self._call(cmd, timeout=120)
+            self._check_download(cmd, res.content)
             with open(os.path.join(dest_dir, filename), "wb") as f:
                 f.write(res.content)
         return dest_dir

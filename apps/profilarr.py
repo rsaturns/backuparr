@@ -28,7 +28,9 @@ Profilarr note for the manual restore steps this leaves you with.
 """
 import logging
 import os
+import tarfile
 import time
+import zipfile
 
 import requests
 
@@ -96,6 +98,8 @@ class ProfilarrApp:
         dest = os.path.join(dest_dir, filename)
         with open(dest, "wb") as f:
             f.write(res.content)
+        if not (tarfile.is_tarfile(dest) or zipfile.is_zipfile(dest)):
+            raise ProfilarrError(f"profilarr: {filename} didn't download as a backup archive - check the URL and API key")
         return dest, filename
 
     def delete_backup(self, filename):

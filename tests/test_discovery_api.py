@@ -92,7 +92,7 @@ def test_logout_discards_discovery_cookie(webui):
     client = client_for(webui)
     client.post("/api/discovery/prowlarr", json={"url": "http://prowlarr:9696", "api_key": "key"})
     assert client.get_cookie(webui.DISCOVERY_OWNER_COOKIE)
-    assert client.post("/api/logout").status_code == 200
+    assert client.post("/api/logout", json={}).status_code == 200
     assert client.get_cookie(webui.DISCOVERY_OWNER_COOKIE) is None
 
 

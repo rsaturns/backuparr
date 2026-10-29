@@ -116,7 +116,7 @@ def one_app_run(tmp_path, monkeypatch):
         monkeypatch.setattr(backup, "enabled_destinations", lambda cfg: ["local"])
         monkeypatch.setattr(destination_util, "sync", lambda cfg: None)
         monkeypatch.setattr(destination_util, "remote_root", lambda dest_id, cfg: str(tmp_path))
-        monkeypatch.setattr(backup.rclone_util, "delete_older_than", lambda *args: None)
+        monkeypatch.setattr(backup, "apply_retention", lambda *args: None)
         cfg = {"retention_days": 7, "apps": {app_name: {"url": app_url, "api_key": key}}, "destinations": {"local": {}}}
         return backup.run_backup(cfg)
 

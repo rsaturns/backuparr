@@ -195,6 +195,18 @@ _AUTH_API_PATHS = {"/api/setup", "/api/login", "/api/logout", "/api/reset"}
 
 
 @app.before_request
+def _require_json_for_changes():
+    """State-changing API calls must send JSON. A form, or a simple request
+    from another site, can only send form or text/plain bodies - and a
+    cross-site JSON request needs a CORS preflight this app never grants -
+    so this blocks cross-site request forgery, including against the public
+    reset and first-run setup routes."""
+    if request.method in ("POST", "PUT", "PATCH") and request.path.startswith("/api/") and not request.is_json:
+        return jsonify({"error": "send the request as JSON (Content-Type: application/json)"}), 415
+    return None
+
+
+@app.before_request
 def _check_auth():
     if request.path.startswith("/static/"):
         return None
@@ -307,7 +319,8 @@ def api_reset():
         pass
 
     if local_backup_dir and os.path.isdir(local_backup_dir):
-        shutil.rmtree(local_backup_dir, ignore_errors=True)
+        # Only Backuparr's own archives: the folder may hold other files.
+        destination_util.remove_local_backups(local_backup_dir, APP_NAMES)
 
     rclone_conf_path = os.environ.get("RCLONE_CONFIG", "/config/backuparr/rclone.conf")
     rclone_pass_path = os.environ.get("RCLONE_CONFIG_PASS_FILE", "/config/backuparr/rclone.pass")
@@ -366,16 +379,18 @@ def _run_tracked(state, work, *args):
         state["finished_at"] = datetime.now(timezone.utc).isoformat()
 
 
-def _start_tracked_run(state, lock, reset_fields, work, *args, before_start=None):
+def _start_tracked_run(state, lock, reset_fields, work, *args, before_start=None, blocked_by=None):
     """Starts work(*args) in a background thread unless state["running"] is
     already True. reset_fields is applied to `state` right before the
     thread starts (only once we know a run will actually happen);
     before_start, if given, runs under the same lock just before that -
     for setup that must not fire when a run is already in progress (e.g.
-    clearing a cancel flag that might belong to that other run). Returns
-    whether it started."""
+    clearing a cancel flag that might belong to that other run). It doesn't
+    start while the blocked_by run state is running either - backups and
+    restores never overlap, so callers share one lock. Returns whether it
+    started."""
     with lock:
-        if state["running"]:
+        if state["running"] or (blocked_by is not None and blocked_by["running"]):
             return False
         if before_start:
             before_start()
@@ -424,6 +439,7 @@ def _start_backup_run():
         },
         _backup_work,
         before_start=RUN_CANCEL_EVENT.clear,
+        blocked_by=RESTORE_RUN_STATE,
     )
 
 
@@ -459,6 +475,8 @@ def _scheduler_loop():
                 _scheduler_state["last_run_minute"] = now
                 if _start_backup_run():
                     log.info("scheduler: starting backup run (schedule %r, %s)", schedule, now.isoformat())
+                elif RESTORE_RUN_STATE["running"]:
+                    log.warning("scheduler: skipped the %s backup run - a restore is in progress", now.isoformat())
         except Exception as exc:
             # A persistent problem (unreadable config.json, say) would
             # repeat every tick; report each distinct one once.
@@ -872,6 +890,8 @@ def api_test_destination(dest_id):
 @app.post("/api/backup/run")
 def api_backup_run():
     if not _start_backup_run():
+        if RESTORE_RUN_STATE["running"]:
+            return jsonify({"error": "a restore is running - start the backup when it finishes"}), 409
         return jsonify({"error": "a backup is already running"}), 409
     return jsonify({"started": True})
 
@@ -982,7 +1002,7 @@ def api_history_download(dest_id, app_name, filename):
 # Shares _start_tracked_run()/_run_tracked() with the backup run state above:
 # a lock guarding one-at-a-time, a background thread, and live log output the
 # UI polls for instead of blocking on one long request.
-RESTORE_LOCK = threading.Lock()
+RESTORE_LOCK = RUN_LOCK  # One lock: a backup and a restore never run at once.
 RESTORE_RUN_STATE = {
     "running": False,
     "app": None,
@@ -1036,8 +1056,11 @@ def _restore_work(app_name, root, app_cfg, data, bazarr_backup_dir):
 
         elif app_name == "nzbget":
             log.info("restore: restoring nzbget settings...")
-            ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
-            RESTORE_RUN_STATE["message"] = "nzbget restore complete, NZBGet is reloading to apply it"
+            result = ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
+            RESTORE_RUN_STATE["message"] = (
+                "nzbget restore complete, NZBGet is reloading to apply it" if result.get("reloaded")
+                else "nzbget settings restored, but NZBGet didn't confirm the reload - restart NZBGet to apply them"
+            )
 
         elif app_name == "seerr":
             log.info("restore: writing the backup into seerr's data folder...")
@@ -1095,6 +1118,7 @@ def _start_restore_run(app_name, root, app_cfg, data, bazarr_backup_dir):
         app_cfg,
         data,
         bazarr_backup_dir,
+        blocked_by=RUN_STATE,
     )
 
 
@@ -1182,6 +1206,8 @@ def api_restore(dest_id, app_name):
             return jsonify({"error": "bazarr_backup_dir is not configured"}), 400
 
     if not _start_restore_run(app_name, root, app_cfg, data, bazarr_backup_dir):
+        if RUN_STATE["running"]:
+            return jsonify({"error": "a backup is running - restore when it finishes"}), 409
         return jsonify({"error": "a restore is already running"}), 409
     return jsonify({"started": True})
 

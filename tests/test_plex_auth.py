@@ -119,7 +119,7 @@ def test_login_requires_backuparr_auth(authed_client, isolated_webui, plex_api, 
 
 
 def test_cross_origin_form_cannot_start_login(authed_client, plex_api):
-    assert authed_client.post("/api/plex/auth", data={}).status_code == 400
+    assert authed_client.post("/api/plex/auth", data={}).status_code == 415
     assert authed_client.post("/api/plex/auth", json=[]).status_code == 400
     assert not plex_api.calls
 
@@ -128,7 +128,7 @@ def test_logout_forgets_token_and_cookie(authed_client, isolated_webui, plex_api
     plex_api.claimed = True
     _, path = start(authed_client)
     assert authed_client.get(path).json["state"] == "completed"
-    assert authed_client.post("/api/logout").status_code == 200
+    assert authed_client.post("/api/logout", json={}).status_code == 200
     assert authed_client.get_cookie(isolated_webui.PLEX_OWNER_COOKIE) is None
     assert not isolated_webui.PLEX_LOGINS
 

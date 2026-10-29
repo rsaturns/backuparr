@@ -49,3 +49,44 @@ def test_templates_have_no_inline_scripts_or_event_handlers(template):
     assert not re.search(r"<script(?![^>]*\bsrc=)[^>]*>", html), "inline <script> would be blocked by the policy"
     assert not re.search(r"\son[a-z]+\s*=", html), "inline event handler would be blocked by the policy"
     assert not re.search(r"javascript:", html)
+
+
+# --- cross-site request forgery ------------------------------------------------
+
+FORGED = '{"confirm":"i-want-to-reset-and-delete-files","x":"="}'
+
+
+@pytest.mark.parametrize("content_type", ["text/plain", "application/x-www-form-urlencoded", "multipart/form-data", None])
+def test_a_forged_reset_from_another_site_is_refused(isolated_webui, content_type, tmp_path):
+    # A page on any site can send these without a CORS preflight. The reset
+    # route is public, so this must not depend on the session.
+    client = isolated_webui.app.test_client()
+    client.post("/api/setup", json={"username": "admin", "password": "password123"})
+    anonymous = isolated_webui.app.test_client()
+    kwargs = {"data": FORGED} if content_type is None else {"data": FORGED, "content_type": content_type}
+    response = anonymous.post("/api/reset", **kwargs)
+    assert response.status_code == 415
+    assert isolated_webui.auth_store.has_credentials()
+
+
+def test_a_forged_first_run_setup_is_refused(isolated_webui):
+    response = isolated_webui.app.test_client().post(
+        "/api/setup", data='{"username":"attacker","password":"password123","x":"="}', content_type="text/plain")
+    assert response.status_code == 415
+    assert not isolated_webui.auth_store.has_credentials()
+
+
+@pytest.mark.parametrize("path", ["/api/config", "/api/backup/run", "/api/restore/local/radarr",
+                                  "/api/destinations/gdrive/disconnect", "/api/logout", "/api/test-notify"])
+def test_state_changes_need_json_even_with_a_session(authed_client, path):
+    # A same-site page gets the session cookie (SameSite=Lax), but can't send JSON.
+    response = authed_client.post(path, data='{"notify_url":"https://attacker.example","x":"="}', content_type="text/plain")
+    assert response.status_code == 415
+
+
+def test_reads_and_deletes_need_no_body(authed_client, monkeypatch):
+    import rclone_util
+    monkeypatch.setattr(rclone_util, "delete_file", lambda path: None)
+    assert authed_client.get("/api/config").status_code == 200
+    # DELETE isn't a simple method: another site needs a CORS preflight to send one.
+    assert authed_client.delete("/api/history/local/radarr/radarr_1.zip").status_code == 200
