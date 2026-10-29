@@ -5,6 +5,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.7.0-beta] - 2026-10-29
+
 ### Added
 
 - Seerr backup and restore. Seerr has no backup API, so its config folder (its
