@@ -10,10 +10,11 @@ let DISCOVERY_RUNNING = false;
 let PLEX_LOGIN = null;
 const APP_CREDENTIAL_EDIT_REVISION = new Map();
 const APP_DISCOVERY_UPDATES = new Map();
-// Saved extra instances (radarr-4k -> "4K"), and ones removed in Settings but
-// not saved yet.
+// Saved extra instances (radarr-4k -> "4K"), ones removed in Settings but
+// not saved yet, and the ids of saved removals, never given out again.
 const INSTANCE_NAMES = new Map();
 const REMOVED_INSTANCES = new Set();
+const RETIRED_INSTANCES = new Set();
 
 async function apiFetch(url, opts) {
   opts = { ...opts };
@@ -388,14 +389,18 @@ function instanceCards(type) {
 }
 
 // The id names the instance's backup folder, so it's made once, from the
-// name it's added with: "4K" -> radarr-4k. Renaming keeps it.
+// name it's added with: "4K" -> radarr-4k. Renaming keeps it. A removed
+// instance's id stays taken: its backups are kept.
 function newInstanceId(type, name) {
-  const taken = new Set(Array.from(document.querySelectorAll(".app-card[data-app]"), (card) => card.dataset.app));
+  const taken = new Set([
+    ...Array.from(document.querySelectorAll(".app-card[data-app]"), (card) => card.dataset.app),
+    ...REMOVED_INSTANCES, ...RETIRED_INSTANCES,
+  ]);
   const max = 40 - type.length - 1;
   let slug = name.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   if (slug.startsWith(`${type}-`)) slug = slug.slice(type.length + 1); // "Radarr 4K" -> 4k
   slug = slug.slice(0, max).replace(/-+$/, "") || "2";
-  for (let n = 2, candidate = slug; ; n += 1, candidate = `${slug.slice(0, max - String(n).length - 1).replace(/-+$/, "")}-${n}`) {
+  for (let n = 1, candidate = slug; ; n += 1, candidate = `${slug.slice(0, max - String(n).length - 1).replace(/-+$/, "")}-${n}`) {
     if (!taken.has(`${type}-${candidate}`)) return `${type}-${candidate}`;
   }
 }
@@ -445,7 +450,6 @@ function addInstanceCard(appId, values = {}) {
 
   document.querySelector(`.instance-add[data-instance-of="${type}"]`).before(card);
   bindAppCard(card);
-  REMOVED_INSTANCES.delete(appId); // Removed, then added back under the same name.
   fillAppCard(appId, values);
   refreshHeaderScopes();
   return card;
@@ -1097,6 +1101,8 @@ async function loadConfig() {
   document.getElementById("request-headers-list").replaceChildren();
   document.querySelectorAll(".instance-card").forEach((card) => card.remove());
   REMOVED_INSTANCES.clear();
+  RETIRED_INSTANCES.clear();
+  (cfg.removed_instances || []).forEach((appId) => RETIRED_INSTANCES.add(appId));
   rememberSavedInstances(cfg.apps || {});
   INSTANCE_NAMES.forEach((name, appId) => addInstanceCard(appId, cfg.apps[appId]));
   (cfg.request_headers || []).forEach(addRequestHeader);
@@ -1156,6 +1162,7 @@ async function saveSettings() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(cfg),
     });
+    REMOVED_INSTANCES.forEach((appId) => RETIRED_INSTANCES.add(appId));
     REMOVED_INSTANCES.clear();
     rememberSavedInstances(cfg.apps);
     resultEl.textContent = "Saved";

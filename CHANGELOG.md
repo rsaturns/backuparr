@@ -29,6 +29,13 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   server error, leaving only Reset. Setup and login also answered a username
   or password sent as a number with a server error instead of rejecting it.
 
+- A new Radarr/Sonarr instance could be given the id, and so the backup
+  folder, of one that had been removed. Its backups then mixed with the
+  removed server's in History, Restore and retention, and an older file could
+  restore the other server's data. Backuparr now remembers removed instances'
+  ids and never reuses them. The second instance with the same name also gets
+  `-2` instead of `-3`.
+
 ## [1.9.0-beta] - 2026-10-29
 
 ### Added

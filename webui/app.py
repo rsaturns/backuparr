@@ -581,6 +581,8 @@ def _validate_instances(data, cfg):
             continue
         if not isinstance(app_data, dict):
             return "apps must be an object of objects"
+        if name not in cfg["apps"] and name in cfg["removed_instances"]:
+            return f"{name} belonged to a removed instance whose backups are kept - add this one under another name"
         display = app_data.get("name", cfg["apps"].get(name, {}).get("name", ""))
         if not isinstance(display, str) or not display.strip() or len(display) > 64:
             return f"{name}: a name of 1-64 characters is required"
@@ -669,6 +671,8 @@ def api_set_config():
     for name, incoming in data.get("apps", {}).items():
         if incoming is None:
             cfg["apps"].pop(name, None)
+            if name not in cfg["removed_instances"]:
+                cfg["removed_instances"].append(name)
             continue
         extra = name not in APP_NAMES
         if extra and name not in cfg["apps"]:

@@ -373,6 +373,9 @@ DEFAULTS = {
     "cron_schedule": "0 3 * * *",
     "notify_url": "",
     "bazarr_backup_dir": "",
+    # Ids of removed extra instances. Their backups are kept, so an id is
+    # never given to another instance.
+    "removed_instances": [],
     "apps": {name: dict(DEFAULT_APP) for name in APP_NAMES},
     "destinations": {name: dict(DEFAULT_DEST[name]) for name in DEST_NAMES},
 }
