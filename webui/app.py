@@ -576,8 +576,9 @@ def _instances_after(data, cfg):
 
 def _validate_instances(data, cfg):
     for name, app_data in data.get("apps", {}).items():
-        kind = instance_type(name)
-        if not kind:
+        # instance_type() only accepts extra ids for MULTI_INSTANCE_APPS, so
+        # "prowlarr-2" is an unknown app here.
+        if not instance_type(name):
             return f"unknown app: {name}"
         if name in APP_NAMES:
             if app_data is None:
@@ -585,8 +586,6 @@ def _validate_instances(data, cfg):
             if not isinstance(app_data, dict):
                 return "apps must be an object of objects"
             continue
-        if kind not in MULTI_INSTANCE_APPS:
-            return f"{app_meta(kind)['label']} can't have more than one instance"
         if app_data is None:
             if name not in cfg["apps"]:
                 return f"unknown instance: {name}"
