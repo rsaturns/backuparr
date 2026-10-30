@@ -68,6 +68,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   forgotten password. It now resets anyway and logs which backups it couldn't
   remove.
 
+- A failed backup of an extra instance was reported as "radarr-4k: radarr:
+  unauthorized ...", which on the Overview read as if the first Radarr had
+  failed. It now reads "radarr-4k: unauthorized ...".
+
 ## [1.9.0-beta] - 2026-10-29
 
 ### Added
