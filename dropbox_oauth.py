@@ -53,18 +53,17 @@ def remote_root(dest_cfg):
     return f"{REMOTE_NAME}:{BACKUP_FOLDER}"
 
 
-def sync_rclone_remote(dest_cfg, force=False):
+def sync_rclone_remote(dest_cfg, force=False, remotes=None):
     """Writes (or removes) the REMOTE_NAME remote in rclone.conf to match
     destinations.dropbox. Only writes the token when force=True or the
     remote doesn't exist yet: Dropbox access tokens are short-lived and
     rclone rewrites the refreshed one into this file, so replacing it from
-    our (older) config.json copy on every sync would throw that away."""
+    our (older) config.json copy on every sync would throw that away.
+    `remotes` is a config_dump() the caller already has."""
+    remote = (rclone_util.config_dump() if remotes is None else remotes).get(REMOTE_NAME)
     if not dest_cfg.get("token"):
-        rclone_util.config_delete(REMOTE_NAME)
+        if remote is not None:
+            rclone_util.config_delete(REMOTE_NAME)
         return
-
-    existing = REMOTE_NAME in rclone_util.config_dump()
-    fields = {}
-    if force or not existing:
-        fields["token"] = dest_cfg["token"]
-    rclone_util.config_set(REMOTE_NAME, "dropbox", fields, force=force)
+    if force or remote is None:
+        rclone_util.config_set(REMOTE_NAME, "dropbox", {"token": dest_cfg["token"]}, force=force)

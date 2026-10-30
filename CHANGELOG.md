@@ -84,6 +84,12 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   failed request (the container restarting) went unreported. The view now asks
   again only after each answer, and shows and retries failures.
 
+### Changed
+
+- Opening History or Restore, downloading or deleting a backup, and every
+  backup run now start one rclone process to check the cloud connections
+  instead of three to five, so those pages load faster.
+
 ## [1.9.0-beta] - 2026-10-29
 
 ### Added

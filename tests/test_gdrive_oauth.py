@@ -56,5 +56,11 @@ def test_a_remote_with_an_unreadable_token_is_rewritten(rclone):
 
 
 def test_disconnecting_removes_the_remote(rclone):
+    gdrive_oauth.sync_rclone_remote(CFG)
     gdrive_oauth.sync_rclone_remote({**CFG, "refresh_token": ""})
-    assert rclone["deleted"] == ["backuparr-gdrive"] and rclone["sets"] == []
+    assert rclone["deleted"] == ["backuparr-gdrive"]
+
+
+def test_nothing_runs_when_disconnected_and_no_remote_exists(rclone):
+    gdrive_oauth.sync_rclone_remote({**CFG, "refresh_token": ""})
+    assert rclone["deleted"] == [] and rclone["sets"] == []

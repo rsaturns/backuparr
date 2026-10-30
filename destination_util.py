@@ -9,6 +9,7 @@ import re
 import dropbox_oauth
 import gdrive_oauth
 import onedrive_oauth
+import rclone_util
 from config_store import DEFAULT_LOCAL_DIR
 
 
@@ -71,7 +72,9 @@ def remote_root(dest_id, dest_cfg):
 
 def sync(cfg):
     """Keeps rclone.conf in sync with any OAuth-connected destinations
-    before an operation touches them - safe/cheap to call unconditionally."""
-    gdrive_oauth.sync_rclone_remote(cfg["destinations"]["gdrive"])
-    onedrive_oauth.sync_rclone_remote(cfg["destinations"]["onedrive"])
-    dropbox_oauth.sync_rclone_remote(cfg["destinations"]["dropbox"])
+    before an operation touches them - safe/cheap to call unconditionally:
+    one `rclone config dump`, and a write only for a remote that differs."""
+    remotes = rclone_util.config_dump()
+    gdrive_oauth.sync_rclone_remote(cfg["destinations"]["gdrive"], remotes=remotes)
+    onedrive_oauth.sync_rclone_remote(cfg["destinations"]["onedrive"], remotes=remotes)
+    dropbox_oauth.sync_rclone_remote(cfg["destinations"]["dropbox"], remotes=remotes)
