@@ -5,6 +5,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.9.0-beta] - 2026-10-29
+
 ### Added
 
 - More than one Radarr or Sonarr (#46), such as a 4K Radarr beside the HD one
