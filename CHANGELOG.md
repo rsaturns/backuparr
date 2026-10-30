@@ -52,6 +52,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Emby and Seerr backups failed, or read the wrong file, when the mounted data
   folder's path contained `#`, `?` or `%`.
 
+- A Bazarr backup whose download was damaged on the way (a member failing its
+  checksum) was kept as good and Bazarr's own copy deleted. Backuparr now
+  downloads it again until it reads back intact.
+
 ## [1.9.0-beta] - 2026-10-29
 
 ### Added

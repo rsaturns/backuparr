@@ -44,6 +44,16 @@ class BazarrError(RuntimeError):
     pass
 
 
+def _complete_zip(path):
+    """Whether every member reads back with the right CRC. testzip() returns
+    the first bad member's name rather than raising."""
+    try:
+        with zipfile.ZipFile(path) as archive:
+            return archive.testzip() is None
+    except (zipfile.BadZipFile, OSError):
+        return False
+
+
 class BazarrApp:
     def __init__(self, url, api_key, username=None, password=None, timeout=30):
         self.url = url.rstrip("/")
@@ -115,14 +125,12 @@ class BazarrApp:
             with open(dest, "wb") as f:
                 f.write(res.content)
 
-            try:
-                zipfile.ZipFile(dest).testzip()
+            if _complete_zip(dest):
                 break
-            except (zipfile.BadZipFile, OSError):
-                if time.time() >= deadline:
-                    raise BazarrError(f"bazarr: {new_filename} never finished writing on the server in time")
-                logger.info("bazarr: backup file still being written, retrying download...")
-                time.sleep(poll_interval)
+            if time.time() >= deadline:
+                raise BazarrError(f"bazarr: {new_filename} never finished writing on the server in time")
+            logger.info("bazarr: backup file still being written, retrying download...")
+            time.sleep(poll_interval)
 
         try:
             self.delete_backup(new_filename)
