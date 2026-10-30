@@ -90,6 +90,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   backup run now start one rclone process to check the cloud connections
   instead of three to five, so those pages load faster.
 
+- While a backup runs, the progress view's status checks no longer re-read the
+  whole log file each time (up to 1 MB every 1.5 seconds), and the run's log
+  they send is capped at its newest 500 lines.
+
 ## [1.9.0-beta] - 2026-10-29
 
 ### Added

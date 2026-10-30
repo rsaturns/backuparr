@@ -374,12 +374,18 @@ RUN_STATE = {
 
 
 class _ListLogHandler(logging.Handler):
+    """Keeps a run's newest lines for the UI, which is sent the whole list
+    on every status poll; backup.log keeps them all."""
+    MAX_LINES = 500
+
     def __init__(self, sink):
         super().__init__()
         self.sink = sink
 
     def emit(self, record):
         self.sink.append(self.format(record))
+        if len(self.sink) > self.MAX_LINES:
+            del self.sink[:-self.MAX_LINES]
 
 
 def _run_tracked(state, work, *args):
@@ -1007,17 +1013,33 @@ def api_backup_cancel():
     return jsonify({"cancelling": True})
 
 
+def _tail_lines(path, count=200, chunk=64 * 1024):
+    """The last `count` lines of a file, read back from its end."""
+    with open(path, "rb") as f:
+        pos = f.seek(0, os.SEEK_END)
+        data = b""
+        while pos > 0 and data.count(b"\n") <= count:
+            step = min(chunk, pos)
+            pos -= step
+            f.seek(pos)
+            data = f.read(step) + data
+    lines = data.split(b"\n")
+    if lines and not lines[-1]:
+        lines.pop()
+    # Past count+1 newlines the first, possibly partial, line falls outside.
+    return [line.decode("utf-8", "replace") for line in lines[-count:]]
+
+
 @app.get("/api/backup/status")
 def api_backup_status():
-    tail = []
-    log_path = os.path.join(os.environ.get("BACKUPARR_LOG_DIR", "/var/log/backuparr"), "backup.log")
-    try:
-        with open(log_path) as f:
-            tail = f.readlines()[-200:]
-    except OSError:
-        pass
     state = dict(RUN_STATE)
-    state["log_tail"] = [line.rstrip("\n") for line in tail]
+    # The UI shows the run's own log while it runs, backup.log's tail after.
+    state["log_tail"] = []
+    if not state["running"]:
+        try:
+            state["log_tail"] = _tail_lines(os.path.join(os.environ.get("BACKUPARR_LOG_DIR", "/var/log/backuparr"), "backup.log"))
+        except OSError:
+            pass
     return jsonify(state)
 
 
