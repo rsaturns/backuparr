@@ -2,6 +2,7 @@
 for the drivers that read an app's mounted data folder (Emby, Seerr)."""
 import os
 import sqlite3
+from urllib.parse import quote
 
 
 def open_ro(src):
@@ -9,8 +10,9 @@ def open_ro(src):
     and a read-only connection reads it consistently through the shared
     -shm index. Without a -wal the file can't change under us, so it's
     opened immutable - which a read-only mount needs, since SQLite can't
-    create the -shm file there."""
-    uri = f"file:{src}?mode=ro"
+    create the -shm file there. The path is quoted: in a URI, "?" and "#"
+    end it and "%" starts an escape."""
+    uri = f"file:{quote(str(src))}?mode=ro"
     if not os.path.exists(f"{src}-wal"):
         uri += "&immutable=1"
     return sqlite3.connect(uri, uri=True, timeout=30)

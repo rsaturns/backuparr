@@ -249,6 +249,17 @@ def _check_auth():
     return None
 
 
+def _credentials_from_request():
+    """The username and password of a setup or login request, as strings -
+    anything else (a number, a list) counts as missing."""
+    data = request.get_json(force=True, silent=True)
+    if not isinstance(data, dict):
+        return "", ""
+    username, password = data.get("username"), data.get("password")
+    return (username.strip() if isinstance(username, str) else "",
+            password if isinstance(password, str) else "")
+
+
 @app.get("/setup")
 def setup_page():
     return render_template("setup.html", version=VERSION)
@@ -256,9 +267,7 @@ def setup_page():
 
 @app.post("/api/setup")
 def api_setup():
-    data = request.get_json(force=True, silent=True) or {}
-    username = (data.get("username") or "").strip()
-    password = data.get("password") or ""
+    username, password = _credentials_from_request()
     if not username or not password:
         return jsonify({"error": "Username and password are required"}), 400
     if len(password) < 8:
@@ -281,9 +290,7 @@ def api_login():
     if wait:
         return jsonify({"error": f"Too many failed attempts - try again in {int(wait) + 1}s"}), 429
 
-    data = request.get_json(force=True, silent=True) or {}
-    username = (data.get("username") or "").strip()
-    password = data.get("password") or ""
+    username, password = _credentials_from_request()
     if not auth_store.verify_password(username, password):
         _login_record_failure(ip)
         return jsonify({"error": "Incorrect username or password"}), 401
@@ -326,8 +333,14 @@ def api_reset():
     if local_backup_dir and os.path.isdir(local_backup_dir):
         # Only Backuparr's own archives: the folder may hold other files.
         # Every instance-shaped folder, so removed instances' backups go too.
-        folders = [name for name in os.listdir(local_backup_dir) if instance_type(name)]
-        destination_util.remove_local_backups(local_backup_dir, folders)
+        # Reset is how a forgotten password is recovered, so a backup folder
+        # it can't clear (a stale mount, no permission) doesn't stop it.
+        try:
+            folders = [name for name in os.listdir(local_backup_dir) if instance_type(name)]
+            destination_util.remove_local_backups(local_backup_dir, folders)
+        except OSError as exc:
+            log.warning("reset: couldn't remove the local backups in %s (%s) - delete them by hand if needed",
+                        local_backup_dir, exc.strerror or type(exc).__name__)
 
     rclone_conf_path = os.environ.get("RCLONE_CONFIG", "/config/backuparr/rclone.conf")
     rclone_pass_path = os.environ.get("RCLONE_CONFIG_PASS_FILE", "/config/backuparr/rclone.pass")
@@ -361,12 +374,18 @@ RUN_STATE = {
 
 
 class _ListLogHandler(logging.Handler):
+    """Keeps a run's newest lines for the UI, which is sent the whole list
+    on every status poll; backup.log keeps them all."""
+    MAX_LINES = 500
+
     def __init__(self, sink):
         super().__init__()
         self.sink = sink
 
     def emit(self, record):
         self.sink.append(self.format(record))
+        if len(self.sink) > self.MAX_LINES:
+            del self.sink[:-self.MAX_LINES]
 
 
 def _run_tracked(state, work, *args):
@@ -525,9 +544,17 @@ def index():
 
 
 # -------------------------------------------------------------- config ----
+# OAuth tokens the UI only needs to know are there. Only the connect and
+# disconnect routes write them, so they never have to come back.
+_CONNECTED_TOKENS = (("gdrive", "refresh_token"), ("onedrive", "token"), ("dropbox", "token"))
+
+
 @app.get("/api/config")
 def api_get_config():
-    return jsonify(load_config())
+    cfg = load_config()
+    for dest, key in _CONNECTED_TOKENS:
+        cfg["destinations"][dest][key] = bool(cfg["destinations"][dest][key])
+    return jsonify(cfg)
 
 
 @app.get("/api/meta")
@@ -535,22 +562,25 @@ def api_meta():
     return jsonify(APP_META)
 
 
-def _instances_after(data, cfg):
+def _instances_after(data, cfg, unsaved=()):
     """The instance ids config.json will hold once `data`'s apps are applied:
-    an extra instance is added by sending it, removed by sending null."""
+    an extra instance is added by sending it, removed by sending null.
+    `unsaved` adds well-formed ids the Settings form holds but hasn't saved
+    yet, for a Test or discovery run before Save."""
     ids = instance_ids(cfg)
     for name, app_data in data.get("apps", {}).items():
         if app_data is None:
             ids = [i for i in ids if i != name]
         elif name not in ids:
             ids.append(name)
-    return ids
+    return ids + [i for i in dict.fromkeys(unsaved) if instance_type(i) and i not in ids]
 
 
 def _validate_instances(data, cfg):
     for name, app_data in data.get("apps", {}).items():
-        kind = instance_type(name)
-        if not kind:
+        # instance_type() only accepts extra ids for MULTI_INSTANCE_APPS, so
+        # "prowlarr-2" is an unknown app here.
+        if not instance_type(name):
             return f"unknown app: {name}"
         if name in APP_NAMES:
             if app_data is None:
@@ -558,14 +588,14 @@ def _validate_instances(data, cfg):
             if not isinstance(app_data, dict):
                 return "apps must be an object of objects"
             continue
-        if kind not in MULTI_INSTANCE_APPS:
-            return f"{app_meta(kind)['label']} can't have more than one instance"
         if app_data is None:
             if name not in cfg["apps"]:
                 return f"unknown instance: {name}"
             continue
         if not isinstance(app_data, dict):
             return "apps must be an object of objects"
+        if name not in cfg["apps"] and name in cfg["removed_instances"]:
+            return f"{name} belonged to a removed instance whose backups are kept - add this one under another name"
         display = app_data.get("name", cfg["apps"].get(name, {}).get("name", ""))
         if not isinstance(display, str) or not display.strip() or len(display) > 64:
             return f"{name}: a name of 1-64 characters is required"
@@ -654,6 +684,8 @@ def api_set_config():
     for name, incoming in data.get("apps", {}).items():
         if incoming is None:
             cfg["apps"].pop(name, None)
+            if name not in cfg["removed_instances"]:
+                cfg["removed_instances"].append(name)
             continue
         extra = name not in APP_NAMES
         if extra and name not in cfg["apps"]:
@@ -670,16 +702,11 @@ def api_set_config():
     return jsonify({"ok": True})
 
 
-def _unsaved_header_ids(cfg, rows):
-    """Instance ids request-header rows from the unsaved Settings form may be
-    scoped to: the saved ones plus any well-formed new one (an instance
-    added but not saved yet)."""
-    ids = instance_ids(cfg)
-    if isinstance(rows, list):
-        for row in rows:
-            scope = row.get("apps") if isinstance(row, dict) else None
-            ids += [i for i in scope if instance_type(i) and i not in ids] if isinstance(scope, list) else []
-    return ids
+def _header_scope_ids(rows):
+    """Every id request-header rows are scoped to, valid or not."""
+    rows = rows if isinstance(rows, list) else []
+    scopes = [row.get("apps") for row in rows if isinstance(row, dict)]
+    return [i for scope in scopes if isinstance(scope, list) for i in scope if isinstance(i, str)]
 
 
 @app.post("/api/test/<app_name>")
@@ -703,7 +730,7 @@ def api_test(app_name):
     try:
         cfg = load_config()
         headers = data["request_headers"] if "request_headers" in data else cfg.get("request_headers", [])
-        validate_request_headers(headers, _unsaved_header_ids(cfg, headers))
+        validate_request_headers(headers, _instances_after({}, cfg, unsaved=_header_scope_ids(headers)))
     except RequestHeadersError as exc:
         return jsonify({"ok": False, "message": str(exc)}), 400
     app_cfg["request_headers"] = headers_for_app(headers, app_name)
@@ -847,7 +874,7 @@ def api_discovery_prowlarr():
     try:
         cfg = load_config()
         headers = data["request_headers"] if "request_headers" in data else cfg.get("request_headers", [])
-        validate_request_headers(headers, _unsaved_header_ids(cfg, headers))
+        validate_request_headers(headers, _instances_after({}, cfg, unsaved=_header_scope_ids(headers)))
     except RequestHeadersError as exc:
         return _discovery_response({"error": str(exc)}, 400)
     headers = headers_for_app(headers, "prowlarr")
@@ -982,17 +1009,33 @@ def api_backup_cancel():
     return jsonify({"cancelling": True})
 
 
+def _tail_lines(path, count=200, chunk=64 * 1024):
+    """The last `count` lines of a file, read back from its end."""
+    with open(path, "rb") as f:
+        pos = f.seek(0, os.SEEK_END)
+        data = b""
+        while pos > 0 and data.count(b"\n") <= count:
+            step = min(chunk, pos)
+            pos -= step
+            f.seek(pos)
+            data = f.read(step) + data
+    lines = data.split(b"\n")
+    if lines and not lines[-1]:
+        lines.pop()
+    # Past count+1 newlines the first, possibly partial, line falls outside.
+    return [line.decode("utf-8", "replace") for line in lines[-count:]]
+
+
 @app.get("/api/backup/status")
 def api_backup_status():
-    tail = []
-    log_path = os.path.join(os.environ.get("BACKUPARR_LOG_DIR", "/var/log/backuparr"), "backup.log")
-    try:
-        with open(log_path) as f:
-            tail = f.readlines()[-200:]
-    except OSError:
-        pass
     state = dict(RUN_STATE)
-    state["log_tail"] = [line.rstrip("\n") for line in tail]
+    # The UI shows the run's own log while it runs, backup.log's tail after.
+    state["log_tail"] = []
+    if not state["running"]:
+        try:
+            state["log_tail"] = _tail_lines(os.path.join(os.environ.get("BACKUPARR_LOG_DIR", "/var/log/backuparr"), "backup.log"))
+        except OSError:
+            pass
     return jsonify(state)
 
 

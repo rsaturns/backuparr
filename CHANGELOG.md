@@ -5,7 +5,101 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Security
+
+- The settings the web UI loads included the Google Drive, OneDrive and
+  Dropbox sign-in tokens, which never need to leave the server - anyone with a
+  logged-in browser session could read them. The UI now only learns whether
+  each one is connected.
+
+- Profilarr, Bazarr, Emby, Seerr and SABnzbd sent their API key to whatever
+  host a redirect pointed at, such as a reverse proxy's login page on another
+  domain. Like Radarr, Sonarr and Prowlarr, they now refuse redirects to a
+  different host unless `BACKUPARR_ALLOW_CROSS_HOST_REDIRECTS` is set.
+
+- Backuparr passed the Google Drive client secret and refresh token to rclone
+  on its command line every time it opened History, Restore or ran a backup,
+  where any user on the Docker host could see them with `ps`. It now does so
+  only when the Google Drive settings change.
+
+- The Overview showed its error message as HTML, the one place the web UI
+  didn't treat text from the server as plain text. It now does.
+
+- The CI and release workflows run third-party GitHub Actions pinned to exact
+  commits instead of version tags that can be moved, so a compromised action
+  can't slip into the image build or the Docker Hub push.
+
+### Fixed
+
+- A username with accented or other non-ASCII letters (such as `Tím`) could be
+  set at first-run setup but then never log in - every login failed with a
+  server error, leaving only Reset. Setup and login also answered a username
+  or password sent as a number with a server error instead of rejecting it.
+
+- A new Radarr/Sonarr instance could be given the id, and so the backup
+  folder, of one that had been removed. Its backups then mixed with the
+  removed server's in History, Restore and retention, and an older file could
+  restore the other server's data. Backuparr now remembers removed instances'
+  ids and never reuses them. The second instance with the same name also gets
+  `-2` instead of `-3`.
+
+- Prowlarr discovery wrote what it found for an extra Radarr/Sonarr instance -
+  its API key, and with **Use this service** its URL too - into the first
+  instance's card, leaving that one with the wrong server or key.
+
+- With the first Radarr/Sonarr card empty, Prowlarr discovery could fill it
+  with a server another instance's card already had, so both backed up the
+  same server. The first card is now only offered servers no other card holds.
+
+- Removing a Radarr/Sonarr instance that a request header was limited to
+  silently took it out of that header's apps - narrowing the header, or
+  leaving it with no apps and a confusing save error. Settings now says which
+  header to change first.
+
+- Emby and Seerr backups failed, or read the wrong file, when the mounted data
+  folder's path contained `#`, `?` or `%`.
+
+- A Bazarr backup whose download was damaged on the way (a member failing its
+  checksum) was kept as good and Bazarr's own copy deleted. Backuparr now
+  downloads it again until it reads back intact.
+
+- Restoring NZBGet trimmed spaces from the start and end of setting values. A
+  value with a line break in it, which the backup can't hold, now fails the
+  backup with the setting's name instead of being split into two lines.
+
+- Jellyfin's **Test** could fail with an unexpected error instead of "check
+  the volume mount" when the first backup Jellyfin listed had no path.
+
+- Reset failed and deleted nothing when the local backup folder couldn't be
+  read, such as a stale network mount, leaving no way back in after a
+  forgotten password. It now resets anyway and logs which backups it couldn't
+  remove.
+
+- A failed backup of an extra instance was reported as "radarr-4k: radarr:
+  unauthorized ...", which on the Overview read as if the first Radarr had
+  failed. It now reads "radarr-4k: unauthorized ...".
+
+- While a backup or restore ran, a slow status reply could let the progress
+  view's requests pile up and show an older state after a newer one, and a
+  failed request (the container restarting) went unreported. The view now asks
+  again only after each answer, and shows and retries failures.
+
+- A Tdarr restore cut off partway, for example by a network drop, failed with
+  a bare connection error. It now says which collection was left partly
+  restored and how far it got, and that running the restore again finishes it.
+
+### Changed
+
+- Opening History or Restore, downloading or deleting a backup, and every
+  backup run now start one rclone process to check the cloud connections
+  instead of three to five, so those pages load faster.
+
+- While a backup runs, the progress view's status checks no longer re-read the
+  whole log file each time (up to 1 MB every 1.5 seconds), and the run's log
+  they send is capped at its newest 500 lines.
+
+- Bazarr backups and restores no longer hold the whole archive in memory,
+  which matters for a large database on a small NAS.
 
 ## [1.9.0-beta] - 2026-10-29
 

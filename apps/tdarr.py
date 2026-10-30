@@ -86,6 +86,9 @@ class TdarrApp:
         return dest_dir
 
     def restore_collection(self, collection, docs):
+        # cruddb has no bulk insert (its modes: insert, update, getAll,
+        # getById, getByIndex, removeOne, removeAll, removeByDB), so one
+        # request per document - about 600 a second.
         self._cruddb({"collection": collection, "mode": "removeAll"})
         restored = 0
         for doc in docs:
@@ -93,7 +96,13 @@ class TdarrApp:
             if not doc_id:
                 logger.warning("tdarr: skipping doc with no _id in %s", collection)
                 continue
-            self._cruddb({"collection": collection, "mode": "insert", "docID": doc_id, "obj": doc})
+            try:
+                self._cruddb({"collection": collection, "mode": "insert", "docID": doc_id, "obj": doc})
+            except requests.RequestException as exc:
+                raise TdarrError(
+                    f"tdarr: the restore stopped partway through {collection} ({restored} of {len(docs)} "
+                    f"documents put back) after {type(exc).__name__} - run the restore again to finish it"
+                ) from exc
             restored += 1
         logger.info("tdarr: restored %d/%d doc(s) into %s", restored, len(docs), collection)
 

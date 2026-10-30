@@ -26,7 +26,8 @@ def test_bazarr_backup_sanitizes_malicious_filename(tmp_path):
 
     fake_response = MagicMock()
     fake_response.status_code = 200
-    fake_response.content = _valid_zip_bytes()
+    fake_response.iter_content = lambda chunk_size: [_valid_zip_bytes()]
+    fake_response.__enter__.return_value = fake_response
     fake_response.raise_for_status = MagicMock()
 
     with patch.object(app, "trigger_backup", return_value=None), patch.object(

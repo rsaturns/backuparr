@@ -180,9 +180,13 @@ def describe_failure(exc, url=None):
 
 def _without_app_prefix(message, app):
     """Driver errors start with "<app>: ", which the caller's own
-    "<app>: ..." label would repeat."""
-    prefix = f"{app}: "
-    return message[len(prefix):] if app and message.startswith(prefix) else message
+    "<app>: ..." label would repeat. An instance's driver says its app type
+    ("radarr: ...") under a "radarr-4k: " label."""
+    if app:
+        for name in (app, instance_type(app)):
+            if name and message.startswith(f"{name}: "):
+                return message[len(name) + 2:]
+    return message
 
 
 def humanize_error(exc, url=None, app=None):

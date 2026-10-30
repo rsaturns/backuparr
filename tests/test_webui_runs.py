@@ -116,6 +116,39 @@ def test_status_includes_the_last_200_log_lines(inline, authed_client):
     assert len(tail) == 200 and tail[0] == "line 100" and tail[-1] == "line 299"
 
 
+@pytest.mark.parametrize("lines, chunk", [(5, 64 * 1024), (300, 64 * 1024), (5000, 64), (300, 7)])
+def test_the_tail_is_read_from_the_end_of_any_size_log(isolated_webui, tmp_path, lines, chunk):
+    path = tmp_path / "backup.log"
+    path.write_text("".join(f"2026-10-30 line {i} é\n" for i in range(lines)), encoding="utf-8")
+    expected = [f"2026-10-30 line {i} é" for i in range(max(0, lines - 200), lines)]
+    assert isolated_webui._tail_lines(str(path), chunk=chunk) == expected
+
+
+def test_the_tail_keeps_a_last_line_without_a_newline(isolated_webui, tmp_path):
+    path = tmp_path / "backup.log"
+    path.write_text("one\ntwo")
+    assert isolated_webui._tail_lines(str(path)) == ["one", "two"]
+
+
+def test_the_log_file_isnt_read_while_a_run_shows_its_own(inline, authed_client):
+    os.makedirs(os.environ["BACKUPARR_LOG_DIR"], exist_ok=True)
+    with open(os.path.join(os.environ["BACKUPARR_LOG_DIR"], "backup.log"), "w") as f:
+        f.write("old run\n")
+    inline.RUN_STATE.update(running=True, log=["this run"])
+    try:
+        assert (status(authed_client)["log_tail"], status(authed_client)["log"]) == ([], ["this run"])
+    finally:
+        inline.RUN_STATE["running"] = False
+
+
+def test_a_runs_log_keeps_only_its_newest_lines(isolated_webui):
+    sink = []
+    handler = isolated_webui._ListLogHandler(sink)
+    for i in range(isolated_webui._ListLogHandler.MAX_LINES + 50):
+        handler.emit(logging.LogRecord("backuparr", logging.INFO, __file__, 1, f"line {i}", None, None))
+    assert len(sink) == isolated_webui._ListLogHandler.MAX_LINES and sink[-1] == f"line {len(sink) + 49}"
+
+
 def test_status_copes_with_a_missing_log_file(inline, authed_client):
     assert status(authed_client)["log_tail"] == []
 

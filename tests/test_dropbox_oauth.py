@@ -68,8 +68,14 @@ def rclone(monkeypatch):
 
 
 def test_sync_removes_the_remote_when_disconnected(rclone):
+    rclone["remotes"]["backuparr-dropbox"] = {"token": "T"}
     dropbox_oauth.sync_rclone_remote({"token": ""})
     assert rclone["deleted"] == ["backuparr-dropbox"] and rclone["sets"] == []
+
+
+def test_sync_runs_nothing_when_disconnected_and_no_remote_exists(rclone):
+    dropbox_oauth.sync_rclone_remote({"token": ""})
+    assert rclone["deleted"] == [] and rclone["sets"] == []
 
 
 def test_sync_creates_a_missing_remote_with_the_token(rclone):
@@ -80,7 +86,7 @@ def test_sync_creates_a_missing_remote_with_the_token(rclone):
 def test_sync_keeps_the_token_rclone_has_already_refreshed(rclone):
     rclone["remotes"]["backuparr-dropbox"] = {"token": "refreshed"}
     dropbox_oauth.sync_rclone_remote({"token": "stale"})
-    assert rclone["sets"] == [("backuparr-dropbox", "dropbox", {}, False)]
+    assert rclone["sets"] == []
 
 
 def test_sync_force_replaces_the_token(rclone):

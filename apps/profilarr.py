@@ -34,6 +34,8 @@ import zipfile
 
 import requests
 
+from apps.servarr import ApiKeySession
+
 logger = logging.getLogger(f"backuparr.{__name__}")
 
 
@@ -45,7 +47,7 @@ class ProfilarrApp:
     def __init__(self, url, api_key, timeout=30):
         self.url = url.rstrip("/")
         self.timeout = timeout
-        self.session = requests.Session()
+        self.session = ApiKeySession(self.url)
         self.session.headers.update({"X-Api-Key": api_key, "Accept": "application/json"})
 
     def _api(self, path):

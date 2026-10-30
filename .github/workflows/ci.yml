@@ -28,13 +28,15 @@ jobs:
   test-and-build:
     name: test-and-build
     runs-on: ubuntu-latest
+    # Actions are pinned to a commit, named in the comment; Dependabot
+    # updates both.
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Same Python as the python:3.15-alpine image the app ships in.
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.15"
 
@@ -45,15 +47,15 @@ jobs:
         run: pytest -q
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       # Run the image, not just build it: catches a module missing from the
       # Dockerfile COPY list, entrypoint errors and a failing healthcheck.
       - name: Build Docker image for the smoke test
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           load: true
@@ -67,7 +69,7 @@ jobs:
       # Validates the Dockerfile builds cleanly on both target
       # architectures. Nothing is pushed anywhere from this workflow.
       - name: Build Docker image (no push)
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64

@@ -374,3 +374,20 @@ def test_a_failed_key_write_leaves_no_temporary_file(isolated_webui, tmp_path, m
     with pytest.raises(OSError):
         isolated_webui._load_or_create_secret_key()
     assert list(path.parent.iterdir()) == []
+
+
+def test_oauth_tokens_are_reported_as_connected_never_sent(authed_client, isolated_webui):
+    cfg = isolated_webui.load_config()
+    cfg["destinations"]["gdrive"].update(client_id="id", refresh_token="gdrive-refresh")
+    cfg["destinations"]["onedrive"]["token"] = '{"refresh_token":"onedrive-refresh"}'
+    isolated_webui.save_config(cfg)
+    response = authed_client.get("/api/config")
+    body = response.get_data(as_text=True)
+    assert "gdrive-refresh" not in body and "onedrive-refresh" not in body
+    dests = response.get_json()["destinations"]
+    assert (dests["gdrive"]["refresh_token"], dests["onedrive"]["token"], dests["dropbox"]["token"]) == (True, True, False)
+    # Saving the settings the UI got back leaves the stored tokens alone.
+    assert save(authed_client, {"destinations": dests}).status_code == 200
+    stored_cfg = isolated_webui.load_config()["destinations"]
+    assert stored_cfg["gdrive"]["refresh_token"] == "gdrive-refresh"
+    assert stored_cfg["onedrive"]["token"] == '{"refresh_token":"onedrive-refresh"}'

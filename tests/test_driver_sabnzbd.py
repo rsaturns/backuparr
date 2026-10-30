@@ -30,7 +30,7 @@ def api(monkeypatch):
         sent.append({"url": url, "data": data, "timeout": timeout, **kwargs})
         return replies.pop(0) if replies else Reply({"status": True})
 
-    monkeypatch.setattr(sabnzbd.requests.Session, "post", lambda self, *args, **kwargs: post(*args, **kwargs))
+    monkeypatch.setattr(requests.Session, "post", lambda self, *args, **kwargs: post(*args, **kwargs))
     return type("Api", (), {"sent": sent, "replies": replies})
 
 

@@ -235,3 +235,11 @@ def test_the_apps_own_prefix_is_not_repeated_after_its_label():
     assert backup.humanize_error(error, app="sonarr") == "unauthorized - check the API key"
     assert backup.humanize_error(error, app="radarr") == "sonarr: unauthorized - check the API key"
     assert backup.humanize_error(KeyError("k"), app="sonarr") == "'k'"
+
+
+def test_an_instances_label_drops_its_drivers_app_prefix(caplog):
+    error = ServarrError("radarr: unauthorized - check the API key")
+    assert backup.humanize_error(error, app="radarr-4k") == "unauthorized - check the API key"
+    assert backup.humanize_error(error, app="sonarr-anime") == "radarr: unauthorized - check the API key"
+    backup.log_failure(backup.log, "radarr-4k: backup failed", error, app="radarr-4k")
+    assert "radarr-4k: backup failed - unauthorized - check the API key" in caplog.text

@@ -30,10 +30,13 @@ validates.
 """
 import logging
 import os
+import shutil
 import time
 import zipfile
 
 import requests
+
+from apps.servarr import ApiKeySession
 
 logger = logging.getLogger(f"backuparr.{__name__}")
 
@@ -42,12 +45,22 @@ class BazarrError(RuntimeError):
     pass
 
 
+def _complete_zip(path):
+    """Whether every member reads back with the right CRC. testzip() returns
+    the first bad member's name rather than raising."""
+    try:
+        with zipfile.ZipFile(path) as archive:
+            return archive.testzip() is None
+    except (zipfile.BadZipFile, OSError):
+        return False
+
+
 class BazarrApp:
     def __init__(self, url, api_key, username=None, password=None, timeout=30):
         self.url = url.rstrip("/")
         self.api_key = api_key
         self.timeout = timeout
-        self.session = requests.Session()
+        self.session = ApiKeySession(self.url)
         self.session.headers.update({"X-API-KEY": api_key, "Accept": "application/json"})
         self.download_auth = (username, password) if username and password else None
 
@@ -101,26 +114,24 @@ class BazarrApp:
         # See the module docstring's third wrinkle - keep re-downloading
         # until the zip actually validates.
         while True:
-            res = self.session.get(download_url, auth=self.download_auth, timeout=self.timeout)
-            if res.status_code == 401:
-                raise BazarrError(
-                    "bazarr: download unauthorized - if Settings > General > Security is set to "
-                    "'Forms', switch it to 'None' or 'Basic' (and fill in the Basic auth username and "
-                    "password on Bazarr's card) for automated backups to work"
-                )
-            res.raise_for_status()
+            with self.session.get(download_url, auth=self.download_auth, timeout=self.timeout, stream=True) as res:
+                if res.status_code == 401:
+                    raise BazarrError(
+                        "bazarr: download unauthorized - if Settings > General > Security is set to "
+                        "'Forms', switch it to 'None' or 'Basic' (and fill in the Basic auth username and "
+                        "password on Bazarr's card) for automated backups to work"
+                    )
+                res.raise_for_status()
+                with open(dest, "wb") as f:
+                    for chunk in res.iter_content(chunk_size=1024 * 1024):
+                        f.write(chunk)
 
-            with open(dest, "wb") as f:
-                f.write(res.content)
-
-            try:
-                zipfile.ZipFile(dest).testzip()
+            if _complete_zip(dest):
                 break
-            except (zipfile.BadZipFile, OSError):
-                if time.time() >= deadline:
-                    raise BazarrError(f"bazarr: {new_filename} never finished writing on the server in time")
-                logger.info("bazarr: backup file still being written, retrying download...")
-                time.sleep(poll_interval)
+            if time.time() >= deadline:
+                raise BazarrError(f"bazarr: {new_filename} never finished writing on the server in time")
+            logger.info("bazarr: backup file still being written, retrying download...")
+            time.sleep(poll_interval)
 
         try:
             self.delete_backup(new_filename)
@@ -144,8 +155,7 @@ class BazarrApp:
         stem = os.path.splitext(os.path.basename(local_zip_path))[0]
         filename = f"bazarr_backup_v{stem}.zip"
         target = os.path.join(bazarr_backup_dir, filename)
-        with open(local_zip_path, "rb") as src, open(target, "wb") as dst:
-            dst.write(src.read())
+        shutil.copyfile(local_zip_path, target)
         # Backuparr's private umask would make this unreadable to Bazarr
         # when the two containers run as different users.
         os.chmod(target, 0o644)

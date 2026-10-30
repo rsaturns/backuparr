@@ -90,12 +90,30 @@ def remote_root(dest_cfg):
     return f"{REMOTE_NAME}:"
 
 
-def sync_rclone_remote(dest_cfg):
+def _remote_matches(remote, fields, refresh_token):
+    """Whether rclone.conf's remote already holds these settings. rclone
+    rewrites the token's access_token and expiry itself; only the refresh
+    token inside it is ours."""
+    if not remote or remote.get("type") != "drive":
+        return False
+    try:
+        stored_refresh = json.loads(remote.get("token", "")).get("refresh_token")
+    except (ValueError, AttributeError):
+        return False
+    return stored_refresh == refresh_token and all(
+        remote.get(key, "") == value for key, value in fields.items() if key != "token")
+
+
+def sync_rclone_remote(dest_cfg, remotes=None):
     """Writes (or removes) the REMOTE_NAME remote in rclone.conf to match
-    destinations.gdrive. Always force=True (full rewrite) - safe since,
-    unlike OneDrive, Google's refresh tokens don't rotate on use."""
+    destinations.gdrive. A full rewrite (force=True) - safe since, unlike
+    OneDrive, Google's refresh tokens don't rotate on use - but only when
+    something changed, since the secrets go on rclone's command line.
+    `remotes` is a config_dump() the caller already has."""
+    remote = (rclone_util.config_dump() if remotes is None else remotes).get(REMOTE_NAME)
     if not dest_cfg.get("refresh_token"):
-        rclone_util.config_delete(REMOTE_NAME)
+        if remote is not None:
+            rclone_util.config_delete(REMOTE_NAME)
         return
 
     # access_token must be non-empty or rclone discards the token as
@@ -114,4 +132,6 @@ def sync_rclone_remote(dest_cfg):
     }
     if dest_cfg.get("folder_id"):
         fields["root_folder_id"] = dest_cfg["folder_id"]
+    if _remote_matches(remote, {**fields, "root_folder_id": dest_cfg.get("folder_id", "")}, dest_cfg["refresh_token"]):
+        return
     rclone_util.config_set(REMOTE_NAME, "drive", fields, force=True)

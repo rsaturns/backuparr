@@ -192,6 +192,21 @@ def test_an_instance_is_added_renamed_and_removed_through_settings(authed_client
     assert "radarr-4k" not in authed_client.get("/api/config").get_json()["apps"]
 
 
+def test_a_removed_instances_id_is_never_given_to_another(authed_client):
+    assert save(authed_client, apps={"radarr-4k": INSTANCE}).status_code == 200
+    assert save(authed_client, apps={"radarr-4k": None}).status_code == 200
+    assert authed_client.get("/api/config").get_json()["removed_instances"] == ["radarr-4k"]
+    # Its backups are kept in radarr-4k/, so a new server can't move in there.
+    response = save(authed_client, apps={"radarr-4k": {**INSTANCE, "url": "http://other:7878"}})
+    assert response.status_code == 400 and "removed instance" in response.get_json()["error"]
+    assert save(authed_client, apps={"radarr-4k-2": INSTANCE}).status_code == 200
+    assert save(authed_client, apps={"radarr-4k-2": None}).status_code == 200
+    assert authed_client.get("/api/config").get_json()["removed_instances"] == ["radarr-4k", "radarr-4k-2"]
+    # A client can't clear the list.
+    assert save(authed_client, removed_instances=[]).status_code == 200
+    assert len(authed_client.get("/api/config").get_json()["removed_instances"]) == 2
+
+
 @pytest.mark.parametrize("apps, fragment", [
     ({"prowlarr-2": {"name": "x"}}, "unknown app"),
     ({"radarr_4k": {"name": "x"}}, "unknown app"),

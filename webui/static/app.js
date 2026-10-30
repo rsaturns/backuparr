@@ -10,10 +10,11 @@ let DISCOVERY_RUNNING = false;
 let PLEX_LOGIN = null;
 const APP_CREDENTIAL_EDIT_REVISION = new Map();
 const APP_DISCOVERY_UPDATES = new Map();
-// Saved extra instances (radarr-4k -> "4K"), and ones removed in Settings but
-// not saved yet.
+// Saved extra instances (radarr-4k -> "4K"), ones removed in Settings but
+// not saved yet, and the ids of saved removals, never given out again.
 const INSTANCE_NAMES = new Map();
 const REMOVED_INSTANCES = new Set();
+const RETIRED_INSTANCES = new Set();
 
 async function apiFetch(url, opts) {
   opts = { ...opts };
@@ -260,7 +261,10 @@ async function loadOverview() {
     });
   } catch (e) {
     summaryEl.innerHTML = "";
-    appsEl.innerHTML = `<p class="overview-empty">Error loading overview: ${e.message}</p>`;
+    const error = document.createElement("p");
+    error.className = "overview-empty";
+    error.textContent = `Error loading overview: ${e.message}`;
+    appsEl.replaceChildren(error);
   }
 }
 
@@ -388,14 +392,18 @@ function instanceCards(type) {
 }
 
 // The id names the instance's backup folder, so it's made once, from the
-// name it's added with: "4K" -> radarr-4k. Renaming keeps it.
+// name it's added with: "4K" -> radarr-4k. Renaming keeps it. A removed
+// instance's id stays taken: its backups are kept.
 function newInstanceId(type, name) {
-  const taken = new Set(Array.from(document.querySelectorAll(".app-card[data-app]"), (card) => card.dataset.app));
+  const taken = new Set([
+    ...Array.from(document.querySelectorAll(".app-card[data-app]"), (card) => card.dataset.app),
+    ...REMOVED_INSTANCES, ...RETIRED_INSTANCES,
+  ]);
   const max = 40 - type.length - 1;
   let slug = name.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   if (slug.startsWith(`${type}-`)) slug = slug.slice(type.length + 1); // "Radarr 4K" -> 4k
   slug = slug.slice(0, max).replace(/-+$/, "") || "2";
-  for (let n = 2, candidate = slug; ; n += 1, candidate = `${slug.slice(0, max - String(n).length - 1).replace(/-+$/, "")}-${n}`) {
+  for (let n = 1, candidate = slug; ; n += 1, candidate = `${slug.slice(0, max - String(n).length - 1).replace(/-+$/, "")}-${n}`) {
     if (!taken.has(`${type}-${candidate}`)) return `${type}-${candidate}`;
   }
 }
@@ -445,7 +453,6 @@ function addInstanceCard(appId, values = {}) {
 
   document.querySelector(`.instance-add[data-instance-of="${type}"]`).before(card);
   bindAppCard(card);
-  REMOVED_INSTANCES.delete(appId); // Removed, then added back under the same name.
   fillAppCard(appId, values);
   refreshHeaderScopes();
   return card;
@@ -453,9 +460,19 @@ function addInstanceCard(appId, values = {}) {
 
 function removeInstanceCard(card) {
   const appId = card.dataset.app;
+  const label = card.querySelector("h3").textContent;
+  // Like the server, refuse rather than quietly narrow a header's apps.
+  const scoped = Array.from(document.querySelectorAll(".request-header-row")).find((row) =>
+    (row.querySelector(".header-name").value.trim() || row.querySelector(".header-value").value)
+    && !row.querySelector(".header-scope-all").checked
+    && row.querySelector(`.header-scope-app[value="${appId}"]`).checked);
+  if (scoped) {
+    const name = scoped.querySelector(".header-name").value.trim() || "unnamed";
+    toast(`The ${name} request header is limited to ${label} - change the apps it goes to first.`, "fail");
+    return;
+  }
   if (INSTANCE_NAMES.has(appId)) REMOVED_INSTANCES.add(appId);
   APP_DISCOVERY_UPDATES.delete(appId);
-  const label = card.querySelector("h3").textContent;
   card.remove();
   refreshHeaderScopes();
   toast(`${label} removed - save settings to apply. Its backups are kept.`, "ok");
@@ -655,12 +672,13 @@ function clearDiscoveryResults() {
   });
 }
 
-// Finding a service never enables it for backups.
-function applyDiscoveredService(candidate, keyOnly = false) {
-  const card = appCard(candidate.app);
+// Finding a service never enables it for backups. candidate.app is only the
+// app type, so the card is named: it may be an extra instance's.
+function applyDiscoveredService(appId, candidate, keyOnly = false) {
+  const card = appCard(appId);
   if (!keyOnly) card.querySelector(".f-url").value = candidate.url;
   card.querySelector(".f-api_key").value = candidate.api_key || "";
-  markDiscovered(candidate.app);
+  markDiscovered(appId);
   card.querySelector(".status-dot").dataset.state = "idle";
   card.querySelector(".test-result").textContent = "";
   pruneNewInstanceChoices();
@@ -675,7 +693,7 @@ function autoFillDiscovered(appId, candidates, original) {
     && original.url === current.url && original.api_key === current.api_key;
   const keyOnly = !!single && !!current.url && trimUrl(current.url) === trimUrl(single.url) && !!single.api_key;
   if (!single || !unedited || current.api_key || (current.url && !keyOnly)) return;
-  applyDiscoveredService(single, keyOnly);
+  applyDiscoveredService(appId, single, keyOnly);
 }
 
 function renderInstanceChoice(appId, candidates) {
@@ -737,7 +755,7 @@ function renderInstanceChoice(appId, candidates) {
   });
   btn.addEventListener("click", () => {
     if (!selected) return;
-    applyDiscoveredService(selected);
+    applyDiscoveredService(appId, selected);
     update();
   });
   APP_DISCOVERY_UPDATES.set(appId, update);  // refreshed when the card's fields are edited
@@ -772,15 +790,18 @@ function renderDiscoveryResults(result, initial) {
   });
   groups.forEach((candidates, type) => {
     // A card already holding a candidate's URL gets that candidate only (so
-    // a missing key can be filled); the app's own card otherwise offers all.
+    // a missing key can be filled); the app's own card otherwise offers the
+    // ones no other card holds.
+    const unclaimed = candidates.filter((candidate) => !onInstanceCard(type, candidate.url));
     instanceCards(type).forEach((card) => {
       const appId = card.dataset.app;
       const url = trimUrl(readAppCard(appId).url);
       const own = candidates.filter((candidate) => url && trimUrl(candidate.url) === url);
-      if (!own.length && appId !== type) return;
+      const offered = own.length ? own : appId === type ? unclaimed : [];
+      if (!offered.length) return;
       markDiscovered(appId);
-      autoFillDiscovered(appId, own.length ? own : candidates, initial[appId]);
-      renderInstanceChoice(appId, own.length ? own : candidates);
+      autoFillDiscovered(appId, offered, initial[appId]);
+      renderInstanceChoice(appId, offered);
     });
     if (appMeta(type).multi_instance) renderNewInstanceChoices(type, candidates);
   });
@@ -996,8 +1017,8 @@ function buildHeaderScope(apps) {
   return scope;
 }
 
-// Rebuilt when an instance is added, renamed or removed; a removed one drops
-// out of every header's apps.
+// Rebuilt when an instance is added, renamed or removed. An instance can
+// only be removed while no header is limited to it.
 function refreshHeaderScopes() {
   document.querySelectorAll(".request-header-row").forEach((row) => {
     const old = row.querySelector(".header-scope");
@@ -1007,6 +1028,16 @@ function refreshHeaderScopes() {
     scope.open = old.open;
     old.replaceWith(scope);
     updateHeaderScopeSummary(row);
+  });
+}
+
+// A rename only changes the instance's label in each scope, so typing a
+// name doesn't rebuild every header's checkboxes.
+function relabelHeaderScopes(appId, label) {
+  document.querySelectorAll(`.header-scope-app[value="${appId}"]`).forEach((box) => {
+    box.dataset.label = label;
+    box.nextSibling.textContent = ` ${label}`;
+    updateHeaderScopeSummary(box.closest(".request-header-row"));
   });
 }
 
@@ -1097,6 +1128,8 @@ async function loadConfig() {
   document.getElementById("request-headers-list").replaceChildren();
   document.querySelectorAll(".instance-card").forEach((card) => card.remove());
   REMOVED_INSTANCES.clear();
+  RETIRED_INSTANCES.clear();
+  (cfg.removed_instances || []).forEach((appId) => RETIRED_INSTANCES.add(appId));
   rememberSavedInstances(cfg.apps || {});
   INSTANCE_NAMES.forEach((name, appId) => addInstanceCard(appId, cfg.apps[appId]));
   (cfg.request_headers || []).forEach(addRequestHeader);
@@ -1156,6 +1189,7 @@ async function saveSettings() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(cfg),
     });
+    REMOVED_INSTANCES.forEach((appId) => RETIRED_INSTANCES.add(appId));
     REMOVED_INSTANCES.clear();
     rememberSavedInstances(cfg.apps);
     resultEl.textContent = "Saved";
@@ -1605,7 +1639,7 @@ function bindAppCard(card) {
   card.querySelector(".f-enabled").addEventListener("change", (event) => setAppCardExpanded(card, event.target.checked));
   card.querySelector(".f-name")?.addEventListener("input", () => {
     updateInstanceCardLabel(card);
-    refreshHeaderScopes();
+    relabelHeaderScopes(card.dataset.app, card.querySelector("h3").textContent);
   });
   card.querySelector(".remove-instance")?.addEventListener("click", () => removeInstanceCard(card));
 }
@@ -1722,28 +1756,35 @@ function renderRunState(state) {
 }
 
 // Shared by refreshRunStatus/refreshRestoreStatus: fetch+render status once,
-// then - if it's running and no poll is already active - keep polling on an
-// interval, rendering each tick, until the status reports not-running.
+// then - if it's running and no poll is already active - keep polling,
+// rendering each tick, until the status reports not-running. The next tick is
+// only scheduled once one has rendered, so a slow response can't overlap or
+// land out of order; a failed tick (the container restarting) is reported
+// and retried.
 async function pollWhileRunning({ getTimer, setTimer, fetchStatus, render, intervalMs, onStopped, onError }) {
   try {
     const state = await fetchStatus();
     render(state);
-    if (state.running && !getTimer()) {
-      setTimer(
-        setInterval(async () => {
-          const s = await fetchStatus();
-          render(s);
-          if (!s.running) {
-            clearInterval(getTimer());
-            setTimer(null);
-            if (onStopped) onStopped(s);
-          }
-        }, intervalMs)
-      );
-    }
+    if (!state.running || getTimer()) return;
   } catch (e) {
     if (onError) onError(e);
+    return;
   }
+  const tick = async () => {
+    try {
+      const s = await fetchStatus();
+      render(s);
+      if (!s.running) {
+        setTimer(null);
+        if (onStopped) onStopped(s);
+        return;
+      }
+    } catch (e) {
+      if (onError) onError(e);
+    }
+    setTimer(setTimeout(tick, intervalMs));
+  };
+  setTimer(setTimeout(tick, intervalMs));
 }
 
 async function refreshRunStatus() {

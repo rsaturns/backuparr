@@ -42,6 +42,7 @@ import zipfile
 import requests
 
 from apps import sqlite_snapshot
+from apps.servarr import ApiKeySession
 
 logger = logging.getLogger(f"backuparr.{__name__}")
 
@@ -98,7 +99,7 @@ class EmbyApp:
         self.url = re.sub(r"/emby/?$", "", url.rstrip("/"))
         self.data_dir = data_dir or None
         self.timeout = timeout
-        self.session = requests.Session()
+        self.session = ApiKeySession(self.url)
         self.session.headers.update({"X-Emby-Token": api_key, "Accept": "application/json"})
 
     def server_info(self):

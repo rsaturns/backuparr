@@ -266,6 +266,19 @@ def test_restore_refuses_a_broken_settings_file_before_any_call(app, nzbget, tmp
     assert nzbget.sent == []
 
 
+def test_surrounding_spaces_in_a_value_survive(app, nzbget, tmp_path):
+    nzbget.options = [dict(o) for o in OPTIONS] + [{"Name": "Category3.Name", "Value": "  padded  "}]
+    app.restore_from_file(make_backup(app, tmp_path))
+    assert {"Name": "Category3.Name", "Value": "  padded  "} in nzbget.saved
+
+
+@pytest.mark.parametrize("value", ["two\nlines", "two\rlines", "trailing\r"])
+def test_a_value_with_a_line_break_fails_the_backup_instead_of_changing(app, nzbget, tmp_path, value):
+    nzbget.options = [dict(o) for o in OPTIONS] + [{"Name": "Feed1.Filter", "Value": value}]
+    with pytest.raises(NzbgetError, match="Feed1.Filter setting has a line break"):
+        app.backup(str(tmp_path / "out"))
+
+
 def test_comments_and_blank_lines_are_skipped():
     assert parse_options("# NZBGet backup\n\nMainDir=/d\r\n") == [{"Name": "MainDir", "Value": "/d"}]
 

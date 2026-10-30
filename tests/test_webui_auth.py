@@ -126,3 +126,26 @@ def test_reenabling_auth_reuses_existing_account(webui, monkeypatch):
     assert client.post("/api/login", json={"username": "admin", "password": "test-password"}).status_code == 200
     assert client.get("/api/meta").status_code == 200
     assert Path(auth_store.AUTH_PATH).read_bytes() == original_auth
+
+
+def test_non_ascii_username_can_log_in(webui):
+    client = webui.app.test_client()
+    assert client.post("/api/setup", json={"username": "Tím", "password": "test-password"}).status_code == 200
+    client.post("/api/logout", json={})
+    assert client.post("/api/login", json={"username": "Tim", "password": "test-password"}).status_code == 401
+    assert client.post("/api/login", json={"username": "日本", "password": "test-password"}).status_code == 401
+    assert client.post("/api/login", json={"username": "Tím", "password": "test-password"}).status_code == 200
+
+
+@pytest.mark.parametrize("body", [
+    {"username": 7, "password": "test-password"},
+    {"username": "admin", "password": 12345678},
+    ["admin", "test-password"],
+    "admin",
+])
+def test_non_string_credentials_are_rejected_not_500(webui, body):
+    client = webui.app.test_client()
+    assert client.post("/api/setup", json=body).status_code == 400
+    assert client.post("/api/setup", json={"username": "admin", "password": "test-password"}).status_code == 200
+    client.post("/api/logout", json={})
+    assert client.post("/api/login", json=body).status_code == 401

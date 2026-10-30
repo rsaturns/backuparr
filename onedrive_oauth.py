@@ -52,23 +52,28 @@ def remote_root(dest_cfg):
     return f"{REMOTE_NAME}:"
 
 
-def sync_rclone_remote(dest_cfg, force=False):
+def sync_rclone_remote(dest_cfg, force=False, remotes=None):
     """Writes (or removes) the REMOTE_NAME remote in rclone.conf to match
     destinations.onedrive. Unlike Google Drive, does NOT overwrite an
     existing token unless force=True or the remote doesn't exist yet -
     Microsoft rotates OneDrive refresh tokens on use, and rclone rewrites
     its own rotated token back into this file, so blindly replacing it
-    from our (stale) config.json copy would clobber a valid token."""
+    from our (stale) config.json copy would clobber a valid token.
+    `remotes` is a config_dump() the caller already has; nothing is
+    written when the remote already matches."""
+    remote = (rclone_util.config_dump() if remotes is None else remotes).get(REMOTE_NAME)
     if not dest_cfg.get("token"):
-        rclone_util.config_delete(REMOTE_NAME)
+        if remote is not None:
+            rclone_util.config_delete(REMOTE_NAME)
         return
 
-    existing = REMOTE_NAME in rclone_util.config_dump()
     fields = {
         "drive_id": dest_cfg.get("drive_id", ""),
         "drive_type": dest_cfg.get("drive_type", "personal"),
         "root_folder_id": dest_cfg.get("item_id", ""),
     }
-    if force or not existing:
+    if not force and remote is not None and all(remote.get(k, "") == v for k, v in fields.items()):
+        return
+    if force or remote is None:
         fields["token"] = dest_cfg["token"]
     rclone_util.config_set(REMOTE_NAME, "onedrive", fields, force=force)

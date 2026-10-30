@@ -47,8 +47,9 @@ def verify_password(username, password):
         return False
     data = _load()
     # Constant-time compare so a wrong username can't be timed against a
-    # wrong password.
-    valid_user = hmac.compare_digest(username, data.get("username", ""))
+    # wrong password. Bytes, because compare_digest refuses non-ASCII str.
+    valid_user = hmac.compare_digest(
+        username.encode("utf-8"), data.get("username", "").encode("utf-8"))
     try:
         _hasher.verify(data.get("password_hash", ""), password)
         valid_pass = True
