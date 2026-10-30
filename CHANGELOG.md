@@ -5,6 +5,13 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Security
+
+- The settings the web UI loads included the Google Drive, OneDrive and
+  Dropbox sign-in tokens, which never need to leave the server - anyone with a
+  logged-in browser session could read them. The UI now only learns whether
+  each one is connected.
+
 ### Fixed
 
 - A username with accented or other non-ASCII letters (such as `Tím`) could be

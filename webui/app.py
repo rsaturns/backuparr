@@ -532,9 +532,17 @@ def index():
 
 
 # -------------------------------------------------------------- config ----
+# OAuth tokens the UI only needs to know are there. Only the connect and
+# disconnect routes write them, so they never have to come back.
+_CONNECTED_TOKENS = (("gdrive", "refresh_token"), ("onedrive", "token"), ("dropbox", "token"))
+
+
 @app.get("/api/config")
 def api_get_config():
-    return jsonify(load_config())
+    cfg = load_config()
+    for dest, key in _CONNECTED_TOKENS:
+        cfg["destinations"][dest][key] = bool(cfg["destinations"][dest][key])
+    return jsonify(cfg)
 
 
 @app.get("/api/meta")
