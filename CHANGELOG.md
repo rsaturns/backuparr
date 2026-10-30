@@ -5,7 +5,12 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+
+- A username with accented or other non-ASCII letters (such as `Tím`) could be
+  set at first-run setup but then never log in - every login failed with a
+  server error, leaving only Reset. Setup and login also answered a username
+  or password sent as a number with a server error instead of rejecting it.
 
 ## [1.9.0-beta] - 2026-10-29
 

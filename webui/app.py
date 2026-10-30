@@ -249,6 +249,17 @@ def _check_auth():
     return None
 
 
+def _credentials_from_request():
+    """The username and password of a setup or login request, as strings -
+    anything else (a number, a list) counts as missing."""
+    data = request.get_json(force=True, silent=True)
+    if not isinstance(data, dict):
+        return "", ""
+    username, password = data.get("username"), data.get("password")
+    return (username.strip() if isinstance(username, str) else "",
+            password if isinstance(password, str) else "")
+
+
 @app.get("/setup")
 def setup_page():
     return render_template("setup.html", version=VERSION)
@@ -256,9 +267,7 @@ def setup_page():
 
 @app.post("/api/setup")
 def api_setup():
-    data = request.get_json(force=True, silent=True) or {}
-    username = (data.get("username") or "").strip()
-    password = data.get("password") or ""
+    username, password = _credentials_from_request()
     if not username or not password:
         return jsonify({"error": "Username and password are required"}), 400
     if len(password) < 8:
@@ -281,9 +290,7 @@ def api_login():
     if wait:
         return jsonify({"error": f"Too many failed attempts - try again in {int(wait) + 1}s"}), 429
 
-    data = request.get_json(force=True, silent=True) or {}
-    username = (data.get("username") or "").strip()
-    password = data.get("password") or ""
+    username, password = _credentials_from_request()
     if not auth_store.verify_password(username, password):
         _login_record_failure(ip)
         return jsonify({"error": "Incorrect username or password"}), 401
