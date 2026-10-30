@@ -49,6 +49,9 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   leaving it with no apps and a confusing save error. Settings now says which
   header to change first.
 
+- Emby and Seerr backups failed, or read the wrong file, when the mounted data
+  folder's path contained `#`, `?` or `%`.
+
 ## [1.9.0-beta] - 2026-10-29
 
 ### Added
