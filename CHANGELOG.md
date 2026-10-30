@@ -12,6 +12,11 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   logged-in browser session could read them. The UI now only learns whether
   each one is connected.
 
+- Profilarr, Bazarr, Emby, Seerr and SABnzbd sent their API key to whatever
+  host a redirect pointed at, such as a reverse proxy's login page on another
+  domain. Like Radarr, Sonarr and Prowlarr, they now refuse redirects to a
+  different host unless `BACKUPARR_ALLOW_CROSS_HOST_REDIRECTS` is set.
+
 ### Fixed
 
 - A username with accented or other non-ASCII letters (such as `Tím`) could be

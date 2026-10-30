@@ -69,7 +69,11 @@ def _same_origin(source, target):
         return False
 
 
-class _ServarrSession(requests.Session):
+class ApiKeySession(requests.Session):
+    """A session that won't carry its API key, or a request body, to another
+    host: requests drops Authorization on a cross-host redirect but keeps
+    custom headers such as X-Api-Key, and resends the body on a 307/308."""
+
     def __init__(self, service_url, strict=False):
         super().__init__()
         self._service_url = requests.Request("GET", service_url).prepare().url
@@ -106,7 +110,7 @@ class ServarrApp:
         self.name = name
         self.url = url.rstrip("/")
         self.timeout = timeout
-        self.session = _ServarrSession(self.url, strict=strict_redirects)
+        self.session = ApiKeySession(self.url, strict=strict_redirects)
         self.session.headers.update({"X-Api-Key": api_key, "Accept": "application/json"})
 
     def _api(self, path):

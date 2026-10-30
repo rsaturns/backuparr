@@ -39,6 +39,7 @@ import zipfile
 import requests
 
 from apps import sqlite_snapshot
+from apps.servarr import ApiKeySession
 
 logger = logging.getLogger(f"backuparr.{__name__}")
 
@@ -77,7 +78,7 @@ class SeerrApp:
         self.url = url.rstrip("/")
         self.data_dir = data_dir or None
         self.timeout = timeout
-        self.session = requests.Session()
+        self.session = ApiKeySession(self.url)
         self.session.headers.update({"X-Api-Key": api_key, "Accept": "application/json"})
 
     def identity(self):

@@ -35,6 +35,8 @@ import zipfile
 
 import requests
 
+from apps.servarr import ApiKeySession
+
 logger = logging.getLogger(f"backuparr.{__name__}")
 
 
@@ -47,7 +49,7 @@ class BazarrApp:
         self.url = url.rstrip("/")
         self.api_key = api_key
         self.timeout = timeout
-        self.session = requests.Session()
+        self.session = ApiKeySession(self.url)
         self.session.headers.update({"X-API-KEY": api_key, "Accept": "application/json"})
         self.download_auth = (username, password) if username and password else None
 
