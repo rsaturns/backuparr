@@ -25,6 +25,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The Overview showed its error message as HTML, the one place the web UI
   didn't treat text from the server as plain text. It now does.
 
+- The CI and release workflows run third-party GitHub Actions pinned to exact
+  commits instead of version tags that can be moved, so a compromised action
+  can't slip into the image build or the Docker Hub push.
+
 ### Fixed
 
 - A username with accented or other non-ASCII letters (such as `Tím`) could be
