@@ -84,6 +84,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   failed request (the container restarting) went unreported. The view now asks
   again only after each answer, and shows and retries failures.
 
+- A Tdarr restore cut off partway, for example by a network drop, failed with
+  a bare connection error. It now says which collection was left partly
+  restored and how far it got, and that running the restore again finishes it.
+
 ### Changed
 
 - Opening History or Restore, downloading or deleting a backup, and every

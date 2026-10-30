@@ -167,17 +167,24 @@ def test_restore_follows_the_documented_collection_order(tmp_path):
     assert [w["collection"] for w in writes(app)] == COLLECTIONS
 
 
-def test_a_failing_write_stops_the_restore():
+@pytest.mark.parametrize("failure", [Reply(status=500), requests.exceptions.ConnectionError("reset")])
+def test_a_failing_write_stops_the_restore_and_says_where(failure):
     app = app_with()
+    inserted = []
 
     def post(url, json=None, timeout=None):
         if json["data"]["mode"] == "insert":
-            return Reply(status=500)
+            if len(inserted) == 2:
+                if isinstance(failure, Exception):
+                    raise failure
+                return failure
+            inserted.append(json["data"]["docID"])
         return Reply(None, text="")
 
     app.session.post = post
-    with pytest.raises(requests.exceptions.HTTPError):
-        app.restore_collection("FlowsJSONDB", [{"_id": "a"}])
+    with pytest.raises(TdarrError, match=r"partway through FileJSONDB \(2 of 4 documents put back\).*run the restore again"):
+        app.restore_collection("FileJSONDB", [{"_id": i} for i in "abcd"])
+    assert inserted == ["a", "b"]
 
 
 @pytest.mark.parametrize("bad", ["{not json", '{"a": 1}', "[1, 2]"])
