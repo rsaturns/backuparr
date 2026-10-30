@@ -233,10 +233,16 @@ def test_reset_removes_only_backuparrs_archives_from_a_custom_local_folder(isola
     (custom / "photos").mkdir()
     (custom / "photos" / "holiday.jpg").write_text("mine")
     (custom / "radarr_20261001_030000.zip").write_text("not in an app folder")
+    # An extra instance's folder too, even one no longer configured.
+    (custom / "radarr-4k").mkdir()
+    (custom / "radarr-4k" / "radarr-4k_20261001_030000.zip").write_text("backup")
+    (custom / "plex-2").mkdir()
+    (custom / "plex-2" / "plex-2_20261001_030000.zip").write_text("not an instance")
     authed_client.post("/api/config", json={"destinations": {"local": {"path": str(custom)}}})
     authed_client.post("/api/reset", json={"confirm": isolated_webui.RESET_CONFIRM_PHRASE})
     assert sorted(p.relative_to(custom).as_posix() for p in custom.rglob("*")) == [
-        "photos", "photos/holiday.jpg", "radarr_20261001_030000.zip", "sonarr", "sonarr/notes.txt",
+        "photos", "photos/holiday.jpg", "plex-2", "plex-2/plex-2_20261001_030000.zip",
+        "radarr_20261001_030000.zip", "sonarr", "sonarr/notes.txt",
     ]
 
 

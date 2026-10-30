@@ -40,7 +40,7 @@ from apps.servarr import ServarrError, UnsafeRedirectError
 from apps.sonarr import SonarrApp
 from apps.tautulli import TautulliApp, TautulliError
 from apps.tdarr import TdarrApp, TdarrError
-from config_store import APP_NAMES, ConfigError, enabled_apps, enabled_destinations
+from config_store import ConfigError, enabled_apps, enabled_destinations, instance_type
 
 LOG_DIR = os.environ.get("BACKUPARR_LOG_DIR", "/var/log/backuparr")
 LOG_FILE = os.path.join(LOG_DIR, "backup.log")
@@ -203,7 +203,8 @@ def log_failure(logger, summary, exc, url=None, app=None):
 
 
 def build_app(name, app_cfg):
-    return configure_app_headers(_build_app(name, app_cfg), app_cfg.get("request_headers", []))
+    """`name` is an app or an instance id - radarr-4k builds a Radarr."""
+    return configure_app_headers(_build_app(instance_type(name), app_cfg), app_cfg.get("request_headers", []))
 
 
 def _build_app(name, app_cfg):
@@ -310,14 +311,15 @@ def format_run_message(ok, failed):
 def apply_retention(root, retention_days, now=None):
     """Deletes each app's backups older than retention_days from one
     destination, always keeping its newest - so an app that keeps failing,
-    or was switched off, still has its last good backup. Only Backuparr's
-    own <app>/<app>_<timestamp> archives are touched; age comes from the
+    or was switched off (or an instance that was removed), still has its
+    last good backup. Only Backuparr's own <app>/<app>_<timestamp> archives
+    are touched, <app> being an app or instance id; age comes from the
     timestamp in the name, written in this container's local time."""
     cutoff = (now or datetime.now()) - timedelta(days=int(retention_days))
     per_app = {}
     for entry in rclone_util.lsjson(root, recursive=True):
         app, sep, name = entry.get("Path", "").partition("/")
-        if entry.get("IsDir") or not sep or app not in APP_NAMES or not destination_util.is_backup_name(app, name):
+        if entry.get("IsDir") or not sep or not instance_type(app) or not destination_util.is_backup_name(app, name):
             continue
         per_app.setdefault(app, []).append(name)
     for app, names in per_app.items():
@@ -341,9 +343,9 @@ class RunCancelled(Exception):
 
 
 def run_backup(cfg, on_progress=None, should_cancel=None):
-    """Run one backup pass for every enabled app, uploading to every
-    enabled destination. Returns (ok, failed) - failed entries are
-    "<app>: <message>" strings.
+    """Run one backup pass for every enabled app instance, uploading to
+    every enabled destination. Returns (ok, failed) - failed entries are
+    "<instance id>: <message>" strings.
 
     on_progress(index, total, name), if given, is called right before each
     app starts - lets a caller (e.g. the web UI) show "app N of M".

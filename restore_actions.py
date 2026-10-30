@@ -12,6 +12,7 @@ import zipfile
 import rclone_util
 from apps.sabnzbd import MASKED
 from backup import build_app
+from config_store import instance_type
 
 # Restored by uploading the archive to the app, which then restarts.
 UPLOAD_RESTORE_APPS = {"radarr", "sonarr", "prowlarr"}
@@ -116,7 +117,7 @@ def restore_sabnzbd(app_cfg, config, password_prompt):
 
 
 def restore_app(app_name, app_cfg, tmp_dir, local_zip, *, bazarr_backup_dir=None, sabnzbd_config=None, sabnzbd_password_prompt=None):
-    """Maps an app name to its restore action. The caller owns the UX around
+    """Maps an app or instance id to its restore action. The caller owns the UX around
     it (confirmation, progress reporting) and any app-specific prep.
 
     bazarr_backup_dir is required for bazarr. sabnzbd_password_prompt is
@@ -128,7 +129,7 @@ def restore_app(app_name, app_cfg, tmp_dir, local_zip, *, bazarr_backup_dir=None
       {"kind": "bazarr"} / {"kind": "tdarr"} / {"kind": "jellyfin"} / {"kind": "emby"} / {"kind": "plex"} / {"kind": "seerr"} / {"kind": "nzbget"}
       {"kind": "tautulli", "summary": {...}} / {"kind": "sabnzbd", "summary": {...}}
     """
-    if app_name in UPLOAD_RESTORE_APPS:
+    if instance_type(app_name) in UPLOAD_RESTORE_APPS:
         restore_upload_app(app_name, app_cfg, local_zip)
         return {"kind": "upload"}
     if app_name == "bazarr":

@@ -4,6 +4,7 @@ import copy
 import json
 import logging
 import os
+import re
 import tempfile
 
 import secrets_crypto
@@ -23,11 +24,23 @@ APP_NAMES = ["radarr", "sonarr", "prowlarr", "profilarr", "bazarr", "tdarr", "sa
 
 DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "password": ""}
 
+# Apps that can run more than once - e.g. a 4K Radarr beside the HD one. The
+# first instance keeps the bare app id, so its config, remote folder and
+# archive names never change; each extra one is "<app>-<suffix>" (radarr-4k),
+# an id fixed when it's added because it names the instance's backup folder.
+# Only its display name can change later.
+MULTI_INSTANCE_APPS = ("radarr", "sonarr")
+MAX_EXTRA_INSTANCES = 10
+_EXTRA_INSTANCE_ID = re.compile(rf"({'|'.join(MULTI_INSTANCE_APPS)})-([a-z0-9]+(?:-[a-z0-9]+)*)")
+_MAX_INSTANCE_ID_LENGTH = 40
+# An extra instance also has a display name, e.g. "Radarr 4K".
+DEFAULT_INSTANCE = {**DEFAULT_APP, "name": ""}
+
 # Drives the web UI's forms generically. "coming_soon" apps render
 # disabled with a badge, same as DESTINATION_META below.
 APP_META = [
-    {"id": "radarr", "label": "Radarr", "icon": "radarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://radarr:7878", "extra_fields": []},
-    {"id": "sonarr", "label": "Sonarr", "icon": "sonarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://sonarr:8989", "extra_fields": []},
+    {"id": "radarr", "label": "Radarr", "icon": "radarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://radarr:7878", "extra_fields": [], "multi_instance": True},
+    {"id": "sonarr", "label": "Sonarr", "icon": "sonarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://sonarr:8989", "extra_fields": [], "multi_instance": True},
     {"id": "prowlarr", "label": "Prowlarr", "icon": "prowlarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://prowlarr:9696", "extra_fields": []},
     {
         "id": "profilarr",
@@ -364,22 +377,47 @@ DEFAULTS = {
     "destinations": {name: dict(DEFAULT_DEST[name]) for name in DEST_NAMES},
 }
 
+def instance_type(instance_id):
+    """The app an instance id runs ("radarr" for radarr-4k), or None if
+    it isn't a well-formed instance id."""
+    if instance_id in APP_NAMES:
+        return instance_id
+    if not isinstance(instance_id, str) or len(instance_id) > _MAX_INSTANCE_ID_LENGTH:
+        return None
+    match = _EXTRA_INSTANCE_ID.fullmatch(instance_id)
+    return match.group(1) if match else None
+
+
+def instance_ids(cfg):
+    """Every configured instance id, each app's extra instances right after
+    its first one."""
+    extras = {}
+    for instance_id in cfg["apps"]:
+        if instance_id not in APP_NAMES and instance_type(instance_id):
+            extras.setdefault(instance_type(instance_id), []).append(instance_id)
+    return [i for name in APP_NAMES for i in [name, *sorted(extras.get(name, []))]]
+
+
 def _secret_fields(cfg):
-    """(container_dict, key) for every value encrypted at rest - an
-    explicit allowlist, not "encrypt everything"."""
-    fields = [(cfg["apps"][name], "api_key") for name in APP_NAMES]
-    fields.append((cfg["apps"]["bazarr"], "password"))
-    fields.append((cfg["apps"]["nzbget"], "password"))
-    fields.append((cfg["destinations"]["gdrive"], "client_secret"))
-    fields.append((cfg["destinations"]["gdrive"], "developer_key"))
-    fields.append((cfg["destinations"]["gdrive"], "refresh_token"))
-    fields.append((cfg["destinations"]["onedrive"], "token"))
-    fields.append((cfg["destinations"]["dropbox"], "token"))
-    fields.append((cfg, "notify_url"))
+    """(ref, container_dict, key) for every value encrypted at rest - an
+    explicit allowlist, not "encrypt everything". `ref` names the field the
+    same way across saves, so adding or removing an instance never lines up
+    one field's stored value with another."""
+    fields = []
+    for instance_id in instance_ids(cfg):
+        app = cfg["apps"][instance_id]
+        fields.append((("apps", instance_id, "api_key"), app, "api_key"))
+        if instance_type(instance_id) in ("bazarr", "nzbget"):
+            fields.append((("apps", instance_id, "password"), app, "password"))
+    for dest, key in (("gdrive", "client_secret"), ("gdrive", "developer_key"), ("gdrive", "refresh_token"),
+                      ("onedrive", "token"), ("dropbox", "token")):
+        fields.append((("destinations", dest, key), cfg["destinations"][dest], key))
+    fields.append((("notify_url",), cfg, "notify_url"))
     rows = cfg.get("request_headers", [])
     if not isinstance(rows, list) or any(not isinstance(row, dict) or not isinstance(row.get("value"), str) for row in rows):
         raise ConfigError("request_headers must be a list of name/value pairs")
-    fields.extend((row, "value") for row in rows)
+    # A header row is the same field only at the same position with the same name.
+    fields.extend((("request_headers", index, row.get("name")), row, "value") for index, row in enumerate(rows))
     return fields
 
 
@@ -388,8 +426,12 @@ def _merge_defaults(data):
     for key, value in data.items():
         if key not in ("apps", "destinations"):
             merged[key] = value
+    apps = data.get("apps", {})
     for name in APP_NAMES:
-        merged["apps"][name].update(data.get("apps", {}).get(name, {}))
+        merged["apps"][name].update(apps.get(name, {}))
+    for instance_id, app_data in apps.items():
+        if instance_id not in APP_NAMES and instance_type(instance_id):
+            merged["apps"][instance_id] = {**DEFAULT_INSTANCE, **app_data}
     for name in DEST_NAMES:
         merged["destinations"][name].update(data.get("destinations", {}).get(name, {}))
     return merged
@@ -397,13 +439,15 @@ def _merge_defaults(data):
 
 def _stored_secret_fields():
     """The secret fields as config.json holds them now (still encrypted),
-    in _secret_fields() order, or [] if it can't be read."""
+    by _secret_fields() ref, or {} if it can't be read."""
     try:
         with open(CONFIG_PATH) as f:
             data = json.load(f)
-        return _secret_fields(_merge_defaults(data)) if isinstance(data, dict) else []
+        if not isinstance(data, dict):
+            return {}
+        return {ref: (container, key) for ref, container, key in _secret_fields(_merge_defaults(data))}
     except (OSError, ValueError, ConfigError, AttributeError, TypeError):
-        return []
+        return {}
 
 
 def load_config():
@@ -426,14 +470,14 @@ def load_config():
 
     # Decrypt in place; a legacy plaintext value gets re-saved encrypted.
     needs_migration = False
-    for container, key in _secret_fields(merged):
+    for _ref, container, key in _secret_fields(merged):
         raw = container.get(key, "")
         if raw and not raw.startswith(secrets_crypto.PREFIX):
             needs_migration = True
         container[key] = secrets_crypto.decrypt(raw)
 
     try:
-        validate_request_headers(merged["request_headers"], APP_NAMES)
+        validate_request_headers(merged["request_headers"], instance_ids(merged))
     except RequestHeadersError as exc:
         raise ConfigError(str(exc)) from None
     if needs_migration:
@@ -444,20 +488,19 @@ def load_config():
 
 def save_config(cfg):
     try:
-        validate_request_headers(cfg.get("request_headers", []), APP_NAMES)
+        validate_request_headers(cfg.get("request_headers", []), instance_ids(cfg))
     except RequestHeadersError as exc:
         raise ConfigError(str(exc)) from None
     to_write = copy.deepcopy(cfg)
     stored = _stored_secret_fields()
     kept = 0
-    for index, (container, key) in enumerate(_secret_fields(to_write)):
+    for ref, container, key in _secret_fields(to_write):
         value = container.get(key, "")
-        old = stored[index] if index < len(stored) else None
+        old = stored.get(ref)
         # A secret the current key can't decrypt loads as "" - saving that
         # would erase it for good. Keep it encrypted as it is, unless a new
         # value was entered (or a header row was replaced).
-        if (not value and old is not None and old[0].get("name") == container.get("name")
-                and secrets_crypto.undecryptable(old[0].get(old[1], ""))):
+        if not value and old is not None and secrets_crypto.undecryptable(old[0].get(old[1], "")):
             container[key] = old[0][old[1]]
             kept += 1
             continue
@@ -480,27 +523,29 @@ def save_config(cfg):
         raise
 
 
-def _enabled(names, meta, cfg_section):
+def _enabled(names, meta, cfg_section, kind=lambda name: name):
     """Only "available" entries can be enabled - guards against a
     hand-edited config.json flipping on a coming_soon entry."""
     available = {m["id"] for m in meta if m["status"] == "available"}
-    return [name for name in names if name in available and cfg_section.get(name, {}).get("enabled")]
+    return [name for name in names if kind(name) in available and cfg_section.get(name, {}).get("enabled")]
 
 
 def enabled_apps(cfg):
-    return _enabled(APP_NAMES, APP_META, cfg["apps"])
+    """Enabled instance ids, e.g. ["radarr", "radarr-4k", "sonarr"]."""
+    return _enabled(instance_ids(cfg), APP_META, cfg["apps"], instance_type)
 
 
+# These take an app or an instance id: an instance shares its app's metadata.
 def key_required(name):
-    return next((m["key_required"] for m in APP_META if m["id"] == name), True)
+    return next((m["key_required"] for m in APP_META if m["id"] == instance_type(name)), True)
 
 
 def restore_supported(name):
-    return next((m.get("restore_supported", True) for m in APP_META if m["id"] == name), True)
+    return next((m.get("restore_supported", True) for m in APP_META if m["id"] == instance_type(name)), True)
 
 
 def app_meta(name):
-    return next((m for m in APP_META if m["id"] == name), None)
+    return next((m for m in APP_META if m["id"] == instance_type(name)), None)
 
 
 def enabled_destinations(cfg):
