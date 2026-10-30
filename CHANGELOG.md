@@ -17,6 +17,11 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   domain. Like Radarr, Sonarr and Prowlarr, they now refuse redirects to a
   different host unless `BACKUPARR_ALLOW_CROSS_HOST_REDIRECTS` is set.
 
+- Backuparr passed the Google Drive client secret and refresh token to rclone
+  on its command line every time it opened History, Restore or ran a backup,
+  where any user on the Docker host could see them with `ps`. It now does so
+  only when the Google Drive settings change.
+
 ### Fixed
 
 - A username with accented or other non-ASCII letters (such as `Tím`) could be
