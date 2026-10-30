@@ -72,6 +72,11 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   unauthorized ...", which on the Overview read as if the first Radarr had
   failed. It now reads "radarr-4k: unauthorized ...".
 
+- While a backup or restore ran, a slow status reply could let the progress
+  view's requests pile up and show an older state after a newer one, and a
+  failed request (the container restarting) went unreported. The view now asks
+  again only after each answer, and shows and retries failures.
+
 ## [1.9.0-beta] - 2026-10-29
 
 ### Added

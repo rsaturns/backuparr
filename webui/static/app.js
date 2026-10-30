@@ -1743,28 +1743,35 @@ function renderRunState(state) {
 }
 
 // Shared by refreshRunStatus/refreshRestoreStatus: fetch+render status once,
-// then - if it's running and no poll is already active - keep polling on an
-// interval, rendering each tick, until the status reports not-running.
+// then - if it's running and no poll is already active - keep polling,
+// rendering each tick, until the status reports not-running. The next tick is
+// only scheduled once one has rendered, so a slow response can't overlap or
+// land out of order; a failed tick (the container restarting) is reported
+// and retried.
 async function pollWhileRunning({ getTimer, setTimer, fetchStatus, render, intervalMs, onStopped, onError }) {
   try {
     const state = await fetchStatus();
     render(state);
-    if (state.running && !getTimer()) {
-      setTimer(
-        setInterval(async () => {
-          const s = await fetchStatus();
-          render(s);
-          if (!s.running) {
-            clearInterval(getTimer());
-            setTimer(null);
-            if (onStopped) onStopped(s);
-          }
-        }, intervalMs)
-      );
-    }
+    if (!state.running || getTimer()) return;
   } catch (e) {
     if (onError) onError(e);
+    return;
   }
+  const tick = async () => {
+    try {
+      const s = await fetchStatus();
+      render(s);
+      if (!s.running) {
+        setTimer(null);
+        if (onStopped) onStopped(s);
+        return;
+      }
+    } catch (e) {
+      if (onError) onError(e);
+    }
+    setTimer(setTimeout(tick, intervalMs));
+  };
+  setTimer(setTimeout(tick, intervalMs));
 }
 
 async function refreshRunStatus() {
