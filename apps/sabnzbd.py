@@ -23,8 +23,6 @@ import json
 import logging
 import os
 
-import requests
-
 from apps.servarr import ApiKeySession
 
 logger = logging.getLogger(f"backuparr.{__name__}")

@@ -27,7 +27,6 @@ Auth: the API key goes in the X-Api-Key header, which leaves Authorization
 free for a reverse proxy's own credentials. Seerr only accepts it once its
 setup has created the admin account.
 """
-import hmac
 import json
 import logging
 import os
