@@ -261,7 +261,10 @@ async function loadOverview() {
     });
   } catch (e) {
     summaryEl.innerHTML = "";
-    appsEl.innerHTML = `<p class="overview-empty">Error loading overview: ${e.message}</p>`;
+    const error = document.createElement("p");
+    error.className = "overview-empty";
+    error.textContent = `Error loading overview: ${e.message}`;
+    appsEl.replaceChildren(error);
   }
 }
 

@@ -22,6 +22,9 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   where any user on the Docker host could see them with `ps`. It now does so
   only when the Google Drive settings change.
 
+- The Overview showed its error message as HTML, the one place the web UI
+  didn't treat text from the server as plain text. It now does.
+
 ### Fixed
 
 - A username with accented or other non-ASCII letters (such as `Tím`) could be
