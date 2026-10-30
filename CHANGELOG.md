@@ -36,6 +36,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   ids and never reuses them. The second instance with the same name also gets
   `-2` instead of `-3`.
 
+- Prowlarr discovery wrote what it found for an extra Radarr/Sonarr instance -
+  its API key, and with **Use this service** its URL too - into the first
+  instance's card, leaving that one with the wrong server or key.
+
 ## [1.9.0-beta] - 2026-10-29
 
 ### Added

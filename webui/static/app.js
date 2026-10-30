@@ -659,12 +659,13 @@ function clearDiscoveryResults() {
   });
 }
 
-// Finding a service never enables it for backups.
-function applyDiscoveredService(candidate, keyOnly = false) {
-  const card = appCard(candidate.app);
+// Finding a service never enables it for backups. candidate.app is only the
+// app type, so the card is named: it may be an extra instance's.
+function applyDiscoveredService(appId, candidate, keyOnly = false) {
+  const card = appCard(appId);
   if (!keyOnly) card.querySelector(".f-url").value = candidate.url;
   card.querySelector(".f-api_key").value = candidate.api_key || "";
-  markDiscovered(candidate.app);
+  markDiscovered(appId);
   card.querySelector(".status-dot").dataset.state = "idle";
   card.querySelector(".test-result").textContent = "";
   pruneNewInstanceChoices();
@@ -679,7 +680,7 @@ function autoFillDiscovered(appId, candidates, original) {
     && original.url === current.url && original.api_key === current.api_key;
   const keyOnly = !!single && !!current.url && trimUrl(current.url) === trimUrl(single.url) && !!single.api_key;
   if (!single || !unedited || current.api_key || (current.url && !keyOnly)) return;
-  applyDiscoveredService(single, keyOnly);
+  applyDiscoveredService(appId, single, keyOnly);
 }
 
 function renderInstanceChoice(appId, candidates) {
@@ -741,7 +742,7 @@ function renderInstanceChoice(appId, candidates) {
   });
   btn.addEventListener("click", () => {
     if (!selected) return;
-    applyDiscoveredService(selected);
+    applyDiscoveredService(appId, selected);
     update();
   });
   APP_DISCOVERY_UPDATES.set(appId, update);  // refreshed when the card's fields are edited
