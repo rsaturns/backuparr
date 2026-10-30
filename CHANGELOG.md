@@ -5,7 +5,13 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- More than one Radarr or Sonarr (#46), such as a 4K Radarr beside the HD one
+  or an anime Sonarr. **Add another Radarr/Sonarr** in Settings adds a named
+  instance with its own settings, backups, History, Restore and authentication
+  headers; Prowlarr discovery can add the ones it finds. Existing settings and
+  backups are unchanged.
 
 ## [1.8.14-beta] - 2026-10-29
 

@@ -225,7 +225,7 @@ def test_an_instance_a_header_is_scoped_to_cant_be_removed_from_under_it(authed_
     header = {"name": "X-Token", "value": "t", "apps": ["radarr-4k"]}
     save(authed_client, apps={"radarr-4k": INSTANCE}, request_headers=[header])
     response = save(authed_client, apps={"radarr-4k": None})
-    assert response.status_code == 400 and "known app" in response.get_json()["error"]
+    assert response.status_code == 400 and "limited to radarr-4k, which is being removed" in response.get_json()["error"]
     assert save(authed_client, apps={"radarr-4k": None}, request_headers=[]).status_code == 200
 
 

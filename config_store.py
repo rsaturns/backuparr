@@ -39,8 +39,8 @@ DEFAULT_INSTANCE = {**DEFAULT_APP, "name": ""}
 # Drives the web UI's forms generically. "coming_soon" apps render
 # disabled with a badge, same as DESTINATION_META below.
 APP_META = [
-    {"id": "radarr", "label": "Radarr", "icon": "radarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://radarr:7878", "extra_fields": [], "multi_instance": True},
-    {"id": "sonarr", "label": "Sonarr", "icon": "sonarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://sonarr:8989", "extra_fields": [], "multi_instance": True},
+    {"id": "radarr", "label": "Radarr", "icon": "radarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://radarr:7878", "extra_fields": [], "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
+    {"id": "sonarr", "label": "Sonarr", "icon": "sonarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://sonarr:8989", "extra_fields": [], "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
     {"id": "prowlarr", "label": "Prowlarr", "icon": "prowlarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://prowlarr:9696", "extra_fields": []},
     {
         "id": "profilarr",

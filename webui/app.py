@@ -589,8 +589,15 @@ def _validate_config(data, cfg):
         return error
     # Checked against the instances there will be, so a header can't be left
     # scoped to a removed one.
+    headers = data.get("request_headers", cfg.get("request_headers", []))
+    removed = {name for name, app_data in data.get("apps", {}).items() if app_data is None}
+    for index, row in enumerate(headers if isinstance(headers, list) else [], 1):
+        scope = row.get("apps") if isinstance(row, dict) else None
+        gone = sorted(removed & set(scope)) if isinstance(scope, list) and all(isinstance(i, str) for i in scope) else []
+        if gone:
+            return f"Request header {index} is limited to {gone[0]}, which is being removed - change the apps it goes to first"
     try:
-        validate_request_headers(data.get("request_headers", cfg.get("request_headers", [])), _instances_after(data, cfg))
+        validate_request_headers(headers, _instances_after(data, cfg))
     except RequestHeadersError as exc:
         return str(exc)
     if "retention_days" in data:
