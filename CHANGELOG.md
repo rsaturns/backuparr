@@ -60,6 +60,9 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   value with a line break in it, which the backup can't hold, now fails the
   backup with the setting's name instead of being split into two lines.
 
+- Jellyfin's **Test** could fail with an unexpected error instead of "check
+  the volume mount" when the first backup Jellyfin listed had no path.
+
 ## [1.9.0-beta] - 2026-10-29
 
 ### Added

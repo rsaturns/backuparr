@@ -116,11 +116,11 @@ class JellyfinApp:
         version = self.server_version()
         backups = self.list_backups()
         self._require_folder()
-        names = [_server_filename(b.get("Path")) for b in backups if b.get("Path")]
-        if names and not any(os.path.isfile(os.path.join(self.backup_dir, n)) for n in names):
+        paths = [b["Path"] for b in backups if b.get("Path")]
+        if paths and not any(os.path.isfile(os.path.join(self.backup_dir, _server_filename(p))) for p in paths):
             raise JellyfinError(
                 f"jellyfin: {self.backup_dir} doesn't hold the backups Jellyfin lists in "
-                f"{_server_folder(backups[0]['Path'])} - check the volume mount"
+                f"{_server_folder(paths[0])} - check the volume mount"
             )
         if not os.access(self.backup_dir, os.W_OK):
             return f"jellyfin {version} reachable; backups folder is read-only, so backups work but restores won't"

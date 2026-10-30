@@ -105,6 +105,12 @@ def test_a_folder_missing_jellyfins_listed_backups_is_the_wrong_mount(app, serve
     assert app.test_connection().endswith("backups folder OK")
 
 
+def test_a_listed_backup_without_a_path_doesnt_hide_the_wrong_mount(app, server, folder):
+    server.routes["GET /Backup"] = (200, [{"DateCreated": "2026-10-01T00:00:00Z"}, entry("jellyfin-backup-1.zip")])
+    with pytest.raises(JellyfinError, match=f"doesn't hold the backups Jellyfin lists in {SERVER_DIR}"):
+        app.test_connection()
+
+
 def test_a_read_only_folder_still_passes_with_a_note(app, server, monkeypatch):
     monkeypatch.setattr(jellyfin.os, "access", lambda path, mode: mode != os.W_OK)
     assert app.test_connection() == "jellyfin 12.4.0 reachable; backups folder is read-only, so backups work but restores won't"
