@@ -85,7 +85,9 @@ class FakeBazarr:
             files = [] if self.listed == 1 else [{"filename": "bazarr_backup_v1.zip"}]
             res._content = requests.compat.json.dumps({"data": files}).encode()
         else:
+            assert kwargs.get("stream") is True  # never the whole archive in memory
             res._content = self.downloads.pop(0)
+        res._content_consumed = True  # iter_content() then serves _content
         return res
 
     def post(self, url, **kwargs):

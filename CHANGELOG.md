@@ -98,6 +98,9 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   whole log file each time (up to 1 MB every 1.5 seconds), and the run's log
   they send is capped at its newest 500 lines.
 
+- Bazarr backups and restores no longer hold the whole archive in memory,
+  which matters for a large database on a small NAS.
+
 ## [1.9.0-beta] - 2026-10-29
 
 ### Added
