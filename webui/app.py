@@ -42,13 +42,18 @@ from config_store import (
     CONFIG_PATH,
     ConfigError,
     DEFAULT_APP,
+    DEFAULT_INSTANCE,
     DEST_EDITABLE_FIELDS,
     DEST_NAMES,
     DESTINATION_META,
     app_meta,
     destination_meta,
+    instance_ids,
+    instance_type,
     key_required,
     load_config,
+    MAX_EXTRA_INSTANCES,
+    MULTI_INSTANCE_APPS,
     restore_supported,
     save_config,
 )
@@ -320,7 +325,9 @@ def api_reset():
 
     if local_backup_dir and os.path.isdir(local_backup_dir):
         # Only Backuparr's own archives: the folder may hold other files.
-        destination_util.remove_local_backups(local_backup_dir, APP_NAMES)
+        # Every instance-shaped folder, so removed instances' backups go too.
+        folders = [name for name in os.listdir(local_backup_dir) if instance_type(name)]
+        destination_util.remove_local_backups(local_backup_dir, folders)
 
     rclone_conf_path = os.environ.get("RCLONE_CONFIG", "/config/backuparr/rclone.conf")
     rclone_pass_path = os.environ.get("RCLONE_CONFIG_PASS_FILE", "/config/backuparr/rclone.pass")
@@ -528,18 +535,71 @@ def api_meta():
     return jsonify(APP_META)
 
 
+def _instances_after(data, cfg):
+    """The instance ids config.json will hold once `data`'s apps are applied:
+    an extra instance is added by sending it, removed by sending null."""
+    ids = instance_ids(cfg)
+    for name, app_data in data.get("apps", {}).items():
+        if app_data is None:
+            ids = [i for i in ids if i != name]
+        elif name not in ids:
+            ids.append(name)
+    return ids
+
+
+def _validate_instances(data, cfg):
+    for name, app_data in data.get("apps", {}).items():
+        kind = instance_type(name)
+        if not kind:
+            return f"unknown app: {name}"
+        if name in APP_NAMES:
+            if app_data is None:
+                return f"{name} can't be removed - disable it instead"
+            if not isinstance(app_data, dict):
+                return "apps must be an object of objects"
+            continue
+        if kind not in MULTI_INSTANCE_APPS:
+            return f"{app_meta(kind)['label']} can't have more than one instance"
+        if app_data is None:
+            if name not in cfg["apps"]:
+                return f"unknown instance: {name}"
+            continue
+        if not isinstance(app_data, dict):
+            return "apps must be an object of objects"
+        display = app_data.get("name", cfg["apps"].get(name, {}).get("name", ""))
+        if not isinstance(display, str) or not display.strip() or len(display) > 64:
+            return f"{name}: a name of 1-64 characters is required"
+    ids = _instances_after(data, cfg)
+    for kind in MULTI_INSTANCE_APPS:
+        if sum(1 for i in ids if instance_type(i) == kind and i != kind) > MAX_EXTRA_INSTANCES:
+            return f"{app_meta(kind)['label']} can have at most {MAX_EXTRA_INSTANCES} extra instances"
+    return None
+
+
 def _validate_config(data, cfg):
     if not isinstance(data, dict):
         return "expected a JSON object"
-    if "request_headers" in data:
-        try:
-            validate_request_headers(data["request_headers"], APP_NAMES)
-        except RequestHeadersError as exc:
-            return str(exc)
     for key in ("apps", "destinations"):
-        section = data.get(key, {})
-        if not isinstance(section, dict) or not all(isinstance(entry, dict) for entry in section.values()):
+        if not isinstance(data.get(key, {}), dict):
             return f"{key} must be an object of objects"
+    if not all(isinstance(entry, dict) for entry in data.get("destinations", {}).values()):
+        return "destinations must be an object of objects"
+    error = _validate_instances(data, cfg)
+    if error:
+        return error
+    # Checked against the instances there will be, so a header can't be left
+    # scoped to a removed one.
+    headers = data.get("request_headers", cfg.get("request_headers", []))
+    removed = {name for name, app_data in data.get("apps", {}).items() if app_data is None}
+    for index, row in enumerate(headers if isinstance(headers, list) else [], 1):
+        scope = row.get("apps") if isinstance(row, dict) else None
+        gone = sorted(removed & set(scope)) if isinstance(scope, list) and all(isinstance(i, str) for i in scope) else []
+        if gone:
+            return f"Request header {index} is limited to {gone[0]}, which is being removed - change the apps it goes to first"
+    try:
+        validate_request_headers(headers, _instances_after(data, cfg))
+    except RequestHeadersError as exc:
+        return str(exc)
     if "retention_days" in data:
         try:
             if isinstance(data["retention_days"], bool) or int(data["retention_days"]) < 1:
@@ -553,8 +613,8 @@ def _validate_config(data, cfg):
         if not croniter.is_valid(schedule):
             return "cron_schedule is not a valid cron expression"
     for name, app_data in data.get("apps", {}).items():
-        if name not in APP_NAMES:
-            return f"unknown app: {name}"
+        if app_data is None:
+            continue
         meta = app_meta(name)
         if app_data.get("enabled") and meta["status"] != "available":
             return f"{meta['label']} isn't available yet"
@@ -591,11 +651,15 @@ def api_set_config():
     for key in ("retention_days", "cron_schedule", "notify_url", "bazarr_backup_dir", "request_headers"):
         if key in data:
             cfg[key] = data[key]
-    for name in APP_NAMES:
-        if name in data.get("apps", {}):
-            incoming = data["apps"][name]
-            fields = set(DEFAULT_APP) | {f["name"] for f in app_meta(name).get("extra_fields", [])}
-            cfg["apps"][name].update({k: v for k, v in incoming.items() if k in fields})
+    for name, incoming in data.get("apps", {}).items():
+        if incoming is None:
+            cfg["apps"].pop(name, None)
+            continue
+        extra = name not in APP_NAMES
+        if extra and name not in cfg["apps"]:
+            cfg["apps"][name] = dict(DEFAULT_INSTANCE)
+        fields = set(DEFAULT_INSTANCE if extra else DEFAULT_APP) | {f["name"] for f in app_meta(name).get("extra_fields", [])}
+        cfg["apps"][name].update({k: v for k, v in incoming.items() if k in fields})
     for name in DEST_NAMES:
         if name in data.get("destinations", {}):
             incoming = data["destinations"][name]
@@ -606,9 +670,22 @@ def api_set_config():
     return jsonify({"ok": True})
 
 
+def _unsaved_header_ids(cfg, rows):
+    """Instance ids request-header rows from the unsaved Settings form may be
+    scoped to: the saved ones plus any well-formed new one (an instance
+    added but not saved yet)."""
+    ids = instance_ids(cfg)
+    if isinstance(rows, list):
+        for row in rows:
+            scope = row.get("apps") if isinstance(row, dict) else None
+            ids += [i for i in scope if instance_type(i) and i not in ids] if isinstance(scope, list) else []
+    return ids
+
+
 @app.post("/api/test/<app_name>")
 def api_test(app_name):
-    if app_name not in APP_NAMES:
+    # Any well-formed id: an instance can be tested before it's saved.
+    if not instance_type(app_name):
         return jsonify({"ok": False, "message": "unknown app"}), 404
     meta = app_meta(app_name)
     if meta["status"] != "available":
@@ -624,8 +701,9 @@ def api_test(app_name):
     app_cfg = copy.deepcopy(DEFAULT_APP)
     app_cfg.update(data)
     try:
-        headers = data["request_headers"] if "request_headers" in data else load_config().get("request_headers", [])
-        validate_request_headers(headers, APP_NAMES)
+        cfg = load_config()
+        headers = data["request_headers"] if "request_headers" in data else cfg.get("request_headers", [])
+        validate_request_headers(headers, _unsaved_header_ids(cfg, headers))
     except RequestHeadersError as exc:
         return jsonify({"ok": False, "message": str(exc)}), 400
     app_cfg["request_headers"] = headers_for_app(headers, app_name)
@@ -767,8 +845,9 @@ def api_discovery_prowlarr():
     if not isinstance(api_key, str) or not api_key.strip():
         return _discovery_response({"error": "Prowlarr's API key is required."}, 400)
     try:
-        headers = data["request_headers"] if "request_headers" in data else load_config().get("request_headers", [])
-        validate_request_headers(headers, APP_NAMES)
+        cfg = load_config()
+        headers = data["request_headers"] if "request_headers" in data else cfg.get("request_headers", [])
+        validate_request_headers(headers, _unsaved_header_ids(cfg, headers))
     except RequestHeadersError as exc:
         return _discovery_response({"error": str(exc)}, 400)
     headers = headers_for_app(headers, "prowlarr")
@@ -939,13 +1018,14 @@ def api_history(dest_id):
         return error
     # One recursive listing of the whole destination instead of one rclone
     # call per app - much faster against remote destinations (Drive/OneDrive).
-    history = {name: [] for name in APP_NAMES if app_meta(name)["status"] == "available"}
+    # Keyed by instance id; a removed instance's backups are listed while any remain.
+    history = {name: [] for name in instance_ids(cfg) if app_meta(name)["status"] == "available"}
     for entry in rclone_util.lsjson(root, recursive=True):
         if entry.get("IsDir"):
             continue
         app_name, _, _ = entry["Path"].partition("/")
-        if app_name in history:
-            history[app_name].append({"name": entry["Name"], "size": entry["Size"], "mod_time": entry["ModTime"]})
+        if app_name in history or (instance_type(app_name) and app_name not in APP_NAMES):
+            history.setdefault(app_name, []).append({"name": entry["Name"], "size": entry["Size"], "mod_time": entry["ModTime"]})
     for entries in history.values():
         entries.sort(key=lambda e: e["mod_time"], reverse=True)
     return jsonify(history)
@@ -953,7 +1033,7 @@ def api_history(dest_id):
 
 @app.delete("/api/history/<dest_id>/<app_name>/<filename>")
 def api_history_delete(dest_id, app_name, filename):
-    if app_name not in APP_NAMES:
+    if not instance_type(app_name):
         return jsonify({"error": "unknown app"}), 404
     if not ra.SAFE_FILENAME.match(filename):
         return jsonify({"error": "invalid filename"}), 400
@@ -972,7 +1052,7 @@ def api_history_delete(dest_id, app_name, filename):
 
 @app.get("/api/history/<dest_id>/<app_name>/<filename>/download")
 def api_history_download(dest_id, app_name, filename):
-    if app_name not in APP_NAMES:
+    if not instance_type(app_name):
         return jsonify({"error": "unknown app"}), 404
     if not ra.SAFE_FILENAME.match(filename):
         return jsonify({"error": "invalid filename"}), 400
@@ -1024,7 +1104,7 @@ def _restore_work(app_name, root, app_cfg, data, bazarr_backup_dir):
         tmp_dir, local_zip, filename = ra.fetch_backup(root, app_name, data.get("file"))
         RESTORE_RUN_STATE["file"] = filename
 
-        if app_name in ra.UPLOAD_RESTORE_APPS:
+        if instance_type(app_name) in ra.UPLOAD_RESTORE_APPS:
             log.info("restore: uploading backup to %s, it will restart...", app_name)
             ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
             RESTORE_RUN_STATE["message"] = f"{app_name} restore uploaded, app is restarting"
@@ -1129,7 +1209,7 @@ def api_restore_status():
 
 @app.get("/api/restore/<dest_id>/<app_name>/backups")
 def api_restore_backups(dest_id, app_name):
-    if app_name not in APP_NAMES:
+    if not instance_type(app_name):
         return jsonify({"error": "unknown app"}), 404
     cfg = load_config()
     root, error = _destination_root_or_error(cfg, dest_id)
@@ -1164,7 +1244,7 @@ def api_restore_sabnzbd_preview(dest_id):
 
 @app.post("/api/restore/<dest_id>/<app_name>")
 def api_restore(dest_id, app_name):
-    if app_name not in APP_NAMES:
+    if not instance_type(app_name):
         return jsonify({"error": "unknown app"}), 404
     if not restore_supported(app_name):
         return jsonify({"error": f"{app_name} does not support automated restore - see the README"}), 400
@@ -1174,6 +1254,8 @@ def api_restore(dest_id, app_name):
         return jsonify({"error": "confirm must be true"}), 400
 
     cfg = load_config()
+    if app_name not in cfg["apps"]:
+        return jsonify({"error": f"{app_name} is not configured"}), 400
     root, error = _destination_root_or_error(cfg, dest_id)
     if error:
         return error

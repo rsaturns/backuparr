@@ -10,6 +10,10 @@ let DISCOVERY_RUNNING = false;
 let PLEX_LOGIN = null;
 const APP_CREDENTIAL_EDIT_REVISION = new Map();
 const APP_DISCOVERY_UPDATES = new Map();
+// Saved extra instances (radarr-4k -> "4K"), and ones removed in Settings but
+// not saved yet.
+const INSTANCE_NAMES = new Map();
+const REMOVED_INSTANCES = new Set();
 
 async function apiFetch(url, opts) {
   opts = { ...opts };
@@ -333,6 +337,11 @@ function fillAppCard(appId, cfg) {
   card.querySelectorAll(".f-extra").forEach((input) => {
     input.value = cfg[input.dataset.field] || "";
   });
+  const nameInput = card.querySelector(".f-name");
+  if (nameInput) {
+    nameInput.value = cfg.name || "";
+    updateInstanceCardLabel(card);
+  }
   setAppCardExpanded(card, !!cfg.enabled);
   if (appId === "prowlarr") updateDiscoveryButton();
 }
@@ -365,8 +374,133 @@ function readAppCard(appId) {
   card.querySelectorAll(".f-extra").forEach((input) => {
     out[input.dataset.field] = input.value;
   });
+  const nameInput = card.querySelector(".f-name");
+  if (nameInput) out.name = nameInput.value.trim();
   return out;
 }
+
+// ------------------------------------------------------------ instances ----
+// An extra Radarr/Sonarr instance gets a copy of its app's card, with a name
+// field and a Remove button. Adding and removing take effect on Save.
+function instanceCards(type) {
+  return Array.from(document.querySelectorAll(".app-card[data-app]"))
+    .filter((card) => instanceType(card.dataset.app) === type);
+}
+
+// The id names the instance's backup folder, so it's made once, from the
+// name it's added with: "4K" -> radarr-4k. Renaming keeps it.
+function newInstanceId(type, name) {
+  const taken = new Set(Array.from(document.querySelectorAll(".app-card[data-app]"), (card) => card.dataset.app));
+  const max = 40 - type.length - 1;
+  let slug = name.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  if (slug.startsWith(`${type}-`)) slug = slug.slice(type.length + 1); // "Radarr 4K" -> 4k
+  slug = slug.slice(0, max).replace(/-+$/, "") || "2";
+  for (let n = 2, candidate = slug; ; n += 1, candidate = `${slug.slice(0, max - String(n).length - 1).replace(/-+$/, "")}-${n}`) {
+    if (!taken.has(`${type}-${candidate}`)) return `${type}-${candidate}`;
+  }
+}
+
+function updateInstanceCardLabel(card) {
+  const meta = appMeta(card.dataset.app);
+  const name = card.querySelector(".f-name").value.trim();
+  card.querySelector("h3").textContent = `${meta ? meta.label : card.dataset.app} (${name || "unnamed"})`;
+}
+
+function addInstanceCard(appId, values = {}) {
+  const type = instanceType(appId);
+  const card = appCard(type).cloneNode(true);
+  card.dataset.app = appId;
+  card.classList.add("instance-card");
+  delete card.dataset.discovered;
+  card.querySelectorAll("input").forEach((input) => {
+    input.value = "";
+    input.checked = false;
+  });
+  card.querySelector(".status-dot").dataset.state = "idle";
+  card.querySelector(".test-result").textContent = "";
+  card.querySelector(".app-discovery")?.replaceChildren();
+  card.querySelectorAll(".app-discovery, .discovery-origin, .discovery-key-status").forEach((el) => el.classList.add("hidden"));
+
+  const nameField = document.createElement("label");
+  nameField.className = "field";
+  const nameLabel = document.createElement("span");
+  nameLabel.className = "field-label";
+  const folder = document.createElement("span");
+  folder.className = "muted";
+  folder.textContent = `(backups go in its ${appId} folder)`;
+  nameLabel.append("Name ", folder);
+  const nameInput = document.createElement("input");
+  nameInput.type = "text";
+  nameInput.className = "f-name";
+  nameInput.maxLength = 64;
+  nameInput.autocomplete = "off";
+  nameField.append(nameLabel, nameInput);
+  card.querySelector(".f-url").closest(".field").before(nameField);
+
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "btn btn-ghost btn-sm remove-instance";
+  remove.textContent = "Remove";
+  card.querySelector(".test-btn").after(remove);
+
+  document.querySelector(`.instance-add[data-instance-of="${type}"]`).before(card);
+  bindAppCard(card);
+  REMOVED_INSTANCES.delete(appId); // Removed, then added back under the same name.
+  fillAppCard(appId, values);
+  refreshHeaderScopes();
+  return card;
+}
+
+function removeInstanceCard(card) {
+  const appId = card.dataset.app;
+  if (INSTANCE_NAMES.has(appId)) REMOVED_INSTANCES.add(appId);
+  APP_DISCOVERY_UPDATES.delete(appId);
+  const label = card.querySelector("h3").textContent;
+  card.remove();
+  refreshHeaderScopes();
+  toast(`${label} removed - save settings to apply. Its backups are kept.`, "ok");
+}
+
+function initInstanceAddRows() {
+  document.querySelectorAll(".instance-add").forEach((row) => {
+    const type = row.dataset.instanceOf;
+    const btn = row.querySelector(".instance-add-btn");
+    const form = row.querySelector(".instance-add-form");
+    const input = row.querySelector(".instance-add-name");
+    const error = row.querySelector(".instance-add-error");
+    const close = () => {
+      form.classList.add("hidden");
+      btn.classList.remove("hidden");
+      input.value = "";
+      error.textContent = "";
+    };
+    btn.addEventListener("click", () => {
+      btn.classList.add("hidden");
+      form.classList.remove("hidden");
+      input.focus();
+    });
+    row.querySelector(".instance-add-cancel").addEventListener("click", close);
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const name = input.value.trim();
+      if (!name) {
+        error.className = "test-result instance-add-error fail";
+        error.textContent = "Enter a name.";
+        return;
+      }
+      const max = appMeta(type).max_extra_instances;
+      if (instanceCards(type).length > max) {
+        error.className = "test-result instance-add-error fail";
+        error.textContent = `At most ${max} extra instances.`;
+        return;
+      }
+      close();
+      const card = addInstanceCard(newInstanceId(type, name), { name, enabled: true });
+      card.querySelector(".f-url").focus();
+    });
+  });
+}
+
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const trimUrl = (url) => url.replace(/\/+$/, "");
@@ -515,6 +649,10 @@ function clearDiscoveryResults() {
     delete panel.closest(".app-card").dataset.discovered;
   });
   document.querySelectorAll(".discovery-origin, .discovery-key-status").forEach((note) => note.classList.add("hidden"));
+  document.querySelectorAll(".instance-discovered").forEach((list) => {
+    list.replaceChildren();
+    list.classList.add("hidden");
+  });
 }
 
 // Finding a service never enables it for backups.
@@ -525,6 +663,7 @@ function applyDiscoveredService(candidate, keyOnly = false) {
   markDiscovered(candidate.app);
   card.querySelector(".status-dot").dataset.state = "idle";
   card.querySelector(".test-result").textContent = "";
+  pruneNewInstanceChoices();
 }
 
 // Fill an app's card automatically when there is exactly one candidate and the
@@ -563,7 +702,9 @@ function renderInstanceChoice(appId, candidates) {
   const update = () => {
     btn.disabled = !selected;
     if (!selected) {
-      description.textContent = "Multiple instances found in Prowlarr. Choose the one you want to configure.";
+      description.textContent = appMeta(appId).multi_instance
+        ? "Several found in Prowlarr. Choose the one for this card; the others can be added as instances below."
+        : "Multiple instances found in Prowlarr. Choose the one you want to configure.";
       keyStatus.classList.add("hidden");
       panel.classList.remove("hidden");
       btn.classList.remove("hidden");
@@ -629,12 +770,74 @@ function renderDiscoveryResults(result, initial) {
     if (!groups.has(candidate.app)) groups.set(candidate.app, []);
     groups.get(candidate.app).push(candidate);
   });
-  groups.forEach((candidates, appId) => {
-    markDiscovered(appId);
-    autoFillDiscovered(appId, candidates, initial[appId]);
-    renderInstanceChoice(appId, candidates);
+  groups.forEach((candidates, type) => {
+    // A card already holding a candidate's URL gets that candidate only (so
+    // a missing key can be filled); the app's own card otherwise offers all.
+    instanceCards(type).forEach((card) => {
+      const appId = card.dataset.app;
+      const url = trimUrl(readAppCard(appId).url);
+      const own = candidates.filter((candidate) => url && trimUrl(candidate.url) === url);
+      if (!own.length && appId !== type) return;
+      markDiscovered(appId);
+      autoFillDiscovered(appId, own.length ? own : candidates, initial[appId]);
+      renderInstanceChoice(appId, own.length ? own : candidates);
+    });
+    if (appMeta(type).multi_instance) renderNewInstanceChoices(type, candidates);
   });
   renderDiscoveryNotes(result);
+}
+
+function onInstanceCard(type, url) {
+  return instanceCards(type).some((card) => trimUrl(readAppCard(card.dataset.app).url) === trimUrl(url));
+}
+
+// Drops offers whose URL has since been filled in on a card.
+function pruneNewInstanceChoices() {
+  document.querySelectorAll(".instance-discovered").forEach((list) => {
+    const type = list.closest(".instance-add").dataset.instanceOf;
+    list.querySelectorAll(".instance-discovered-row").forEach((row) => {
+      if (onInstanceCard(type, row.dataset.url)) row.remove();
+    });
+    if (!list.querySelector(".instance-discovered-row")) list.classList.add("hidden");
+  });
+}
+
+// Candidates no card holds yet, each offered as a new extra instance.
+function renderNewInstanceChoices(type, candidates) {
+  const list = document.querySelector(`.instance-add[data-instance-of="${type}"] .instance-discovered`);
+  const remaining = candidates.filter((candidate) => !onInstanceCard(type, candidate.url));
+  // With the app's own card still empty, one candidate goes there instead.
+  if (!remaining.length || (remaining.length === 1 && !readAppCard(type).url)) return;
+  const intro = document.createElement("p");
+  intro.className = "hint";
+  intro.textContent = `Also found in Prowlarr - add as another ${appMeta(type).label}:`;
+  list.replaceChildren(intro);
+  remaining.forEach((candidate) => {
+    const row = document.createElement("div");
+    row.className = "instance-discovered-row";
+    row.dataset.url = candidate.url;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn btn-ghost btn-sm";
+    btn.textContent = "Add as instance";
+    btn.addEventListener("click", () => {
+      if (onInstanceCard(type, candidate.url)) return pruneNewInstanceChoices();
+      const appId = newInstanceId(type, candidate.name);
+      // Prowlarr names it like "Radarr 4K"; the card already says Radarr.
+      const name = candidate.name.replace(new RegExp(`^${appMeta(type).label}\\b[\\s:-]*`, "i"), "") || candidate.name;
+      addInstanceCard(appId, { name, url: candidate.url, api_key: candidate.api_key || "" });
+      markDiscovered(appId);
+      if (!candidate.api_key) {
+        const keyStatus = appCard(appId).querySelector(".discovery-key-status");
+        keyStatus.textContent = `Discovery API key unavailable — ${candidate.api_key_error || "Prowlarr's backup did not supply this key."}`;
+        keyStatus.classList.remove("hidden");
+      }
+      pruneNewInstanceChoices();
+    });
+    row.append(`${candidate.name} — ${candidate.url}`, btn);
+    list.appendChild(row);
+  });
+  list.classList.remove("hidden");
 }
 
 async function pollDiscovery(jobId, status) {
@@ -668,7 +871,8 @@ async function discoverServices() {
   clearDiscoveryResults();
   // Snapshot the cards so edits made while discovery runs are never overwritten.
   const initial = {};
-  ["radarr", "sonarr", "sabnzbd"].forEach((appId) => {
+  ["radarr", "sonarr", "sabnzbd"].flatMap(instanceCards).forEach((card) => {
+    const appId = card.dataset.app;
     initial[appId] = { ...readAppCard(appId), revision: APP_CREDENTIAL_EDIT_REVISION.get(appId) || 0 };
   });
   let jobId = null;
@@ -781,10 +985,29 @@ function buildHeaderScope(apps) {
   };
   option("header-scope-all", "", "All apps", !apps);
   // Keep a saved scope's apps listed even if one stops being "available".
-  APP_META.filter((m) => m.status === "available" || (apps || []).includes(m.id))
-    .forEach((m) => option("header-scope-app", m.id, m.label, !apps || apps.includes(m.id)));
+  // Each app's extra instances (from the Settings cards) follow it.
+  APP_META.filter((m) => m.status === "available" || (apps || []).includes(m.id)).forEach((m) => {
+    option("header-scope-app", m.id, m.label, !apps || apps.includes(m.id));
+    instanceCards(m.id).filter((card) => card.dataset.app !== m.id).forEach((card) => {
+      option("header-scope-app", card.dataset.app, card.querySelector("h3").textContent, !apps || apps.includes(card.dataset.app));
+    });
+  });
   scope.append(document.createElement("summary"), options);
   return scope;
+}
+
+// Rebuilt when an instance is added, renamed or removed; a removed one drops
+// out of every header's apps.
+function refreshHeaderScopes() {
+  document.querySelectorAll(".request-header-row").forEach((row) => {
+    const old = row.querySelector(".header-scope");
+    const apps = old.querySelector(".header-scope-all").checked
+      ? undefined : Array.from(old.querySelectorAll(".header-scope-app:checked"), (box) => box.value);
+    const scope = buildHeaderScope(apps);
+    scope.open = old.open;
+    old.replaceWith(scope);
+    updateHeaderScopeSummary(row);
+  });
 }
 
 function addRequestHeader(header = {}) {
@@ -798,7 +1021,10 @@ function addRequestHeader(header = {}) {
   row.querySelector(".header-value").type = document.getElementById("show-request-headers").checked ? "text" : "password";
   row.querySelector(".remove-header").addEventListener("click", () => row.remove());
   row.append(buildHeaderScope(header.apps));
-  row.querySelector(".header-scope").addEventListener("change", () => updateHeaderScopeSummary(row));
+  // On the row: refreshHeaderScopes() replaces the scope element.
+  row.addEventListener("change", (event) => {
+    if (event.target.closest(".header-scope")) updateHeaderScopeSummary(row);
+  });
   updateHeaderScopeSummary(row);
   document.getElementById("request-headers-list").append(row);
   return row;
@@ -869,6 +1095,10 @@ async function loadConfig() {
   document.getElementById("s-notify_url").value = cfg.notify_url || "";
   document.getElementById("s-bazarr_backup_dir").value = cfg.bazarr_backup_dir || "";
   document.getElementById("request-headers-list").replaceChildren();
+  document.querySelectorAll(".instance-card").forEach((card) => card.remove());
+  REMOVED_INSTANCES.clear();
+  rememberSavedInstances(cfg.apps || {});
+  INSTANCE_NAMES.forEach((name, appId) => addInstanceCard(appId, cfg.apps[appId]));
   (cfg.request_headers || []).forEach(addRequestHeader);
   Object.keys(cfg.apps || {}).forEach((appId) => fillAppCard(appId, cfg.apps[appId]));
   Object.keys(cfg.destinations || {}).forEach((destId) => fillDestCard(destId, cfg.destinations[destId]));
@@ -876,11 +1106,19 @@ async function loadConfig() {
   return cfg;
 }
 
+function rememberSavedInstances(apps) {
+  INSTANCE_NAMES.clear();
+  Object.keys(apps).sort().forEach((appId) => {
+    if (apps[appId] && isExtraInstance(appId)) INSTANCE_NAMES.set(appId, apps[appId].name || "");
+  });
+}
+
 function collectConfig() {
   const apps = {};
   document.querySelectorAll(".app-card[data-app]").forEach((card) => {
     apps[card.dataset.app] = readAppCard(card.dataset.app);
   });
+  REMOVED_INSTANCES.forEach((appId) => { apps[appId] = null; }); // null removes it
   const destinations = {};
   document.querySelectorAll(".dest-card[data-dest]").forEach((card) => {
     destinations[card.dataset.dest] = readDestCard(card.dataset.dest);
@@ -912,11 +1150,14 @@ async function saveSettings() {
   resultEl.textContent = "Saving...";
   resultEl.className = "save-result";
   try {
+    const cfg = collectConfig();
     await apiFetch("/api/config", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(collectConfig()),
+      body: JSON.stringify(cfg),
     });
+    REMOVED_INSTANCES.clear();
+    rememberSavedInstances(cfg.apps);
     resultEl.textContent = "Saved";
     resultEl.className = "save-result ok";
     snapshotSettingsState();
@@ -1346,6 +1587,29 @@ function initScheduleEvents() {
   });
 }
 
+// Also run for each extra instance's card, a copy made after startup.
+function bindAppCard(card) {
+  card.querySelectorAll(".f-url, .f-api_key").forEach((input) => {
+    input.addEventListener("input", () => {
+      const appId = card.dataset.app;
+      if (appId === "plex" && PLEX_LOGIN) stopPlexLogin("Plex details changed. Sign in again to get a token.");
+      APP_CREDENTIAL_EDIT_REVISION.set(appId, (APP_CREDENTIAL_EDIT_REVISION.get(appId) || 0) + 1);
+      const refresh = APP_DISCOVERY_UPDATES.get(appId);
+      if (refresh) refresh();
+      pruneNewInstanceChoices();
+      card.querySelector(".discovery-origin")?.classList.add("hidden");
+      card.querySelector(".discovery-key-status")?.classList.add("hidden");
+    });
+  });
+  card.querySelector(".test-btn")?.addEventListener("click", () => testApp(card.dataset.app));
+  card.querySelector(".f-enabled").addEventListener("change", (event) => setAppCardExpanded(card, event.target.checked));
+  card.querySelector(".f-name")?.addEventListener("input", () => {
+    updateInstanceCardLabel(card);
+    refreshHeaderScopes();
+  });
+  card.querySelector(".remove-instance")?.addEventListener("click", () => removeInstanceCard(card));
+}
+
 function initSettingsEvents() {
   document.getElementById("save-btn").addEventListener("click", saveSettings);
   document.getElementById("plex-token-btn").addEventListener("click", startPlexLogin);
@@ -1364,26 +1628,8 @@ function initSettingsEvents() {
   appCard("prowlarr").querySelectorAll(".f-url, .f-api_key").forEach((input) => {
     input.addEventListener("input", updateDiscoveryButton);
   });
-  document.querySelectorAll(".app-card[data-app] .f-url, .app-card[data-app] .f-api_key").forEach((input) => {
-    input.addEventListener("input", () => {
-      const card = input.closest(".app-card");
-      const appId = card.dataset.app;
-      if (appId === "plex" && PLEX_LOGIN) stopPlexLogin("Plex details changed. Sign in again to get a token.");
-      APP_CREDENTIAL_EDIT_REVISION.set(appId, (APP_CREDENTIAL_EDIT_REVISION.get(appId) || 0) + 1);
-      const refresh = APP_DISCOVERY_UPDATES.get(appId);
-      if (refresh) refresh();
-      card.querySelector(".discovery-origin")?.classList.add("hidden");
-      card.querySelector(".discovery-key-status")?.classList.add("hidden");
-    });
-  });
-  document.querySelectorAll(".test-btn").forEach((btn) => {
-    btn.addEventListener("click", () => testApp(btn.closest(".app-card").dataset.app));
-  });
-  document.querySelectorAll(".f-enabled").forEach((checkbox) => {
-    checkbox.addEventListener("change", () => {
-      setAppCardExpanded(checkbox.closest(".app-card"), checkbox.checked);
-    });
-  });
+  document.querySelectorAll(".app-card[data-app]").forEach(bindAppCard);
+  initInstanceAddRows();
   document.getElementById("notify-test-btn").addEventListener("click", testNotifyUrl);
   initScheduleEvents();
 
@@ -1544,13 +1790,28 @@ function initRunEvents() {
 }
 
 // ---------------------------------------------------------- history tab ----
-function appMeta(appId) {
-  return APP_META.find((m) => m.id === appId);
+// An app id, or an extra instance's "<app>-<suffix>" id (see config_store.py).
+function instanceType(appId) {
+  if (APP_META.some((m) => m.id === appId)) return appId;
+  const match = /^([a-z]+)-[a-z0-9]+(?:-[a-z0-9]+)*$/.exec(appId || "");
+  return match && APP_META.some((m) => m.id === match[1] && m.multi_instance) ? match[1] : null;
 }
 
+function isExtraInstance(appId) {
+  const type = instanceType(appId);
+  return !!type && type !== appId;
+}
+
+function appMeta(appId) {
+  const type = instanceType(appId);
+  return APP_META.find((m) => m.id === type);
+}
+
+// "Radarr (4K)" for an extra instance; a removed one's id stands in for its name.
 function appLabel(appId) {
   const m = appMeta(appId);
-  return m ? m.label : appId;
+  if (!m) return appId;
+  return isExtraInstance(appId) ? `${m.label} (${INSTANCE_NAMES.get(appId) || appId.slice(m.id.length + 1)})` : m.label;
 }
 
 async function deleteBackup(destId, appId, filename, row) {
@@ -1670,19 +1931,20 @@ let RESTORE_STATE = { app: null, file: null, servers: [] };
 
 function initRestoreAppOptions() {
   const select = document.getElementById("r-app");
-  if (select.options.length) return;
+  const previous = select.value;
+  select.replaceChildren();
   // restore_supported defaults to true; only explicit opt-outs (e.g. Profilarr) are excluded.
+  // Saved extra instances follow their app.
   APP_META.filter((m) => m.restore_supported !== false).forEach((m) => {
-    const opt = document.createElement("option");
-    opt.value = m.id;
-    opt.textContent = m.label;
-    select.appendChild(opt);
+    [m.id, ...Array.from(INSTANCE_NAMES.keys()).filter((appId) => instanceType(appId) === m.id)]
+      .forEach((appId) => select.add(new Option(appLabel(appId), appId)));
   });
+  if (Array.from(select.options).some((opt) => opt.value === previous)) select.value = previous;
 }
 
 function renderRestoreOverride() {
   const appId = document.getElementById("r-app").value;
-  const meta = APP_META.find((m) => m.id === appId);
+  const meta = appMeta(appId);
   const root = document.getElementById("r-override");
   root.innerHTML = "";
   if (!meta) return;

@@ -124,6 +124,24 @@
             </div>
             {% endif %}
           </div>
+          {% if m.multi_instance %}
+          {# Extra instances' cards (app.js copies this app's card) go above this row. #}
+          <div class="instance-add" data-instance-of="{{ m.id }}">
+            <div class="instance-discovered hidden"></div>
+            <button type="button" class="btn btn-ghost btn-sm instance-add-btn">Add another {{ m.label }}</button>
+            <form class="instance-add-form hidden">
+              <label class="field">
+                <span class="field-label">Name <span class="muted">(e.g. 4K or Anime - also names its backup folder)</span></span>
+                <input type="text" class="instance-add-name" maxlength="64" autocomplete="off">
+              </label>
+              <div class="app-card-actions">
+                <button type="submit" class="btn btn-primary btn-sm">Add</button>
+                <button type="button" class="btn btn-ghost btn-sm instance-add-cancel">Cancel</button>
+                <span class="test-result instance-add-error" role="status"></span>
+              </div>
+            </form>
+          </div>
+          {% endif %}
           {% endfor %}
         </div>
       </div>

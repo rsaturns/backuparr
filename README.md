@@ -40,6 +40,7 @@ See [CHANGELOG.md](CHANGELOG.md) for release history.
   - [Tdarr auth note](#tdarr-auth-note)
 - [Settings and security](#settings-and-security)
   - [Prowlarr discovery](#prowlarr-discovery)
+  - [More than one Radarr or Sonarr](#more-than-one-radarr-or-sonarr)
   - [Service authentication headers](#service-authentication-headers)
   - [Login](#login)
   - [Encryption at rest](#encryption-at-rest)
@@ -386,6 +387,8 @@ Tdarr has no auth (the default).
 Optional. Enter Prowlarr's URL and API key on its card and click **Discover
 services**: Backuparr fills in the URLs and API keys of the Radarr, Sonarr and
 SABnzbd instances Prowlarr knows, letting you choose when there are several.
+Extra Radarr and Sonarr instances it finds can be added with **Add as
+instance**.
 
 - Only empty fields are filled, and nothing is saved until you save.
 - Prowlarr masks those API keys, so Backuparr reads them from a temporary
@@ -394,6 +397,20 @@ SABnzbd instances Prowlarr knows, letting you choose when there are several.
 - The URLs are the ones Prowlarr uses; **Test connection** confirms Backuparr
   can reach them.
 - Other apps, including NZBGet, are configured by hand.
+
+### More than one Radarr or Sonarr
+
+Click **Add another Radarr** (or Sonarr) under its card and give the instance
+a name, such as `4K` or `Anime`. Each instance has its own settings, backups,
+History and Restore entry, and can get its own
+[authentication headers](#service-authentication-headers).
+
+- The name also sets the instance's backup folder and archive names: `4K`
+  gives `radarr-4k/radarr-4k_<date>_<time>.zip`. Renaming it later keeps the
+  folder.
+- Removing an instance keeps its backups; they stay in History, and retention
+  keeps the newest.
+- Up to 10 extra instances per app.
 
 ### Service authentication headers
 
@@ -620,6 +637,7 @@ Kuma push URLs, and other webhooks that accept raw text.
 | Field | Purpose |
 |---|---|
 | `apps.<name>.enabled/url/api_key` | Per app, as on the Settings tab |
+| `apps.<radarr\|sonarr>-<suffix>` | An extra instance (e.g. `radarr-4k`): the same fields plus `name` |
 | `apps.bazarr.username/password` | Only if Bazarr's web auth is `Basic` |
 | `apps.nzbget.username/password` | NZBGet's Control username and password |
 | `apps.jellyfin.backup_dir` | Jellyfin's mounted backups folder - required |

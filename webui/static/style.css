@@ -365,6 +365,18 @@ body {
 .discovery-key-status { display: block; margin-top: 6px; color: var(--danger); font-size: 13px; font-weight: 400; overflow-wrap: anywhere; }
 .discovery-warning { font-size: 13px; color: var(--text-muted); overflow-wrap: anywhere; }
 
+/* Extra Radarr/Sonarr instances sit indented under their app's card. */
+.instance-card { margin-left: 16px; }
+.instance-add { display: grid; gap: 8px; justify-items: start; margin: -4px 0 12px 16px; }
+.instance-add-form { width: 100%; }
+.instance-add-form .field { margin-bottom: 8px; }
+.instance-discovered { display: grid; gap: 6px; width: 100%; font-size: 14px; }
+.instance-discovered p { margin: 0; overflow-wrap: anywhere; }
+.instance-discovered-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+  .instance-card, .instance-add { margin-left: 0; }
+}
+
 @media (max-width: 480px) {
   .app-card-head { flex-wrap: wrap; }
 }
