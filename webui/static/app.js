@@ -1031,6 +1031,16 @@ function refreshHeaderScopes() {
   });
 }
 
+// A rename only changes the instance's label in each scope, so typing a
+// name doesn't rebuild every header's checkboxes.
+function relabelHeaderScopes(appId, label) {
+  document.querySelectorAll(`.header-scope-app[value="${appId}"]`).forEach((box) => {
+    box.dataset.label = label;
+    box.nextSibling.textContent = ` ${label}`;
+    updateHeaderScopeSummary(box.closest(".request-header-row"));
+  });
+}
+
 function addRequestHeader(header = {}) {
   const row = document.createElement("div");
   row.className = "request-header-row";
@@ -1629,7 +1639,7 @@ function bindAppCard(card) {
   card.querySelector(".f-enabled").addEventListener("change", (event) => setAppCardExpanded(card, event.target.checked));
   card.querySelector(".f-name")?.addEventListener("input", () => {
     updateInstanceCardLabel(card);
-    refreshHeaderScopes();
+    relabelHeaderScopes(card.dataset.app, card.querySelector("h3").textContent);
   });
   card.querySelector(".remove-instance")?.addEventListener("click", () => removeInstanceCard(card));
 }
