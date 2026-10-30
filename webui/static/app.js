@@ -777,15 +777,18 @@ function renderDiscoveryResults(result, initial) {
   });
   groups.forEach((candidates, type) => {
     // A card already holding a candidate's URL gets that candidate only (so
-    // a missing key can be filled); the app's own card otherwise offers all.
+    // a missing key can be filled); the app's own card otherwise offers the
+    // ones no other card holds.
+    const unclaimed = candidates.filter((candidate) => !onInstanceCard(type, candidate.url));
     instanceCards(type).forEach((card) => {
       const appId = card.dataset.app;
       const url = trimUrl(readAppCard(appId).url);
       const own = candidates.filter((candidate) => url && trimUrl(candidate.url) === url);
-      if (!own.length && appId !== type) return;
+      const offered = own.length ? own : appId === type ? unclaimed : [];
+      if (!offered.length) return;
       markDiscovered(appId);
-      autoFillDiscovered(appId, own.length ? own : candidates, initial[appId]);
-      renderInstanceChoice(appId, own.length ? own : candidates);
+      autoFillDiscovered(appId, offered, initial[appId]);
+      renderInstanceChoice(appId, offered);
     });
     if (appMeta(type).multi_instance) renderNewInstanceChoices(type, candidates);
   });

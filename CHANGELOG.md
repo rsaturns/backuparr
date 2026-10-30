@@ -40,6 +40,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   its API key, and with **Use this service** its URL too - into the first
   instance's card, leaving that one with the wrong server or key.
 
+- With the first Radarr/Sonarr card empty, Prowlarr discovery could fill it
+  with a server another instance's card already had, so both backed up the
+  same server. The first card is now only offered servers no other card holds.
+
 ## [1.9.0-beta] - 2026-10-29
 
 ### Added
