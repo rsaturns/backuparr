@@ -562,16 +562,18 @@ def api_meta():
     return jsonify(APP_META)
 
 
-def _instances_after(data, cfg):
+def _instances_after(data, cfg, unsaved=()):
     """The instance ids config.json will hold once `data`'s apps are applied:
-    an extra instance is added by sending it, removed by sending null."""
+    an extra instance is added by sending it, removed by sending null.
+    `unsaved` adds well-formed ids the Settings form holds but hasn't saved
+    yet, for a Test or discovery run before Save."""
     ids = instance_ids(cfg)
     for name, app_data in data.get("apps", {}).items():
         if app_data is None:
             ids = [i for i in ids if i != name]
         elif name not in ids:
             ids.append(name)
-    return ids
+    return ids + [i for i in dict.fromkeys(unsaved) if instance_type(i) and i not in ids]
 
 
 def _validate_instances(data, cfg):
@@ -700,16 +702,11 @@ def api_set_config():
     return jsonify({"ok": True})
 
 
-def _unsaved_header_ids(cfg, rows):
-    """Instance ids request-header rows from the unsaved Settings form may be
-    scoped to: the saved ones plus any well-formed new one (an instance
-    added but not saved yet)."""
-    ids = instance_ids(cfg)
-    if isinstance(rows, list):
-        for row in rows:
-            scope = row.get("apps") if isinstance(row, dict) else None
-            ids += [i for i in scope if instance_type(i) and i not in ids] if isinstance(scope, list) else []
-    return ids
+def _header_scope_ids(rows):
+    """Every id request-header rows are scoped to, valid or not."""
+    rows = rows if isinstance(rows, list) else []
+    scopes = [row.get("apps") for row in rows if isinstance(row, dict)]
+    return [i for scope in scopes if isinstance(scope, list) for i in scope if isinstance(i, str)]
 
 
 @app.post("/api/test/<app_name>")
@@ -733,7 +730,7 @@ def api_test(app_name):
     try:
         cfg = load_config()
         headers = data["request_headers"] if "request_headers" in data else cfg.get("request_headers", [])
-        validate_request_headers(headers, _unsaved_header_ids(cfg, headers))
+        validate_request_headers(headers, _instances_after({}, cfg, unsaved=_header_scope_ids(headers)))
     except RequestHeadersError as exc:
         return jsonify({"ok": False, "message": str(exc)}), 400
     app_cfg["request_headers"] = headers_for_app(headers, app_name)
@@ -877,7 +874,7 @@ def api_discovery_prowlarr():
     try:
         cfg = load_config()
         headers = data["request_headers"] if "request_headers" in data else cfg.get("request_headers", [])
-        validate_request_headers(headers, _unsaved_header_ids(cfg, headers))
+        validate_request_headers(headers, _instances_after({}, cfg, unsaved=_header_scope_ids(headers)))
     except RequestHeadersError as exc:
         return _discovery_response({"error": str(exc)}, 400)
     headers = headers_for_app(headers, "prowlarr")
