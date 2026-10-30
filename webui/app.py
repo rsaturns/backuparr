@@ -333,8 +333,14 @@ def api_reset():
     if local_backup_dir and os.path.isdir(local_backup_dir):
         # Only Backuparr's own archives: the folder may hold other files.
         # Every instance-shaped folder, so removed instances' backups go too.
-        folders = [name for name in os.listdir(local_backup_dir) if instance_type(name)]
-        destination_util.remove_local_backups(local_backup_dir, folders)
+        # Reset is how a forgotten password is recovered, so a backup folder
+        # it can't clear (a stale mount, no permission) doesn't stop it.
+        try:
+            folders = [name for name in os.listdir(local_backup_dir) if instance_type(name)]
+            destination_util.remove_local_backups(local_backup_dir, folders)
+        except OSError as exc:
+            log.warning("reset: couldn't remove the local backups in %s (%s) - delete them by hand if needed",
+                        local_backup_dir, exc.strerror or type(exc).__name__)
 
     rclone_conf_path = os.environ.get("RCLONE_CONFIG", "/config/backuparr/rclone.conf")
     rclone_pass_path = os.environ.get("RCLONE_CONFIG_PASS_FILE", "/config/backuparr/rclone.pass")

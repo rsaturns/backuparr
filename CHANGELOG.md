@@ -63,6 +63,11 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Jellyfin's **Test** could fail with an unexpected error instead of "check
   the volume mount" when the first backup Jellyfin listed had no path.
 
+- Reset failed and deleted nothing when the local backup folder couldn't be
+  read, such as a stale network mount, leaving no way back in after a
+  forgotten password. It now resets anyway and logs which backups it couldn't
+  remove.
+
 ## [1.9.0-beta] - 2026-10-29
 
 ### Added

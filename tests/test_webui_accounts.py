@@ -251,3 +251,16 @@ def test_reset_signs_out_the_caller_and_tolerates_missing_files(isolated_webui, 
     again = authed_client.post("/api/reset", json={"confirm": isolated_webui.RESET_CONFIRM_PHRASE})
     assert again.status_code == 200
     assert authed_client.get("/api/meta").status_code == 302  # nothing left, so back to setup
+
+
+@pytest.mark.parametrize("error", [PermissionError(13, "Permission denied"), OSError(5, "Input/output error")])
+def test_reset_still_resets_when_the_backup_folder_cant_be_cleared(isolated_webui, authed_client, monkeypatch, caplog, error):
+    seed_state(isolated_webui, authed_client)
+
+    def unreadable(path):
+        raise error
+    monkeypatch.setattr(isolated_webui.os, "listdir", unreadable)
+    response = authed_client.post("/api/reset", json={"confirm": isolated_webui.RESET_CONFIRM_PHRASE})
+    assert response.status_code == 200
+    assert not os.path.exists(auth_store.AUTH_PATH) and not os.path.exists(isolated_webui.CONFIG_PATH)
+    assert "couldn't remove the local backups" in caplog.text
