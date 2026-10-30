@@ -44,6 +44,11 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   with a server another instance's card already had, so both backed up the
   same server. The first card is now only offered servers no other card holds.
 
+- Removing a Radarr/Sonarr instance that a request header was limited to
+  silently took it out of that header's apps - narrowing the header, or
+  leaving it with no apps and a confusing save error. Settings now says which
+  header to change first.
+
 ## [1.9.0-beta] - 2026-10-29
 
 ### Added

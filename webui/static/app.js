@@ -457,9 +457,19 @@ function addInstanceCard(appId, values = {}) {
 
 function removeInstanceCard(card) {
   const appId = card.dataset.app;
+  const label = card.querySelector("h3").textContent;
+  // Like the server, refuse rather than quietly narrow a header's apps.
+  const scoped = Array.from(document.querySelectorAll(".request-header-row")).find((row) =>
+    (row.querySelector(".header-name").value.trim() || row.querySelector(".header-value").value)
+    && !row.querySelector(".header-scope-all").checked
+    && row.querySelector(`.header-scope-app[value="${appId}"]`).checked);
+  if (scoped) {
+    const name = scoped.querySelector(".header-name").value.trim() || "unnamed";
+    toast(`The ${name} request header is limited to ${label} - change the apps it goes to first.`, "fail");
+    return;
+  }
   if (INSTANCE_NAMES.has(appId)) REMOVED_INSTANCES.add(appId);
   APP_DISCOVERY_UPDATES.delete(appId);
-  const label = card.querySelector("h3").textContent;
   card.remove();
   refreshHeaderScopes();
   toast(`${label} removed - save settings to apply. Its backups are kept.`, "ok");
@@ -1004,8 +1014,8 @@ function buildHeaderScope(apps) {
   return scope;
 }
 
-// Rebuilt when an instance is added, renamed or removed; a removed one drops
-// out of every header's apps.
+// Rebuilt when an instance is added, renamed or removed. An instance can
+// only be removed while no header is limited to it.
 function refreshHeaderScopes() {
   document.querySelectorAll(".request-header-row").forEach((row) => {
     const old = row.querySelector(".header-scope");
