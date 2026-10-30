@@ -47,6 +47,11 @@ class NzbgetError(RuntimeError):
 
 
 def format_options(options):
+    # One option per line, so a value with a line break can't be kept -
+    # refuse it rather than write a backup that restores differently.
+    broken = next((o["Name"] for o in options if "\n" in o["Value"] or "\r" in o["Value"]), None)
+    if broken:
+        raise NzbgetError(f"nzbget: the {broken} setting has a line break in its value, which can't be backed up")
     return "".join(f"{o['Name']}={o['Value']}\n" for o in options)
 
 
@@ -61,7 +66,8 @@ def parse_options(text):
         name, sep, value = line.partition("=")
         if not sep or not name.strip():
             raise NzbgetError(f"nzbget: unexpected line in {CONFIG}: {line[:60]!r}")
-        options.append({"Name": name.strip(), "Value": value.strip()})
+        # The value is kept exactly: surrounding spaces may be part of it.
+        options.append({"Name": name.strip(), "Value": value})
     return options
 
 

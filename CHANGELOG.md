@@ -56,6 +56,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   checksum) was kept as good and Bazarr's own copy deleted. Backuparr now
   downloads it again until it reads back intact.
 
+- Restoring NZBGet trimmed spaces from the start and end of setting values. A
+  value with a line break in it, which the backup can't hold, now fails the
+  backup with the setting's name instead of being split into two lines.
+
 ## [1.9.0-beta] - 2026-10-29
 
 ### Added
