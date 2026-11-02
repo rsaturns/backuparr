@@ -9,8 +9,8 @@ generate and stream a live, sanitized copy on every call:
 - `cmd=download_config` - a fresh copy of config.ini, but only
   `PMS_TOKEN`/`JWT_SECRET` are stripped (Tautulli's own
   `_DO_NOT_DOWNLOAD_KEYS`) - the Tautulli API key itself and any
-  notification agent credentials come through in plain text. See the
-  README's Tautulli note.
+  notification agent credentials come through in plain text. See
+  docs/apps/tautulli.md.
 
 Both are ordinary `@addtoapi()` commands, reachable through the same
 apikey-authenticated `/api/v2?apikey=...&cmd=...` route as every other
@@ -185,7 +185,7 @@ class TautulliApp:
                         "(upstream api2.py bug). Restore tautulli.db by hand: Settings > "
                         "Import & Backup > Import Database."
                     )
-                    summary["database_skipped"] = "not restorable via API - see README"
+                    summary["database_skipped"] = "not restorable via API - see the Tautulli page in the docs"
                 else:
                     raise
         cfg_path = os.path.join(extract_dir, "config.ini")

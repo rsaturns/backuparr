@@ -50,7 +50,7 @@ APP_META = [
         "key_required": True,
         "url_placeholder": "http://profilarr:6868",
         "extra_fields": [],
-        # Profilarr's restore has no public API - see README.
+        # Profilarr's restore has no public API - see docs/apps/profilarr.md.
         "restore_supported": False,
     },
     {

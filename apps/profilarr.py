@@ -23,8 +23,8 @@ SvelteKit form action gated by browser session cookie, not part of the
 /api/v1 REST API, and even then only stages a pending restore in a
 sentinel file - the actual swap happens at the next Profilarr container
 restart, which Backuparr can't trigger. POST /backups/upload exists but
-only stores a file; it doesn't stage or apply anything. See the README's
-Profilarr note for the manual restore steps this leaves you with.
+only stores a file; it doesn't stage or apply anything. See
+docs/apps/profilarr.md for the manual restore steps this leaves you with.
 """
 import logging
 import os

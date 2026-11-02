@@ -7,6 +7,16 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 _Nothing yet._
 
+## [1.10.1] - 2026-11-02
+
+### Changed
+
+- The documentation moved to a [documentation site](https://rsaturns.github.io/backuparr/)
+  with a page per topic and search. The README keeps the screenshots, the
+  Quick start and links into the site.
+- The Tautulli and SABnzbd restore notes, and the error for apps without an
+  automated restore, point to the documentation site instead of the README.
+
 ## [1.10.0] - 2026-11-02
 
 🎉 **Backuparr is out of beta.** With its feature set settled and backups and restores of every supported app holding up release after release, 1.10.0 is the first full release - from here on, versions drop the `-beta` suffix.
