@@ -147,7 +147,7 @@ def test_each_instance_gets_its_own_folder_and_archive_names(monkeypatch):
     monkeypatch.setattr(backup.destination_util, "remote_root", lambda dest_id, cfg: "/dest")
     monkeypatch.setattr(backup, "build_app", lambda name, app_cfg: built.append((name, app_cfg["url"])) or Fake())
     monkeypatch.setattr(backup.rclone_util, "copyto", lambda src, dst: uploaded.append(dst))
-    monkeypatch.setattr(backup, "apply_retention", lambda *args: None)
+    monkeypatch.setattr(backup, "apply_retention", lambda *args, **kwargs: None)
 
     ok, failed = backup.run_backup(cfg)
 
@@ -155,6 +155,40 @@ def test_each_instance_gets_its_own_folder_and_archive_names(monkeypatch):
     assert built == [("radarr", "http://r1"), ("radarr-4k", "http://r2")]
     assert re.fullmatch(r"/dest/radarr/radarr_\d{8}_\d{6}\.zip", uploaded[0])
     assert re.fullmatch(r"/dest/radarr-4k/radarr-4k_\d{8}_\d{6}\.zip", uploaded[1])
+
+
+def test_a_single_app_run_backs_up_and_prunes_only_that_instance(monkeypatch):
+    built, uploaded, retention = [], [], []
+
+    class Fake:
+        def backup(self, work_dir):
+            path = Path(work_dir) / "files"
+            path.mkdir()
+            return str(path)
+
+    cfg = {"apps": {"radarr": {"url": "http://r1"}, "radarr-4k": {"url": "http://r2"}}, "destinations": {"local": {}}}
+    monkeypatch.setattr(backup, "enabled_apps", lambda cfg: ["radarr", "radarr-4k"])
+    monkeypatch.setattr(backup, "enabled_destinations", lambda cfg: ["local"])
+    monkeypatch.setattr(backup.destination_util, "sync", lambda cfg: None)
+    monkeypatch.setattr(backup.destination_util, "remote_root", lambda dest_id, cfg: "/dest")
+    monkeypatch.setattr(backup, "build_app", lambda name, app_cfg: built.append(name) or Fake())
+    monkeypatch.setattr(backup.rclone_util, "copyto", lambda src, dst: uploaded.append(dst))
+    monkeypatch.setattr(backup, "apply_retention", lambda root, days, only=None: retention.append((root, only)))
+    progress = []
+
+    ok, failed = backup.run_backup(cfg, on_progress=lambda *args: progress.append(args), only="radarr-4k")
+
+    assert (ok, failed) == (["radarr-4k"], [])
+    assert built == ["radarr-4k"] and progress == [(1, 1, "radarr-4k")]
+    assert len(uploaded) == 1 and uploaded[0].startswith("/dest/radarr-4k/")
+    assert retention == [("/dest", "radarr-4k")]
+
+
+def test_a_single_app_run_of_an_app_that_isnt_enabled_does_nothing(monkeypatch):
+    monkeypatch.setattr(backup, "enabled_apps", lambda cfg: ["radarr"])
+    monkeypatch.setattr(backup, "build_app", lambda *args: pytest.fail("nothing should be backed up"))
+    monkeypatch.setattr(backup.destination_util, "sync", lambda cfg: pytest.fail("nothing should be synced"))
+    assert backup.run_backup({"apps": {}, "destinations": {}}, only="sonarr") == ([], ["sonarr: not enabled in config"])
 
 
 def test_retention_covers_instances_and_keeps_a_removed_ones_newest(monkeypatch):

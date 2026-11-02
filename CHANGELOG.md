@@ -7,6 +7,28 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 _Nothing yet._
 
+## [1.10.0] - 2026-11-02
+
+🎉 **Backuparr is out of beta.** With its feature set settled and backups and
+restores of every supported app holding up release after release, 1.10.0 is the
+first full release - from here on, versions drop the `-beta` suffix.
+
+### Added
+
+- Back up a single app on demand (#78). **Run & Status** has an app picker
+  beside **Run backup now**: leave it on **All apps** for the usual run, or
+  pick one enabled app or instance to back up just that one. A single-app run
+  uploads to every enabled destination and only applies retention to that
+  app's backups. Scheduled runs still back up every enabled app.
+
+### Changed
+
+- The README has a Screenshots section showing the Overview, Settings,
+  Run & Status and History tabs.
+- SECURITY.md describes the current reset protections and how rclone is
+  given OAuth tokens, and lists unencrypted backup archives and the
+  on-volume encryption key as accepted risks.
+
 ## [1.9.25-beta] - 2026-10-30
 
 ### Security

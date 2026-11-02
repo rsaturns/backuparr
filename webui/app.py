@@ -48,6 +48,7 @@ from config_store import (
     DESTINATION_META,
     app_meta,
     destination_meta,
+    enabled_apps,
     instance_ids,
     instance_type,
     key_required,
@@ -428,7 +429,7 @@ def _start_tracked_run(state, lock, reset_fields, work, *args, before_start=None
     return True
 
 
-def _backup_work():
+def _backup_work(only=None):
     backup_logger = logging.getLogger("backuparr")
 
     def _progress(index, total, name):
@@ -438,7 +439,7 @@ def _backup_work():
 
     try:
         cfg = load_config()
-        ok, failed = run_backup(cfg, on_progress=_progress, should_cancel=RUN_CANCEL_EVENT.is_set)
+        ok, failed = run_backup(cfg, on_progress=_progress, should_cancel=RUN_CANCEL_EVENT.is_set, only=only)
         RUN_STATE["ok"] = ok
         RUN_STATE["failed"] = failed
         notify(cfg.get("notify_url"), format_run_message(ok, failed))
@@ -448,9 +449,10 @@ def _backup_work():
         log_failure(backup_logger, "backup run stopped", exc)
 
 
-def _start_backup_run():
-    """Starts a backup run unless one's already in progress. Returns
-    whether it started. Shared by the manual endpoint and the scheduler."""
+def _start_backup_run(only=None):
+    """Starts a backup run unless one's already in progress - of every
+    enabled app, or of just the `only` app or instance id. Returns whether
+    it started. Shared by the manual endpoint and the scheduler."""
     return _start_tracked_run(
         RUN_STATE,
         RUN_LOCK,
@@ -464,6 +466,7 @@ def _start_backup_run():
             "cancel_requested": False,
         },
         _backup_work,
+        only,
         before_start=RUN_CANCEL_EVENT.clear,
         blocked_by=RESTORE_RUN_STATE,
     )
@@ -995,7 +998,12 @@ def api_test_destination(dest_id):
 # ------------------------------------------------------------- backups ----
 @app.post("/api/backup/run")
 def api_backup_run():
-    if not _start_backup_run():
+    data = request.get_json(force=True, silent=True)
+    # No "app" (or null) backs up every enabled app; otherwise just that one.
+    only = data.get("app") if isinstance(data, dict) else None
+    if only is not None and (not isinstance(only, str) or only not in enabled_apps(load_config())):
+        return jsonify({"error": "that app isn't enabled - pick an enabled app, or All apps"}), 400
+    if not _start_backup_run(only):
         if RESTORE_RUN_STATE["running"]:
             return jsonify({"error": "a restore is running - start the backup when it finishes"}), 409
         return jsonify({"error": "a backup is already running"}), 409

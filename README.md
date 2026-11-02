@@ -26,6 +26,7 @@ See [CHANGELOG.md](CHANGELOG.md) for release history.
   - [Pull the published image (recommended)](#pull-the-published-image-recommended)
   - [Or build from source](#or-build-from-source)
   - [First run](#first-run)
+- [Screenshots](#screenshots)
 - [Architecture](#architecture)
 - [Why not reuse an existing tool?](#why-not-reuse-an-existing-tool)
 - [Per-app backup method](#per-app-backup-method)
@@ -109,7 +110,7 @@ docker run -d --name backuparr --restart unless-stopped \
 ```
 
 Published for `linux/amd64` and `linux/arm64`. `latest` is the newest tagged
-release; pin a version (e.g. `rsaturns/backuparr:1.9.25-beta`) to control
+release; pin a version (e.g. `rsaturns/backuparr:1.10.0`) to control
 upgrades. Tags are on [Docker Hub](https://hub.docker.com/r/rsaturns/backuparr).
 
 ### Or build from source
@@ -135,8 +136,21 @@ Then, on the **Settings** tab:
    than the number of days you set, but always keeps its newest one.
 4. Click **Save settings**. Schedule changes apply without a restart.
 
-**Run & Status** runs a backup now and shows it live, **History** lists, downloads
-and deletes backups, and **Restore** restores them.
+**Run & Status** runs a backup now - of every app, or just one - and shows it
+live, **History** lists, downloads and deletes backups, and **Restore** restores them.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/overview.png" alt="Overview tab: enabled services, destinations, schedule and retention, and each app's last backup"><br><b>Overview</b></td>
+    <td><img src="docs/screenshots/settings.png" alt="Settings tab: app cards with URL and API key on the left, destinations on the right"><br><b>Settings</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/run.png" alt="Run and Status tab: a backup in progress with its live log"><br><b>Run &amp; Status</b></td>
+    <td><img src="docs/screenshots/history.png" alt="History tab: each app's backups on a destination, with download and delete buttons"><br><b>History</b></td>
+  </tr>
+</table>
 
 ## Architecture
 
