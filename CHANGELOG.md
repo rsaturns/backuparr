@@ -15,8 +15,8 @@ _Nothing yet._
 
 - Pasting a crafted OneDrive or Dropbox token could tie up the web server for
   hours: the pattern that finds the token in `rclone authorize` output
-  backtracked badly on long runs of spaces. Only a logged-in user could paste
-  one. It now takes linear time.
+  backtracked badly on long runs of spaces or a repeated marker line. Only a
+  logged-in user could paste one. It now takes linear time.
 - The Plex sign-in and Prowlarr discovery cookies are set only when Backuparr
   makes a new one, instead of echoing the browser's own cookie back.
 

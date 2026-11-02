@@ -30,6 +30,19 @@ def test_a_long_whitespace_run_after_the_marker_fails_fast():
     assert time.perf_counter() - started < 1
 
 
+def test_a_paste_repeating_the_marker_fails_fast():
+    # A search() retrying at every copy of the marker took seconds at this size.
+    started = time.perf_counter()
+    with pytest.raises(rclone_token.TokenError):
+        rclone_token.parse_token_blob("Paste the following into your remote machine --->" * 2_000 + " " * 100_000, "dropbox")
+    assert time.perf_counter() - started < 1
+
+
+def test_text_before_the_terminal_block_is_ignored():
+    block = f"$ rclone authorize dropbox\nPaste the following into your remote machine --->\n{B64}\n<---End paste\n"
+    assert rclone_token.parse_token_blob(block, "dropbox")[1] == "acc"
+
+
 def test_parses_the_bare_base64_line_and_raw_json():
     assert rclone_token.parse_token_blob(B64, "dropbox")[1] == "acc"
     assert rclone_token.parse_token_blob(json.dumps(TOKEN, indent=2), "dropbox")[1] == "acc"

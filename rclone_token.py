@@ -5,10 +5,10 @@ import binascii
 import json
 import re
 
-_PASTE_MARKERS = re.compile(
-    r"Paste the following into your remote machine\s*--->(.*?)<---\s*End paste",
-    re.DOTALL,
-)
+# Matched once, from the first _PASTE_START: a search() would retry at every
+# copy of it, which is quadratic on a paste repeating it.
+_PASTE_START = "Paste the following into your remote machine"
+_PASTE_REST = re.compile(r"\s*--->(.*?)<---\s*End paste", re.DOTALL)
 
 
 class TokenError(ValueError):
@@ -26,7 +26,8 @@ def parse_token_blob(pasted, backend):
 
     bad_token = TokenError(f"That doesn't look like a valid rclone token - paste the exact output of `{command}`.")
 
-    match = _PASTE_MARKERS.search(text)
+    start = text.find(_PASTE_START)
+    match = _PASTE_REST.match(text, start + len(_PASTE_START)) if start >= 0 else None
     if match:
         text = match.group(1).strip()
 
