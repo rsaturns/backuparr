@@ -394,6 +394,7 @@ def plex_tls(tmp_path_factory):
     certificate - like Plex's own, which is never issued for its IP."""
     import datetime
     import ssl
+    import sys
     import threading
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     from cryptography import x509
@@ -444,7 +445,13 @@ def plex_tls(tmp_path_factory):
         def log_message(self, *args):
             pass
 
-    server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    class Server(ThreadingHTTPServer):
+        def handle_error(self, request, client_address):
+            # A client that rejects the certificate drops the connection mid-request.
+            if not isinstance(sys.exc_info()[1], (ConnectionError, ssl.SSLError)):
+                super().handle_error(request, client_address)
+
+    server = Server(('127.0.0.1', 0), Handler)
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.load_cert_chain(root / 'leaf.pem', root / 'leaf.key')
     server.socket = context.wrap_socket(server.socket, server_side=True)
