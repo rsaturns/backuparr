@@ -9,9 +9,7 @@ _Nothing yet._
 
 ## [1.10.0] - 2026-11-02
 
-🎉 **Backuparr is out of beta.** With its feature set settled and backups and
-restores of every supported app holding up release after release, 1.10.0 is the
-first full release - from here on, versions drop the `-beta` suffix.
+🎉 **Backuparr is out of beta.** With its feature set settled and backups and restores of every supported app holding up release after release, 1.10.0 is the first full release - from here on, versions drop the `-beta` suffix.
 
 ### Added
 
