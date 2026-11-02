@@ -13,6 +13,11 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   uploads to every enabled destination and only applies retention to that
   app's backups. Scheduled runs still back up every enabled app.
 
+### Changed
+
+- The README has a Screenshots section showing the Overview, Settings,
+  Run & Status and History tabs.
+
 ## [1.9.25-beta] - 2026-10-30
 
 ### Security
