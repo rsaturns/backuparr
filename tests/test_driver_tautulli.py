@@ -140,7 +140,7 @@ def test_restore_uploads_both_files_with_the_right_form_fields(tmp_path):
 def test_the_known_upstream_database_bug_is_skipped_but_the_config_still_restores(tmp_path):
     bug = Reply(400, data={"response": {"result": "error", "message": "No app specified for import."}})
     summary = app_with(bug, ok("started"), Reply()).restore(folder(tmp_path))
-    assert summary == {"database_skipped": "not restorable via API - see README", "config": "started"}
+    assert summary == {"database_skipped": "not restorable via API - see the Tautulli page in the docs", "config": "started"}
 
 
 def test_any_other_database_error_is_not_swallowed(tmp_path):

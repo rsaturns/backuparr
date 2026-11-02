@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerates webui/static/architecture-diagram.svg, the README's
+"""Regenerates webui/static/architecture-diagram.svg, the docs site's
 architecture reference diagram (services -> Backuparr -> destinations).
 Re-run this after adding/removing an app or destination, or after any of
 the icon/logo assets it embeds change. Requires Pillow (`pip install

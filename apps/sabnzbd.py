@@ -47,7 +47,7 @@ _WARNING = (
     "password. Backuparr's Restore tab will prompt you for each Usenet "
     "server's password and restore the rest of the config "
     "automatically; categories/RSS feeds/sorters are not auto-restored "
-    "(see README) and any other field that shows as '**********' below "
+    "(see https://rsaturns.github.io/backuparr/apps/) and any other field that shows as '**********' below "
     "needs to be re-entered by hand in SABnzbd's Settings UI.\n"
 )
 

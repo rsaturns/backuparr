@@ -1,0 +1,31 @@
+# GitHub Pages builds this site from the docs/ folder on main.
+title: Backuparr
+description: Scheduled backups and web-UI restores for your *arr stack and media servers.
+url: https://rsaturns.github.io
+baseurl: /backuparr
+permalink: pretty
+
+remote_theme: just-the-docs/just-the-docs@v0.12.0
+plugins:
+  - jekyll-remote-theme
+  - jekyll-relative-links
+
+logo: https://raw.githubusercontent.com/rsaturns/backuparr/main/webui/static/logo.png
+search_enabled: true
+heading_anchors: true
+aux_links:
+  GitHub: https://github.com/rsaturns/backuparr
+  Docker Hub: https://hub.docker.com/r/rsaturns/backuparr
+aux_links_new_tab: true
+back_to_top: true
+gh_edit_link: true
+gh_edit_link_text: Edit this page on GitHub
+gh_edit_repository: https://github.com/rsaturns/backuparr
+gh_edit_branch: main
+gh_edit_source: docs
+gh_edit_view_mode: edit
+footer_content: "Backuparr is licensed under the <a href=\"https://github.com/rsaturns/backuparr/blob/main/LICENSE\">GNU AGPLv3</a>."
+
+relative_links:
+  enabled: true
+  collections: true

@@ -41,9 +41,11 @@ scripts/smoke_test.sh backuparr:dev    # the same container check CI runs
   restored, and say which version you used in the PR.
 - The web UI is plain JavaScript and CSS with no framework or build step -
   please keep it that way. API calls that change state must send JSON.
-- Update the README when behaviour or setup changes, and add a line under
-  `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md) for anything users will
-  notice. Contributors are credited there.
+- Update the docs in `docs/` (published as the
+  [documentation site](https://rsaturns.github.io/backuparr/)) when behaviour
+  or setup changes, and add a line under `## [Unreleased]` in
+  [CHANGELOG.md](CHANGELOG.md) for anything users will notice. Contributors
+  are credited there.
 
 ### Adding an app
 
@@ -51,7 +53,8 @@ Each app is a driver in `apps/<name>.py`, researched against the app's real
 API or source code (the existing drivers' docstrings show the depth
 expected). A new app also needs an entry in `config_store.py`'s `APP_META`,
 wiring in `backup.py`'s `_build_app()`, an icon in `webui/static/icons/`, its
-README rows and notes, the issue-form dropdown, and the generator in
+row in `docs/apps/index.md` (plus a page in `docs/apps/` if it needs notes),
+the issue-form dropdown, and the generator in
 `scripts/gen_architecture_diagram.py`. Ask in the issue if any of that is
 unclear.
 
