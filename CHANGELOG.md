@@ -5,7 +5,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- The image is also published to GitHub Container Registry as
+  `ghcr.io/rsaturns/backuparr`, with the same tags as Docker Hub.
 
 ## [1.10.1] - 2026-11-02
 

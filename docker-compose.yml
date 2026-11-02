@@ -1,7 +1,8 @@
 services:
   backuparr:
     build: /path/to/backuparr
-    # or once you publish it: image: ghcr.io/<you>/backuparr:latest
+    # or use the published image: rsaturns/backuparr:latest (Docker Hub)
+    # or ghcr.io/rsaturns/backuparr:latest (GitHub Container Registry)
     container_name: backuparr
     restart: unless-stopped
     environment:
