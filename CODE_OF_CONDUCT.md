@@ -27,9 +27,7 @@ or level of experience.
 
 People's identities and their right to exist are not up for debate here.
 Framing bigotry as "just an opinion", "free speech" or "just asking questions"
-doesn't change what it is. Harassment, intimidation, sharing someone's private
-information (doxxing) and sexual attention people didn't ask for are covered
-too.
+doesn't change what it is.
 
 ## Where this applies
 
