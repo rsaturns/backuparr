@@ -110,7 +110,7 @@ docker run -d --name backuparr --restart unless-stopped \
 ```
 
 Published for `linux/amd64` and `linux/arm64`. `latest` is the newest tagged
-release; pin a version (e.g. `rsaturns/backuparr:1.9.25-beta`) to control
+release; pin a version (e.g. `rsaturns/backuparr:1.10.0`) to control
 upgrades. Tags are on [Docker Hub](https://hub.docker.com/r/rsaturns/backuparr).
 
 ### Or build from source

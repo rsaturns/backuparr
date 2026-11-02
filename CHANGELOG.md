@@ -5,6 +5,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.10.0] - 2026-11-02
+
 ### Added
 
 - Back up a single app on demand (#78). **Run & Status** has an app picker
@@ -17,6 +21,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - The README has a Screenshots section showing the Overview, Settings,
   Run & Status and History tabs.
+- SECURITY.md describes the current reset protections and how rclone is
+  given OAuth tokens, and lists unencrypted backup archives and the
+  on-volume encryption key as accepted risks.
+- Releases no longer carry a `-beta` suffix; this one is `1.10.0`.
 
 ## [1.9.25-beta] - 2026-10-30
 
