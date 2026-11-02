@@ -27,6 +27,7 @@ _Nothing yet._
   pick one enabled app or instance to back up just that one. A single-app run
   uploads to every enabled destination and only applies retention to that
   app's backups. Scheduled runs still back up every enabled app.
+- A Code of Conduct, a contributing guide and a pull request template.
 
 ### Changed
 
