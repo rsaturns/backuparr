@@ -16,9 +16,9 @@ _Nothing yet._
 
 ### Changed
 
-- The documentation moved to a [documentation site](https://rsaturns.github.io/backuparr/)
-  with a page per topic and search. The README keeps the screenshots, the
-  Quick start and links into the site.
+- The documentation moved to a documentation site with a page per topic and
+  search, at https://rsaturns.github.io/backuparr/. The README keeps the
+  screenshots, the Quick start and links into the site.
 - The Tautulli and SABnzbd restore notes, and the error for apps without an
   automated restore, point to the documentation site instead of the README.
 
