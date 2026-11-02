@@ -12,12 +12,14 @@ Include what you'd include in a bug report: affected version/commit, steps to re
 
 A few things are intentionally not "fixed" - they're documented trade-offs for this project's single-trusted-admin threat model, not oversights:
 
-- With local authentication enabled, `POST /api/reset` (the forgot-password recovery flow) is reachable without authentication, gated only by a confirmation phrase visible in the client-side source. It is disabled when `BACKUPARR_DISABLE_AUTH=true`. See the README's [Login](README.md#login) section.
+- With local authentication enabled, `POST /api/reset` (the forgot-password recovery flow) is reachable without authentication, gated only by a confirmation phrase that's public in this repo. It wipes Backuparr's own state - API keys, cloud connections, the admin account and Backuparr's backups in Local storage - but not backups in cloud destinations. Other websites can't trigger it, since state-changing API calls must be sent as JSON. It is disabled when `BACKUPARR_DISABLE_AUTH=true`. See the README's [Login](README.md#login) section.
 - `BACKUPARR_DISABLE_AUTH=true` grants full access to the UI and operational API without a local account. Use it only when an authenticating reverse proxy protects all routes and direct access to the container is blocked; Backuparr does not verify proxy user headers.
-- `rclone`'s OAuth tokens/client secrets are passed as subprocess arguments on every sync, visible to anything that can inspect the container's own process list (`/proc`, `ps`, `docker top`).
+- Backup archives are not encrypted, and some contain app credentials (see the README's per-app notes). Protect every destination.
+- Secrets in `config.json` are encrypted with `secrets.key`, which by default sits on the same volume - anyone with the whole volume can decrypt them. Set `BACKUPARR_SECRETS_KEY` to keep the key off it. See the README's [Encryption at rest](README.md#encryption-at-rest) section.
+- When a Google Drive, OneDrive or Dropbox remote is first written to `rclone.conf` or its settings change, its OAuth token (and Google Drive's client secret) is passed to `rclone` as a command-line argument, briefly visible to anything that can inspect the container's process list (`/proc`, `ps`, `docker top`).
 
-If you believe either of these has a worse impact than described, or you've found something else, please still report it privately first.
+If you believe any of these has a worse impact than described, or you've found something else, please still report it privately first.
 
 ## Supported versions
 
-This project is pre-1.0 and moves quickly - only the latest `main`/`latest` image and the most recent tagged release receive fixes. There's no long-term support branch.
+Backuparr moves quickly - only the newest release (the `latest` image) receives fixes. There's no long-term support branch.
