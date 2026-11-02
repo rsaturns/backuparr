@@ -6,7 +6,7 @@ import json
 import re
 
 _PASTE_MARKERS = re.compile(
-    r"Paste the following into your remote machine\s*--->\s*(.*?)\s*<---\s*End paste",
+    r"Paste the following into your remote machine\s*--->(.*?)<---\s*End paste",
     re.DOTALL,
 )
 

@@ -773,7 +773,8 @@ def api_plex_auth_start():
     if not PLEX_START_LOCK.acquire(blocking=False):
         return jsonify({"error": "Plex sign-in is starting. Try again in a moment."}), 429
     try:
-        owner = request.cookies.get(PLEX_OWNER_COOKIE) or secrets.token_urlsafe(24)
+        new_owner = None if request.cookies.get(PLEX_OWNER_COOKIE) else secrets.token_urlsafe(24)
+        owner = new_owner or request.cookies.get(PLEX_OWNER_COOKIE)
         _discard_plex_logins(owner)
         with PLEX_LOGINS_LOCK:
             _purge_plex_logins_locked()
@@ -785,8 +786,10 @@ def api_plex_auth_start():
             PLEX_LOGINS[job_id] = (owner, login)
         response = jsonify({"job_id": job_id, "auth_url": login.auth_url, "expires_in": login.expires_in})
         # Separate from Flask's refreshing session cookie, as with discovery.
-        response.set_cookie(PLEX_OWNER_COOKIE, owner, httponly=True,
-                            secure=app.config["SESSION_COOKIE_SECURE"], samesite="Strict")
+        # Set only when new, so a browser's own cookie is never echoed back.
+        if new_owner:
+            response.set_cookie(PLEX_OWNER_COOKIE, new_owner, httponly=True,
+                                secure=app.config["SESSION_COOKIE_SECURE"], samesite="Strict")
         return response, 201
     except PlexAuthError as exc:
         return jsonify({"error": str(exc)}), exc.status
@@ -884,7 +887,8 @@ def api_discovery_prowlarr():
     if not DISCOVERY_RUN_LOCK.acquire(blocking=False):
         return _discovery_response({"error": "Discovery is already running. Try again when it finishes."}, 409)
     # A separate cookie: a stale concurrent response must not clobber the refreshing session cookie.
-    owner = request.cookies.get(DISCOVERY_OWNER_COOKIE) or secrets.token_urlsafe(24)
+    new_owner = None if request.cookies.get(DISCOVERY_OWNER_COOKIE) else secrets.token_urlsafe(24)
+    owner = new_owner or request.cookies.get(DISCOVERY_OWNER_COOKIE)
     job_id = secrets.token_urlsafe(24)
     with DISCOVERY_JOBS_LOCK:
         _purge_discovery_locked()
@@ -896,8 +900,9 @@ def api_discovery_prowlarr():
         DISCOVERY_RUN_LOCK.release()
         return _discovery_response({"error": "Could not start discovery. Try again."}, 503)
     response = _discovery_response({"job_id": job_id}, 202)
-    response.set_cookie(DISCOVERY_OWNER_COOKIE, owner, httponly=True,
-                        secure=app.config["SESSION_COOKIE_SECURE"], samesite="Strict")
+    if new_owner:
+        response.set_cookie(DISCOVERY_OWNER_COOKIE, new_owner, httponly=True,
+                            secure=app.config["SESSION_COOKIE_SECURE"], samesite="Strict")
     return response
 
 

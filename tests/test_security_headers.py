@@ -46,8 +46,8 @@ def test_static_assets_are_still_cacheable(webui):
 @pytest.mark.parametrize("template", sorted(p.name for p in (WEBUI / "templates").glob("*.html")))
 def test_templates_have_no_inline_scripts_or_event_handlers(template):
     html = (WEBUI / "templates" / template).read_text()
-    assert not re.search(r"<script(?![^>]*\bsrc=)[^>]*>", html), "inline <script> would be blocked by the policy"
-    assert not re.search(r"\son[a-z]+\s*=", html), "inline event handler would be blocked by the policy"
+    assert not re.search(r"<script(?![^>]*\bsrc=)[^>]*>", html, re.IGNORECASE), "inline <script> would be blocked by the policy"
+    assert not re.search(r"\son[a-z]+\s*=", html, re.IGNORECASE), "inline event handler would be blocked by the policy"
     assert not re.search(r"javascript:", html)
 
 

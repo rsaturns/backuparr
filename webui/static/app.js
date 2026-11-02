@@ -1970,7 +1970,7 @@ async function loadHistory() {
         dlLink.className = "icon-btn";
         dlLink.title = "Download this backup";
         dlLink.textContent = "↓";
-        dlLink.href = `/api/history/${destId}/${appId}/${encodeURIComponent(e.name)}/download`;
+        dlLink.href = `/api/history/${encodeURIComponent(destId)}/${encodeURIComponent(appId)}/${encodeURIComponent(e.name)}/download`;
         const delBtn = document.createElement("button");
         delBtn.type = "button";
         delBtn.className = "icon-btn";
