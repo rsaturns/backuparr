@@ -411,7 +411,7 @@ def test_scheduled_backup_and_web_restore_send_headers_at_every_phase(authed_cli
         else:
             uploaded.append(dst)
     monkeypatch.setattr(backup.rclone_util, "copyto", copyto)
-    monkeypatch.setattr(backup, "apply_retention", lambda *a: None)
+    monkeypatch.setattr(backup, "apply_retention", lambda *a, **kw: None)
     monkeypatch.setattr(backup.destination_util, "remote_root", lambda *a: "/dest")
     cfg = config_store.load_config()
     cfg["request_headers"] = HEADERS

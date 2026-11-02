@@ -135,8 +135,8 @@ Then, on the **Settings** tab:
    than the number of days you set, but always keeps its newest one.
 4. Click **Save settings**. Schedule changes apply without a restart.
 
-**Run & Status** runs a backup now and shows it live, **History** lists, downloads
-and deletes backups, and **Restore** restores them.
+**Run & Status** runs a backup now - of every app, or just one - and shows it
+live, **History** lists, downloads and deletes backups, and **Restore** restores them.
 
 ## Architecture
 

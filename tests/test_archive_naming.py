@@ -57,7 +57,7 @@ def test_run_backup_names_each_archive_by_its_real_format(tmp_path, monkeypatch)
     monkeypatch.setattr(backup.destination_util, "remote_root", lambda dest_id, cfg: "/dest")
     monkeypatch.setattr(backup, "build_app", lambda name, cfg: Fake(kinds[name]))
     monkeypatch.setattr(backup.rclone_util, "copyto", lambda src, dst: uploaded.append(dst))
-    monkeypatch.setattr(backup, "apply_retention", lambda *args: None)
+    monkeypatch.setattr(backup, "apply_retention", lambda *args, **kwargs: None)
 
     ok, failed = backup.run_backup({"apps": {n: {} for n in kinds}, "destinations": {"local": {}}})
 

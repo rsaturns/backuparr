@@ -15,6 +15,8 @@ const APP_DISCOVERY_UPDATES = new Map();
 const INSTANCE_NAMES = new Map();
 const REMOVED_INSTANCES = new Set();
 const RETIRED_INSTANCES = new Set();
+// Enabled apps and instances as last saved: the Run tab can back up any one.
+const ENABLED_APPS = new Set();
 
 async function apiFetch(url, opts) {
   opts = { ...opts };
@@ -1131,6 +1133,7 @@ async function loadConfig() {
   RETIRED_INSTANCES.clear();
   (cfg.removed_instances || []).forEach((appId) => RETIRED_INSTANCES.add(appId));
   rememberSavedInstances(cfg.apps || {});
+  rememberEnabledApps(cfg.apps || {});
   INSTANCE_NAMES.forEach((name, appId) => addInstanceCard(appId, cfg.apps[appId]));
   (cfg.request_headers || []).forEach(addRequestHeader);
   Object.keys(cfg.apps || {}).forEach((appId) => fillAppCard(appId, cfg.apps[appId]));
@@ -1144,6 +1147,14 @@ function rememberSavedInstances(apps) {
   Object.keys(apps).sort().forEach((appId) => {
     if (apps[appId] && isExtraInstance(appId)) INSTANCE_NAMES.set(appId, apps[appId].name || "");
   });
+}
+
+function rememberEnabledApps(apps) {
+  ENABLED_APPS.clear();
+  Object.keys(apps).forEach((appId) => {
+    if (apps[appId] && apps[appId].enabled) ENABLED_APPS.add(appId);
+  });
+  initRunAppOptions();
 }
 
 function collectConfig() {
@@ -1192,6 +1203,7 @@ async function saveSettings() {
     REMOVED_INSTANCES.forEach((appId) => RETIRED_INSTANCES.add(appId));
     REMOVED_INSTANCES.clear();
     rememberSavedInstances(cfg.apps);
+    rememberEnabledApps(cfg.apps);
     resultEl.textContent = "Saved";
     resultEl.className = "save-result ok";
     snapshotSettingsState();
@@ -1707,6 +1719,7 @@ function renderRunState(state) {
   const progressBar = document.getElementById("run-progress-bar");
 
   runBtn.disabled = !!state.running;
+  document.getElementById("run-app").disabled = !!state.running;
   runBtn.textContent = state.running ? "Running..." : "Run backup now";
 
   cancelBtn.classList.toggle("hidden", !state.running);
@@ -1802,10 +1815,24 @@ async function refreshRunStatus() {
   });
 }
 
+// "All apps", then every enabled app with its saved instances after it.
+function initRunAppOptions() {
+  const select = document.getElementById("run-app");
+  const previous = select.value;
+  select.replaceChildren(new Option("All apps", ""));
+  APP_META.forEach((m) => {
+    [m.id, ...Array.from(INSTANCE_NAMES.keys()).filter((appId) => instanceType(appId) === m.id)]
+      .filter((appId) => ENABLED_APPS.has(appId))
+      .forEach((appId) => select.add(new Option(appLabel(appId), appId)));
+  });
+  if (Array.from(select.options).some((opt) => opt.value === previous)) select.value = previous;
+}
+
 async function runBackupNow() {
+  const appId = document.getElementById("run-app").value;
   try {
-    await apiFetch("/api/backup/run", { method: "POST" });
-    toast("Backup started", "ok");
+    await apiFetch("/api/backup/run", { method: "POST", body: JSON.stringify(appId ? { app: appId } : {}) });
+    toast(appId ? `Backup of ${appLabel(appId)} started` : "Backup started", "ok");
     refreshRunStatus();
   } catch (e) {
     toast(`Could not start backup: ${e.message}`, "fail");

@@ -312,18 +312,21 @@ def format_run_message(ok, failed):
     return "\n".join(lines)
 
 
-def apply_retention(root, retention_days, now=None):
+def apply_retention(root, retention_days, now=None, only=None):
     """Deletes each app's backups older than retention_days from one
     destination, always keeping its newest - so an app that keeps failing,
     or was switched off (or an instance that was removed), still has its
     last good backup. Only Backuparr's own <app>/<app>_<timestamp> archives
     are touched, <app> being an app or instance id; age comes from the
-    timestamp in the name, written in this container's local time."""
+    timestamp in the name, written in this container's local time. only,
+    if given, limits it to that one app or instance's backups."""
     cutoff = (now or datetime.now()) - timedelta(days=int(retention_days))
     per_app = {}
     for entry in rclone_util.lsjson(root, recursive=True):
         app, sep, name = entry.get("Path", "").partition("/")
         if entry.get("IsDir") or not sep or not instance_type(app) or not destination_util.is_backup_name(app, name):
+            continue
+        if only is not None and app != only:
             continue
         per_app.setdefault(app, []).append(name)
     for app, names in per_app.items():
@@ -346,10 +349,13 @@ class RunCancelled(Exception):
     pass
 
 
-def run_backup(cfg, on_progress=None, should_cancel=None):
+def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
     """Run one backup pass for every enabled app instance, uploading to
     every enabled destination. Returns (ok, failed) - failed entries are
     "<instance id>: <message>" strings.
+
+    only, if given, is one enabled app or instance id: back up just that
+    one, and apply retention to its backups alone.
 
     on_progress(index, total, name), if given, is called right before each
     app starts - lets a caller (e.g. the web UI) show "app N of M".
@@ -364,6 +370,11 @@ def run_backup(cfg, on_progress=None, should_cancel=None):
             raise RunCancelled()
 
     apps = enabled_apps(cfg)
+    if only is not None:
+        if only not in apps:
+            log.error("%s is not enabled - nothing to do", only)
+            return [], [f"{only}: not enabled in config"]
+        apps = [only]
     if not apps:
         log.error("No apps enabled - nothing to do")
         return [], ["no apps enabled in config"]
@@ -459,6 +470,6 @@ def run_backup(cfg, on_progress=None, should_cancel=None):
 
     log.info("Applying retention (%sd) per destination", retention_days)
     for root in dest_roots.values():
-        apply_retention(root, retention_days)
+        apply_retention(root, retention_days, only=only)
 
     return ok, failed

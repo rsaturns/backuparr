@@ -674,6 +674,12 @@ input:focus, select:focus, textarea:focus {
   gap: 8px;
 }
 
+.run-head-actions select { width: auto; }
+
+@media (max-width: 560px) {
+  .run-head { flex-wrap: wrap; gap: 10px; }
+}
+
 .run-summary {
   display: flex;
   align-items: center;

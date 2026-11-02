@@ -21,7 +21,7 @@ def test_a_run_reports_progress_results_and_notifies(inline, authed_client, monk
     notified = []
     seen = {}
 
-    def fake_run_backup(cfg, on_progress=None, should_cancel=None):
+    def fake_run_backup(cfg, on_progress=None, should_cancel=None, only=None):
         on_progress(1, 2, "radarr")
         on_progress(2, 2, "sonarr")
         seen["cancel"] = should_cancel
@@ -77,6 +77,34 @@ def test_each_run_starts_from_a_clean_state(inline, authed_client, monkeypatch):
     authed_client.post("/api/backup/run", json={})
     state = status(authed_client)
     assert (state["ok"], state["failed"]) == ([], ["sonarr: x"])
+
+
+# --- one app ---------------------------------------------------------------
+
+RADARR = {"enabled": True, "url": "http://radarr:7878", "api_key": "k"}
+
+
+def test_a_run_can_back_up_just_one_enabled_app(inline, authed_client, monkeypatch):
+    seen = []
+    monkeypatch.setattr(inline, "run_backup", lambda cfg, only=None, **kw: seen.append(only) or ([only or "all"], []))
+    assert authed_client.post("/api/config", json={"apps": {"radarr": RADARR}}).status_code == 200
+
+    assert authed_client.post("/api/backup/run", json={"app": "radarr"}).get_json() == {"started": True}
+    assert status(authed_client)["ok"] == ["radarr"]
+    # No app, or null, is the usual run of every enabled app.
+    assert authed_client.post("/api/backup/run", json={}).status_code == 200
+    assert authed_client.post("/api/backup/run", json={"app": None}).status_code == 200
+    assert seen == ["radarr", None, None]
+
+
+@pytest.mark.parametrize("target", ["sonarr", "radarr-4k", "nope", "", 7, ["radarr"]])
+def test_a_one_app_run_needs_an_enabled_app(inline, authed_client, monkeypatch, target):
+    started = []
+    monkeypatch.setattr(inline, "run_backup", lambda cfg, **kw: started.append(1) or ([], []))
+    assert authed_client.post("/api/config", json={"apps": {"radarr": RADARR}}).status_code == 200
+    response = authed_client.post("/api/backup/run", json={"app": target})
+    assert response.status_code == 400 and "isn't enabled" in response.get_json()["error"]
+    assert started == [] and inline.RUN_STATE["running"] is False
 
 
 # --- cancelling ------------------------------------------------------------

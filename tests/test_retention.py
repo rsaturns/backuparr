@@ -55,6 +55,13 @@ def test_nothing_but_backuparrs_own_archives_is_ever_deleted(remote, path):
     assert remote.deleted == []
 
 
+def test_a_single_app_run_only_prunes_that_apps_backups(remote):
+    remote.files = ["radarr/radarr_20260101_030000.zip", "radarr/radarr_20261029_030000.zip",
+                    "radarr-4k/radarr-4k_20260101_030000.zip", "radarr-4k/radarr-4k_20261029_030000.zip"]
+    backup.apply_retention("dest:", 7, now=NOW, only="radarr-4k")
+    assert remote.deleted == ["dest:/radarr-4k/radarr-4k_20260101_030000.zip"]
+
+
 def test_profilarrs_tar_archives_count_too(remote):
     remote.files = ["profilarr/profilarr_20260101_030000.tar.gz", "profilarr/profilarr_20261029_030000.tar.gz"]
     backup.apply_retention("dest:", 7, now=NOW)

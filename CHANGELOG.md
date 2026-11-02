@@ -5,7 +5,13 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- Back up a single app on demand (#78). **Run & Status** has an app picker
+  beside **Run backup now**: leave it on **All apps** for the usual run, or
+  pick one enabled app or instance to back up just that one. A single-app run
+  uploads to every enabled destination and only applies retention to that
+  app's backups. Scheduled runs still back up every enabled app.
 
 ## [1.9.25-beta] - 2026-10-30
 
