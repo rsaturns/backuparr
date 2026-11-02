@@ -9,6 +9,10 @@ _Nothing yet._
 
 ## [1.10.0] - 2026-11-02
 
+🎉 **Backuparr is out of beta.** With its feature set settled and backups and
+restores of every supported app holding up release after release, 1.10.0 is the
+first full release - from here on, versions drop the `-beta` suffix.
+
 ### Added
 
 - Back up a single app on demand (#78). **Run & Status** has an app picker
@@ -24,7 +28,6 @@ _Nothing yet._
 - SECURITY.md describes the current reset protections and how rclone is
   given OAuth tokens, and lists unencrypted backup archives and the
   on-volume encryption key as accepted risks.
-- Releases no longer carry a `-beta` suffix; this one is `1.10.0`.
 
 ## [1.9.25-beta] - 2026-10-30
 
