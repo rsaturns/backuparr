@@ -9,6 +9,11 @@ _Nothing yet._
 
 ## [1.10.1] - 2026-11-02
 
+### Added
+
+- The image is also published to GitHub Container Registry as
+  `ghcr.io/rsaturns/backuparr`, with the same tags as Docker Hub.
+
 ### Changed
 
 - The documentation moved to a [documentation site](https://rsaturns.github.io/backuparr/)
