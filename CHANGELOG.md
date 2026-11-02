@@ -11,6 +11,15 @@ _Nothing yet._
 
 🎉 **Backuparr is out of beta.** With its feature set settled and backups and restores of every supported app holding up release after release, 1.10.0 is the first full release - from here on, versions drop the `-beta` suffix.
 
+### Security
+
+- Pasting a crafted OneDrive or Dropbox token could tie up the web server for
+  hours: the pattern that finds the token in `rclone authorize` output
+  backtracked badly on long runs of spaces or a repeated marker line. Only a
+  logged-in user could paste one. It now takes linear time.
+- The Plex sign-in and Prowlarr discovery cookies are set only when Backuparr
+  makes a new one, instead of echoing the browser's own cookie back.
+
 ### Added
 
 - Back up a single app on demand (#78). **Run & Status** has an app picker
@@ -26,6 +35,11 @@ _Nothing yet._
 - SECURITY.md describes the current reset protections and how rclone is
   given OAuth tokens, and lists unencrypted backup archives and the
   on-volume encryption key as accepted risks.
+
+### Fixed
+
+- History's download links encode the destination and app in the URL, like the
+  file name.
 
 ## [1.9.25-beta] - 2026-10-30
 

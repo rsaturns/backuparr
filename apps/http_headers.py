@@ -9,7 +9,7 @@ class RequestHeadersError(RuntimeError):
     """Safe to display: messages never contain header values or target URLs."""
 
 
-_NAME = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+\Z")
+_NAME = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+")
 _TRANSPORT_HEADERS = {
     "host", "content-length", "transfer-encoding", "connection", "trailer",
     "te", "upgrade", "proxy-connection", "expect",

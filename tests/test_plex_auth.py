@@ -92,6 +92,16 @@ def test_login_returns_owned_server_token_without_saving(authed_client, isolated
     assert not isolated_webui.PLEX_LOGINS
 
 
+def test_the_owner_cookie_is_set_once_and_never_echoed_back(authed_client, isolated_webui, plex_api):
+    first, _ = start(authed_client)
+    owner = authed_client.get_cookie(isolated_webui.PLEX_OWNER_COOKIE).value
+    assert any(c.startswith(isolated_webui.PLEX_OWNER_COOKIE + "=") for c in first.headers.getlist("Set-Cookie"))
+    second, path = start(authed_client)
+    assert not any(c.startswith(isolated_webui.PLEX_OWNER_COOKIE + "=") for c in second.headers.getlist("Set-Cookie"))
+    assert authed_client.get_cookie(isolated_webui.PLEX_OWNER_COOKIE).value == owner
+    assert authed_client.get(path).json == {"state": "pending"}
+
+
 def test_multiple_owned_servers_are_available_for_selection(authed_client, plex_api):
     plex_api.resources.append({"owned": True, "provides": "server,player", "name": "Second", "accessToken": "second-secret"})
     plex_api.claimed = True

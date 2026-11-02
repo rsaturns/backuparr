@@ -91,6 +91,18 @@ def test_late_session_refresh_cannot_erase_discovery_access(webui):
     assert client.get(path).json["result"]["candidates"][0]["api_key"] == "test-secret"
 
 
+def test_the_owner_cookie_is_set_once_and_never_echoed_back(webui):
+    client = client_for(webui)
+    body = {"url": "http://prowlarr:9696", "api_key": "key"}
+    first = client.post("/api/discovery/prowlarr", json=body)
+    owner = client.get_cookie(webui.DISCOVERY_OWNER_COOKIE).value
+    assert any(c.startswith(webui.DISCOVERY_OWNER_COOKIE + "=") for c in first.headers.getlist("Set-Cookie"))
+    second = client.post("/api/discovery/prowlarr", json=body)
+    assert not any(c.startswith(webui.DISCOVERY_OWNER_COOKIE + "=") for c in second.headers.getlist("Set-Cookie"))
+    assert client.get_cookie(webui.DISCOVERY_OWNER_COOKIE).value == owner
+    assert client.get("/api/discovery/prowlarr/" + second.json["job_id"]).json["result"]["candidates"]
+
+
 def test_logout_discards_discovery_cookie(webui):
     client = client_for(webui)
     client.post("/api/discovery/prowlarr", json={"url": "http://prowlarr:9696", "api_key": "key"})

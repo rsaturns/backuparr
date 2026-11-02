@@ -3,12 +3,21 @@ destinations that connect by pasting it (OneDrive, Dropbox)."""
 import base64
 import binascii
 import json
-import re
 
-_PASTE_MARKERS = re.compile(
-    r"Paste the following into your remote machine\s*--->\s*(.*?)\s*<---\s*End paste",
-    re.DOTALL,
-)
+_PASTE_START = "Paste the following into your remote machine"
+
+
+def _terminal_block(text):
+    """The token between rclone's "--->" and "<---End paste" markers, or
+    None. Plain string scans, so it stays linear on any paste."""
+    start = text.find(_PASTE_START)
+    if start < 0:
+        return None
+    rest = text[start + len(_PASTE_START):].lstrip()
+    if not rest.startswith("--->"):
+        return None
+    token, found, tail = rest[len("--->"):].partition("<---")
+    return token.strip() if found and tail.lstrip().startswith("End paste") else None
 
 
 class TokenError(ValueError):
@@ -26,9 +35,9 @@ def parse_token_blob(pasted, backend):
 
     bad_token = TokenError(f"That doesn't look like a valid rclone token - paste the exact output of `{command}`.")
 
-    match = _PASTE_MARKERS.search(text)
-    if match:
-        text = match.group(1).strip()
+    block = _terminal_block(text)
+    if block is not None:
+        text = block
 
     candidate = text
     if not text.lstrip().startswith("{"):
