@@ -2,6 +2,7 @@
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import io
 import json
+import os
 import threading
 from urllib.parse import urlsplit
 import zipfile
@@ -11,6 +12,7 @@ import pytest
 import backup
 import config_store
 import restore_actions
+from apps.servarr import ServarrApp
 from apps.whisparr import WhisparrApp
 
 
@@ -19,7 +21,7 @@ def whisparr():
     archive = io.BytesIO()
     with zipfile.ZipFile(archive, "w") as output:
         output.writestr("config.xml", "<Config />")
-        output.writestr("whisparr.db", b"SQLite format 3\x00")
+        output.writestr("whisparr2.db", b"SQLite format 3\x00")
     state = {"requests": [], "archive": archive.getvalue()}
 
     class Handler(BaseHTTPRequestHandler):
@@ -96,7 +98,7 @@ def test_backup_downloads_the_new_manual_backup_and_removes_it(whisparr, tmp_pat
     assert app.test_connection() == "whisparr 2.2.0.404 reachable"
     path = app.backup(str(tmp_path))
     with zipfile.ZipFile(path) as archive:
-        assert sorted(archive.namelist()) == ["config.xml", "whisparr.db"]
+        assert sorted(archive.namelist()) == ["config.xml", "whisparr2.db"]
     calls = [(method, path) for method, path, _key, _body in state["requests"]]
     assert calls == [
         ("GET", "/api/v3/system/status"),
@@ -118,3 +120,45 @@ def test_restore_uploads_the_archive_and_restarts_whisparr(whisparr, tmp_path):
     calls = [(method, path) for method, path, _key, _body in state["requests"]]
     assert calls == [("POST", "/api/v3/system/backup/restore/upload"), ("POST", "/api/v3/system/restart")]
     assert b'filename="whisparr_20261103_080000.zip"' in state["requests"][0][3]
+
+
+def _zip(path, members):
+    with zipfile.ZipFile(path, "w") as archive:
+        for name, data in members.items():
+            archive.writestr(name, data)
+    return str(path)
+
+
+def _uploaded(monkeypatch):
+    seen = []
+
+    def capture(self, file_path):
+        with zipfile.ZipFile(file_path) as archive:
+            seen.append((os.path.basename(file_path), {n: archive.read(n) for n in archive.namelist()}))
+        return {"RestartRequired": True}
+
+    monkeypatch.setattr(ServarrApp, "restore_upload", capture)
+    return seen
+
+
+def test_v3_backup_is_uploaded_with_the_database_name_v3_accepts(monkeypatch, tmp_path):
+    # Whisparr v3 backs up whisparr3.db but only restores nzbdrone.db or whisparr.db.
+    seen = _uploaded(monkeypatch)
+    archive = _zip(tmp_path / "whisparr-v3_20261103_080000.zip",
+                   {"config.xml": b"<Config />", "whisparr3.db": b"v3 database", "whisparr3.db-journal": b"", "INFO": b"v3"})
+    WhisparrApp("http://whisparr:6969", "k").restore_upload(archive)
+    name, members = seen[0]
+    assert name == "whisparr-v3_20261103_080000.zip"
+    assert members == {"config.xml": b"<Config />", "whisparr.db": b"v3 database", "whisparr3.db-journal": b"", "INFO": b"v3"}
+    assert os.listdir(tmp_path) == ["whisparr-v3_20261103_080000.zip"], "the renamed copy must be removed"
+
+
+@pytest.mark.parametrize("members", [
+    {"config.xml": b"<Config />", "whisparr2.db": b"v2 database"},
+    {"config.xml": b"<Config />", "whisparr.db": b"db", "whisparr3.db": b"db"},
+])
+def test_other_backups_are_uploaded_unchanged(monkeypatch, tmp_path, members):
+    seen = _uploaded(monkeypatch)
+    archive = _zip(tmp_path / "whisparr_20261103_080000.zip", members)
+    WhisparrApp("http://whisparr:6969", "k").restore_upload(archive)
+    assert seen == [("whisparr_20261103_080000.zip", members)]
