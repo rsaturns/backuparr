@@ -20,7 +20,7 @@ class ConfigError(RuntimeError):
     truncated by a full disk, ...). The message says what to do about it."""
 
 
-APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr"]
+APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr", "lazylibrarian"]
 
 DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "password": ""}
 
@@ -161,6 +161,22 @@ APP_META = [
             {"name": "data_dir", "label": "Data folder", "type": "text", "required": True,
              "placeholder": "/mnt/seerr",
              "help": "Seerr's /app/config folder as mounted here; read-write to restore"},
+        ],
+    },
+    {
+        "id": "lazylibrarian",
+        "label": "LazyLibrarian",
+        "icon": "lazylibrarian.png",
+        "status": "available",
+        "key_required": True,
+        "url_placeholder": "http://lazylibrarian:5299",
+        "key_help": "Config > Interface > API > API Key (the full-access one)",
+        # LazyLibrarian's backup API only says where it wrote the file, so its
+        # data folder is mounted into this container - see apps/lazylibrarian.py.
+        "extra_fields": [
+            {"name": "data_dir", "label": "Data folder", "type": "text", "required": True,
+             "placeholder": "/mnt/lazylibrarian",
+             "help": "LazyLibrarian's /config folder as mounted here; read-write to restore"},
         ],
     },
 ]

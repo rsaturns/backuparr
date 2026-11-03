@@ -5,7 +5,7 @@ nav_order: 11
 
 # Architecture
 
-![Radarr, Sonarr, Lidarr, Whisparr, Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, NZBGet, Tautulli, Jellyfin, Emby, Plex, and Seerr each feed Backuparr; Backuparr uploads each backup via rclone to Local storage, Google Drive, Microsoft OneDrive, and Dropbox](https://raw.githubusercontent.com/rsaturns/backuparr/main/webui/static/architecture-diagram.svg)
+![Radarr, Sonarr, Lidarr, Whisparr, Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, NZBGet, Tautulli, Jellyfin, Emby, Plex, Seerr, and LazyLibrarian each feed Backuparr; Backuparr uploads each backup via rclone to Local storage, Google Drive, Microsoft OneDrive, and Dropbox](https://raw.githubusercontent.com/rsaturns/backuparr/main/webui/static/architecture-diagram.svg)
 
 ## Why not reuse an existing tool?
 

@@ -50,6 +50,7 @@ SOURCES = [
     ("Emby", os.path.join(ICONS, "emby.svg"), "svg"),
     ("Plex", os.path.join(ICONS, "plex.svg"), "svg"),
     ("Seerr", os.path.join(ICONS, "seerr.svg"), "svg"),
+    ("LazyLibrarian", os.path.join(ICONS, "lazylibrarian.png"), "png"),
 ]
 
 DESTS = [

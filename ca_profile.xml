@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <CommunityApplications>
-  <Profile>Backuparr backs up and restores your *arr stack and media apps - Radarr, Sonarr, Lidarr, Whisparr, Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, NZBGet, Tautulli, Jellyfin, Emby, Plex and Seerr - to local storage, Google Drive, OneDrive and Dropbox, all set up from its web UI. The Unraid template uses the same image as every other install. Documentation: https://rsaturns.github.io/backuparr/ - report problems on GitHub: https://github.com/rsaturns/backuparr/issues</Profile>
+  <Profile>Backuparr backs up and restores your *arr stack and media apps - Radarr, Sonarr, Lidarr, Whisparr, Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, NZBGet, Tautulli, Jellyfin, Emby, Plex, Seerr and LazyLibrarian - to local storage, Google Drive, OneDrive and Dropbox, all set up from its web UI. The Unraid template uses the same image as every other install. Documentation: https://rsaturns.github.io/backuparr/ - report problems on GitHub: https://github.com/rsaturns/backuparr/issues</Profile>
   <Icon>https://raw.githubusercontent.com/rsaturns/backuparr/main/webui/static/logo.png</Icon>
   <WebPage>https://github.com/rsaturns/backuparr</WebPage>
 </CommunityApplications>

@@ -1,7 +1,7 @@
 ---
 title: Whisparr
 parent: Apps
-nav_order: 10
+nav_order: 11
 ---
 
 # Whisparr

@@ -42,6 +42,8 @@ services:
       #- "/share/Container/plex/Library/Application Support/Plex Media Server:/mnt/plex:ro"
       # Needed to back up Seerr - its /app/config folder (see the Seerr note).
       #- /share/Container/seerr/config:/mnt/seerr:ro
+      # Needed to back up LazyLibrarian - its /config folder (see the LazyLibrarian note).
+      #- /share/Container/lazylibrarian/config:/mnt/lazylibrarian
 ```
 
 ```sh
@@ -67,6 +69,7 @@ and the same images are on GitHub Container Registry as
 The optional settings are explained under
 [Environment variables](../environment-variables.md), and the extra volumes in the
 notes for [Bazarr](../apps/bazarr.md), [Jellyfin](../apps/jellyfin.md),
-[Emby](../apps/emby.md), [Plex](../apps/plex.md) and [Seerr](../apps/seerr.md).
+[Emby](../apps/emby.md), [Plex](../apps/plex.md), [Seerr](../apps/seerr.md) and
+[LazyLibrarian](../apps/lazylibrarian.md).
 
 Then go through the [first run](first-run.md).
