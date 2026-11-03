@@ -45,8 +45,16 @@ from config_store import ConfigError, enabled_apps, enabled_destinations, instan
 LOG_DIR = os.environ.get("BACKUPARR_LOG_DIR", "/var/log/backuparr")
 LOG_FILE = os.path.join(LOG_DIR, "backup.log")
 
+
+def _log_level(value):
+    """LOG_LEVEL as a logging level name: empty or unknown values mean INFO,
+    so a blank field in a container template doesn't stop startup."""
+    name = (value or "").strip().upper()
+    return name if name in logging.getLevelNamesMapping() else "INFO"
+
+
 logging.basicConfig(
-    level=os.environ.get("LOG_LEVEL", "INFO"),
+    level=_log_level(os.environ.get("LOG_LEVEL")),
     format="%(asctime)s %(levelname)s %(message)s",
 )
 log = logging.getLogger("backuparr")

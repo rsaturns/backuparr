@@ -25,7 +25,10 @@ also need a folder mounted into Backuparr - see [Apps](apps/index.md).
 
 ## Where to find things
 
-- [Getting started](getting-started.md) - install with Docker and the first run.
+- [Getting started](getting-started.md) - install with
+  [Docker](getting-started/docker.md), on [Unraid](getting-started/unraid.md)
+  or [from source](getting-started/build-from-source.md), and the
+  [first run](getting-started/first-run.md).
 - [Apps](apps/index.md) - how each app is backed up and restored, with the notes
   for apps that need extra setup.
 - [Destinations](destinations.md) - Local storage, Google Drive, OneDrive and

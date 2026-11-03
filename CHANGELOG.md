@@ -5,7 +5,14 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- An Unraid template for Community Applications (`templates/backuparr.xml`, with `ca_profile.xml`). It installs the same image as Compose and `docker run`, with appdata in `/mnt/user/appdata/backuparr`, Unraid's `PUID`/`PGID` of `99`/`100`, optional folders for Jellyfin, Emby, Plex, Seerr and Bazarr, and the optional settings under Advanced (#86).
+- Getting started on the documentation site is split into Docker, Unraid, Build from source and First run pages, listed under it in the sidebar, and the README's Quick start has an Unraid section.
+
+### Fixed
+
+- An empty or unknown `LOG_LEVEL` no longer stops the web UI from starting; it falls back to `INFO`.
 
 ## [1.10.1] - 2026-11-02
 

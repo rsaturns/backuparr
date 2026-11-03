@@ -35,6 +35,8 @@ notes](https://rsaturns.github.io/backuparr/apps/).
 
 ## Quick start
 
+### Docker
+
 Add a `backuparr` service to the compose file that already defines your apps,
 so it shares their network and can reach them by name.
 
@@ -93,8 +95,17 @@ upgrades. Tags are on [Docker Hub](https://hub.docker.com/r/rsaturns/backuparr),
 and the same images are on GitHub Container Registry as
 [`ghcr.io/rsaturns/backuparr`](https://github.com/rsaturns/backuparr/pkgs/container/backuparr).
 
-Building from source and the optional settings are covered in
-[Getting started](https://rsaturns.github.io/backuparr/getting-started/).
+The optional settings are covered in
+[Docker](https://rsaturns.github.io/backuparr/getting-started/docker/), and
+building the image yourself in
+[Build from source](https://rsaturns.github.io/backuparr/getting-started/build-from-source/).
+
+### Unraid
+
+On the **Apps** tab, search for **Backuparr** and click **Install**. The
+template uses the same image, with appdata in `/mnt/user/appdata/backuparr`;
+fill in the folders of the apps that need one - see
+[Unraid](https://rsaturns.github.io/backuparr/getting-started/unraid/).
 
 ### First run
 
