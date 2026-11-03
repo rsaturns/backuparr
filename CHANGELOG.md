@@ -5,6 +5,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.10.2] - 2026-11-03
+
 ### Added
 
 - An Unraid template for Community Applications (`templates/backuparr.xml`, with `ca_profile.xml`). It installs the same image as Compose and `docker run`, with appdata in `/mnt/user/appdata/backuparr`, Unraid's `PUID`/`PGID` of `99`/`100`, optional folders for Jellyfin, Emby, Plex, Seerr and Bazarr, and the optional settings under Advanced (#86).
