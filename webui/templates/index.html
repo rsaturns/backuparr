@@ -58,6 +58,9 @@
         <h2>Apps</h2>
         <p class="hint">Check the apps you want backed up - each one expands for its URL and API key (find the key in that app's Settings &gt; General).</p>
         <div id="app-list">
+          {# app.js groups the cards under these once an app is enabled and saved. #}
+          <h3 id="apps-enabled-heading" class="app-group-heading hidden">Enabled</h3>
+          <h3 id="apps-disabled-heading" class="app-group-heading hidden">Not enabled</h3>
           {% for m in app_meta %}
           <div class="app-card{% if m.status != 'available' %} card-soon{% endif %}" data-app="{{ m.id }}">
             <div class="app-card-head">

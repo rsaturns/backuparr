@@ -540,6 +540,7 @@ def _operational_error(exc):
 @app.get("/")
 def index():
     # Prowlarr and the apps it discovers lead the Settings list, side by side.
+    # Once an app is enabled and saved, app.js groups the cards by Enabled.
     lead = ("prowlarr", "radarr", "sonarr", "sabnzbd")
     apps = sorted(APP_META, key=lambda m: lead.index(m["id"]) if m["id"] in lead else len(lead))
     return render_template("index.html", app_meta=apps, destination_meta=DESTINATION_META, version=VERSION,
