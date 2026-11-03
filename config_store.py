@@ -170,7 +170,7 @@ APP_META = [
         "status": "available",
         "key_required": True,
         "url_placeholder": "http://lazylibrarian:5299",
-        "key_help": "Config > Interface > API > API Key (the full-access one)",
+        "key_help": "Config > Interface > API > API Key",
         # LazyLibrarian's backup API only says where it wrote the file, so its
         # data folder is mounted into this container - see apps/lazylibrarian.py.
         "extra_fields": [
