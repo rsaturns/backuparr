@@ -48,6 +48,20 @@ COLLECTIONS = [
     "JobsJSONDB",
     "WorkerVerdictHistoryJSONDB",
 ]
+# Not asked of older versions, which log the refusal as an error.
+_SINCE_MAJOR = {"DashboardsJSONDB": 3}
+
+
+def _major(version):
+    try:
+        return int(str(version).split(".")[0])
+    except ValueError:
+        return None
+
+
+def _known_missing(collection, version):
+    major = _major(version)
+    return major is not None and major < _SINCE_MAJOR.get(collection, 0)
 
 
 class TdarrError(RuntimeError):
@@ -125,6 +139,8 @@ class TdarrApp:
         version = self.version()
         os.makedirs(dest_dir, exist_ok=True)
         for collection in COLLECTIONS:
+            if _known_missing(collection, version):
+                continue
             try:
                 docs = self.dump_collection(collection)
             except _MissingCollection:
@@ -175,8 +191,11 @@ class TdarrApp:
             dumps[collection] = docs
         if not dumps:
             raise TdarrError("tdarr: the backup holds no Tdarr collections - nothing was changed")
+        version = self.version()
         for collection in list(dumps):
             try:
+                if _known_missing(collection, version):
+                    raise _MissingCollection(collection)
                 self._cruddb({"collection": collection, "mode": "getById", "docID": "backuparr-probe"})
             except _MissingCollection:
                 logger.warning("tdarr: skipping %s - this Tdarr version doesn't have it (the backup is from a newer Tdarr)",

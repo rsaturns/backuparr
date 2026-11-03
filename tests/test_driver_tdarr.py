@@ -165,6 +165,20 @@ def test_backup_of_tdarr_2_skips_the_collections_it_doesnt_have(tmp_path):
     assert json.loads((out / "AutomationsJSONDB.json").read_text()) == [{"_id": "a1"}]
 
 
+def test_tdarr_2_is_never_asked_for_dashboards(tmp_path):
+    # It would log the refusal as an error on every backup.
+    app = app_with(**TDARR_2)
+    app.backup(str(tmp_path / "dump"))
+    asked = {call[2]["collection"] for call in app.session.requests if call[0] == "POST"}
+    assert "DashboardsJSONDB" not in asked and asked == set(COLLECTIONS) - {"DashboardsJSONDB"}
+
+
+def test_an_unknown_version_still_falls_back_to_tdarrs_answer(tmp_path):
+    out = tmp_path / "dump"
+    app_with(version="nightly", missing={"DashboardsJSONDB"}).backup(str(out))
+    assert "DashboardsJSONDB.json" not in {p.name for p in out.iterdir()}
+
+
 def test_users_and_api_keys_are_never_backed_up():
     # Tdarr answers 403 for them; restoring them could lock Backuparr out.
     assert not {"UsersJSONDB", "ApiKeysJSONDB"} & set(COLLECTIONS)
