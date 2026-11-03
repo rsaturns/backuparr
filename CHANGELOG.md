@@ -13,6 +13,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - An empty or unknown `LOG_LEVEL` no longer stops the web UI from starting; it falls back to `INFO`.
+- The Google Drive API key on Settings is masked like the Client Secret, so it isn't shown on screen (#94). Thanks to @snehaapratap for the contribution (#95).
 
 ## [1.10.1] - 2026-11-02
 
