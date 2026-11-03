@@ -12,6 +12,7 @@ APPS = {
     "emby": ("X-Emby-Token", {}),
     "seerr": ("X-Api-Key", {}),
     "lazylibrarian": (None, {}),
+    "tdarr": ("x-api-key", {}),
     "sabnzbd": (None, {}),
 }
 

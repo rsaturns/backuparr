@@ -15,6 +15,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Settings lists enabled apps first, A-Z, under **Enabled** and **Not enabled** headings, with Prowlarr at the top when it's enabled. Cards move only on page load and after saving (#93).
 
+### Fixed
+
+- Tdarr 3 support, and Tdarr's API key now works on Tdarr 2 and 3 (it's sent as `x-api-key`). Backups also include Tdarr's automations, variables, dashboards and jobs (#100).
+
 ## [1.10.2] - 2026-11-03
 
 ### Added
