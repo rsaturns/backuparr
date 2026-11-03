@@ -5,15 +5,6 @@ nav_order: 5
 
 # Settings
 
-## App order
-
-On a fresh install, Prowlarr comes first, followed by the Radarr, Sonarr and
-SABnzbd it can discover, then the other apps. Once an app is enabled and
-saved, the list is grouped instead: Prowlarr at the top if it's enabled, then
-**Enabled** and **Not enabled** apps, each A-Z. Cards move only on page load
-and after **Save settings**, never while you edit. Extra instances stay under
-their app's card.
-
 ## Prowlarr discovery
 
 Optional. Enter Prowlarr's URL and API key on its card and click **Discover
