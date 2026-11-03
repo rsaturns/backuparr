@@ -11,9 +11,9 @@ permalink: /
 
 Scheduled config/database backups for Radarr, Sonarr, Lidarr, Whisparr,
 Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, NZBGet, Tautulli, Jellyfin, Emby,
-Plex, and Seerr, sent to every destination you enable: Local storage, Google Drive, OneDrive, and
-Dropbox. Everything - apps, destinations, schedule, retention and restores - is
-set up in the web UI, not env vars.
+Plex, and Seerr, sent to every destination you enable: Local storage, Google
+Drive, OneDrive, and Dropbox. Everything - apps, destinations, schedule,
+retention and restores - is set up in the web UI, not env vars.
 
 Most apps are backed up through their own API. Jellyfin, Emby, Plex and Seerr
 also need a folder mounted into Backuparr - see [Apps](apps/index.md).
