@@ -9,14 +9,14 @@ permalink: /
 
 **Backup your Arrs.**
 
-Scheduled config/database backups for Radarr, Sonarr, Prowlarr, Profilarr,
-Bazarr, Tdarr, SABnzbd, NZBGet, Tautulli, Jellyfin, Emby, Plex, and Seerr, sent
-to every destination you enable: Local storage, Google Drive, OneDrive, and
-Dropbox. Everything - apps, destinations, schedule, retention and restores - is
-set up in the web UI, not env vars.
+Scheduled config/database backups for Radarr, Sonarr, Lidarr, Whisparr,
+Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, NZBGet, Tautulli, Jellyfin, Emby,
+Plex, Seerr, and LazyLibrarian, sent to every destination you enable: Local
+storage, Google Drive, OneDrive, and Dropbox. Everything - apps, destinations,
+schedule, retention and restores - is set up in the web UI, not env vars.
 
-Most apps are backed up through their own API. Jellyfin, Emby, Plex and Seerr
-also need a folder mounted into Backuparr - see [Apps](apps/index.md).
+Most apps are backed up through their own API. Jellyfin, Emby, Plex, Seerr and
+LazyLibrarian also need a folder mounted into Backuparr - see [Apps](apps/index.md).
 
 [Get started](getting-started.md){: .btn .btn-primary }
 [View on GitHub](https://github.com/rsaturns/backuparr){: .btn }
@@ -33,8 +33,8 @@ also need a folder mounted into Backuparr - see [Apps](apps/index.md).
   for apps that need extra setup.
 - [Destinations](destinations.md) - Local storage, Google Drive, OneDrive and
   Dropbox.
-- [Settings](settings.md) - Prowlarr discovery, more than one Radarr or Sonarr,
-  and authentication headers for apps behind a reverse proxy.
+- [Settings](settings.md) - Prowlarr discovery, more than one instance of an
+  app, and authentication headers for apps behind a reverse proxy.
 - [Login and security](security.md) - the admin login, resetting it, and
   encryption at rest.
 - [Restoring after a disaster](restoring.md)

@@ -13,7 +13,7 @@ live progress and a log.
 fields for that restore only, without changing Settings - for a rebuilt or
 renamed instance, or a trial restore on a throwaway copy.
 
-- **Radarr / Sonarr / Prowlarr** - automatic; the app restarts.
+- **Radarr / Sonarr / Lidarr / Whisparr / Prowlarr** - automatic; the app restarts.
 - **Profilarr** - manual, see the [Profilarr note](apps/profilarr.md).
 - **Bazarr** - needs Bazarr's config/backup folder mounted into Backuparr;
   enter it under "Bazarr backup folder" unless it's set in Settings.
@@ -24,5 +24,6 @@ renamed instance, or a trial restore on a throwaway copy.
 - **NZBGet** - automatic; NZBGet reloads. See the [NZBGet note](apps/nzbget.md).
 - **Tautulli** - config only, see the [Tautulli note](apps/tautulli.md).
 - **Jellyfin** - automatic; Jellyfin restarts. See the [Jellyfin note](apps/jellyfin.md) before restoring onto a fresh install.
-- **Emby, Plex, Seerr** - stop the app first, restore, then start it again. See
-  the [Emby](apps/emby.md), [Plex](apps/plex.md) and [Seerr](apps/seerr.md) notes.
+- **Emby, Plex, Seerr, LazyLibrarian** - stop the app first, restore, then start
+  it again. See the [Emby](apps/emby.md), [Plex](apps/plex.md),
+  [Seerr](apps/seerr.md) and [LazyLibrarian](apps/lazylibrarian.md) notes.

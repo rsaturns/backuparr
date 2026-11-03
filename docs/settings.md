@@ -8,25 +8,25 @@ nav_order: 5
 ## Prowlarr discovery
 
 Optional. Enter Prowlarr's URL and API key on its card and click **Discover
-services**: Backuparr fills in the URLs and API keys of the Radarr, Sonarr and
-SABnzbd instances Prowlarr knows, letting you choose when there are several.
-Extra Radarr and Sonarr instances it finds can be added with **Add as
-instance**.
+services**: Backuparr fills in the Radarr, Sonarr, Lidarr, Whisparr,
+LazyLibrarian, SABnzbd and NZBGet that Prowlarr knows, letting you choose when
+there are several. Extra Radarr, Sonarr, Lidarr and Whisparr instances can be
+added with **Add as instance**.
 
 - Only empty fields are filled, and nothing is saved until you save.
-- Prowlarr masks those API keys, so Backuparr reads them from a temporary
-  Prowlarr backup, which it then deletes. With Prowlarr on PostgreSQL, or a
-  login proxy blocking `/backup/`, only the URLs are filled in.
+- Prowlarr masks API keys and NZBGet's password, so Backuparr reads them from a
+  temporary Prowlarr backup, which it then deletes. With Prowlarr on
+  PostgreSQL, or a login proxy blocking `/backup/`, only the URLs are filled in.
 - The URLs are the ones Prowlarr uses; **Test connection** confirms Backuparr
   can reach them.
-- Other apps, including NZBGet, are configured by hand.
+- Other fields, such as LazyLibrarian's data folder, are entered by hand.
 
-## More than one Radarr or Sonarr
+## More than one instance
 
-Click **Add another Radarr** (or Sonarr) under its card and give the instance
-a name, such as `4K` or `Anime`. Each instance has its own settings, backups,
-History and Restore entry, and can get its own
-[authentication headers](#service-authentication-headers).
+Radarr, Sonarr, Lidarr and Whisparr can each run more than once. Click **Add
+another** under the app's card and name the instance, such as `4K` or `Anime`.
+Each instance has its own settings, backups, History and Restore entry, and can
+get its own [authentication headers](#service-authentication-headers).
 
 - The name also sets the instance's backup folder and archive names: `4K`
   gives `radarr-4k/radarr-4k_<date>_<time>.zip`. Renaming it later keeps the
@@ -45,9 +45,9 @@ OAuth providers or notification webhooks. Values are encrypted like API keys.
 - A header goes to **all apps** unless you open **Apps** under it and pick
   some. One header name can be used on several rows, as long as no app gets it
   twice.
-- An app's own authentication wins over a header of the same name - Tdarr's
-  and NZBGet's `Authorization`, Jellyfin's `Authorization: MediaBrowser`. Use
-  another header name (such as `Proxy-Authorization`) for the proxy.
+- An app's own authentication wins over a header of the same name - NZBGet's
+  `Authorization`, Jellyfin's `Authorization: MediaBrowser`. Use another header
+  name (such as `Proxy-Authorization`) for the proxy.
 - A configured `Cookie` is added alongside the app's cookies; a cookie the app
   already set wins.
 - Requests to an app with headers must stay on its configured scheme, host and

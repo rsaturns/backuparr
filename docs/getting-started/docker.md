@@ -42,6 +42,8 @@ services:
       #- "/share/Container/plex/Library/Application Support/Plex Media Server:/mnt/plex:ro"
       # Needed to back up Seerr - its /app/config folder (see the Seerr note).
       #- /share/Container/seerr/config:/mnt/seerr:ro
+      # Needed to back up LazyLibrarian - its /config folder (see the LazyLibrarian note).
+      #- /share/Container/lazylibrarian/config:/mnt/lazylibrarian
 ```
 
 ```sh
@@ -59,7 +61,7 @@ docker run -d --name backuparr --restart unless-stopped \
 ```
 
 Published for `linux/amd64` and `linux/arm64`. `latest` is the newest tagged
-release; pin a version (e.g. `rsaturns/backuparr:1.10.2`) to control
+release; pin a version (e.g. `rsaturns/backuparr:2.0.0`) to control
 upgrades. Tags are on [Docker Hub](https://hub.docker.com/r/rsaturns/backuparr),
 and the same images are on GitHub Container Registry as
 [`ghcr.io/rsaturns/backuparr`](https://github.com/rsaturns/backuparr/pkgs/container/backuparr).
@@ -67,6 +69,7 @@ and the same images are on GitHub Container Registry as
 The optional settings are explained under
 [Environment variables](../environment-variables.md), and the extra volumes in the
 notes for [Bazarr](../apps/bazarr.md), [Jellyfin](../apps/jellyfin.md),
-[Emby](../apps/emby.md), [Plex](../apps/plex.md) and [Seerr](../apps/seerr.md).
+[Emby](../apps/emby.md), [Plex](../apps/plex.md), [Seerr](../apps/seerr.md) and
+[LazyLibrarian](../apps/lazylibrarian.md).
 
 Then go through the [first run](first-run.md).

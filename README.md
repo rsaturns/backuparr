@@ -8,14 +8,14 @@
 > from Claude (Anthropic) - code, documentation, and commit history
 > included. Reviewed and maintained by a human.
 
-Scheduled config/database backups for Radarr, Sonarr, Prowlarr, Profilarr,
-Bazarr, Tdarr, SABnzbd, NZBGet, Tautulli, Jellyfin, Emby, Plex, and Seerr, sent
-to every destination you enable: Local storage, Google Drive, OneDrive, and
-Dropbox. Everything - apps, destinations, schedule, retention and restores - is
-set up in the web UI, not env vars.
+Scheduled config/database backups for Radarr, Sonarr, Lidarr, Whisparr,
+Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, NZBGet, Tautulli, Jellyfin, Emby,
+Plex, Seerr, and LazyLibrarian, sent to every destination you enable: Local
+storage, Google Drive, OneDrive, and Dropbox. Everything - apps, destinations,
+schedule, retention and restores - is set up in the web UI, not env vars.
 
-Most apps are backed up through their own API. Jellyfin, Emby, Plex and Seerr
-also need a folder mounted into Backuparr - see the [app
+Most apps are backed up through their own API. Jellyfin, Emby, Plex, Seerr and
+LazyLibrarian also need a folder mounted into Backuparr - see the [app
 notes](https://rsaturns.github.io/backuparr/apps/).
 
 **[Documentation](https://rsaturns.github.io/backuparr/)** · [Changelog](CHANGELOG.md)
@@ -73,6 +73,8 @@ services:
       #- "/share/Container/plex/Library/Application Support/Plex Media Server:/mnt/plex:ro"
       # Needed to back up Seerr - its /app/config folder (see the Seerr note).
       #- /share/Container/seerr/config:/mnt/seerr:ro
+      # Needed to back up LazyLibrarian - its /config folder (see the LazyLibrarian note).
+      #- /share/Container/lazylibrarian/config:/mnt/lazylibrarian
 ```
 
 ```sh
@@ -90,7 +92,7 @@ docker run -d --name backuparr --restart unless-stopped \
 ```
 
 Published for `linux/amd64` and `linux/arm64`. `latest` is the newest tagged
-release; pin a version (e.g. `rsaturns/backuparr:1.10.2`) to control
+release; pin a version (e.g. `rsaturns/backuparr:2.0.0`) to control
 upgrades. Tags are on [Docker Hub](https://hub.docker.com/r/rsaturns/backuparr),
 and the same images are on GitHub Container Registry as
 [`ghcr.io/rsaturns/backuparr`](https://github.com/rsaturns/backuparr/pkgs/container/backuparr).
@@ -129,7 +131,7 @@ live, **History** lists, downloads and deletes backups, and **Restore** restores
 - [Getting started](https://rsaturns.github.io/backuparr/getting-started/)
 - [Apps](https://rsaturns.github.io/backuparr/apps/) - how each app is backed up and restored
 - [Destinations](https://rsaturns.github.io/backuparr/destinations/) - Local storage, Google Drive, OneDrive, Dropbox
-- [Settings](https://rsaturns.github.io/backuparr/settings/) - Prowlarr discovery, multiple Radarr/Sonarr, reverse-proxy headers
+- [Settings](https://rsaturns.github.io/backuparr/settings/) - Prowlarr discovery, multiple instances of an app, reverse-proxy headers
 - [Login and security](https://rsaturns.github.io/backuparr/security/)
 - [Restoring after a disaster](https://rsaturns.github.io/backuparr/restoring/)
 - [Notifications](https://rsaturns.github.io/backuparr/notifications/)

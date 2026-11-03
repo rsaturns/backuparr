@@ -29,6 +29,8 @@ from apps.bazarr import BazarrApp, BazarrError
 from apps.http_headers import RequestHeadersError, app_connection_config, configure_app_headers
 from apps.emby import EmbyApp, EmbyError
 from apps.jellyfin import JellyfinApp, JellyfinError
+from apps.lazylibrarian import LazyLibrarianApp, LazyLibrarianError
+from apps.lidarr import LidarrApp
 from apps.nzbget import NzbgetApp, NzbgetError
 from apps.plex import PlexApp, PlexError
 from apps.profilarr import ProfilarrApp, ProfilarrError
@@ -40,6 +42,7 @@ from apps.servarr import ServarrError, UnsafeRedirectError
 from apps.sonarr import SonarrApp
 from apps.tautulli import TautulliApp, TautulliError
 from apps.tdarr import TdarrApp, TdarrError
+from apps.whisparr import WhisparrApp
 from config_store import ConfigError, enabled_apps, enabled_destinations, instance_type
 
 LOG_DIR = os.environ.get("BACKUPARR_LOG_DIR", "/var/log/backuparr")
@@ -76,6 +79,7 @@ _CLEAN_MESSAGE_ERRORS = (
     ConfigError,
     destination_util.DestinationError,
     JellyfinError,
+    LazyLibrarianError,
     NzbgetError,
     EmbyError,
     PlexError,
@@ -224,6 +228,10 @@ def _build_app(name, app_cfg):
         return RadarrApp(app_cfg["url"], app_cfg["api_key"])
     if name == "sonarr":
         return SonarrApp(app_cfg["url"], app_cfg["api_key"])
+    if name == "lidarr":
+        return LidarrApp(app_cfg["url"], app_cfg["api_key"])
+    if name == "whisparr":
+        return WhisparrApp(app_cfg["url"], app_cfg["api_key"])
     if name == "prowlarr":
         return ProwlarrApp(app_cfg["url"], app_cfg["api_key"])
     if name == "profilarr":
@@ -251,6 +259,8 @@ def _build_app(name, app_cfg):
         return PlexApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
     if name == "seerr":
         return SeerrApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
+    if name == "lazylibrarian":
+        return LazyLibrarianApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
     raise ValueError(f"Unknown app: {name}")
 
 

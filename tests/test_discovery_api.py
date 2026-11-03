@@ -1,3 +1,4 @@
+import re
 import importlib
 import threading
 import copy
@@ -162,7 +163,33 @@ def test_running_jobs_are_never_purged(webui):
 def test_prowlarr_and_discovered_apps_lead_the_app_list(webui):
     html = client_for(webui).get("/").get_data(as_text=True)
     cards = [line for line in html.splitlines() if 'class="app-card' in line and "data-app=" in line]
-    assert [c.split('data-app="')[1].split('"')[0] for c in cards[:5]] == ["prowlarr", "radarr", "sonarr", "sabnzbd", "profilarr"]
+    assert [c.split('data-app="')[1].split('"')[0] for c in cards[:9]] == [
+        "prowlarr", "radarr", "sonarr", "lidarr", "whisparr", "lazylibrarian", "sabnzbd", "nzbget", "profilarr"]
     assert html.count('id="discover-btn"') == 1
     assert html.index('data-app="prowlarr"') < html.index('id="discover-btn"') < html.index('class="help-tip"') < html.index('data-app="profilarr"')
     assert html.count('class="help-tip"') == 1
+
+
+def test_app_list_has_hidden_group_headings_before_the_cards(webui):
+    # app.js shows them and moves the cards under them once an app is saved enabled.
+    html = client_for(webui).get("/").get_data(as_text=True)
+    for heading in ('id="apps-enabled-heading" class="app-group-heading hidden"',
+                    'id="apps-disabled-heading" class="app-group-heading hidden"'):
+        assert html.count(heading) == 1
+        assert html.index('id="app-list"') < html.index(heading) < html.index('data-app="prowlarr"')
+
+
+def test_every_discoverable_card_can_show_what_prowlarr_found(webui):
+    html = client_for(webui).get("/").get_data(as_text=True)
+    starts = list(re.finditer(r'<div class="app-card[^"]*" data-app="([^"]+)"', html))
+    cards = {m.group(1): html[m.start():(starts[i + 1].start() if i + 1 < len(starts) else len(html))]
+             for i, m in enumerate(starts)}
+    for app in ("radarr", "sonarr", "lidarr", "whisparr", "lazylibrarian", "sabnzbd", "nzbget"):
+        for marker in ("discovery-origin", "app-discovery", "discovery-key-status"):
+            assert marker in cards[app], (app, marker)
+    for app in ("prowlarr", "bazarr", "tdarr", "plex", "seerr"):
+        assert "discovery-origin" not in cards[app] and "discovery-key-status" not in cards[app], app
+    # NZBGet has no API key field: its note sits under the password.
+    nzbget = cards["nzbget"]
+    assert "f-api_key" not in nzbget
+    assert nzbget.index('data-field="password"') < nzbget.index("discovery-key-status")

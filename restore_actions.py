@@ -15,7 +15,7 @@ from backup import build_app
 from config_store import instance_type
 
 # Restored by uploading the archive to the app, which then restarts.
-UPLOAD_RESTORE_APPS = {"radarr", "sonarr", "prowlarr"}
+UPLOAD_RESTORE_APPS = {"radarr", "sonarr", "lidarr", "whisparr", "prowlarr"}
 
 # Backup filenames are always <app>_<timestamp>.<ext> (.zip, or .tar.gz for
 # Profilarr). filename can come straight from a request body, so reject
@@ -97,6 +97,10 @@ def restore_seerr(app_cfg, local_zip):
     build_app("seerr", app_cfg).restore_from_file(local_zip)
 
 
+def restore_lazylibrarian(app_cfg, local_zip):
+    build_app("lazylibrarian", app_cfg).restore_from_file(local_zip)
+
+
 def load_sabnzbd_config(tmp_dir, local_zip):
     extract_dir = extract_zip(local_zip, os.path.join(tmp_dir, "extracted"))
     with open(os.path.join(extract_dir, "sabnzbd_config.json")) as f:
@@ -125,8 +129,8 @@ def restore_app(app_name, app_cfg, tmp_dir, local_zip, *, bazarr_backup_dir=None
     out to have it loaded here.
 
     Returns a small dict describing what happened, shaped per app:
-      {"kind": "upload"} - radarr/sonarr/prowlarr
-      {"kind": "bazarr"} / {"kind": "tdarr"} / {"kind": "jellyfin"} / {"kind": "emby"} / {"kind": "plex"} / {"kind": "seerr"} / {"kind": "nzbget"}
+      {"kind": "upload"} - radarr/sonarr/lidarr/whisparr/prowlarr
+      {"kind": "bazarr"} / {"kind": "tdarr"} / {"kind": "jellyfin"} / {"kind": "emby"} / {"kind": "plex"} / {"kind": "seerr"} / {"kind": "lazylibrarian"} / {"kind": "nzbget"}
       {"kind": "tautulli", "summary": {...}} / {"kind": "sabnzbd", "summary": {...}}
     """
     if instance_type(app_name) in UPLOAD_RESTORE_APPS:
@@ -152,6 +156,9 @@ def restore_app(app_name, app_cfg, tmp_dir, local_zip, *, bazarr_backup_dir=None
     if app_name == "seerr":
         restore_seerr(app_cfg, local_zip)
         return {"kind": "seerr"}
+    if app_name == "lazylibrarian":
+        restore_lazylibrarian(app_cfg, local_zip)
+        return {"kind": "lazylibrarian"}
     if app_name == "nzbget":
         return {"kind": "nzbget", "reloaded": restore_nzbget(app_cfg, local_zip)}
     if app_name == "tautulli":

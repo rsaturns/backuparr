@@ -1,18 +1,16 @@
 ---
 title: Tdarr
 parent: Apps
-nav_order: 9
+nav_order: 10
 ---
 
 # Tdarr
 
-## API auth token
+Tdarr 2 and 3 are both supported. Use the server's port (8266), not the web UI's.
 
-If Tdarr has an API auth token enabled, put it in the optional API key field
-on its card (it's sent as `Authorization: Bearer <key>`). Leave it blank if
-Tdarr has no auth (the default).
-
-## Restore
-
-A restore wipes each of Tdarr's database collections before refilling it, so
-you're asked to confirm first.
+- **API key:** needed when Tdarr's authentication is on - the default from
+  Tdarr 3. Create one under **Tools > API Keys**. Tdarr 3 asks for an admin
+  account first.
+- **Restore** wipes each of Tdarr's database collections before refilling it,
+  so you're asked to confirm first. A Tdarr 3 backup restored onto Tdarr 2
+  leaves out its dashboards, which Tdarr 2 doesn't have.

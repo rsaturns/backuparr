@@ -36,3 +36,6 @@ services:
       # Needed to back up Seerr - the folder Seerr has at /app/config.
       # Read-only is enough for backups; read-write to restore.
       # - /share/Container/seerr/config:/mnt/seerr:ro
+      # Needed to back up LazyLibrarian - the folder it has at /config. Read-write,
+      # so each backup's file is removed from it and restores work.
+      # - /share/Container/lazylibrarian/config:/mnt/lazylibrarian

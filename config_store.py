@@ -20,7 +20,7 @@ class ConfigError(RuntimeError):
     truncated by a full disk, ...). The message says what to do about it."""
 
 
-APP_NAMES = ["radarr", "sonarr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr"]
+APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr", "lazylibrarian"]
 
 DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "password": ""}
 
@@ -29,10 +29,13 @@ DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "pass
 # archive names never change; each extra one is "<app>-<suffix>" (radarr-4k),
 # an id fixed when it's added because it names the instance's backup folder.
 # Only its display name can change later.
-MULTI_INSTANCE_APPS = ("radarr", "sonarr")
+MULTI_INSTANCE_APPS = ("radarr", "sonarr", "lidarr", "whisparr")
 MAX_EXTRA_INSTANCES = 10
 _EXTRA_INSTANCE_ID = re.compile(rf"({'|'.join(MULTI_INSTANCE_APPS)})-([a-z0-9]+(?:-[a-z0-9]+)*)")
 _MAX_INSTANCE_ID_LENGTH = 40
+# Apps Prowlarr discovery can fill in: its Applications, then its download
+# clients. Each one's Prowlarr implementation, lowercased, is its app id.
+DISCOVERABLE_APPS = ("radarr", "sonarr", "lidarr", "whisparr", "lazylibrarian", "sabnzbd", "nzbget")
 # An extra instance also has a display name, e.g. "Radarr 4K".
 DEFAULT_INSTANCE = {**DEFAULT_APP, "name": ""}
 
@@ -41,6 +44,8 @@ DEFAULT_INSTANCE = {**DEFAULT_APP, "name": ""}
 APP_META = [
     {"id": "radarr", "label": "Radarr", "icon": "radarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://radarr:7878", "extra_fields": [], "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
     {"id": "sonarr", "label": "Sonarr", "icon": "sonarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://sonarr:8989", "extra_fields": [], "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
+    {"id": "lidarr", "label": "Lidarr", "icon": "lidarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://lidarr:8686", "extra_fields": [], "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
+    {"id": "whisparr", "label": "Whisparr", "icon": "whisparr.svg", "status": "available", "key_required": True, "url_placeholder": "http://whisparr:6969", "extra_fields": [], "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
     {"id": "prowlarr", "label": "Prowlarr", "icon": "prowlarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://prowlarr:9696", "extra_fields": []},
     {
         "id": "profilarr",
@@ -75,7 +80,7 @@ APP_META = [
         "key_required": False,
         "url_placeholder": "http://192.168.1.10:8266",
         "extra_fields": [],
-        "key_help": "Only if Tdarr's API auth token is enabled",
+        "key_help": "Tools > API Keys - needed when Tdarr's authentication is on, the default from Tdarr 3",
     },
     {"id": "sabnzbd", "label": "SABnzbd", "icon": "sabnzbd.svg", "status": "available", "key_required": True, "url_placeholder": "http://sabnzbd:8080", "extra_fields": []},
     {
@@ -161,7 +166,25 @@ APP_META = [
              "help": "Seerr's /app/config folder as mounted here; read-write to restore"},
         ],
     },
+    {
+        "id": "lazylibrarian",
+        "label": "LazyLibrarian",
+        "icon": "lazylibrarian.png",
+        "status": "available",
+        "key_required": True,
+        "url_placeholder": "http://lazylibrarian:5299",
+        "key_help": "Config > Interface > API > API Key",
+        # LazyLibrarian's backup API only says where it wrote the file, so its
+        # data folder is mounted into this container - see apps/lazylibrarian.py.
+        "extra_fields": [
+            {"name": "data_dir", "label": "Data folder", "type": "text", "required": True,
+             "placeholder": "/mnt/lazylibrarian",
+             "help": "LazyLibrarian's /config folder as mounted here; read-write to restore"},
+        ],
+    },
 ]
+for _meta in APP_META:
+    _meta["discoverable"] = _meta["id"] in DISCOVERABLE_APPS
 
 DEST_NAMES = ["local", "gdrive", "onedrive", "dropbox"]
 

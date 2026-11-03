@@ -18,6 +18,8 @@ body:
       options:
         - Radarr
         - Sonarr
+        - Lidarr
+        - Whisparr
         - Prowlarr
         - Profilarr
         - Bazarr
@@ -29,6 +31,7 @@ body:
         - Emby
         - Plex
         - Seerr
+        - LazyLibrarian
         - Web UI / general
         - Not app-specific
     validations:

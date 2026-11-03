@@ -169,7 +169,7 @@ def test_sabnzbd_preview_failure_is_explained_and_cleaned_up(authed_client, monk
 def configure(client, **apps):
     body = {"bazarr_backup_dir": "/mnt/bazarr", "apps": {}}
     defaults = {name: {"enabled": True, "url": f"http://{name}:1", "api_key": f"{name}-key"} for name in
-                ("radarr", "sonarr", "prowlarr", "bazarr", "tdarr", "tautulli", "sabnzbd", "profilarr")}
+                ("radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "bazarr", "tdarr", "tautulli", "sabnzbd", "profilarr")}
     defaults["jellyfin"] = {"enabled": True, "url": "http://jellyfin:1", "api_key": "jellyfin-key", "backup_dir": "/mnt/jellyfin"}
     defaults["emby"] = {"enabled": True, "url": "http://emby:1", "api_key": "emby-key", "data_dir": "/mnt/emby"}
     defaults["plex"] = {"enabled": True, "url": "http://plex:1", "api_key": "plex-key", "data_dir": "/mnt/plex"}
@@ -261,6 +261,8 @@ def test_only_one_restore_runs_at_a_time(restore, authed_client, inline):
 @pytest.mark.parametrize("app, message", [
     ("radarr", "radarr restore uploaded, app is restarting"),
     ("sonarr", "sonarr restore uploaded, app is restarting"),
+    ("lidarr", "lidarr restore uploaded, app is restarting"),
+    ("whisparr", "whisparr restore uploaded, app is restarting"),
     ("prowlarr", "prowlarr restore uploaded, app is restarting"),
     ("bazarr", "bazarr restore triggered, app is restarting"),
     ("tdarr", "tdarr restore complete"),

@@ -46,6 +46,7 @@ from config_store import (
     DEST_EDITABLE_FIELDS,
     DEST_NAMES,
     DESTINATION_META,
+    DISCOVERABLE_APPS,
     app_meta,
     destination_meta,
     enabled_apps,
@@ -540,7 +541,8 @@ def _operational_error(exc):
 @app.get("/")
 def index():
     # Prowlarr and the apps it discovers lead the Settings list, side by side.
-    lead = ("prowlarr", "radarr", "sonarr", "sabnzbd")
+    # Once an app is enabled and saved, app.js groups the cards by Enabled.
+    lead = ("prowlarr", *DISCOVERABLE_APPS)
     apps = sorted(APP_META, key=lambda m: lead.index(m["id"]) if m["id"] in lead else len(lead))
     return render_template("index.html", app_meta=apps, destination_meta=DESTINATION_META, version=VERSION,
                            auth_disabled=_AUTH_DISABLED)
@@ -1202,6 +1204,11 @@ def _restore_work(app_name, root, app_cfg, data, bazarr_backup_dir):
             log.info("restore: writing the backup into seerr's data folder...")
             ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
             RESTORE_RUN_STATE["message"] = "seerr restore complete, start Seerr again to load it"
+
+        elif app_name == "lazylibrarian":
+            log.info("restore: writing the backup into lazylibrarian's data folder...")
+            ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
+            RESTORE_RUN_STATE["message"] = "lazylibrarian restore complete, start LazyLibrarian again to load it"
 
         elif app_name == "tautulli":
             log.info("restore: restoring tautulli...")

@@ -7,6 +7,25 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 _Nothing yet._
 
+## [2.0.0] - 2026-11-03
+
+**A big one:** 2.0 adds support for 3 new apps - Lidarr, Whisparr (v2 and v3) and LazyLibrarian - finds them through Prowlarr discovery, and supports Tdarr 3.
+
+### Added
+
+- Lidarr backup and restore, with extra instances (#87).
+- Whisparr v2 and v3 backup and restore, with extra instances. Restoring a v3 backup includes its database, which Whisparr v3's own restore skips (#88).
+- LazyLibrarian backup and restore, through its mounted data folder (#91).
+- Prowlarr discovery also finds Lidarr, Whisparr, LazyLibrarian and NZBGet (#92).
+
+### Changed
+
+- Settings lists enabled apps first, A-Z, under **Enabled** and **Not enabled** headings, with Prowlarr at the top when it's enabled. Cards move only on page load and after saving (#93).
+
+### Fixed
+
+- Tdarr 3 support, and Tdarr's API key now works on Tdarr 2 and 3 (it's sent as `x-api-key`). Backups also include Tdarr's automations, variables, dashboards and jobs (#100).
+
 ## [1.10.2] - 2026-11-03
 
 ### Added
