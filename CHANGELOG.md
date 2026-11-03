@@ -9,6 +9,8 @@ _Nothing yet._
 
 ## [2.0.0] - 2026-11-03
 
+**A big one:** 2.0 adds support for 3 new apps - Lidarr, Whisparr (v2 and v3) and LazyLibrarian - finds them through Prowlarr discovery, and supports Tdarr 3.
+
 ### Added
 
 - Lidarr backup and restore, with extra instances (#87).
