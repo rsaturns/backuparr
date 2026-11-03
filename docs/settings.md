@@ -19,11 +19,11 @@ instance**.
   login proxy blocking `/backup/`, only the URLs are filled in.
 - The URLs are the ones Prowlarr uses; **Test connection** confirms Backuparr
   can reach them.
-- Other apps, including NZBGet, are configured by hand.
+- Other apps, including Lidarr and NZBGet, are configured by hand.
 
-## More than one Radarr or Sonarr
+## More than one Radarr, Sonarr or Lidarr
 
-Click **Add another Radarr** (or Sonarr) under its card and give the instance
+Click **Add another Radarr** (or Sonarr, or Lidarr) under its card and give the instance
 a name, such as `4K` or `Anime`. Each instance has its own settings, backups,
 History and Restore entry, and can get its own
 [authentication headers](#service-authentication-headers).

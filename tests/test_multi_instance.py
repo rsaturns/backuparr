@@ -35,7 +35,7 @@ def write_config(data):
 
 @pytest.mark.parametrize("instance_id, kind", [
     ("radarr", "radarr"), ("plex", "plex"), ("radarr-4k", "radarr"), ("sonarr-anime", "sonarr"),
-    ("radarr-4k-hdr", "radarr"),
+    ("radarr-4k-hdr", "radarr"), ("lidarr-flac", "lidarr"),
     ("prowlarr-2", None), ("plex-2", None), ("radarr-", None), ("radarr--4k", None), ("radarr-4K", None),
     ("radarr_4k", None), ("radarr-4k/..", None), ("radarr-" + "a" * 40, None), ("", None), (None, None),
 ])

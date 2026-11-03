@@ -5,6 +5,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Lidarr backup and restore, through Lidarr's own backup API like Radarr and Sonarr: a URL and API key, no mounted folder. Lidarr can have extra instances, like Radarr and Sonarr (#87).
+
 ### Changed
 
 - Settings groups the app cards once an app is enabled and saved: Prowlarr at the top if it's enabled, then the enabled apps and then the rest, each A-Z under an **Enabled** or **Not enabled** heading. Cards re-sort on page load and after **Save settings**, not while you edit, and extra instances stay under their app's card. A fresh install keeps the current order (#93).

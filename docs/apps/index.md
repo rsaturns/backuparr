@@ -9,7 +9,7 @@ has_toc: false
 
 | App | Backup | Restore |
 |---|---|---|
-| Radarr / Sonarr / Prowlarr | The app's own backup zip (`POST /system/backup`), downloaded and then deleted on the server | Uploaded to `/system/backup/restore/upload`; the app restarts itself |
+| Radarr / Sonarr / Lidarr / Prowlarr | The app's own backup zip (`POST /system/backup`), downloaded and then deleted on the server | Uploaded to `/system/backup/restore/upload`; the app restarts itself |
 | Profilarr | The app's own backup (`POST /api/v1/backups`), downloaded and then deleted on the server | Manual only - see the [Profilarr note](profilarr.md) |
 | Bazarr | The app's own backup (`POST /api/system/backups`), downloaded and then deleted on the server | Written into Bazarr's mounted backup folder, then restored over the API. Downloads depend on Bazarr's web auth - see the [Bazarr note](bazarr.md) |
 | Tdarr | Every internal database collection, read over `/api/v2/cruddb` | Destructive: each collection is wiped, then refilled - see the [Tdarr note](tdarr.md) |
@@ -25,5 +25,5 @@ For the apps with a mounted folder, read-only is enough for backups; restoring
 from the web UI needs it read-write, with Backuparr running as the app's
 `PUID`/`PGID` (or otherwise able to write the app's files).
 
-Running more than one Radarr or Sonarr? See
-[More than one Radarr or Sonarr](../settings.md#more-than-one-radarr-or-sonarr).
+Running more than one Radarr, Sonarr or Lidarr? See
+[More than one Radarr, Sonarr or Lidarr](../settings.md#more-than-one-radarr-sonarr-or-lidarr).

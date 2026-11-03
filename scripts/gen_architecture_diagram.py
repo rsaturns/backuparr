@@ -37,6 +37,7 @@ BOTTOM_MARGIN = 40
 SOURCES = [
     ("Radarr", os.path.join(ICONS, "radarr.svg"), "svg"),
     ("Sonarr", os.path.join(ICONS, "sonarr.svg"), "svg"),
+    ("Lidarr", os.path.join(ICONS, "lidarr.svg"), "svg"),
     ("Prowlarr", os.path.join(ICONS, "prowlarr.svg"), "svg"),
     ("Profilarr", os.path.join(ICONS, "profilarr.svg"), "svg"),
     ("Bazarr", os.path.join(ICONS, "bazarr.svg"), "svg"),
