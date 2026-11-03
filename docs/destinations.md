@@ -23,7 +23,8 @@ Set up from the Google Drive card, with no rclone config:
    register. **Publish the OAuth app** as it says - apps left in Testing lose
    their connection every 7 days.
 2. Paste the Client ID, Client Secret and API key, then **Save settings**. The
-   **Choose folder** picker needs the API key.
+   **Choose folder** picker needs the API key. The API key and Client Secret
+   inputs are masked on screen; the Client ID remains visible.
 3. Click **Connect Google Drive** and approve. Backuparr only asks for
    `drive.file` (files it created or you picked). Google warns the app is
    unverified; click **Advanced**, then **Go to (your app name) (unsafe)**.

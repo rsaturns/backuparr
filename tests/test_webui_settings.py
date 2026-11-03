@@ -1,6 +1,7 @@
 """Settings and the connectivity-test endpoints."""
 import json
 import os
+import re
 
 import pytest
 import requests
@@ -40,6 +41,21 @@ def test_the_dashboard_shows_the_release_version(authed_client, isolated_webui):
     page = authed_client.get("/").get_data(as_text=True)
     assert f"v{isolated_webui.VERSION}" in page
     assert isolated_webui.VERSION == open(os.path.join(os.path.dirname(isolated_webui.__file__), "..", "VERSION")).read().strip()
+
+
+@pytest.mark.parametrize("field, input_type", [
+    ("developer_key", "password"),
+    ("client_secret", "password"),
+    ("client_id", "text"),
+])
+def test_google_drive_credentials_use_appropriate_input_types(authed_client, field, input_type):
+    response = authed_client.get("/")
+    assert response.status_code == 200
+    page = response.get_data(as_text=True)
+    tag = re.search(rf'<input\b[^>]*data-field="{field}"[^>]*>', page)
+    assert tag is not None
+    assert f'type="{input_type}"' in tag.group(0)
+    assert 'class="d-field"' in tag.group(0)
 
 
 # --- validation ------------------------------------------------------------

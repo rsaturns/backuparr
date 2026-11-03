@@ -5,7 +5,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+
+- Mask the Google Drive API key in Settings like the Client Secret so it is
+  not exposed on screen. Fixes #94. Thanks @snehaapratap.
 
 ## [1.10.1] - 2026-11-02
 
