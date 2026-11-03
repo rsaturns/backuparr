@@ -29,6 +29,7 @@ from apps.bazarr import BazarrApp, BazarrError
 from apps.http_headers import RequestHeadersError, app_connection_config, configure_app_headers
 from apps.emby import EmbyApp, EmbyError
 from apps.jellyfin import JellyfinApp, JellyfinError
+from apps.lidarr import LidarrApp
 from apps.nzbget import NzbgetApp, NzbgetError
 from apps.plex import PlexApp, PlexError
 from apps.profilarr import ProfilarrApp, ProfilarrError
@@ -224,6 +225,8 @@ def _build_app(name, app_cfg):
         return RadarrApp(app_cfg["url"], app_cfg["api_key"])
     if name == "sonarr":
         return SonarrApp(app_cfg["url"], app_cfg["api_key"])
+    if name == "lidarr":
+        return LidarrApp(app_cfg["url"], app_cfg["api_key"])
     if name == "prowlarr":
         return ProwlarrApp(app_cfg["url"], app_cfg["api_key"])
     if name == "profilarr":

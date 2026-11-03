@@ -386,7 +386,7 @@ function readAppCard(appId) {
 }
 
 // ------------------------------------------------------------ instances ----
-// An extra Radarr/Sonarr instance gets a copy of its app's card, with a name
+// An extra Radarr, Sonarr or Lidarr instance gets a copy of its app's card, with a name
 // field and a Remove button. Adding and removing take effect on Save.
 function instanceCards(type) {
   return Array.from(document.querySelectorAll(".app-card[data-app]"))

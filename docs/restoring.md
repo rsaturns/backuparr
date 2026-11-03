@@ -13,7 +13,7 @@ live progress and a log.
 fields for that restore only, without changing Settings - for a rebuilt or
 renamed instance, or a trial restore on a throwaway copy.
 
-- **Radarr / Sonarr / Prowlarr** - automatic; the app restarts.
+- **Radarr / Sonarr / Lidarr / Prowlarr** - automatic; the app restarts.
 - **Profilarr** - manual, see the [Profilarr note](apps/profilarr.md).
 - **Bazarr** - needs Bazarr's config/backup folder mounted into Backuparr;
   enter it under "Bazarr backup folder" unless it's set in Settings.

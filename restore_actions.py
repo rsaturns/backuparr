@@ -15,7 +15,7 @@ from backup import build_app
 from config_store import instance_type
 
 # Restored by uploading the archive to the app, which then restarts.
-UPLOAD_RESTORE_APPS = {"radarr", "sonarr", "prowlarr"}
+UPLOAD_RESTORE_APPS = {"radarr", "sonarr", "lidarr", "prowlarr"}
 
 # Backup filenames are always <app>_<timestamp>.<ext> (.zip, or .tar.gz for
 # Profilarr). filename can come straight from a request body, so reject
@@ -125,7 +125,7 @@ def restore_app(app_name, app_cfg, tmp_dir, local_zip, *, bazarr_backup_dir=None
     out to have it loaded here.
 
     Returns a small dict describing what happened, shaped per app:
-      {"kind": "upload"} - radarr/sonarr/prowlarr
+      {"kind": "upload"} - radarr/sonarr/lidarr/prowlarr
       {"kind": "bazarr"} / {"kind": "tdarr"} / {"kind": "jellyfin"} / {"kind": "emby"} / {"kind": "plex"} / {"kind": "seerr"} / {"kind": "nzbget"}
       {"kind": "tautulli", "summary": {...}} / {"kind": "sabnzbd", "summary": {...}}
     """

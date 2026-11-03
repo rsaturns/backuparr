@@ -1,8 +1,8 @@
-"""Shared backup/restore driver for Radarr, Sonarr, and Prowlarr.
+"""Shared backup/restore driver for Radarr, Sonarr, Lidarr and Prowlarr.
 
-All three share the same .NET backend (the "Servarr" family), so they expose
+All four share the same .NET backend (the "Servarr" family), so they expose
 identical system/backup endpoints - only the API version prefix differs
-(Prowlarr is still on v1). This drives the app's own official backup
+(Lidarr and Prowlarr are on v1). This drives the app's own official backup
 mechanism end to end via HTTP: trigger a backup command, wait for it to
 finish, download the resulting zip, delete it from the server, and (for
 restore) upload a zip straight back in. No filesystem/volume access at all.

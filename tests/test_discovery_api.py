@@ -162,7 +162,7 @@ def test_running_jobs_are_never_purged(webui):
 def test_prowlarr_and_discovered_apps_lead_the_app_list(webui):
     html = client_for(webui).get("/").get_data(as_text=True)
     cards = [line for line in html.splitlines() if 'class="app-card' in line and "data-app=" in line]
-    assert [c.split('data-app="')[1].split('"')[0] for c in cards[:5]] == ["prowlarr", "radarr", "sonarr", "sabnzbd", "profilarr"]
+    assert [c.split('data-app="')[1].split('"')[0] for c in cards[:5]] == ["prowlarr", "radarr", "sonarr", "sabnzbd", "lidarr"]
     assert html.count('id="discover-btn"') == 1
     assert html.index('data-app="prowlarr"') < html.index('id="discover-btn"') < html.index('class="help-tip"') < html.index('data-app="profilarr"')
     assert html.count('class="help-tip"') == 1
