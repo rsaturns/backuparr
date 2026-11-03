@@ -8,18 +8,18 @@ nav_order: 5
 ## Prowlarr discovery
 
 Optional. Enter Prowlarr's URL and API key on its card and click **Discover
-services**: Backuparr fills in the URLs and API keys of the Radarr, Sonarr and
-SABnzbd instances Prowlarr knows, letting you choose when there are several.
-Extra Radarr and Sonarr instances it finds can be added with **Add as
-instance**.
+services**: Backuparr fills in the Radarr, Sonarr, Lidarr, Whisparr,
+LazyLibrarian, SABnzbd and NZBGet that Prowlarr knows, letting you choose when
+there are several. Extra Radarr, Sonarr, Lidarr and Whisparr instances can be
+added with **Add as instance**.
 
 - Only empty fields are filled, and nothing is saved until you save.
-- Prowlarr masks those API keys, so Backuparr reads them from a temporary
-  Prowlarr backup, which it then deletes. With Prowlarr on PostgreSQL, or a
-  login proxy blocking `/backup/`, only the URLs are filled in.
+- Prowlarr masks API keys and NZBGet's password, so Backuparr reads them from a
+  temporary Prowlarr backup, which it then deletes. With Prowlarr on
+  PostgreSQL, or a login proxy blocking `/backup/`, only the URLs are filled in.
 - The URLs are the ones Prowlarr uses; **Test connection** confirms Backuparr
   can reach them.
-- Other apps, including NZBGet, are configured by hand.
+- Other fields, such as LazyLibrarian's data folder, are entered by hand.
 
 ## More than one instance
 

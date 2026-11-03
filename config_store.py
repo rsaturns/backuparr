@@ -33,6 +33,9 @@ MULTI_INSTANCE_APPS = ("radarr", "sonarr", "lidarr", "whisparr")
 MAX_EXTRA_INSTANCES = 10
 _EXTRA_INSTANCE_ID = re.compile(rf"({'|'.join(MULTI_INSTANCE_APPS)})-([a-z0-9]+(?:-[a-z0-9]+)*)")
 _MAX_INSTANCE_ID_LENGTH = 40
+# Apps Prowlarr discovery can fill in: its Applications, then its download
+# clients. Each one's Prowlarr implementation, lowercased, is its app id.
+DISCOVERABLE_APPS = ("radarr", "sonarr", "lidarr", "whisparr", "lazylibrarian", "sabnzbd", "nzbget")
 # An extra instance also has a display name, e.g. "Radarr 4K".
 DEFAULT_INSTANCE = {**DEFAULT_APP, "name": ""}
 
@@ -180,6 +183,8 @@ APP_META = [
         ],
     },
 ]
+for _meta in APP_META:
+    _meta["discoverable"] = _meta["id"] in DISCOVERABLE_APPS
 
 DEST_NAMES = ["local", "gdrive", "onedrive", "dropbox"]
 

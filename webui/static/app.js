@@ -652,6 +652,20 @@ async function startPlexLogin() {
   }
 }
 
+// NZBGet's discovered secret is its password; every other app's is an API key.
+function secretField(candidate) {
+  return "password" in candidate ? "password" : "api_key";
+}
+
+function secretLabel(candidate) {
+  return secretField(candidate) === "password" ? "password" : "API key";
+}
+
+function secretUnavailable(candidate) {
+  const reason = candidate[`${secretField(candidate)}_error`] || `Prowlarr's backup did not supply this ${secretLabel(candidate)}.`;
+  return `Discovery ${secretLabel(candidate)} unavailable — ${reason}`;
+}
+
 function markDiscovered(appId) {
   const card = appCard(appId);
   card.dataset.discovered = "true";
@@ -679,7 +693,13 @@ function clearDiscoveryResults() {
 function applyDiscoveredService(appId, candidate, keyOnly = false) {
   const card = appCard(appId);
   if (!keyOnly) card.querySelector(".f-url").value = candidate.url;
-  card.querySelector(".f-api_key").value = candidate.api_key || "";
+  if (secretField(candidate) === "password") {
+    const username = card.querySelector('.f-extra[data-field="username"]');
+    if (!keyOnly || !username.value) username.value = candidate.username || "";
+    card.querySelector('.f-extra[data-field="password"]').value = candidate.password || "";
+  } else {
+    card.querySelector(".f-api_key").value = candidate.api_key || "";
+  }
   markDiscovered(appId);
   card.querySelector(".status-dot").dataset.state = "idle";
   card.querySelector(".test-result").textContent = "";
@@ -690,11 +710,12 @@ function applyDiscoveredService(appId, candidate, keyOnly = false) {
 // user has neither edited the card since discovery began nor entered a key.
 function autoFillDiscovered(appId, candidates, original) {
   const single = candidates.length === 1 ? candidates[0] : null;
+  const field = single ? secretField(single) : "api_key";
   const current = readAppCard(appId);
   const unedited = original && original.revision === (APP_CREDENTIAL_EDIT_REVISION.get(appId) || 0)
-    && original.url === current.url && original.api_key === current.api_key;
-  const keyOnly = !!single && !!current.url && trimUrl(current.url) === trimUrl(single.url) && !!single.api_key;
-  if (!single || !unedited || current.api_key || (current.url && !keyOnly)) return;
+    && original.url === current.url && original[field] === current[field];
+  const keyOnly = !!single && !!current.url && trimUrl(current.url) === trimUrl(single.url) && !!single[field];
+  if (!single || !unedited || current[field] || (current.url && !keyOnly)) return;
   applyDiscoveredService(appId, single, keyOnly);
 }
 
@@ -732,23 +753,24 @@ function renderInstanceChoice(appId, candidates) {
       return;
     }
     const fields = readAppCard(appId);
+    const field = secretField(selected);
     const sameService = trimUrl(fields.url) === trimUrl(selected.url);
-    const inUse = sameService && (!selected.api_key || fields.api_key === selected.api_key);
+    const inUse = sameService && (!selected[field] || fields[field] === selected[field]);
     if (candidates.length > 1) {
       description.textContent = inUse
         ? "Selected instance filled in. Review and save settings."
         : "Choose an instance and apply its settings below.";
     } else {
       description.textContent = sameService
-        ? "Prowlarr found an API key for this URL. Your existing settings were kept."
+        ? `Prowlarr found the ${secretLabel(selected)} for this URL. Your existing settings were kept.`
         : `${selected.name} found at ${selected.url}. Your existing settings were kept.`;
     }
-    keyStatus.textContent = selected.api_key ? "" : `Discovery API key unavailable — ${selected.api_key_error || "Prowlarr's backup did not supply this key."}`;
-    keyStatus.classList.toggle("hidden", !!selected.api_key);
+    keyStatus.textContent = selected[field] ? "" : secretUnavailable(selected);
+    keyStatus.classList.toggle("hidden", !!selected[field]);
     panel.classList.toggle("hidden", candidates.length === 1 && inUse);
     btn.classList.toggle("hidden", inUse);
-    const replaces = (fields.url && !sameService) || (fields.api_key && fields.api_key !== selected.api_key);
-    btn.textContent = replaces ? "Replace URL and API key" : "Use this service";
+    const replaces = (fields.url && !sameService) || (fields[field] && fields[field] !== selected[field]);
+    btn.textContent = replaces ? `Replace URL and ${secretLabel(selected)}` : "Use this service";
   };
 
   if (select) select.addEventListener("change", () => {
@@ -766,10 +788,10 @@ function renderInstanceChoice(appId, candidates) {
 }
 
 function renderDiscoveryNotes(result) {
-  const keyErrors = new Set(result.candidates.map((candidate) => candidate.api_key_error).filter(Boolean));
+  const keyErrors = new Set(result.candidates.map((candidate) => candidate[`${secretField(candidate)}_error`]).filter(Boolean));
   const root = document.getElementById("discovery-results");
   result.warnings
-    .filter((warning) => !keyErrors.has(warning) && !warning.startsWith("Some API keys are unavailable."))
+    .filter((warning) => !keyErrors.has(warning) && !warning.startsWith("Some API keys or passwords are unavailable."))
     .forEach((warning) => {
       const note = document.createElement("p");
       note.className = "discovery-warning";
@@ -777,10 +799,10 @@ function renderDiscoveryNotes(result) {
       root.appendChild(note);
     });
   const total = result.candidates.length;
-  const keys = result.candidates.filter((candidate) => candidate.api_key).length;
+  const keys = result.candidates.filter((candidate) => candidate[secretField(candidate)]).length;
   document.getElementById("discovery-status").textContent = total
-    ? `Found ${total} service(s); API keys available: ${keys}/${total}. Review the details and save settings.`
-    : "No supported services found. Add Radarr, Sonarr or SABnzbd to Prowlarr, or configure them manually below.";
+    ? `Found ${total} service(s); API keys and passwords available: ${keys}/${total}. Review the details and save settings.`
+    : "No supported services found in Prowlarr. Configure them manually below.";
 }
 
 function renderDiscoveryResults(result, initial) {
@@ -852,7 +874,7 @@ function renderNewInstanceChoices(type, candidates) {
       markDiscovered(appId);
       if (!candidate.api_key) {
         const keyStatus = appCard(appId).querySelector(".discovery-key-status");
-        keyStatus.textContent = `Discovery API key unavailable — ${candidate.api_key_error || "Prowlarr's backup did not supply this key."}`;
+        keyStatus.textContent = secretUnavailable(candidate);
         keyStatus.classList.remove("hidden");
       }
       pruneNewInstanceChoices();
@@ -894,7 +916,7 @@ async function discoverServices() {
   clearDiscoveryResults();
   // Snapshot the cards so edits made while discovery runs are never overwritten.
   const initial = {};
-  ["radarr", "sonarr", "sabnzbd"].flatMap(instanceCards).forEach((card) => {
+  APP_META.filter((meta) => meta.discoverable).map((meta) => meta.id).flatMap(instanceCards).forEach((card) => {
     const appId = card.dataset.app;
     initial[appId] = { ...readAppCard(appId), revision: APP_CREDENTIAL_EDIT_REVISION.get(appId) || 0 };
   });
@@ -1681,7 +1703,7 @@ function initScheduleEvents() {
 
 // Also run for each extra instance's card, a copy made after startup.
 function bindAppCard(card) {
-  card.querySelectorAll(".f-url, .f-api_key").forEach((input) => {
+  card.querySelectorAll('.f-url, .f-api_key, .f-extra[data-field="username"], .f-extra[data-field="password"]').forEach((input) => {
     input.addEventListener("input", () => {
       const appId = card.dataset.app;
       if (appId === "plex" && PLEX_LOGIN) stopPlexLogin("Plex details changed. Sign in again to get a token.");
