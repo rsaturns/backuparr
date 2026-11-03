@@ -7,7 +7,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- Lidarr backup and restore, through Lidarr's own backup API like Radarr and Sonarr: a URL and API key, no mounted folder. Lidarr can have extra instances, like Radarr and Sonarr (#87).
+- Lidarr backup and restore, with extra instances (#87).
 
 ### Changed
 

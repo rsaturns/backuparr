@@ -10,9 +10,9 @@
 
 Scheduled config/database backups for Radarr, Sonarr, Lidarr, Prowlarr,
 Profilarr, Bazarr, Tdarr, SABnzbd, NZBGet, Tautulli, Jellyfin, Emby, Plex, and
-Seerr, sent to every destination you enable: Local storage, Google Drive, OneDrive, and
-Dropbox. Everything - apps, destinations, schedule, retention and restores - is
-set up in the web UI, not env vars.
+Seerr, sent to every destination you enable: Local storage, Google Drive,
+OneDrive, and Dropbox. Everything - apps, destinations, schedule, retention and
+restores - is set up in the web UI, not env vars.
 
 Most apps are backed up through their own API. Jellyfin, Emby, Plex and Seerr
 also need a folder mounted into Backuparr - see the [app
@@ -129,7 +129,7 @@ live, **History** lists, downloads and deletes backups, and **Restore** restores
 - [Getting started](https://rsaturns.github.io/backuparr/getting-started/)
 - [Apps](https://rsaturns.github.io/backuparr/apps/) - how each app is backed up and restored
 - [Destinations](https://rsaturns.github.io/backuparr/destinations/) - Local storage, Google Drive, OneDrive, Dropbox
-- [Settings](https://rsaturns.github.io/backuparr/settings/) - Prowlarr discovery, multiple Radarr/Sonarr/Lidarr, reverse-proxy headers
+- [Settings](https://rsaturns.github.io/backuparr/settings/) - Prowlarr discovery, multiple instances of an app, reverse-proxy headers
 - [Login and security](https://rsaturns.github.io/backuparr/security/)
 - [Restoring after a disaster](https://rsaturns.github.io/backuparr/restoring/)
 - [Notifications](https://rsaturns.github.io/backuparr/notifications/)

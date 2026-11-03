@@ -25,5 +25,5 @@ For the apps with a mounted folder, read-only is enough for backups; restoring
 from the web UI needs it read-write, with Backuparr running as the app's
 `PUID`/`PGID` (or otherwise able to write the app's files).
 
-Running more than one Radarr, Sonarr or Lidarr? See
-[More than one Radarr, Sonarr or Lidarr](../settings.md#more-than-one-radarr-sonarr-or-lidarr).
+Running more than one instance of an app? See
+[More than one instance](../settings.md#more-than-one-instance).
