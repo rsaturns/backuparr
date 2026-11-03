@@ -222,6 +222,8 @@ def wire(monkeypatch):
 
     def send(_adapter, request, **kwargs):
         sent.append(request.copy())
+        if request.url.endswith("/api/v2/cruddb"):
+            return reply(request, content=b"[]")  # Tdarr: a collection's documents
         return reply(request, {"version": "test", "config": {}, "response": {"result": "success"}})
 
     monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", send)
@@ -237,7 +239,7 @@ def test_every_available_app_sends_headers_without_losing_its_key(name, wire):
     if name in {"radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr"}:
         assert request.headers["X-Api-Key"] == "native-key"
     elif name == "tdarr":
-        assert request.headers["Authorization"] == "Bearer native-key"
+        assert request.headers["x-api-key"] == "native-key" and "Authorization" not in request.headers
     elif name == "sabnzbd":
         assert "apikey=native-key" in request.body
     else:

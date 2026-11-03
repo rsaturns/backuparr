@@ -77,7 +77,7 @@ APP_META = [
         "key_required": False,
         "url_placeholder": "http://192.168.1.10:8266",
         "extra_fields": [],
-        "key_help": "Only if Tdarr's API auth token is enabled",
+        "key_help": "Tools > API Keys - needed when Tdarr's authentication is on, the default from Tdarr 3",
     },
     {"id": "sabnzbd", "label": "SABnzbd", "icon": "sabnzbd.svg", "status": "available", "key_required": True, "url_placeholder": "http://sabnzbd:8080", "extra_fields": []},
     {
