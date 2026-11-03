@@ -1138,6 +1138,7 @@ async function loadConfig() {
   (cfg.request_headers || []).forEach(addRequestHeader);
   Object.keys(cfg.apps || {}).forEach((appId) => fillAppCard(appId, cfg.apps[appId]));
   Object.keys(cfg.destinations || {}).forEach((destId) => fillDestCard(destId, cfg.destinations[destId]));
+  sortAppCards();
   snapshotSettingsState();
   return cfg;
 }
@@ -1147,6 +1148,50 @@ function rememberSavedInstances(apps) {
   Object.keys(apps).sort().forEach((appId) => {
     if (apps[appId] && isExtraInstance(appId)) INSTANCE_NAMES.set(appId, apps[appId].name || "");
   });
+}
+
+// The order the page lists the apps in on a fresh install (Prowlarr and the
+// apps it discovers first), kept to go back to if every app is disabled.
+let FRESH_APP_ORDER = null;
+
+// Once an app is enabled in the saved settings, list Prowlarr first if it's
+// enabled, then the enabled apps and then the rest, each A-Z under its own
+// heading. Runs on load and after Save only, so ticking Enabled never moves a
+// card mid-edit. An app moves with its extra instances and "Add another" row,
+// and counts as enabled if any of its cards is.
+function sortAppCards() {
+  const list = document.getElementById("app-list");
+  const enabledHeading = document.getElementById("apps-enabled-heading");
+  const disabledHeading = document.getElementById("apps-disabled-heading");
+  const blocks = new Map();
+  let block = null;
+  Array.from(list.children).forEach((el) => {
+    if (el.classList.contains("app-group-heading")) return;
+    if (el.matches(".app-card[data-app]:not(.instance-card)")) {
+      block = [];
+      blocks.set(el.dataset.app, block);
+    }
+    if (block) block.push(el);
+  });
+  if (!FRESH_APP_ORDER) FRESH_APP_ORDER = Array.from(blocks.keys());
+
+  const enabledTypes = new Set(Array.from(ENABLED_APPS, (appId) => instanceType(appId) || appId));
+  const label = (type) => blocks.get(type)[0].querySelector("h3").textContent.trim();
+  const byLabel = (a, b) => label(a).localeCompare(label(b), undefined, { sensitivity: "base" });
+  const types = FRESH_APP_ORDER.filter((type) => blocks.has(type));
+  const grouped = types.some((type) => enabledTypes.has(type));
+  const pinned = grouped && enabledTypes.has("prowlarr") ? ["prowlarr"] : [];
+  const enabled = types.filter((type) => enabledTypes.has(type) && !pinned.includes(type)).sort(byLabel);
+  const disabled = types.filter((type) => !enabledTypes.has(type)).sort(byLabel);
+  const els = (group) => group.flatMap((type) => blocks.get(type));
+
+  enabledHeading.classList.toggle("hidden", !grouped || !enabled.length);
+  disabledHeading.classList.toggle("hidden", !grouped || !disabled.length);
+  if (grouped) {
+    list.append(...els(pinned), enabledHeading, ...els(enabled), disabledHeading, ...els(disabled));
+  } else {
+    list.append(...els(types));
+  }
 }
 
 function rememberEnabledApps(apps) {
@@ -1204,6 +1249,7 @@ async function saveSettings() {
     REMOVED_INSTANCES.clear();
     rememberSavedInstances(cfg.apps);
     rememberEnabledApps(cfg.apps);
+    sortAppCards();
     resultEl.textContent = "Saved";
     resultEl.className = "save-result ok";
     snapshotSettingsState();

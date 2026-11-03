@@ -166,3 +166,12 @@ def test_prowlarr_and_discovered_apps_lead_the_app_list(webui):
     assert html.count('id="discover-btn"') == 1
     assert html.index('data-app="prowlarr"') < html.index('id="discover-btn"') < html.index('class="help-tip"') < html.index('data-app="profilarr"')
     assert html.count('class="help-tip"') == 1
+
+
+def test_app_list_has_hidden_group_headings_before_the_cards(webui):
+    # app.js shows them and moves the cards under them once an app is saved enabled.
+    html = client_for(webui).get("/").get_data(as_text=True)
+    for heading in ('id="apps-enabled-heading" class="app-group-heading hidden"',
+                    'id="apps-disabled-heading" class="app-group-heading hidden"'):
+        assert html.count(heading) == 1
+        assert html.index('id="app-list"') < html.index(heading) < html.index('data-app="prowlarr"')

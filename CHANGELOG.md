@@ -5,7 +5,9 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed
+
+- Settings lists enabled apps first, A-Z, under **Enabled** and **Not enabled** headings, with Prowlarr at the top when it's enabled. Cards move only on page load and after saving (#93).
 
 ## [1.10.2] - 2026-11-03
 
