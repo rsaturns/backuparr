@@ -70,13 +70,13 @@
               </label>
               <img class="app-icon" src="{{ url_for('static', filename='icons/' ~ m.icon) }}" alt="" width="22" height="22">
               <h3>{{ m.label }}</h3>
-              {% if m.id in ('radarr', 'sonarr', 'sabnzbd') %}<span class="discovery-badge discovery-origin hidden">From Prowlarr</span>{% endif %}
+              {% if m.discoverable %}<span class="discovery-badge discovery-origin hidden">From Prowlarr</span>{% endif %}
               {% if m.status != 'available' %}<span class="badge-soon">Coming soon</span>{% endif %}
               <span class="status-dot" data-state="idle"></span>
             </div>
             {% if m.status == 'available' %}
             <div class="app-card-body hidden">
-              {% if m.id in ('radarr', 'sonarr', 'sabnzbd') %}<div class="app-discovery hidden"></div>{% endif %}
+              {% if m.discoverable %}<div class="app-discovery hidden"></div>{% endif %}
               <label class="field">
                 <span class="field-label">URL</span>
                 <input type="text" class="f-url" placeholder="{{ m.url_placeholder }}" autocomplete="off">
@@ -88,7 +88,7 @@
                   {% if not m.key_required %}<span class="muted">(optional{% if m.key_help %} &mdash; {{ m.key_help }}{% endif %})</span>{% elif m.key_help %}<span class="muted">({{ m.key_help }})</span>{% endif %}
                 </span>
                 <input type="password" class="f-api_key" autocomplete="off">
-                {% if m.id in ('radarr', 'sonarr', 'sabnzbd') %}<span class="discovery-key-status hidden" role="status"></span>{% endif %}
+                {% if m.discoverable %}<span class="discovery-key-status hidden" role="status"></span>{% endif %}
               </label>
               {% endif %}
               {% if m.id == 'plex' %}
@@ -107,6 +107,8 @@
               <label class="field">
                 <span class="field-label">{{ f.label }} {% if f.help %}<span class="muted">({{ f.help }})</span>{% endif %}</span>
                 <input type="{{ f.type }}" class="f-extra" data-field="{{ f.name }}"{% if f.placeholder %} placeholder="{{ f.placeholder }}"{% endif %} autocomplete="off">
+                {# NZBGet's discovered secret is its password: its note goes here. #}
+                {% if m.discoverable and m.no_api_key and f.name == 'password' %}<span class="discovery-key-status hidden" role="status"></span>{% endif %}
               </label>
               {% endfor %}
               {% if m.id == 'bazarr' %}
@@ -117,7 +119,7 @@
               {% endif %}
               <div class="app-card-actions">
                 <button type="button" class="btn btn-ghost btn-sm test-btn">Test connection</button>
-                {% if m.id == 'prowlarr' %}<button type="button" class="btn btn-primary btn-sm" id="discover-btn" disabled>Discover services</button><span class="help-tip" tabindex="0" role="img" aria-label="Reads the apps and download clients connected to Prowlarr, through its API, and fills in the URL and API key of your Radarr, Sonarr and SABnzbd." data-tip="Reads the apps and download clients connected to Prowlarr, through its API, and fills in the URL and API key of your Radarr, Sonarr and SABnzbd.">?</span>{% endif %}
+                {% if m.id == 'prowlarr' %}<button type="button" class="btn btn-primary btn-sm" id="discover-btn" disabled>Discover services</button><span class="help-tip" tabindex="0" role="img" aria-label="Reads the apps and download clients connected to Prowlarr, through its API, and fills in their URLs and API keys (and NZBGet's username and password)." data-tip="Reads the apps and download clients connected to Prowlarr, through its API, and fills in their URLs and API keys (and NZBGet's username and password).">?</span>{% endif %}
                 <span class="test-result"></span>
               </div>
               {% if m.id == 'prowlarr' %}

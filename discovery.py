@@ -1,4 +1,10 @@
-"""Read the services configured in Prowlarr, recovering their masked API keys.
+"""Read the services configured in Prowlarr, recovering their masked secrets.
+
+Prowlarr's Applications (Radarr, Sonarr, Lidarr, Whisparr, LazyLibrarian)
+hold a BaseUrl and an ApiKey; its download clients (SABnzbd, NZBGet) a
+Host/Port/UseSsl/UrlBase, and SABnzbd an ApiKey, NZBGet a Username and
+Password. The API masks the key or password; it's read from a temporary
+Prowlarr backup instead.
 
 Nothing is saved here, and only a backup created by discovery is ever deleted.
 """
@@ -12,6 +18,18 @@ import zipfile
 import requests
 
 from apps.servarr import ServarrError, UnsafeRedirectError
+from config_store import DISCOVERABLE_APPS
+
+_CLIENT_PORTS = {"sabnzbd": 8080, "nzbget": 6789}  # Prowlarr's defaults
+
+
+def secret_field(app):
+    """The candidate field holding the app's masked secret."""
+    return "password" if app == "nzbget" else "api_key"
+
+
+def _secret_label(app):
+    return "password" if app == "nzbget" else "API key"
 
 MAX_BACKUP_BYTES = 512 * 1024 * 1024
 
@@ -51,7 +69,7 @@ def _real_key(value):
     return value.strip() if isinstance(value, str) and value.strip().strip("*") else ""
 
 
-def _sabnzbd_url(settings):
+def _client_url(settings, default_port):
     host = settings.get("host")
     if not isinstance(host, str) or not host.strip():
         return ""
@@ -63,7 +81,7 @@ def _sabnzbd_url(settings):
         if (not parsed.hostname or parsed.port is not None or parsed.username or parsed.password
                 or parsed.path or parsed.query or parsed.fragment):
             return ""
-        port = int(settings.get("port", 8080))
+        port = int(settings.get("port", default_port))
     except (TypeError, ValueError):
         return ""
     base = settings.get("urlbase") or ""
@@ -74,8 +92,12 @@ def _sabnzbd_url(settings):
 
 
 def _service_url(app, settings):
-    url = settings.get("baseurl", "") if app in ("radarr", "sonarr") else _sabnzbd_url(settings)
-    return url.rstrip("/") if valid_service_url(url) else ""
+    url = _client_url(settings, _CLIENT_PORTS[app]) if app in _CLIENT_PORTS else settings.get("baseurl", "")
+    return url.rstrip("/") if isinstance(url, str) and valid_service_url(url) else ""
+
+
+def _secret(app, settings):
+    return _real_key(settings.get("password" if app == "nzbget" else "apikey"))
 
 
 def _get_providers(instance, path):
@@ -105,7 +127,7 @@ def read_backup_settings(archive_path):
     """
     with zipfile.ZipFile(archive_path) as archive:
         if "prowlarr.db" not in archive.namelist():
-            return {}, ["The Prowlarr backup has no SQLite database (for example, when using PostgreSQL). Enter missing API keys manually."]
+            return {}, ["The Prowlarr backup has no SQLite database (for example, when using PostgreSQL). Enter missing API keys and passwords manually."]
         with tempfile.TemporaryDirectory(prefix="backuparr-discovery-db-") as tmp:
             db_path = os.path.join(tmp, "prowlarr.db")
             with archive.open("prowlarr.db") as source, open(db_path, "xb") as target:
@@ -119,10 +141,11 @@ def read_backup_settings(archive_path):
             connection = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
             try:
                 result = {}
+                wanted = ", ".join("?" * len(DISCOVERABLE_APPS))
                 for table in ("Applications", "DownloadClients"):
                     rows = connection.execute(
                         f'SELECT Id, Implementation, Settings FROM "{table}" '
-                        "WHERE lower(Implementation) IN ('radarr', 'sonarr', 'sabnzbd')")
+                        f"WHERE lower(Implementation) IN ({wanted})", DISCOVERABLE_APPS)
                     for provider_id, implementation, raw in rows:
                         try:
                             settings = json.loads(raw)
@@ -139,7 +162,7 @@ def _backup_settings(instance, progress, warnings):
     progress("Waiting for any Prowlarr backup to finish...")
     with instance.backup_lock:
         before = {backup["id"] for backup in instance.list_backups()}
-        progress("Creating a temporary Prowlarr backup to read API keys...")
+        progress("Creating a temporary Prowlarr backup to read API keys and passwords...")
         try:
             owned = instance.trigger_discovery_backup()
             created = [
@@ -147,12 +170,12 @@ def _backup_settings(instance, progress, warnings):
                 if backup.get("type") == "manual" and backup.get("id") not in before
             ]
         except (requests.RequestException, RuntimeError):
-            raise DiscoveryError("Could not finish creating or identifying the temporary discovery backup. Check Prowlarr's System > Backup for a leftover backup; enter missing API keys manually.") from None
+            raise DiscoveryError("Could not finish creating or identifying the temporary discovery backup. Check Prowlarr's System > Backup for a leftover backup; enter missing API keys and passwords manually.") from None
         if len(created) != 1 or created[0].get("id") is None:
             raise DiscoveryError("The temporary backup could not be identified safely. Existing backups were left untouched; check Prowlarr's backup list.")
         backup = created[0]
         try:
-            progress("Reading API keys from the temporary Prowlarr backup...")
+            progress("Reading API keys and passwords from the temporary Prowlarr backup...")
             with tempfile.TemporaryDirectory(prefix="backuparr-discovery-") as tmp:
                 archive_path = os.path.join(tmp, "backup.zip")
                 try:
@@ -178,38 +201,40 @@ def _backup_settings(instance, progress, warnings):
 
 
 def _fill_missing_keys(instance, candidates, progress, warnings):
-    """Fill candidates' masked API keys from a temporary Prowlarr backup.
-
-    Candidates that stay without a key get an ``api_key_error`` saying why.
-    """
+    """Fill candidates' masked API keys and passwords from a temporary
+    Prowlarr backup. Candidates that stay without one get an
+    ``api_key_error`` / ``password_error`` saying why."""
     key_error = ""
     try:
         saved, backup_warnings = _backup_settings(instance, progress, warnings)
         for candidate in candidates:
-            if candidate["api_key"]:
+            field = secret_field(candidate["app"])
+            if candidate[field]:
                 continue
             settings = saved.get((candidate["app"], candidate["provider_id"]), {})
             # A changed provider must not receive credentials from an old URL.
             matches_url = _service_url(candidate["app"], settings) == candidate["url"]
             if matches_url:
-                candidate["api_key"] = _real_key(settings.get("apikey"))
-            if not candidate["api_key"]:
+                candidate[field] = _secret(candidate["app"], settings)
+            if not candidate[field]:
+                label = _secret_label(candidate["app"])
                 if not settings:
                     reason = backup_warnings[0] if backup_warnings else "The Prowlarr backup has no matching settings for this service. Run discovery again after checking the application in Prowlarr."
                 elif not matches_url:
                     reason = "The service URL in the backup differs from its current Prowlarr URL. Run discovery again after checking the application in Prowlarr."
                 else:
-                    reason = "The Prowlarr backup has no readable API key for this service. Check the application's API key in Prowlarr."
-                candidate["api_key_error"] = reason
+                    reason = f"The Prowlarr backup has no readable {label} for this service. Check the application's {label} in Prowlarr."
+                candidate[f"{field}_error"] = reason
     except DiscoveryError as exc:
         key_error = str(exc)
     except (OSError, RuntimeError):
-        key_error = "Could not read API keys from a temporary Prowlarr backup. Enter missing API keys manually."
+        key_error = "Could not read API keys and passwords from a temporary Prowlarr backup. Enter them manually."
     if key_error:
         warnings.append(key_error)
         for candidate in candidates:
-            if not candidate["api_key"]:
-                candidate["api_key_error"] = key_error
+            field = secret_field(candidate["app"])
+            if not candidate[field]:
+                candidate[f"{field}_error"] = key_error
 
 
 def discover_prowlarr(instance, progress=lambda message: None):
@@ -219,36 +244,42 @@ def discover_prowlarr(instance, progress=lambda message: None):
     try:
         providers += _get_providers(instance, "/downloadclient")
     except (DiscoveryError, requests.RequestException):
-        warnings.append("Could not read Prowlarr's download clients. Radarr and Sonarr discovery can still proceed.")
+        warnings.append("Could not read Prowlarr's download clients. Its apps can still be discovered.")
 
     candidates = []
     for provider in providers:
         if not isinstance(provider, dict):
             continue
         app = str(provider.get("implementation", "")).lower()
-        if app not in ("radarr", "sonarr", "sabnzbd"):
+        if app not in DISCOVERABLE_APPS:
             continue
         settings = _settings(provider.get("fields"))
         url = _service_url(app, settings)
         if not url:
             warnings.append(f"A configured {app} has an invalid or missing URL and was skipped.")
             continue
-        candidates.append({
+        candidate = {
             "app": app,
             "name": str(provider.get("name") or app),
             "url": url,
-            "api_key": _real_key(settings.get("apikey")),
+            secret_field(app): _secret(app, settings),
             "provider_id": provider.get("id"),
-        })
+        }
+        if app == "nzbget":
+            username = settings.get("username")
+            candidate["username"] = username.strip() if isinstance(username, str) else ""
+        candidates.append(candidate)
 
-    if any(not candidate["api_key"] for candidate in candidates):
+    missing = lambda: any(not candidate[secret_field(candidate["app"])] for candidate in candidates)
+    if missing():
         _fill_missing_keys(instance, candidates, progress, warnings)
 
     unique = {}
     for candidate in candidates:
         candidate.pop("provider_id")
-        unique.setdefault((candidate["app"], candidate["url"], candidate["api_key"]), candidate)
+        field = secret_field(candidate["app"])
+        unique.setdefault((candidate["app"], candidate["url"], candidate.get("username"), candidate[field]), candidate)
     candidates = list(unique.values())
-    if any(not candidate["api_key"] for candidate in candidates):
-        warnings.append("Some API keys are unavailable. Their URLs can be filled in; enter their keys manually.")
+    if missing():
+        warnings.append("Some API keys or passwords are unavailable. Their URLs can be filled in; enter the rest manually.")
     return {"candidates": candidates, "warnings": warnings}

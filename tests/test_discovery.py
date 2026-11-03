@@ -194,6 +194,62 @@ def test_sabnzbd_ipv6_ssl_and_urlbase(tmp_path):
     assert result["candidates"][0]["api_key"] == "sab-key"
 
 
+def test_lidarr_whisparr_and_lazylibrarian_are_found_like_radarr(tmp_path, monkeypatch):
+    monkeypatch.setattr(discovery.tempfile, "tempdir", str(tmp_path))
+    archive = archive_with_settings(tmp_path, [
+        ("Applications", 20, "Lidarr", {"baseUrl": "http://lidarr:8686", "apiKey": "lidarr-key"}),
+        ("Applications", 21, "Lidarr", {"baseUrl": "http://lidarr-flac:8686", "apiKey": "flac-key"}),
+        ("Applications", 22, "Whisparr", {"baseUrl": "http://whisparr:6969", "apiKey": "whisparr-key"}),
+        ("Applications", 23, "LazyLibrarian", {"baseUrl": "http://lazylibrarian:5299", "apiKey": "ll-key"}),
+    ])
+    instance = FakeProwlarr([
+        provider("Lidarr", 20, "http://lidarr:8686", name="Lidarr"),
+        provider("Lidarr", 21, "http://lidarr-flac:8686", name="Lidarr FLAC"),
+        provider("Whisparr", 22, "http://whisparr:6969", name="Whisparr"),
+        provider("LazyLibrarian", 23, "http://lazylibrarian:5299", name="LazyLibrarian"),
+    ], archive=archive)
+    result = discovery.discover_prowlarr(instance)
+    assert [(c["app"], c["name"], c["url"], c["api_key"]) for c in result["candidates"]] == [
+        ("lidarr", "Lidarr", "http://lidarr:8686", "lidarr-key"),
+        ("lidarr", "Lidarr FLAC", "http://lidarr-flac:8686", "flac-key"),
+        ("whisparr", "Whisparr", "http://whisparr:6969", "whisparr-key"),
+        ("lazylibrarian", "LazyLibrarian", "http://lazylibrarian:5299", "ll-key"),
+    ]
+    assert result["warnings"] == [] and instance.deleted == [2]
+
+
+def nzbget_client(host="nzbget", port=6789, password="********", username="nzbget", **extra):
+    fields = {"host": host, "port": port, "useSsl": False, "urlBase": "", "username": username, "password": password, **extra}
+    return {"id": 5, "name": "NZBGet", "implementation": "Nzbget",
+            "fields": [{"name": name, "value": value} for name, value in fields.items() if value is not None]}
+
+
+def test_nzbget_gets_its_username_and_its_password_from_the_backup(tmp_path, monkeypatch):
+    monkeypatch.setattr(discovery.tempfile, "tempdir", str(tmp_path))
+    archive = archive_with_settings(tmp_path, [("DownloadClients", 5, "Nzbget", {
+        "host": "nzbget", "port": 6789, "useSsl": False, "urlBase": "", "username": "nzbget", "password": "tegbzn6789",
+    })])
+    result = discovery.discover_prowlarr(FakeProwlarr([], [nzbget_client()], archive))
+    assert result["candidates"] == [{"app": "nzbget", "name": "NZBGet", "url": "http://nzbget:6789",
+                                     "password": "tegbzn6789", "username": "nzbget"}]
+    assert result["warnings"] == []
+
+
+def test_nzbget_url_uses_its_own_default_port_ssl_and_url_base():
+    result = discovery.discover_prowlarr(FakeProwlarr([], [nzbget_client(port=None, password="real", useSsl=True, urlBase="/nzbget/")]))
+    assert result["candidates"][0]["url"] == "https://nzbget:6789/nzbget"
+
+
+def test_nzbget_whose_url_changed_gets_no_old_password(tmp_path):
+    archive = archive_with_settings(tmp_path, [("DownloadClients", 5, "Nzbget", {
+        "host": "old-host", "port": 6789, "username": "nzbget", "password": "old-password"})])
+    result = discovery.discover_prowlarr(FakeProwlarr([], [nzbget_client()], archive))
+    candidate = result["candidates"][0]
+    assert candidate["password"] == "" and "differs from its current Prowlarr URL" in candidate["password_error"]
+    assert "api_key" not in candidate and "api_key_error" not in candidate
+    assert "Some API keys or passwords are unavailable" in result["warnings"][-1]
+
+
 def test_postgres_backup_preserves_urls_and_reports_missing_keys():
     content = io.BytesIO()
     with zipfile.ZipFile(content, "w") as archive:
@@ -306,7 +362,7 @@ def test_interrupted_backup_keeps_urls_and_reports_possible_leftover(monkeypatch
 
 
 def test_empty_or_unsupported_providers_do_not_create_a_backup():
-    instance = FakeProwlarr([provider("Lidarr"), provider("Bazarr"), provider(url="file:///etc/passwd")])
+    instance = FakeProwlarr([provider("Readarr"), provider("Mylar"), provider(url="file:///etc/passwd")])
     result = discovery.discover_prowlarr(instance)
     assert result["candidates"] == []
     assert not instance.created
