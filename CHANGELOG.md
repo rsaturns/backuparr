@@ -7,7 +7,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- Settings groups the app cards once an app is enabled and saved: Prowlarr at the top if it's enabled, then the enabled apps and then the rest, each A-Z under an **Enabled** or **Not enabled** heading. Cards re-sort on page load and after **Save settings**, not while you edit, and extra instances stay under their app's card. A fresh install keeps the current order (#93).
+- Settings lists enabled apps first, A-Z, under **Enabled** and **Not enabled** headings, with Prowlarr at the top when it's enabled. Cards move only on page load and after saving (#93).
 
 ## [1.10.2] - 2026-11-03
 
