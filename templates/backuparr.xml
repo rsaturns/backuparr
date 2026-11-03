@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>backuparr</Name>
+  <Repository>rsaturns/backuparr:latest</Repository>
+  <Registry>https://hub.docker.com/r/rsaturns/backuparr</Registry>
+  <Network>bridge</Network>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/rsaturns/backuparr/issues</Support>
+  <Project>https://github.com/rsaturns/backuparr</Project>
+  <ReadMe>https://rsaturns.github.io/backuparr/</ReadMe>
+  <Overview>Backup your Arrs. Scheduled config/database backups for Radarr, Sonarr, Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, NZBGet, Tautulli, Jellyfin, Emby, Plex and Seerr, sent to every destination you enable: Local storage, Google Drive, OneDrive and Dropbox. Apps, destinations, schedule, retention and restores are all set up in the web UI. Most apps are backed up through their own API, so they need only a URL (your server's IP and the app's port) and an API key. Jellyfin, Emby, Plex and Seerr also need their folder mapped below, and Bazarr needs its backup folder only to restore. Leave the paths for apps you don't use empty. Docs: https://rsaturns.github.io/backuparr/</Overview>
+  <Category>Backup: Tools:Utilities</Category>
+  <ExtraSearchTerms>arr radarr sonarr prowlarr bazarr sabnzbd nzbget plex jellyfin emby seerr tautulli rclone restore</ExtraSearchTerms>
+  <WebUI>http://[IP]:[PORT:8990]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/rsaturns/backuparr/main/templates/backuparr.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/rsaturns/backuparr/main/webui/static/logo.png</Icon>
+  <License>AGPL-3.0</License>
+  <Screenshot>https://raw.githubusercontent.com/rsaturns/backuparr/main/docs/screenshots/overview.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/rsaturns/backuparr/main/docs/screenshots/settings.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/rsaturns/backuparr/main/docs/screenshots/run.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/rsaturns/backuparr/main/docs/screenshots/history.png</Screenshot>
+  <Config Name="WebUI" Target="8990" Default="8990" Mode="tcp" Description="Port of the Backuparr web UI." Type="Port" Display="always" Required="true" Mask="false">8990</Config>
+  <Config Name="Appdata" Target="/config/backuparr" Default="/mnt/user/appdata/backuparr" Mode="rw" Description="Backuparr's settings, encrypted credentials and, with the Local destination, the backups themselves. Back this folder up or keep a cloud destination enabled." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/backuparr</Config>
+  <Config Name="Jellyfin backups folder" Target="/mnt/jellyfin-backups" Default="" Mode="rw" Description="Needed to back up Jellyfin: the folder Jellyfin writes its backups to, e.g. /mnt/user/appdata/jellyfin/data/data/backups for the linuxserver image. See https://rsaturns.github.io/backuparr/apps/jellyfin/" Type="Path" Display="always" Required="false" Mask="false"/>
+  <Config Name="Emby config folder" Target="/mnt/emby" Default="" Mode="ro" Description="Needed to back up Emby: the folder Emby has at /config, e.g. /mnt/user/appdata/emby. Set Access Mode to Read/Write to restore from the web UI. See https://rsaturns.github.io/backuparr/apps/emby/" Type="Path" Display="always" Required="false" Mask="false"/>
+  <Config Name="Plex data folder" Target="/mnt/plex" Default="" Mode="ro" Description="Needed to back up Plex: its Plex Media Server folder, e.g. /mnt/user/appdata/plex/Library/Application Support/Plex Media Server. Set Access Mode to Read/Write to restore from the web UI. See https://rsaturns.github.io/backuparr/apps/plex/" Type="Path" Display="always" Required="false" Mask="false"/>
+  <Config Name="Seerr config folder" Target="/mnt/seerr" Default="" Mode="ro" Description="Needed to back up Seerr: the folder Seerr has at /app/config, e.g. /mnt/user/appdata/seerr. Set Access Mode to Read/Write to restore from the web UI. See https://rsaturns.github.io/backuparr/apps/seerr/" Type="Path" Display="always" Required="false" Mask="false"/>
+  <Config Name="Bazarr backup folder" Target="/mnt/bazarr-backup" Default="" Mode="rw" Description="Needed only to restore Bazarr: its backup folder, e.g. /mnt/user/appdata/bazarr/backup. See https://rsaturns.github.io/backuparr/apps/bazarr/" Type="Path" Display="always" Required="false" Mask="false"/>
+  <Config Name="PUID" Target="PUID" Default="99" Description="User the container runs as. 99 is Unraid's nobody." Type="Variable" Display="advanced" Required="true" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Description="Group the container runs as. 100 is Unraid's users." Type="Variable" Display="advanced" Required="true" Mask="false">100</Config>
+  <Config Name="UMASK" Target="UMASK" Default="077" Description="Permissions of new files. The default 077 lets only the container user read backups; set 022 if another user reads the backup folder." Type="Variable" Display="advanced" Required="false" Mask="false">077</Config>
+  <Config Name="LOG_LEVEL" Target="LOG_LEVEL" Default="INFO" Description="Logging level for backup and restore runs, e.g. DEBUG." Type="Variable" Display="advanced" Required="false" Mask="false">INFO</Config>
+  <Config Name="BACKUPARR_FORCE_HTTPS" Target="BACKUPARR_FORCE_HTTPS" Default="" Description="Set to true only behind your own TLS reverse proxy. Leave empty on plain HTTP, or login fails. See https://rsaturns.github.io/backuparr/environment-variables/" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="BACKUPARR_TRUSTED_PROXY" Target="BACKUPARR_TRUSTED_PROXY" Default="" Description="With BACKUPARR_FORCE_HTTPS: your reverse proxy's IP address, so the login lockout sees each client's own address." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="BACKUPARR_DISABLE_AUTH" Target="BACKUPARR_DISABLE_AUTH" Default="" Description="Set to true only when an authenticating reverse proxy protects the whole UI and the port isn't reachable any other way. See https://rsaturns.github.io/backuparr/security/" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="BACKUPARR_SECRETS_KEY" Target="BACKUPARR_SECRETS_KEY" Default="" Description="Optional: replaces the generated secrets.key that encrypts credentials in config.json. Leave empty to use the generated key." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="RCLONE_CONFIG_PASS" Target="RCLONE_CONFIG_PASS" Default="" Description="Optional: replaces the generated password that encrypts rclone.conf. Leave empty to use the generated one." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+</Container>
