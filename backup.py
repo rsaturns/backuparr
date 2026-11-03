@@ -29,6 +29,7 @@ from apps.bazarr import BazarrApp, BazarrError
 from apps.http_headers import RequestHeadersError, app_connection_config, configure_app_headers
 from apps.emby import EmbyApp, EmbyError
 from apps.jellyfin import JellyfinApp, JellyfinError
+from apps.lazylibrarian import LazyLibrarianApp, LazyLibrarianError
 from apps.lidarr import LidarrApp
 from apps.nzbget import NzbgetApp, NzbgetError
 from apps.plex import PlexApp, PlexError
@@ -78,6 +79,7 @@ _CLEAN_MESSAGE_ERRORS = (
     ConfigError,
     destination_util.DestinationError,
     JellyfinError,
+    LazyLibrarianError,
     NzbgetError,
     EmbyError,
     PlexError,
@@ -257,6 +259,8 @@ def _build_app(name, app_cfg):
         return PlexApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
     if name == "seerr":
         return SeerrApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
+    if name == "lazylibrarian":
+        return LazyLibrarianApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
     raise ValueError(f"Unknown app: {name}")
 
 

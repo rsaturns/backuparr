@@ -2195,6 +2195,14 @@ function renderRestoreExtra() {
       "the media server and Radarr/Sonarr connections, notifications and the API key. " +
       "Anything added since is lost. Start Seerr again afterwards.";
     extraRoot.appendChild(block);
+  } else if (appId === "lazylibrarian") {
+    const block = document.createElement("div");
+    block.className = "extra-field-block";
+    block.innerHTML =
+      "<strong>Stop LazyLibrarian first</strong> - the restore is refused while it's running. " +
+      "It replaces LazyLibrarian's database and settings with the backup's, its API key included. " +
+      "Anything added since is lost. Start LazyLibrarian again afterwards.";
+    extraRoot.appendChild(block);
   } else if (appId === "bazarr") {
     const block = document.createElement("div");
     block.className = "extra-field-block";

@@ -17,6 +17,7 @@ import backup
 import config_store
 import restore_actions
 from apps.emby import EmbyError
+from apps.lazylibrarian import LazyLibrarianError
 from apps.seerr import SeerrError
 from apps.nzbget import NzbgetError
 from apps.plex import PlexError
@@ -289,6 +290,24 @@ def test_seerr_sends_headers_without_losing_its_key(monkeypatch, tmp_path):
     assert all(r.headers["Proxy-Authorization"] == SECRET and r.headers["X-Api-Key"] == "native-key" for r in sent)
 
 
+def test_lazylibrarian_sends_headers_without_losing_its_key(monkeypatch, tmp_path):
+    sent = []
+
+    def send(_adapter, request, **kwargs):
+        sent.append(request.copy())
+        if "cmd=help" in request.url:
+            return reply(request, content=b"<td>backup</td>")
+        return reply(request, {"Success": True, "current_version": "fc698c6c"})
+
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", send)
+    cfg = {"url": "https://app.example", "api_key": "native-key", "data_dir": str(tmp_path), "request_headers": HEADERS}
+    with pytest.raises(LazyLibrarianError, match="doesn't look like LazyLibrarian's data folder"):
+        backup.build_app("lazylibrarian", cfg).test_connection()
+    assert [r.url for r in sent] == ["https://app.example/api?apikey=native-key&cmd=getVersion",
+                                     "https://app.example/api?apikey=native-key&cmd=help"]
+    assert all(r.headers["Proxy-Authorization"] == SECRET for r in sent)
+
+
 def test_nzbget_sends_headers_without_losing_its_basic_auth(monkeypatch):
     sent = []
 
@@ -430,12 +449,13 @@ def test_scheduled_backup_and_web_restore_send_headers_at_every_phase(authed_cli
 
 @pytest.mark.parametrize("name, method", [("bazarr", "restore_from_file"), ("tdarr", "restore"), ("tautulli", "restore"), ("sabnzbd", "restore"),
                                           ("jellyfin", "restore_from_file"), ("emby", "restore_from_file"), ("plex", "restore_from_file"),
-                                          ("seerr", "restore_from_file"), ("nzbget", "restore_from_file")])
+                                          ("seerr", "restore_from_file"), ("nzbget", "restore_from_file"),
+                                          ("lazylibrarian", "restore_from_file")])
 def test_other_restore_drivers_receive_global_headers(name, method, monkeypatch, tmp_path, wire):
     classes = {"bazarr": backup.BazarrApp, "tdarr": backup.TdarrApp,
                "tautulli": backup.TautulliApp, "sabnzbd": backup.SabnzbdApp,
                "jellyfin": backup.JellyfinApp, "emby": backup.EmbyApp, "plex": backup.PlexApp,
-               "seerr": backup.SeerrApp, "nzbget": backup.NzbgetApp}
+               "seerr": backup.SeerrApp, "nzbget": backup.NzbgetApp, "lazylibrarian": backup.LazyLibrarianApp}
     def restore(app, *args):
         app.session.post(app.url + "/restore")
         return {}

@@ -72,6 +72,7 @@ def test_google_drive_credentials_use_appropriate_input_types(authed_client, fie
     ({"apps": {"radarr": {"enabled": True}}}, "URL is required"),
     ({"apps": {"radarr": {"enabled": True, "url": "http://r"}}}, "API key is required"),
     ({"apps": {"seerr": {"enabled": True, "url": "http://s", "api_key": "k"}}}, "Data folder is required"),
+    ({"apps": {"lazylibrarian": {"enabled": True, "url": "http://l", "api_key": "k"}}}, "Data folder is required"),
     ({"destinations": {"nope": {}}}, "unknown destination"),
     ({"destinations": {"dropbox": {"enabled": True}}}, "connect it first"),
     ({"destinations": {"gdrive": {"enabled": True}}}, "Client ID is required"),
@@ -366,6 +367,7 @@ def test_restore_override_fields_are_the_url_key_and_the_apps_own_extras(isolate
     assert fields("emby") == {"url", "api_key", "data_dir"}
     assert fields("plex") == {"url", "api_key", "data_dir"}
     assert fields("seerr") == {"url", "api_key", "data_dir"}
+    assert fields("lazylibrarian") == {"url", "api_key", "data_dir"}
     assert fields("nzbget") == {"url", "api_key", "username", "password"}
     assert fields("unknown") == {"url", "api_key"}
 
