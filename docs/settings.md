@@ -45,9 +45,9 @@ OAuth providers or notification webhooks. Values are encrypted like API keys.
 - A header goes to **all apps** unless you open **Apps** under it and pick
   some. One header name can be used on several rows, as long as no app gets it
   twice.
-- An app's own authentication wins over a header of the same name - Tdarr's
-  and NZBGet's `Authorization`, Jellyfin's `Authorization: MediaBrowser`. Use
-  another header name (such as `Proxy-Authorization`) for the proxy.
+- An app's own authentication wins over a header of the same name - NZBGet's
+  `Authorization`, Jellyfin's `Authorization: MediaBrowser`. Use another header
+  name (such as `Proxy-Authorization`) for the proxy.
 - A configured `Cookie` is added alongside the app's cookies; a cookie the app
   already set wins.
 - Requests to an app with headers must stay on its configured scheme, host and
