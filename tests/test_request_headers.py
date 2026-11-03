@@ -227,13 +227,13 @@ def wire(monkeypatch):
     return sent
 
 
-@pytest.mark.parametrize("name", ["radarr", "sonarr", "lidarr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "tautulli"])
+@pytest.mark.parametrize("name", ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "tautulli"])
 def test_every_available_app_sends_headers_without_losing_its_key(name, wire):
     app = backup.build_app(name, {"url": "https://app.example", "api_key": "native-key", "request_headers": HEADERS})
     app.test_connection()
     request = wire[-1]
     assert request.headers["Proxy-Authorization"] == SECRET
-    if name in {"radarr", "sonarr", "lidarr", "prowlarr", "profilarr", "bazarr"}:
+    if name in {"radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr"}:
         assert request.headers["X-Api-Key"] == "native-key"
     elif name == "tdarr":
         assert request.headers["Authorization"] == "Bearer native-key"

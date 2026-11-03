@@ -23,10 +23,10 @@ instance**.
 
 ## More than one instance
 
-Radarr, Sonarr and Lidarr can each run more than once. Click **Add another**
-under the app's card and name the instance, such as `4K` or `Anime`. Each
-instance has its own settings, backups, History and Restore entry, and can get
-its own [authentication headers](#service-authentication-headers).
+Radarr, Sonarr, Lidarr and Whisparr can each run more than once. Click **Add
+another** under the app's card and name the instance, such as `4K` or `Anime`.
+Each instance has its own settings, backups, History and Restore entry, and can
+get its own [authentication headers](#service-authentication-headers).
 
 - The name also sets the instance's backup folder and archive names: `4K`
   gives `radarr-4k/radarr-4k_<date>_<time>.zip`. Renaming it later keeps the

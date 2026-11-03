@@ -8,6 +8,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - Lidarr backup and restore, with extra instances (#87).
+- Whisparr v2 and v3 backup and restore, with extra instances. Restoring a v3 backup includes its database, which Whisparr v3's own restore skips (#88).
 
 ### Changed
 
