@@ -20,7 +20,7 @@ class ConfigError(RuntimeError):
     truncated by a full disk, ...). The message says what to do about it."""
 
 
-APP_NAMES = ["radarr", "sonarr", "lidarr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr"]
+APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr"]
 
 DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "password": ""}
 
@@ -29,7 +29,7 @@ DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "pass
 # archive names never change; each extra one is "<app>-<suffix>" (radarr-4k),
 # an id fixed when it's added because it names the instance's backup folder.
 # Only its display name can change later.
-MULTI_INSTANCE_APPS = ("radarr", "sonarr", "lidarr")
+MULTI_INSTANCE_APPS = ("radarr", "sonarr", "lidarr", "whisparr")
 MAX_EXTRA_INSTANCES = 10
 _EXTRA_INSTANCE_ID = re.compile(rf"({'|'.join(MULTI_INSTANCE_APPS)})-([a-z0-9]+(?:-[a-z0-9]+)*)")
 _MAX_INSTANCE_ID_LENGTH = 40
@@ -42,6 +42,7 @@ APP_META = [
     {"id": "radarr", "label": "Radarr", "icon": "radarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://radarr:7878", "extra_fields": [], "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
     {"id": "sonarr", "label": "Sonarr", "icon": "sonarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://sonarr:8989", "extra_fields": [], "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
     {"id": "lidarr", "label": "Lidarr", "icon": "lidarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://lidarr:8686", "extra_fields": [], "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
+    {"id": "whisparr", "label": "Whisparr", "icon": "whisparr.svg", "status": "available", "key_required": True, "url_placeholder": "http://whisparr:6969", "extra_fields": [], "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
     {"id": "prowlarr", "label": "Prowlarr", "icon": "prowlarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://prowlarr:9696", "extra_fields": []},
     {
         "id": "profilarr",

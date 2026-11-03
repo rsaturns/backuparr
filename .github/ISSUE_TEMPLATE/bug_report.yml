@@ -19,6 +19,7 @@ body:
         - Radarr
         - Sonarr
         - Lidarr
+        - Whisparr
         - Prowlarr
         - Profilarr
         - Bazarr

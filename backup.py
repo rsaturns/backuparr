@@ -41,6 +41,7 @@ from apps.servarr import ServarrError, UnsafeRedirectError
 from apps.sonarr import SonarrApp
 from apps.tautulli import TautulliApp, TautulliError
 from apps.tdarr import TdarrApp, TdarrError
+from apps.whisparr import WhisparrApp
 from config_store import ConfigError, enabled_apps, enabled_destinations, instance_type
 
 LOG_DIR = os.environ.get("BACKUPARR_LOG_DIR", "/var/log/backuparr")
@@ -227,6 +228,8 @@ def _build_app(name, app_cfg):
         return SonarrApp(app_cfg["url"], app_cfg["api_key"])
     if name == "lidarr":
         return LidarrApp(app_cfg["url"], app_cfg["api_key"])
+    if name == "whisparr":
+        return WhisparrApp(app_cfg["url"], app_cfg["api_key"])
     if name == "prowlarr":
         return ProwlarrApp(app_cfg["url"], app_cfg["api_key"])
     if name == "profilarr":

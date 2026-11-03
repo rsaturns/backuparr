@@ -8,6 +8,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - Lidarr backup and restore, through Lidarr's own backup API like Radarr and Sonarr: a URL and API key, no mounted folder. Lidarr can have extra instances, like Radarr and Sonarr (#87).
+- Whisparr backup and restore, the same way, for both Whisparr v2 and v3. Whisparr can have extra instances too, so v2 and v3 can be backed up side by side (#88).
 
 ### Changed
 

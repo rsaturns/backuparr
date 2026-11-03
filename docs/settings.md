@@ -21,9 +21,10 @@ instance**.
   can reach them.
 - Other apps, including NZBGet, are configured by hand.
 
-## More than one Radarr, Sonarr or Lidarr
+## More than one instance
 
-Click **Add another Radarr** (or Sonarr, or Lidarr) under its card and give
+Radarr, Sonarr, Lidarr and Whisparr can each be added more than once. Click
+**Add another Radarr** (or Sonarr, Lidarr, Whisparr) under its card and give
 the instance a name, such as `4K` or `Anime`. Each instance has its own
 settings, backups, History and Restore entry, and can get its own
 [authentication headers](#service-authentication-headers).
