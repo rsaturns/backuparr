@@ -244,16 +244,9 @@ class ServarrApp:
         return path
 
     def restore_upload(self, file_path):
-        """Restore via POST /system/backup/restore/upload - a genuine multipart
-        upload endpoint, so no filesystem access to the app's config volume
-        is required at all.
-
-        The upload only stages the db/config for restore and responds
-        {"RestartRequired": true} - it does nothing further on its own. The
-        app's startup routine is what actually swaps the staged files in, so
-        a restart has to be triggered here or the "restore" silently never
-        applies.
-        """
+        """Uploads the zip to /system/backup/restore/upload. That only stages
+        it ({"RestartRequired": true}): the app swaps the staged files in on
+        startup, so it's restarted here, or the restore would never apply."""
         with open(file_path, "rb") as f:
             files = {"file": (os.path.basename(file_path), f, "application/zip")}
             res = self.session.post(self._api("/system/backup/restore/upload"), files=files, timeout=120)

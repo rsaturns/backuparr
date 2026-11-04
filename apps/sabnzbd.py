@@ -14,10 +14,7 @@ without a password.
 categories/rss/sorters use their own special-cased shapes and aren't
 auto-restored - usually small enough to recreate by hand.
 
-misc.api_key/misc.nzb_key are skipped too (see UNSAFE_MISC_KEYWORDS):
-unlike a masked password, a backup does carry their real values, but
-restoring them would swap the credential this client is authenticating
-with out from under itself mid-restore.
+misc.api_key/misc.nzb_key are skipped too - see UNSAFE_MISC_KEYWORDS.
 """
 import json
 import logging
@@ -33,11 +30,9 @@ MASKED = "*" * 10  # OptionPassword.get_stars(), see sabnzbd/config.py
 # Special-cased server-side, not reconstructed here - see module docstring.
 UNHANDLED_SPECIAL_SECTIONS = {"categories", "rss", "sorters"}
 
-# api_key/nzb_key aren't masked in a backup like server passwords are, but
-# restoring them is self-defeating: the moment set_config changes api_key,
-# every subsequent call in this same restore (made with the api_key this
-# client was constructed with) starts failing auth. Skipped the same way a
-# masked value is - re-key by hand in SABnzbd's UI if that's really the goal.
+# A backup holds their real values, but the moment set_config changed
+# api_key, the rest of this restore (made with the current key) would fail
+# auth. Re-key by hand in SABnzbd if that's the goal.
 UNSAFE_MISC_KEYWORDS = {"api_key", "nzb_key"}
 
 _WARNING = (

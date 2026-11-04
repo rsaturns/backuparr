@@ -1,30 +1,18 @@
 """Backup driver for Profilarr's own backup API - backup only, no restore.
 
-Profilarr (https://github.com/Dictionarry-Hub/profilarr) is a config
-management layer in front of Radarr/Sonarr (quality profiles, custom
-formats), not a media manager itself. REST API at /api/v1/openapi.json;
-the parts used here:
+Profilarr manages Radarr/Sonarr quality profiles and custom formats. Its REST
+API (/api/v1/openapi.json): POST /backups starts a `backup.create` job
+(polled at /jobs/{id}), GET /backups lists them newest first, and GET/DELETE
+/backups/{filename} downloads or removes one.
 
-- POST /backups triggers an async `backup.create` job and returns a
-  jobId - trigger-then-poll, like the Servarr apps' /command endpoint.
-- GET /backups lists existing backups, newest first.
-- GET /backups/{filename} downloads one. Per Profilarr's own docs, this
-  is DELIBERATELY SANITIZED: arr instance URLs/API keys, sync configs,
-  drift/rename history, notification webhook URLs and tokens, user
-  accounts and sessions, linked-database access tokens, and AI/TMDB API
-  keys are all stripped before the file reaches the client - a Profilarr
-  design decision, not a Backuparr limitation. A restored instance needs
-  those re-added by hand regardless of how the backup got there.
-- DELETE /backups/{filename} removes a backup, same as with
-  Radarr/Sonarr/Prowlarr/Bazarr, to keep Profilarr's own list clean.
+A download is sanitized by design: arr URLs and API keys, sync configs,
+history, notification webhooks, users and sessions, and linked-database, AI
+and TMDB keys are stripped, so a restored Profilarr needs those re-added.
 
-There is deliberately no restore() here. Profilarr's restore path is a
-SvelteKit form action gated by browser session cookie, not part of the
-/api/v1 REST API, and even then only stages a pending restore in a
-sentinel file - the actual swap happens at the next Profilarr container
-restart, which Backuparr can't trigger. POST /backups/upload exists but
-only stores a file; it doesn't stage or apply anything. See
-docs/apps/profilarr.md for the manual restore steps this leaves you with.
+There's no restore() because Profilarr has no restore API: its restore is a
+SvelteKit form action behind a browser session, which only stages the file
+for the next container restart. POST /backups/upload just stores a file.
+docs/apps/profilarr.md has the manual steps.
 """
 import logging
 import os
