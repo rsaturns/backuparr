@@ -813,6 +813,10 @@ input:focus, select:focus, textarea:focus {
   margin: 10px 0;
 }
 .danger-text { color: var(--danger); }
+.restore-version.ok { color: var(--ok); }
+.restore-version.warn { color: var(--warn); }
+.restore-version.fail { color: var(--danger); }
+.restore-version .btn { margin-left: 6px; }
 
 .server-pw-row {
   display: flex;

@@ -208,7 +208,13 @@ def restore(inline, authed_client, monkeypatch, tmp_path):
             recorder["prompts"] = {n: kwargs["sabnzbd_password_prompt"](n, {}) for n in ("news", "free", "unlisted")}
         return recorder["results"].get(app_name, {})
 
+    def list_backups(root, app):
+        if recorder["fetch_fail"]:
+            raise recorder["fetch_fail"]
+        return [f"{app}_latest.zip"]
+
     monkeypatch.setattr(restore_actions, "fetch_backup", fetch)
+    monkeypatch.setattr(restore_actions, "list_backups", list_backups)
     monkeypatch.setattr(restore_actions, "restore_app", restore_app)
     configure(authed_client)
     return recorder

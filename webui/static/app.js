@@ -2148,7 +2148,8 @@ async function loadRestoreFiles() {
     const res = await apiFetch(`/api/restore/${destId}/${appId}/backups`);
     fileSelect.innerHTML = "";
     if (!res.files.length) {
-      fileSelect.innerHTML = "<option>No backups found</option>";
+      fileSelect.innerHTML = '<option value="">No backups found</option>';
+      setRestoreReady(false);
       return;
     }
     res.files.forEach((f) => {
@@ -2167,11 +2168,67 @@ async function loadRestoreFiles() {
   }
 }
 
-function renderRestoreExtra() {
+// Restore stays disabled until the backup's version has been checked
+// against the installed app - first, while the app is still running, so
+// Emby, Plex, Seerr and LazyLibrarian are only asked to stop after it.
+let restoreCheckSeq = 0;
+
+function setRestoreReady(ready) {
+  document.getElementById("restore-btn").disabled = !ready;
+}
+
+function sentence(text) {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+async function renderRestoreExtra() {
+  const destId = document.getElementById("r-destination").value;
   const appId = document.getElementById("r-app").value;
+  const file = document.getElementById("r-file").value;
   const extraRoot = document.getElementById("r-extra");
   extraRoot.innerHTML = "";
+  setRestoreReady(false);
+  if (!destId || !file) return;
 
+  const block = document.createElement("div");
+  block.className = "extra-field-block restore-version";
+  block.textContent = "Checking the backup's version against the installed one...";
+  extraRoot.appendChild(block);
+  const seq = ++restoreCheckSeq;
+  const body = { file };
+  const override = readRestoreOverride();
+  if (override) body.override = override;
+  let result;
+  try {
+    result = await apiFetch(`/api/restore/${destId}/${appId}/check`, { method: "POST", body: JSON.stringify(body) });
+  } catch (e) {
+    if (seq !== restoreCheckSeq) return;
+    showRestoreCheckFailure(block, e.message);
+    return;
+  }
+  if (seq !== restoreCheckSeq) return;
+  if (result.status === "refused") {
+    showRestoreCheckFailure(block, result.message);
+    return;
+  }
+  block.textContent = result.message;
+  block.classList.add(result.status === "match" ? "ok" : "warn");
+  renderRestoreDetails(appId, extraRoot);
+  setRestoreReady(true);
+}
+
+function showRestoreCheckFailure(block, message) {
+  block.textContent = "";
+  block.classList.add("fail");
+  const again = document.createElement("button");
+  again.type = "button";
+  again.className = "btn btn-ghost btn-sm";
+  again.textContent = "Check again";
+  again.addEventListener("click", renderRestoreExtra);
+  block.append(sentence(message), " ", again);
+}
+
+function renderRestoreDetails(appId, extraRoot) {
   const warning = appMeta(appId)?.restore_warning;
   if (warning) {
     const block = document.createElement("div");
@@ -2371,6 +2428,8 @@ function initRestoreEvents() {
   document.getElementById("r-app").addEventListener("change", updateRestoreOverrideVisibility);
   document.getElementById("r-file").addEventListener("change", renderRestoreExtra);
   document.getElementById("r-override-toggle").addEventListener("change", updateRestoreOverrideVisibility);
+  // The check runs against the restore's target, so a new target needs a new check.
+  document.getElementById("r-override-toggle").addEventListener("change", renderRestoreExtra);
   document.getElementById("restore-btn").addEventListener("click", doRestore);
 }
 

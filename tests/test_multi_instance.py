@@ -309,6 +309,7 @@ def test_history_lists_instances_including_removed_ones_with_backups_left(authed
 def test_an_instance_restores_from_its_own_folder_with_its_own_connection(inline, authed_client, monkeypatch, tmp_path):
     calls, work = [], tmp_path / "work"  # removed after the restore
     work.mkdir()
+    monkeypatch.setattr(restore_actions, "list_backups", lambda root, app: [f"{app}_1.zip"])
     monkeypatch.setattr(restore_actions, "fetch_backup",
                         lambda root, app, filename=None: calls.append(("fetch", app)) or (str(work), str(work / "b.zip"), f"{app}_1.zip"))
     monkeypatch.setattr(restore_actions, "restore_app",
