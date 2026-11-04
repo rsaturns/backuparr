@@ -43,7 +43,7 @@ import requests
 
 from apps import mounted, sqlite_snapshot
 from apps.base import AppError
-from apps.servarr import ApiKeySession
+from apps.servarr import SameHostSession
 
 logger = logging.getLogger(f"backuparr.{__name__}")
 
@@ -96,7 +96,7 @@ class EmbyApp:
         self.url = re.sub(r"/emby/?$", "", url.rstrip("/"))
         self.data_dir = data_dir or None
         self.timeout = timeout
-        self.session = ApiKeySession(self.url)
+        self.session = SameHostSession(self.url)
         self.session.headers.update({"X-Emby-Token": api_key, "Accept": "application/json"})
 
     def server_info(self):

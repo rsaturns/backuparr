@@ -35,7 +35,7 @@ import requests
 
 from apps import mounted, sqlite_snapshot
 from apps.base import AppError
-from apps.servarr import ApiKeySession, UnsafeRedirectError
+from apps.servarr import SameHostSession, UnsafeRedirectError
 
 logger = logging.getLogger(f"backuparr.{__name__}")
 
@@ -75,7 +75,7 @@ class LazyLibrarianApp:
         self.api_key = api_key
         self.data_dir = data_dir or None
         self.timeout = timeout
-        self.session = ApiKeySession(self.url)
+        self.session = SameHostSession(self.url)
 
     def _call(self, cmd, timeout=None):
         try:

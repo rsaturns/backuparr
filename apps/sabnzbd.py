@@ -21,7 +21,7 @@ import logging
 import os
 
 from apps.base import AppError
-from apps.servarr import ApiKeySession
+from apps.servarr import SameHostSession
 
 logger = logging.getLogger(f"backuparr.{__name__}")
 
@@ -57,7 +57,7 @@ class SabnzbdApp:
         self.url = url.rstrip("/")
         self.api_key = api_key
         self.timeout = timeout
-        self.session = ApiKeySession(self.url)
+        self.session = SameHostSession(self.url)
 
     def _call(self, params):
         payload = {"apikey": self.api_key, "output": "json", **params}

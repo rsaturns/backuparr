@@ -28,7 +28,7 @@ import os
 import requests
 
 from apps.base import AppError
-from apps.servarr import ApiKeySession
+from apps.servarr import SameHostSession
 
 logger = logging.getLogger(f"backuparr.{__name__}")
 
@@ -89,7 +89,7 @@ class TdarrApp:
     def __init__(self, url, api_key=None, timeout=60):
         self.url = url.rstrip("/")
         self.timeout = timeout
-        self.session = ApiKeySession(self.url)
+        self.session = SameHostSession(self.url)
         self.session.headers.update({"Accept": "application/json"})
         if api_key:
             self.session.headers.update({"x-api-key": api_key})
