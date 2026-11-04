@@ -259,7 +259,9 @@ def archive_suffix(path):
 
 
 def zip_dir(src_dir, zip_path):
-    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
+    # zlib's default level: 9 is far slower on multi-GB databases for a few
+    # percent less size.
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for root, _dirs, files in os.walk(src_dir):
             for name in files:
                 full = os.path.join(root, name)
