@@ -1249,5 +1249,5 @@ code {
 .overview-links { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; font-size: 14.5px; }
 .overview-links .overview-download-link { margin-top: 0; }
 .history-table tr.history-missing td { color: var(--text-muted); }
-.history-table tr.history-missing td.history-reason { color: var(--danger); overflow-wrap: anywhere; }
+.history-table tr.history-missing td.history-reason { color: var(--danger); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .history-table td.actions-cell .link-btn { font-size: 14px; margin-right: 6px; }

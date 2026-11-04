@@ -2031,12 +2031,16 @@ function appLabel(appId) {
 function missingHistoryRow(appId, e) {
   const tr = document.createElement("tr");
   tr.className = "history-missing";
-  const cells = [e.name || "No backup file", e.app_version || "-", e.reason, fmtTime(e.mod_time)].map((text) => {
+  // The reason spans the Version and Size columns, on one line; the full
+  // text is its tooltip and in the log.
+  const cells = [e.name || "No backup file", e.reason, fmtTime(e.mod_time)].map((text) => {
     const td = document.createElement("td");
     td.textContent = text;
     return td;
   });
-  cells[2].className = "history-reason";
+  cells[1].className = "history-reason";
+  cells[1].colSpan = 2;
+  cells[1].title = e.reason;
   const actionsTd = document.createElement("td");
   actionsTd.className = "actions-cell";
   actionsTd.appendChild(viewLogButton(appId, e.run_id));
