@@ -150,8 +150,8 @@ def test_the_restore_tab_check_reports_the_result(authed_client, restores, insta
     assert response.status_code == 200 and response.get_json()["status"] == "match"
     installed["radarr"] = "6.5"
     response = authed_client.post("/api/restore/local/radarr/check", json={"file": "radarr_1.zip"})
-    assert response.status_code == 409
-    assert response.get_json()["error"] == "this backup is from Radarr 6.4 and Radarr 6.5 is installed. Install Radarr 6.4, then restore."
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "refused", "message": "this backup is from Radarr 6.4 and Radarr 6.5 is installed. Install Radarr 6.4, then restore."}
 
 
 def test_the_check_refuses_a_bad_filename(authed_client, restores):
@@ -206,6 +206,15 @@ def test_a_stopped_app_that_was_never_checked_is_refused(authed_client, restores
     state = restore_result(authed_client, "plex", file="plex_1.zip")
     assert state["ok"] is False
     assert "Start Plex, pick the backup on the Restore tab so its version is checked, then stop Plex and restore" in state["error"]
+    assert restores == []
+
+
+def test_a_refused_check_does_not_let_a_stopped_app_restore(authed_client, restores, installed):
+    record("plex", "plex_1.zip", "1.43")
+    installed["plex"] = "1.44"
+    assert authed_client.post("/api/restore/local/plex/check", json={"file": "plex_1.zip"}).get_json()["status"] == "refused"
+    del installed["plex"]
+    assert restore_result(authed_client, "plex", file="plex_1.zip")["ok"] is False
     assert restores == []
 
 

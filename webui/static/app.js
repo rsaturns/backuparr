@@ -2203,21 +2203,29 @@ async function renderRestoreExtra() {
     result = await apiFetch(`/api/restore/${destId}/${appId}/check`, { method: "POST", body: JSON.stringify(body) });
   } catch (e) {
     if (seq !== restoreCheckSeq) return;
-    block.textContent = "";
-    block.classList.add("fail");
-    const again = document.createElement("button");
-    again.type = "button";
-    again.className = "btn btn-ghost btn-sm";
-    again.textContent = "Check again";
-    again.addEventListener("click", renderRestoreExtra);
-    block.append(sentence(e.message), " ", again);
+    showRestoreCheckFailure(block, e.message);
     return;
   }
   if (seq !== restoreCheckSeq) return;
+  if (result.status === "refused") {
+    showRestoreCheckFailure(block, result.message);
+    return;
+  }
   block.textContent = result.message;
   block.classList.add(result.status === "match" ? "ok" : "warn");
   renderRestoreDetails(appId, extraRoot);
   setRestoreReady(true);
+}
+
+function showRestoreCheckFailure(block, message) {
+  block.textContent = "";
+  block.classList.add("fail");
+  const again = document.createElement("button");
+  again.type = "button";
+  again.className = "btn btn-ghost btn-sm";
+  again.textContent = "Check again";
+  again.addEventListener("click", renderRestoreExtra);
+  block.append(sentence(message), " ", again);
 }
 
 function renderRestoreDetails(appId, extraRoot) {

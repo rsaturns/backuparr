@@ -319,10 +319,11 @@ def api_restore_check(dest_id, app_name):
     _cfg, _root, app_cfg, error = _restore_target(dest_id, app_name, data)
     if error:
         return error
+    # A refusal is the check's answer, not a failed request.
     try:
         result = rv.check(app_name, file, app_cfg)
     except rv.RestoreVersionError as exc:
-        return jsonify({"error": humanize_error(exc, app=app_name)}), 409
+        return jsonify({"status": "refused", "message": humanize_error(exc, app=app_name)})
     _remember_check(app_name, file, app_cfg, result)
     return jsonify(result)
 
