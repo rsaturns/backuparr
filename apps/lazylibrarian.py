@@ -34,6 +34,7 @@ import tempfile
 import requests
 
 from apps import sqlite_snapshot
+from apps.base import AppError
 from apps.servarr import ApiKeySession, UnsafeRedirectError
 
 logger = logging.getLogger(f"backuparr.{__name__}")
@@ -48,7 +49,7 @@ _API_ARCHIVE = re.compile(r"api_[A-Za-z0-9_]+\.tgz")
 _MIB = 1024 * 1024
 
 
-class LazyLibrarianError(RuntimeError):
+class LazyLibrarianError(AppError):
     pass
 
 

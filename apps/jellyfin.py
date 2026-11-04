@@ -35,6 +35,8 @@ import zipfile
 
 import requests
 
+from apps.base import AppError
+
 logger = logging.getLogger(f"backuparr.{__name__}")
 
 # Database only - see the module docstring.
@@ -43,7 +45,7 @@ BACKUP_OPTIONS = {"Database": True, "Metadata": False, "Trickplay": False, "Subt
 _SAFE_NAME = re.compile(r"^(?!\.)[A-Za-z0-9._-]+\Z")
 
 
-class JellyfinError(RuntimeError):
+class JellyfinError(AppError):
     pass
 
 

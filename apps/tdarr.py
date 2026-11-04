@@ -27,6 +27,7 @@ import os
 
 import requests
 
+from apps.base import AppError
 from apps.servarr import ApiKeySession
 
 logger = logging.getLogger(f"backuparr.{__name__}")
@@ -64,7 +65,7 @@ def _known_missing(collection, version):
     return major is not None and major < _SINCE_MAJOR.get(collection, 0)
 
 
-class TdarrError(RuntimeError):
+class TdarrError(AppError):
     pass
 
 

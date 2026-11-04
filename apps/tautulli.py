@@ -50,10 +50,12 @@ import os
 
 import requests
 
+from apps.base import AppError
+
 logger = logging.getLogger(f"backuparr.{__name__}")
 
 
-class TautulliError(RuntimeError):
+class TautulliError(AppError):
     pass
 
 

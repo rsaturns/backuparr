@@ -46,6 +46,8 @@ from urllib.parse import quote, urljoin, urlsplit
 
 import requests
 
+from apps.base import AppError
+
 logger = logging.getLogger(f"backuparr.{__name__}")
 
 MANIFEST = "backuparr-plex.json"
@@ -65,7 +67,7 @@ _EXPORTED_DB = re.compile(
 )
 
 
-class PlexError(RuntimeError):
+class PlexError(AppError):
     pass
 
 

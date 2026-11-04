@@ -38,6 +38,7 @@ import zipfile
 import requests
 
 from apps import sqlite_snapshot
+from apps.base import AppError
 from apps.servarr import ApiKeySession
 
 logger = logging.getLogger(f"backuparr.{__name__}")
@@ -49,7 +50,7 @@ _MEMBERS = {MANIFEST, DATABASE, SETTINGS}
 _MIB = 1024 * 1024
 
 
-class SeerrError(RuntimeError):
+class SeerrError(AppError):
     pass
 
 

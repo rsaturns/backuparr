@@ -42,6 +42,7 @@ import zipfile
 import requests
 
 from apps import sqlite_snapshot
+from apps.base import AppError
 from apps.servarr import ApiKeySession
 
 logger = logging.getLogger(f"backuparr.{__name__}")
@@ -60,7 +61,7 @@ _RESTORABLE = re.compile(
 )
 
 
-class EmbyError(RuntimeError):
+class EmbyError(AppError):
     pass
 
 

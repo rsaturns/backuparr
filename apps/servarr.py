@@ -18,6 +18,8 @@ import zipfile
 
 import requests
 
+from apps.base import AppError
+
 logger = logging.getLogger(f"backuparr.{__name__}")
 
 ALLOW_CROSS_HOST_ENV = "BACKUPARR_ALLOW_CROSS_HOST_REDIRECTS"
@@ -29,7 +31,7 @@ _BACKUP_ACCESS_HINT = (
 )
 
 
-class ServarrError(RuntimeError):
+class ServarrError(AppError):
     pass
 
 

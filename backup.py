@@ -25,23 +25,24 @@ import requests
 
 import destination_util
 import rclone_util
-from apps.bazarr import BazarrApp, BazarrError
+from apps.base import AppError
+from apps.bazarr import BazarrApp
+from apps.emby import EmbyApp
 from apps.http_headers import RequestHeadersError, app_connection_config, configure_app_headers
-from apps.emby import EmbyApp, EmbyError
-from apps.jellyfin import JellyfinApp, JellyfinError
-from apps.lazylibrarian import LazyLibrarianApp, LazyLibrarianError
+from apps.jellyfin import JellyfinApp
+from apps.lazylibrarian import LazyLibrarianApp
 from apps.lidarr import LidarrApp
-from apps.nzbget import NzbgetApp, NzbgetError
-from apps.plex import PlexApp, PlexError
-from apps.profilarr import ProfilarrApp, ProfilarrError
+from apps.nzbget import NzbgetApp
+from apps.plex import PlexApp
+from apps.profilarr import ProfilarrApp
 from apps.prowlarr import ProwlarrApp
 from apps.radarr import RadarrApp
-from apps.sabnzbd import SabnzbdApp, SabnzbdError
-from apps.seerr import SeerrApp, SeerrError
-from apps.servarr import ServarrError, UnsafeRedirectError
+from apps.sabnzbd import SabnzbdApp
+from apps.seerr import SeerrApp
+from apps.servarr import UnsafeRedirectError
 from apps.sonarr import SonarrApp
-from apps.tautulli import TautulliApp, TautulliError
-from apps.tdarr import TdarrApp, TdarrError
+from apps.tautulli import TautulliApp
+from apps.tdarr import TdarrApp
 from apps.whisparr import WhisparrApp
 from config_store import ConfigError, app_meta, enabled_apps, enabled_destinations, instance_type
 
@@ -74,22 +75,10 @@ except OSError:
 
 # Errors whose message was written for humans (and carries no URL or key).
 _CLEAN_MESSAGE_ERRORS = (
-    RequestHeadersError,
-    BazarrError,
+    AppError,
     ConfigError,
     destination_util.DestinationError,
-    JellyfinError,
-    LazyLibrarianError,
-    NzbgetError,
-    EmbyError,
-    PlexError,
-    ProfilarrError,
-    rclone_util.RcloneError,
-    SabnzbdError,
-    SeerrError,
-    ServarrError,
-    TautulliError,
-    TdarrError,
+    RequestHeadersError,
     UnsafeRedirectError,
 )
 
