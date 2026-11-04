@@ -5,8 +5,8 @@ import json
 import logging
 import os
 import re
-import tempfile
 
+import atomic_file
 import secrets_crypto
 from apps.http_headers import RequestHeadersError, validate_request_headers
 
@@ -543,18 +543,7 @@ def save_config(cfg):
         log.warning("kept %d stored secret(s) that the current encryption key can't decrypt - "
                     "restore the original key (secrets.key or BACKUPARR_SECRETS_KEY) to use them again", kept)
 
-    config_dir = os.path.dirname(CONFIG_PATH)
-    os.makedirs(config_dir, exist_ok=True)
-    # Unique tmp filename avoids concurrent saves colliding.
-    fd, tmp_path = tempfile.mkstemp(dir=config_dir, prefix=".config.json.")
-    try:
-        with os.fdopen(fd, "w") as f:
-            json.dump(to_write, f, indent=2)
-        os.chmod(tmp_path, 0o600)
-        os.replace(tmp_path, CONFIG_PATH)
-    except BaseException:
-        os.remove(tmp_path)
-        raise
+    atomic_file.write_private(CONFIG_PATH, json.dumps(to_write, indent=2))
 
 
 def _enabled(names, meta, cfg_section, kind=lambda name: name):

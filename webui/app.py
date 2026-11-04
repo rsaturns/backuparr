@@ -17,6 +17,7 @@ from croniter import croniter
 from flask import Flask, after_this_request, jsonify, redirect, render_template, request, send_file, session
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+import atomic_file
 import auth_store
 import destination_util
 import discovery
@@ -93,17 +94,7 @@ def _load_or_create_secret_key():
         with open(path, "rb") as f:
             return f.read()
     key = secrets.token_bytes(32)
-    key_dir = os.path.dirname(path)
-    os.makedirs(key_dir, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(dir=key_dir, prefix=".secret_key.")
-    try:
-        with os.fdopen(fd, "wb") as f:
-            f.write(key)
-        os.chmod(tmp_path, 0o600)
-        os.replace(tmp_path, path)
-    except BaseException:
-        os.remove(tmp_path)
-        raise
+    atomic_file.write_private(path, key)
     return key
 
 
