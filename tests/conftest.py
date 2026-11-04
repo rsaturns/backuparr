@@ -6,6 +6,7 @@ import threading
 
 import pytest
 
+import archive_check
 import auth_store
 import backup
 import config_store
@@ -24,6 +25,14 @@ def manifest_in_tmp(tmp_path, monkeypatch):
     path = str(tmp_path / "manifest.json")
     monkeypatch.setattr(manifest, "path", lambda: path)
     return path
+
+
+@pytest.fixture(autouse=True)
+def skip_archive_check(request, monkeypatch):
+    """Most run_backup tests use fake drivers whose placeholder archives
+    aren't real backups; tests marked archive_check run the real check."""
+    if request.node.get_closest_marker("archive_check") is None:
+        monkeypatch.setattr(archive_check, "check", lambda app, path: None)
 
 
 def load_webui():
