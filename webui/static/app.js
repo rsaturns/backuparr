@@ -1,8 +1,8 @@
 "use strict";
 
 const AUTH_DISABLED = document.body.dataset.authDisabled === "true";
-let APP_META = [];
-let DESTINATION_META = [];
+// /api/meta and /api/destinations, as the page was rendered with them.
+const { apps: APP_META, destinations: DESTINATION_META } = JSON.parse(document.body.dataset.uiMeta);
 let RUN_POLL_TIMER = null;
 let RESTORE_POLL_TIMER = null;
 let SETTINGS_SNAPSHOT = null;
@@ -2069,6 +2069,25 @@ function initRestoreAppOptions() {
   if (Array.from(select.options).some((opt) => opt.value === previous)) select.value = previous;
 }
 
+// <label class="field">: a caption, a muted "(hint)" if any, and an input
+// with the given properties. Text goes in as text, never as markup.
+function overrideField(caption, hint, inputProps) {
+  const label = document.createElement("label");
+  label.className = "field";
+  const text = document.createElement("span");
+  text.className = "field-label";
+  text.textContent = caption;
+  if (hint) {
+    const muted = document.createElement("span");
+    muted.className = "muted";
+    muted.textContent = `(${hint})`;
+    text.append(" ", muted);
+  }
+  const input = Object.assign(document.createElement("input"), { autocomplete: "off" }, inputProps);
+  label.append(text, input);
+  return label;
+}
+
 function renderRestoreOverride() {
   const appId = document.getElementById("r-app").value;
   const meta = appMeta(appId);
@@ -2079,27 +2098,15 @@ function renderRestoreOverride() {
   const block = document.createElement("div");
   block.className = "extra-field-block";
 
-  const urlLabel = document.createElement("label");
-  urlLabel.className = "field";
-  urlLabel.innerHTML = `<span class="field-label">URL</span><input type="text" id="r-ovr-url" placeholder="${meta.url_placeholder || ""}" autocomplete="off">`;
-  block.appendChild(urlLabel);
-
+  block.appendChild(overrideField("URL", "", { type: "text", id: "r-ovr-url", placeholder: meta.url_placeholder || "" }));
   if (!meta.no_api_key) {
-    const keyLabel = document.createElement("label");
-    keyLabel.className = "field";
-    const keyHint = !meta.key_required
-      ? `<span class="muted">(optional${meta.key_help ? ` &mdash; ${meta.key_help}` : ""})</span>`
-      : meta.key_help ? `<span class="muted">(${meta.key_help})</span>` : "";
-    keyLabel.innerHTML = `<span class="field-label">${meta.key_label || "API key"} ${keyHint}</span><input type="password" id="r-ovr-api_key" autocomplete="off">`;
-    block.appendChild(keyLabel);
+    const hint = meta.key_required ? meta.key_help : `optional${meta.key_help ? ` \u2014 ${meta.key_help}` : ""}`;
+    block.appendChild(overrideField(meta.key_label || "API key", hint, { type: "password", id: "r-ovr-api_key" }));
   }
-
   (meta.extra_fields || []).forEach((f) => {
-    const label = document.createElement("label");
-    label.className = "field";
-    const help = f.help ? `<span class="muted">(${f.help})</span>` : "";
-    label.innerHTML = `<span class="field-label">${f.label} ${help}</span><input type="${f.type}" class="r-ovr-extra" data-field="${f.name}" placeholder="${f.placeholder || ""}" autocomplete="off">`;
-    block.appendChild(label);
+    const field = overrideField(f.label, f.help, { type: f.type, className: "r-ovr-extra", placeholder: f.placeholder || "" });
+    field.querySelector("input").dataset.field = f.name;
+    block.appendChild(field);
   });
 
   root.appendChild(block);
@@ -2582,16 +2589,6 @@ async function init() {
       e.returnValue = "";
     }
   });
-  try {
-    APP_META = await apiFetch("/api/meta");
-  } catch (e) {
-    toast(`Could not load app metadata: ${e.message}`, "fail");
-  }
-  try {
-    DESTINATION_META = await apiFetch("/api/destinations");
-  } catch (e) {
-    toast(`Could not load destination metadata: ${e.message}`, "fail");
-  }
   try {
     await loadConfig();
   } catch (e) {

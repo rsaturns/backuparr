@@ -419,3 +419,13 @@ def test_create_app_loads_the_session_key_and_starts_the_scheduler(isolated_webu
     isolated_webui.app.secret_key = None
     assert isolated_webui.create_app() is isolated_webui.app
     assert calls == ["logging", "scheduler"] and isolated_webui.app.secret_key == isolated_webui._load_or_create_secret_key()
+
+
+def test_the_page_carries_the_ui_metadata_as_data(authed_client):
+    import json
+    import re
+    import html
+    page = authed_client.get("/").get_data(as_text=True)
+    block = html.unescape(re.search(r"data-ui-meta='([^']*)'", page).group(1))
+    assert json.loads(block) == {"apps": authed_client.get("/api/meta").get_json(),
+                                 "destinations": authed_client.get("/api/destinations").get_json()}

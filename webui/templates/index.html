@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body data-auth-disabled="{{ 'true' if auth_disabled else 'false' }}">
+<body data-auth-disabled="{{ 'true' if auth_disabled else 'false' }}" data-ui-meta='{{ ui_meta | tojson }}'>
 <header class="topbar">
   <div class="brand">
     <img class="brand-mark" src="{{ url_for('static', filename='logo.png') }}" alt="">
