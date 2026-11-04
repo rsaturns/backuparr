@@ -42,10 +42,11 @@ import time
 import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
-from urllib.parse import quote, urljoin, urlsplit
+from urllib.parse import urljoin, urlsplit
 
 import requests
 
+from apps import mounted, sqlite_snapshot
 from apps.base import AppError
 
 logger = logging.getLogger(f"backuparr.{__name__}")
@@ -74,7 +75,7 @@ class PlexError(AppError):
 def schema_version(path):
     """Newest migration Plex applied to a library database. Plex migrates
     an older database forward on startup, but can't open a newer one."""
-    db = sqlite3.connect(f"file:{quote(str(path))}?mode=ro&immutable=1", uri=True)
+    db = sqlite_snapshot.open_ro(path)
     try:
         row = db.execute("SELECT max(CAST(version AS INTEGER)) FROM schema_migrations").fetchone()
     except sqlite3.Error as exc:
@@ -85,11 +86,7 @@ def schema_version(path):
 
 
 def is_plex_backup(path):
-    try:
-        with zipfile.ZipFile(path) as zf:
-            return {MANIFEST, LIBRARY_DB, PREFERENCES} <= set(zf.namelist()) and zf.testzip() is None
-    except zipfile.BadZipFile:
-        return False
+    return mounted.is_backup_zip(path, {MANIFEST, LIBRARY_DB, PREFERENCES})
 
 
 def _is_ip(host):
@@ -215,13 +212,9 @@ class PlexApp:
         return os.path.join(self.data_dir, *parts)
 
     def _require_folder(self, machine_identifier=None):
-        if not self.data_dir:
-            raise PlexError("plex: set the data folder - Plex's \"Plex Media Server\" folder, mounted into this container")
-        if not os.path.isdir(self.data_dir):
-            raise PlexError(
-                f"plex: data folder {self.data_dir} doesn't exist in this container - mount Plex's "
-                "\"Plex Media Server\" folder there (Library/Application Support/Plex Media Server in Plex's /config)"
-            )
+        mounted.require_dir(
+            self.data_dir, PlexError, "plex", "data folder", "Plex's \"Plex Media Server\" folder",
+            "mount Plex's \"Plex Media Server\" folder there (Library/Application Support/Plex Media Server in Plex's /config)")
         if not os.path.isfile(self._path(*_DATABASES, LIBRARY_DB)) or not os.path.isfile(self._path(PREFERENCES)):
             raise PlexError(
                 f"plex: {self.data_dir} doesn't look like Plex's data folder (no Preferences.xml or library database) - "
@@ -361,13 +354,9 @@ class PlexApp:
                     "plex: this backup comes from a newer Plex than the one installed (database schema "
                     f"{backup_schema}, installed {installed}) - update Plex first"
                 )
-            # "wb" truncates in place: owner and mode stay Plex's.
-            for src_path, dst_path in ((restored, target), (restored_prefs, preferences)):
-                with open(src_path, "rb") as src, open(dst_path, "wb") as dst:
-                    shutil.copyfileobj(src, dst, _MIB)
+            mounted.copy_in_place(restored, target)
+            mounted.copy_in_place(restored_prefs, preferences)
         # No -wal exists (checked above), so a -shm index is stale.
-        shm = target + "-shm"
-        if os.path.exists(shm):
-            os.remove(shm)
+        mounted.remove_journal_files(target)
         logger.info("plex: restored the library database and server settings (server %s) into %s - start Plex to load them",
                     server_id or "?", self.data_dir)
