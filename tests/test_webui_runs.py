@@ -28,8 +28,8 @@ def test_a_run_reports_progress_results_and_notifies(inline, authed_client, monk
         logging.getLogger("backuparr").warning("hello from the run")
         return ["radarr"], ["sonarr: boom"]
 
-    monkeypatch.setattr(inline, "run_backup", fake_run_backup)
-    monkeypatch.setattr(inline, "notify", lambda url, message, **kw: notified.append((url, message)))
+    monkeypatch.setattr(inline.runs, "run_backup", fake_run_backup)
+    monkeypatch.setattr(inline.runs, "notify", lambda url, message, **kw: notified.append((url, message)))
     authed_client.post("/api/config", json={"notify_url": "https://ntfy.example/t"})
 
     response = authed_client.post("/api/backup/run", json={})
@@ -41,11 +41,11 @@ def test_a_run_reports_progress_results_and_notifies(inline, authed_client, monk
     assert state["started_at"] and state["finished_at"]
     assert any("hello from the run" in line for line in state["log"])
     assert notified == [("https://ntfy.example/t", backup.format_run_message(["radarr"], ["sonarr: boom"]))]
-    assert seen["cancel"] == inline.RUN_CANCEL_EVENT.is_set
+    assert seen["cancel"] == inline.runs.RUN_CANCEL_EVENT.is_set
 
 
 def test_the_run_log_handler_is_removed_afterwards(inline, authed_client, monkeypatch):
-    monkeypatch.setattr(inline, "run_backup", lambda cfg, **kw: ([], []))
+    monkeypatch.setattr(inline.runs, "run_backup", lambda cfg, **kw: ([], []))
     before = list(logging.getLogger("backuparr").handlers)
     authed_client.post("/api/backup/run", json={})
     assert logging.getLogger("backuparr").handlers == before
@@ -55,7 +55,7 @@ def test_an_unexpected_crash_is_reported_not_raised(inline, authed_client, monke
     def crash(cfg, **kw):
         raise RuntimeError("kaboom")
 
-    monkeypatch.setattr(inline, "run_backup", crash)
+    monkeypatch.setattr(inline.runs, "run_backup", crash)
     assert authed_client.post("/api/backup/run", json={}).status_code == 200
     state = status(authed_client)
     assert state["failed"] == ["unexpected error: kaboom"] and state["running"] is False and state["finished_at"]
@@ -63,8 +63,8 @@ def test_an_unexpected_crash_is_reported_not_raised(inline, authed_client, monke
 
 def test_a_second_run_is_refused_while_one_is_in_progress(inline, authed_client, monkeypatch):
     started = []
-    monkeypatch.setattr(inline, "run_backup", lambda cfg, **kw: started.append(1) or ([], []))
-    inline.RUN_STATE["running"] = True
+    monkeypatch.setattr(inline.runs, "run_backup", lambda cfg, **kw: started.append(1) or ([], []))
+    inline.runs.RUN_STATE["running"] = True
     response = authed_client.post("/api/backup/run", json={})
     assert response.status_code == 409 and "already running" in response.get_json()["error"]
     assert started == []
@@ -72,7 +72,7 @@ def test_a_second_run_is_refused_while_one_is_in_progress(inline, authed_client,
 
 def test_each_run_starts_from_a_clean_state(inline, authed_client, monkeypatch):
     results = iter([(["radarr"], []), ([], ["sonarr: x"])])
-    monkeypatch.setattr(inline, "run_backup", lambda cfg, **kw: next(results))
+    monkeypatch.setattr(inline.runs, "run_backup", lambda cfg, **kw: next(results))
     authed_client.post("/api/backup/run", json={})
     authed_client.post("/api/backup/run", json={})
     state = status(authed_client)
@@ -86,7 +86,7 @@ RADARR = {"enabled": True, "url": "http://radarr:7878", "api_key": "k"}
 
 def test_a_run_can_back_up_just_one_enabled_app(inline, authed_client, monkeypatch):
     seen = []
-    monkeypatch.setattr(inline, "run_backup", lambda cfg, only=None, **kw: seen.append(only) or ([only or "all"], []))
+    monkeypatch.setattr(inline.runs, "run_backup", lambda cfg, only=None, **kw: seen.append(only) or ([only or "all"], []))
     assert authed_client.post("/api/config", json={"apps": {"radarr": RADARR}}).status_code == 200
 
     assert authed_client.post("/api/backup/run", json={"app": "radarr"}).get_json() == {"started": True}
@@ -100,38 +100,38 @@ def test_a_run_can_back_up_just_one_enabled_app(inline, authed_client, monkeypat
 @pytest.mark.parametrize("target", ["sonarr", "radarr-4k", "nope", "", 7, ["radarr"]])
 def test_a_one_app_run_needs_an_enabled_app(inline, authed_client, monkeypatch, target):
     started = []
-    monkeypatch.setattr(inline, "run_backup", lambda cfg, **kw: started.append(1) or ([], []))
+    monkeypatch.setattr(inline.runs, "run_backup", lambda cfg, **kw: started.append(1) or ([], []))
     assert authed_client.post("/api/config", json={"apps": {"radarr": RADARR}}).status_code == 200
     response = authed_client.post("/api/backup/run", json={"app": target})
     assert response.status_code == 400 and "isn't enabled" in response.get_json()["error"]
-    assert started == [] and inline.RUN_STATE["running"] is False
+    assert started == [] and inline.runs.RUN_STATE["running"] is False
 
 
 # --- cancelling ------------------------------------------------------------
 
 def test_cancel_needs_a_run_in_progress(inline, authed_client):
     response = authed_client.post("/api/backup/cancel", json={})
-    assert response.status_code == 409 and not inline.RUN_CANCEL_EVENT.is_set()
+    assert response.status_code == 409 and not inline.runs.RUN_CANCEL_EVENT.is_set()
 
 
 def test_cancel_flags_the_running_run_and_the_next_run_clears_it(inline, authed_client, monkeypatch):
-    inline.RUN_STATE["running"] = True
+    inline.runs.RUN_STATE["running"] = True
     response = authed_client.post("/api/backup/cancel", json={})
     assert response.get_json() == {"cancelling": True}
-    assert inline.RUN_CANCEL_EVENT.is_set() and inline.RUN_STATE["cancel_requested"] is True
+    assert inline.runs.RUN_CANCEL_EVENT.is_set() and inline.runs.RUN_STATE["cancel_requested"] is True
 
-    inline.RUN_STATE["running"] = False
+    inline.runs.RUN_STATE["running"] = False
     observed = []
-    monkeypatch.setattr(inline, "run_backup", lambda cfg, should_cancel=None, **kw: observed.append(should_cancel()) or ([], []))
+    monkeypatch.setattr(inline.runs, "run_backup", lambda cfg, should_cancel=None, **kw: observed.append(should_cancel()) or ([], []))
     authed_client.post("/api/backup/run", json={})
-    assert observed == [False] and inline.RUN_STATE["cancel_requested"] is False
+    assert observed == [False] and inline.runs.RUN_STATE["cancel_requested"] is False
 
 
 def test_a_refused_start_does_not_clear_a_pending_cancel(inline, authed_client):
-    inline.RUN_STATE["running"] = True
-    inline.RUN_CANCEL_EVENT.set()
+    inline.runs.RUN_STATE["running"] = True
+    inline.runs.RUN_CANCEL_EVENT.set()
     assert authed_client.post("/api/backup/run", json={}).status_code == 409
-    assert inline.RUN_CANCEL_EVENT.is_set()
+    assert inline.runs.RUN_CANCEL_EVENT.is_set()
 
 
 # --- status log tail -------------------------------------------------------
@@ -149,32 +149,32 @@ def test_the_tail_is_read_from_the_end_of_any_size_log(isolated_webui, tmp_path,
     path = tmp_path / "backup.log"
     path.write_text("".join(f"2026-10-30 line {i} é\n" for i in range(lines)), encoding="utf-8")
     expected = [f"2026-10-30 line {i} é" for i in range(max(0, lines - 200), lines)]
-    assert isolated_webui._tail_lines(str(path), chunk=chunk) == expected
+    assert isolated_webui.runs._tail_lines(str(path), chunk=chunk) == expected
 
 
 def test_the_tail_keeps_a_last_line_without_a_newline(isolated_webui, tmp_path):
     path = tmp_path / "backup.log"
     path.write_text("one\ntwo")
-    assert isolated_webui._tail_lines(str(path)) == ["one", "two"]
+    assert isolated_webui.runs._tail_lines(str(path)) == ["one", "two"]
 
 
 def test_the_log_file_isnt_read_while_a_run_shows_its_own(inline, authed_client):
     os.makedirs(os.environ["BACKUPARR_LOG_DIR"], exist_ok=True)
     with open(os.path.join(os.environ["BACKUPARR_LOG_DIR"], "backup.log"), "w") as f:
         f.write("old run\n")
-    inline.RUN_STATE.update(running=True, log=["this run"])
+    inline.runs.RUN_STATE.update(running=True, log=["this run"])
     try:
         assert (status(authed_client)["log_tail"], status(authed_client)["log"]) == ([], ["this run"])
     finally:
-        inline.RUN_STATE["running"] = False
+        inline.runs.RUN_STATE["running"] = False
 
 
 def test_a_runs_log_keeps_only_its_newest_lines(isolated_webui):
     sink = []
-    handler = isolated_webui._ListLogHandler(sink)
-    for i in range(isolated_webui._ListLogHandler.MAX_LINES + 50):
+    handler = isolated_webui.runs._ListLogHandler(sink)
+    for i in range(isolated_webui.runs._ListLogHandler.MAX_LINES + 50):
         handler.emit(logging.LogRecord("backuparr", logging.INFO, __file__, 1, f"line {i}", None, None))
-    assert len(sink) == isolated_webui._ListLogHandler.MAX_LINES and sink[-1] == f"line {len(sink) + 49}"
+    assert len(sink) == isolated_webui.runs._ListLogHandler.MAX_LINES and sink[-1] == f"line {len(sink) + 49}"
 
 
 def test_status_copes_with_a_missing_log_file(inline, authed_client):
@@ -191,21 +191,21 @@ def test_run_tracked_always_marks_the_run_finished(isolated_webui):
         raise ValueError("work failed")
 
     with pytest.raises(ValueError):
-        isolated_webui._run_tracked(state, work)
+        isolated_webui.runs._run_tracked(state, work)
     assert state["running"] is False and state["finished_at"]
     assert any("inside work" in line for line in state["log"])
-    assert not any(isinstance(h, isolated_webui._ListLogHandler) for h in logging.getLogger("backuparr").handlers)
+    assert not any(isinstance(h, isolated_webui.runs._ListLogHandler) for h in logging.getLogger("backuparr").handlers)
 
 
 def test_start_tracked_run_applies_resets_only_when_it_really_starts(inline):
     state = {"running": False, "started_at": None, "finished_at": "old", "items": ["stale"], "log": []}
     ran, order = [], []
     lock = threading.Lock()
-    assert inline._start_tracked_run(state, lock, {"items": []}, lambda: ran.append(state["items"][:]), before_start=lambda: order.append("before"))
+    assert inline.runs._start_tracked_run(state, lock, {"items": []}, lambda: ran.append(state["items"][:]), before_start=lambda: order.append("before"))
     assert ran == [[]] and order == ["before"] and state["started_at"] and state["running"] is False
 
     state.update(running=True, items=["keep"])
-    assert not inline._start_tracked_run(state, lock, {"items": []}, lambda: ran.append("never"), before_start=lambda: order.append("again"))
+    assert not inline.runs._start_tracked_run(state, lock, {"items": []}, lambda: ran.append("never"), before_start=lambda: order.append("again"))
     assert state["items"] == ["keep"] and order == ["before"]
 
 
@@ -220,8 +220,8 @@ def test_scheduler_thread_is_a_daemon(isolated_webui, monkeypatch):
             pass
 
     monkeypatch.setattr(threading, "Thread", Recorder)
-    isolated_webui.start_scheduler()
-    assert created == [(isolated_webui._scheduler_loop, True)]
+    isolated_webui.runs.start_scheduler()
+    assert created == [(isolated_webui.runs._scheduler_loop, True)]
 
 
 # --- scheduler -------------------------------------------------------------
@@ -243,26 +243,26 @@ def clock(isolated_webui, monkeypatch):
         def now(cls, tz=None):
             return cls.current
 
-    monkeypatch.setattr(isolated_webui, "datetime", FakeDateTime)
-    monkeypatch.setattr(isolated_webui, "_start_backup_run", lambda: starts.append(FakeDateTime.current) or True)
-    isolated_webui._scheduler_state["last_run_minute"] = None
-    monkeypatch.setattr(isolated_webui, "_config_stamp", object)  # config.json changes every tick
+    monkeypatch.setattr(isolated_webui.runs, "datetime", FakeDateTime)
+    monkeypatch.setattr(isolated_webui.runs, "_start_backup_run", lambda: starts.append(FakeDateTime.current) or True)
+    isolated_webui.runs._scheduler_state["last_run_minute"] = None
+    monkeypatch.setattr(isolated_webui.runs, "_config_stamp", object)  # config.json changes every tick
 
     def run(schedule, ticks, load=None):
         ticks = iter(ticks)
-        monkeypatch.setattr(isolated_webui, "load_config", load or (lambda: {"cron_schedule": schedule}))
+        monkeypatch.setattr(isolated_webui.runs, "load_config", load or (lambda: {"cron_schedule": schedule}))
 
         def fake_sleep(seconds):
-            assert seconds == isolated_webui._SCHEDULER_INTERVAL_SECONDS
+            assert seconds == isolated_webui.runs._SCHEDULER_INTERVAL_SECONDS
             try:
                 FakeDateTime.current = next(ticks)
             except StopIteration:
                 raise Stop
 
-        monkeypatch.setattr(isolated_webui.time, "sleep", fake_sleep)
+        monkeypatch.setattr(isolated_webui.runs.time, "sleep", fake_sleep)
         FakeDateTime.current = next(ticks)
         with pytest.raises(Stop):
-            isolated_webui._scheduler_loop()
+            isolated_webui.runs._scheduler_loop()
         return starts
 
     return run
@@ -301,22 +301,22 @@ def test_the_scheduler_re_reads_the_schedule_every_tick(clock):
 
 def test_the_scheduler_reads_the_config_only_when_it_changes(isolated_webui, monkeypatch):
     loads = []
-    monkeypatch.setattr(isolated_webui, "load_config", lambda: loads.append(1) or {"cron_schedule": "0 4 * * *"})
-    monkeypatch.setitem(isolated_webui._scheduler_state, "config_stamp", None)
-    path = isolated_webui.config_store.CONFIG_PATH
+    monkeypatch.setattr(isolated_webui.runs, "load_config", lambda: loads.append(1) or {"cron_schedule": "0 4 * * *"})
+    monkeypatch.setitem(isolated_webui.runs._scheduler_state, "config_stamp", None)
+    path = isolated_webui.runs.config_store.CONFIG_PATH
     with open(path, "w") as f:
         f.write("{}")
-    assert isolated_webui._scheduled_cron() == isolated_webui._scheduled_cron() == "0 4 * * *"
+    assert isolated_webui.runs._scheduled_cron() == isolated_webui.runs._scheduled_cron() == "0 4 * * *"
     assert len(loads) == 1
     with open(path, "w") as f:
         f.write('{"cron_schedule": "0 4 * * *"}')
-    isolated_webui._scheduled_cron()
+    isolated_webui.runs._scheduled_cron()
     assert len(loads) == 2
 
 
 def test_the_scheduler_does_not_retry_a_minute_skipped_because_a_run_was_active(isolated_webui, monkeypatch, clock):
     attempts = []
-    monkeypatch.setattr(isolated_webui, "_start_backup_run", lambda: attempts.append(1) or False)
+    monkeypatch.setattr(isolated_webui.runs, "_start_backup_run", lambda: attempts.append(1) or False)
     clock("* * * * *", [at(5, 3, 0, 0), at(5, 3, 0, 20), at(5, 3, 0, 40)])
     assert attempts == [1]
 
@@ -325,7 +325,7 @@ def test_a_run_that_cannot_start_for_lack_of_disk_is_reported_in_one_line(inline
     def disk_full(cfg, **kw):
         raise OSError(errno.ENOSPC, "No space left on device", "/tmp/backuparr-run-x")
 
-    monkeypatch.setattr(inline, "run_backup", disk_full)
+    monkeypatch.setattr(inline.runs, "run_backup", disk_full)
     with caplog.at_level(logging.INFO):
         assert authed_client.post("/api/backup/run", json={}).status_code == 200
     state = status(authed_client)
@@ -353,11 +353,11 @@ def _ticks(inline, monkeypatch, errors):
         if not queue:
             raise _StopLoop
 
-    monkeypatch.setattr(inline, "load_config", load_config)
-    monkeypatch.setattr(inline, "_config_stamp", object)
-    monkeypatch.setattr(inline.time, "sleep", sleep)
+    monkeypatch.setattr(inline.runs, "load_config", load_config)
+    monkeypatch.setattr(inline.runs, "_config_stamp", object)
+    monkeypatch.setattr(inline.runs.time, "sleep", sleep)
     with pytest.raises(_StopLoop):
-        inline._scheduler_loop()
+        inline.runs._scheduler_loop()
 
 
 def test_a_broken_config_is_reported_once_not_every_tick(inline, monkeypatch, caplog):
@@ -387,7 +387,7 @@ def test_saving_settings_to_a_read_only_volume_explains_itself(authed_client, in
     def read_only(cfg):
         raise PermissionError(errno.EACCES, "Permission denied", "/config/backuparr/config.json")
 
-    monkeypatch.setattr(inline, "save_config", read_only)
+    monkeypatch.setattr(inline.settings, "save_config", read_only)
     with caplog.at_level(logging.INFO):
         response = authed_client.post("/api/config", json={"retention_days": 3})
     assert response.status_code == 500
@@ -400,7 +400,7 @@ def test_a_corrupt_config_file_is_explained_not_a_stack_trace(authed_client, inl
     def corrupt():
         raise inline.ConfigError("config.json isn't valid JSON (line 1) - fix it")
 
-    monkeypatch.setattr(inline, "load_config", corrupt)
+    monkeypatch.setattr(inline.settings, "load_config", corrupt)
     with caplog.at_level(logging.INFO):
         response = authed_client.get("/api/config")
     assert response.status_code == 500 and "isn't valid JSON" in response.get_json()["error"]
@@ -409,22 +409,22 @@ def test_a_corrupt_config_file_is_explained_not_a_stack_trace(authed_client, inl
 
 def test_a_backup_waits_for_a_running_restore(inline, authed_client, monkeypatch):
     started = []
-    monkeypatch.setattr(inline, "run_backup", lambda cfg, **kw: started.append(1) or ([], []))
-    monkeypatch.setitem(inline.RESTORE_RUN_STATE, "running", True)
+    monkeypatch.setattr(inline.runs, "run_backup", lambda cfg, **kw: started.append(1) or ([], []))
+    monkeypatch.setitem(inline.runs.RESTORE_RUN_STATE, "running", True)
     response = authed_client.post("/api/backup/run", json={})
     assert response.status_code == 409 and "a restore is running" in response.get_json()["error"]
-    assert started == [] and inline.RUN_STATE["running"] is False
+    assert started == [] and inline.runs.RUN_STATE["running"] is False
 
 
 def test_the_scheduler_skips_its_run_during_a_restore(inline, monkeypatch, caplog):
-    monkeypatch.setattr(inline, "run_backup", lambda cfg, **kw: ([], []))
-    monkeypatch.setitem(inline.RESTORE_RUN_STATE, "running", True)
-    monkeypatch.setattr(inline, "load_config", lambda: {"cron_schedule": "* * * * *"})
-    monkeypatch.setitem(inline._scheduler_state, "last_run_minute", None)
+    monkeypatch.setattr(inline.runs, "run_backup", lambda cfg, **kw: ([], []))
+    monkeypatch.setitem(inline.runs.RESTORE_RUN_STATE, "running", True)
+    monkeypatch.setattr(inline.runs, "load_config", lambda: {"cron_schedule": "* * * * *"})
+    monkeypatch.setitem(inline.runs._scheduler_state, "last_run_minute", None)
 
     def stop(_seconds):
         raise SystemExit
-    monkeypatch.setattr(inline.time, "sleep", stop)
+    monkeypatch.setattr(inline.runs.time, "sleep", stop)
     with pytest.raises(SystemExit):
-        inline._scheduler_loop()
-    assert "a restore is in progress" in caplog.text and inline.RUN_STATE["running"] is False
+        inline.runs._scheduler_loop()
+    assert "a restore is in progress" in caplog.text and inline.runs.RUN_STATE["running"] is False

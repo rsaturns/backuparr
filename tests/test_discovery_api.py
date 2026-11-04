@@ -14,10 +14,10 @@ def webui(tmp_path, monkeypatch):
     monkeypatch.setenv("BACKUPARR_LOG_DIR", str(tmp_path / "logs"))
     module = load_webui()
     import config_store
-    monkeypatch.setattr(module, "load_config", lambda: copy.deepcopy(config_store.DEFAULTS))
-    monkeypatch.setattr(module.auth_store, "has_credentials", lambda: True)
-    monkeypatch.setattr(module.DISCOVERY_JOBS, "jobs", {})
-    monkeypatch.setattr(module, "DISCOVERY_RUN_LOCK", threading.Lock())
+    monkeypatch.setattr(module.services, "load_config", lambda: copy.deepcopy(config_store.DEFAULTS))
+    monkeypatch.setattr(module.auth.auth_store, "has_credentials", lambda: True)
+    monkeypatch.setattr(module.services.DISCOVERY_JOBS, "jobs", {})
+    monkeypatch.setattr(module.services, "DISCOVERY_RUN_LOCK", threading.Lock())
 
     class InlineThread:
         def __init__(self, target, args, **kwargs):
@@ -26,8 +26,8 @@ def webui(tmp_path, monkeypatch):
         def start(self):
             self.target(*self.args)
 
-    monkeypatch.setattr(module.threading, "Thread", InlineThread)
-    monkeypatch.setattr(module.discovery, "discover_prowlarr", lambda instance, progress: {
+    monkeypatch.setattr(module.services.threading, "Thread", InlineThread)
+    monkeypatch.setattr(module.services.discovery, "discover_prowlarr", lambda instance, progress: {
         "candidates": [{"app": "radarr", "url": "http://radarr:7878", "api_key": "test-secret", "name": "Movies"}],
         "warnings": [],
     })
@@ -50,7 +50,7 @@ def test_discovery_requires_login(webui):
 def test_discovery_validates_inputs(webui, data):
     response = client_for(webui).post("/api/discovery/prowlarr", json=data)
     assert response.status_code == 400
-    assert not webui.DISCOVERY_JOBS.jobs
+    assert not webui.services.DISCOVERY_JOBS.jobs
 
 
 def test_result_is_private_uncached_and_can_be_discarded(webui):
@@ -71,7 +71,7 @@ def test_result_is_private_uncached_and_can_be_discarded(webui):
 
 
 def test_concurrent_discovery_is_rejected(webui):
-    webui.DISCOVERY_RUN_LOCK.acquire()
+    webui.services.DISCOVERY_RUN_LOCK.acquire()
     response = client_for(webui).post("/api/discovery/prowlarr", json={"url": "http://prowlarr:9696", "api_key": "key"})
     assert response.status_code == 409
 
@@ -94,35 +94,35 @@ def test_the_owner_cookie_is_set_once_and_never_echoed_back(webui):
     client = client_for(webui)
     body = {"url": "http://prowlarr:9696", "api_key": "key"}
     first = client.post("/api/discovery/prowlarr", json=body)
-    owner = client.get_cookie(webui.DISCOVERY_JOBS.cookie).value
-    assert any(c.startswith(webui.DISCOVERY_JOBS.cookie + "=") for c in first.headers.getlist("Set-Cookie"))
+    owner = client.get_cookie(webui.services.DISCOVERY_JOBS.cookie).value
+    assert any(c.startswith(webui.services.DISCOVERY_JOBS.cookie + "=") for c in first.headers.getlist("Set-Cookie"))
     second = client.post("/api/discovery/prowlarr", json=body)
-    assert not any(c.startswith(webui.DISCOVERY_JOBS.cookie + "=") for c in second.headers.getlist("Set-Cookie"))
-    assert client.get_cookie(webui.DISCOVERY_JOBS.cookie).value == owner
+    assert not any(c.startswith(webui.services.DISCOVERY_JOBS.cookie + "=") for c in second.headers.getlist("Set-Cookie"))
+    assert client.get_cookie(webui.services.DISCOVERY_JOBS.cookie).value == owner
     assert client.get("/api/discovery/prowlarr/" + second.json["job_id"]).json["result"]["candidates"]
 
 
 def test_logout_discards_discovery_cookie(webui):
     client = client_for(webui)
     client.post("/api/discovery/prowlarr", json={"url": "http://prowlarr:9696", "api_key": "key"})
-    assert client.get_cookie(webui.DISCOVERY_JOBS.cookie)
+    assert client.get_cookie(webui.services.DISCOVERY_JOBS.cookie)
     assert client.post("/api/logout", json={}).status_code == 200
-    assert client.get_cookie(webui.DISCOVERY_JOBS.cookie) is None
+    assert client.get_cookie(webui.services.DISCOVERY_JOBS.cookie) is None
 
 
 def test_remote_errors_do_not_expose_secrets_and_allow_retry(webui, monkeypatch, caplog):
     def fail(instance, progress):
         raise requests.HTTPError("http://server?apikey=do-not-leak-key")
 
-    monkeypatch.setattr(webui.discovery, "discover_prowlarr", fail)
+    monkeypatch.setattr(webui.services.discovery, "discover_prowlarr", fail)
     client = client_for(webui)
     response = client.post("/api/discovery/prowlarr", json={"url": "http://prowlarr:9696", "api_key": "key"})
     path = "/api/discovery/prowlarr/" + response.json["job_id"]
     result = client.get(path)
     assert result.json["state"] == "failed"
     assert "do-not-leak-key" not in result.text + caplog.text
-    assert not webui.DISCOVERY_RUN_LOCK.locked()
-    webui.DISCOVERY_JOBS.discard(response.json["job_id"])
+    assert not webui.services.DISCOVERY_RUN_LOCK.locked()
+    webui.services.DISCOVERY_JOBS.discard(response.json["job_id"])
     assert client.get(path).status_code == 404
 
 
@@ -133,7 +133,7 @@ def test_discovery_connects_with_strict_redirects(webui, monkeypatch):
         def __init__(self, url, api_key, **kwargs):
             received.append((url, api_key, kwargs))
 
-    monkeypatch.setattr(webui, "ProwlarrApp", Instance)
+    monkeypatch.setattr(webui.services, "ProwlarrApp", Instance)
     client = client_for(webui)
     response = client.post("/api/discovery/prowlarr", json={"url": "http://prowlarr:9696", "api_key": " key "})
     result = client.get("/api/discovery/prowlarr/" + response.json["job_id"])
@@ -146,16 +146,16 @@ def test_finished_results_are_purged_after_the_ttl(webui, monkeypatch):
     response = client.post("/api/discovery/prowlarr", json={"url": "http://prowlarr:9696", "api_key": "key"})
     path = "/api/discovery/prowlarr/" + response.json["job_id"]
     assert client.get(path).status_code == 200
-    webui.DISCOVERY_JOBS.jobs[response.json["job_id"]][1]["finished"] -= webui.DISCOVERY_RESULT_TTL + 1
+    webui.services.DISCOVERY_JOBS.jobs[response.json["job_id"]][1]["finished"] -= webui.services.DISCOVERY_RESULT_TTL + 1
     assert client.get(path).status_code == 404
-    assert not webui.DISCOVERY_JOBS.jobs
+    assert not webui.services.DISCOVERY_JOBS.jobs
 
 
 def test_running_jobs_are_never_purged(webui):
-    webui.DISCOVERY_JOBS.jobs["job"] = ("o", {"state": "running", "message": "..."})
-    with webui.DISCOVERY_JOBS.lock:
-        webui.DISCOVERY_JOBS.purge_locked()
-    assert "job" in webui.DISCOVERY_JOBS.jobs
+    webui.services.DISCOVERY_JOBS.jobs["job"] = ("o", {"state": "running", "message": "..."})
+    with webui.services.DISCOVERY_JOBS.lock:
+        webui.services.DISCOVERY_JOBS.purge_locked()
+    assert "job" in webui.services.DISCOVERY_JOBS.jobs
 
 
 def test_prowlarr_and_discovered_apps_lead_the_app_list(webui):

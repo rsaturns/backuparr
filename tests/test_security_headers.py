@@ -35,7 +35,7 @@ def test_pages_carry_a_policy_that_blocks_inline_and_foreign_scripts(webui):
 
 @pytest.mark.parametrize("path", ["/api/config", "/api/history/local", "/api/meta"])
 def test_api_responses_are_never_cached(webui, monkeypatch, path):
-    monkeypatch.setattr(webui.rclone_util, "lsjson", lambda root, recursive=False: [])
+    monkeypatch.setattr(webui.backups.rclone_util, "lsjson", lambda root, recursive=False: [])
     assert authed(webui).get(path).headers["Cache-Control"] == "no-store"
 
 
@@ -66,14 +66,14 @@ def test_a_forged_reset_from_another_site_is_refused(isolated_webui, content_typ
     kwargs = {"data": FORGED} if content_type is None else {"data": FORGED, "content_type": content_type}
     response = anonymous.post("/api/reset", **kwargs)
     assert response.status_code == 415
-    assert isolated_webui.auth_store.has_credentials()
+    assert isolated_webui.auth.auth_store.has_credentials()
 
 
 def test_a_forged_first_run_setup_is_refused(isolated_webui):
     response = isolated_webui.app.test_client().post(
         "/api/setup", data='{"username":"attacker","password":"password123","x":"="}', content_type="text/plain")
     assert response.status_code == 415
-    assert not isolated_webui.auth_store.has_credentials()
+    assert not isolated_webui.auth.auth_store.has_credentials()
 
 
 @pytest.mark.parametrize("path", ["/api/config", "/api/backup/run", "/api/restore/local/radarr",

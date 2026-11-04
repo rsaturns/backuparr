@@ -33,8 +33,8 @@ def test_fetch_backup_refuses_directory_names_before_touching_the_destination(mo
 @pytest.fixture
 def client(isolated_webui, authed_client, monkeypatch):
     calls = []
-    monkeypatch.setattr(isolated_webui.rclone_util, "copyto", lambda *a: calls.append(a))
-    monkeypatch.setattr(isolated_webui.rclone_util, "delete_file", lambda *a: calls.append(a))
+    monkeypatch.setattr(isolated_webui.backups.rclone_util, "copyto", lambda *a: calls.append(a))
+    monkeypatch.setattr(isolated_webui.backups.rclone_util, "delete_file", lambda *a: calls.append(a))
     authed_client.calls = calls
     return authed_client
 

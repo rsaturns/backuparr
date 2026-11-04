@@ -75,8 +75,8 @@ def test_progress_reaches_live_web_status_before_backup_finishes(authed_client, 
         return get(url, **kwargs)
 
     monkeypatch.setattr(app.session, 'get', request)
-    monkeypatch.setattr(isolated_webui, 'run_backup', lambda *a, **kw: (app.backup(str(tmp_path / 'backup')) and ['plex'], []))
-    monkeypatch.setattr(isolated_webui, 'notify', lambda *a: None)
+    monkeypatch.setattr(isolated_webui.runs, 'run_backup', lambda *a, **kw: (app.backup(str(tmp_path / 'backup')) and ['plex'], []))
+    monkeypatch.setattr(isolated_webui.runs, 'notify', lambda *a: None)
     monkeypatch.setattr(logging.getLogger('backuparr.apps.plex'), 'level', logging.INFO)
     # Keep the real worker thread, HTTP status route and live log handler.
     try:

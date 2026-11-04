@@ -86,7 +86,7 @@ def test_disabled_auth_blocks_auth_apis_and_preserves_files(webui, existing_acco
 
     client = webui.app.test_client()
     for path in ("/api/setup", "/api/login", "/api/logout", "/api/reset"):
-        payload = {"confirm": webui.RESET_CONFIRM_PHRASE} if path == "/api/reset" else {}
+        payload = {"confirm": webui.auth.RESET_CONFIRM_PHRASE} if path == "/api/reset" else {}
         response = client.post(path, json=payload)
         assert response.status_code == 403
         assert response.is_json
@@ -99,9 +99,9 @@ def test_disabled_auth_blocks_auth_apis_and_preserves_files(webui, existing_acco
 def test_auth_api_paths_cover_every_auth_route(webui):
     auth_rules = {
         rule.rule for rule in webui.app.url_map.iter_rules()
-        if rule.endpoint in ("api_setup", "api_login", "api_logout", "api_reset")
+        if rule.endpoint in ("auth.api_setup", "auth.api_login", "auth.api_logout", "auth.api_reset")
     }
-    assert auth_rules == webui._AUTH_API_PATHS
+    assert auth_rules == webui.auth._AUTH_API_PATHS
 
 
 @pytest.mark.parametrize("webui", ["true"], indirect=True)

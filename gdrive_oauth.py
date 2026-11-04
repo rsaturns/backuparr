@@ -1,6 +1,6 @@
 """Google Drive as a Backuparr destination, connected via an OAuth
-"Connect" button (see webui/app.py's /api/destinations/gdrive/* routes)
-instead of rclone's interactive config wizard. Scoped to drive.file -
+"Connect" button (see webui/destinations.py) instead of rclone's
+interactive config wizard. Scoped to drive.file -
 only files/folders this app created or the user picked via the Google
 Picker widget, not the whole Drive.
 

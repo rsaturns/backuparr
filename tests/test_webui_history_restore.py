@@ -15,7 +15,7 @@ from config_store import APP_NAMES
 def rclone(isolated_webui, monkeypatch):
     """Fake rclone_util calls; returns the lists they record into."""
     calls = {"lsjson": [], "delete": [], "copyto": [], "lsf": []}
-    fake = isolated_webui.rclone_util
+    fake = isolated_webui.backups.rclone_util
     monkeypatch.setattr(fake, "lsjson", lambda root, recursive=False: calls["lsjson"].append((root, recursive)) or calls.get("entries", []))
     monkeypatch.setattr(fake, "delete_file", lambda path: calls["delete"].append(path))
     monkeypatch.setattr(fake, "copyto", lambda src, dst: calls["copyto"].append((src, dst)) or open(dst, "wb").write(b"backup bytes"))
@@ -49,9 +49,9 @@ def test_history_groups_files_by_app_newest_first(authed_client, rclone):
 
 def test_history_reports_a_destination_it_cant_list(authed_client, isolated_webui, monkeypatch):
     def expired(root, recursive=False):
-        raise isolated_webui.rclone_util.RcloneError("rclone lsjson failed", "invalid_grant (reconnect it)", 1)
+        raise isolated_webui.backups.rclone_util.RcloneError("rclone lsjson failed", "invalid_grant (reconnect it)", 1)
 
-    monkeypatch.setattr(isolated_webui.rclone_util, "lsjson", expired)
+    monkeypatch.setattr(isolated_webui.backups.rclone_util, "lsjson", expired)
     response = authed_client.get("/api/history/local")
     assert response.status_code == 502 and response.get_json() == {"error": "invalid_grant (reconnect it)"}
 
@@ -81,7 +81,7 @@ def test_destination_problems_are_explained(authed_client, rclone, path):
 def test_delete_removes_exactly_that_file(authed_client, rclone, isolated_webui):
     response = authed_client.delete("/api/history/local/radarr/radarr_1.zip")
     assert response.get_json() == {"ok": True}
-    assert rclone["delete"] == [os.path.join(isolated_webui.destination_util.DEFAULT_LOCAL_DIR, "radarr", "radarr_1.zip")]
+    assert rclone["delete"] == [os.path.join(isolated_webui.destinations.destination_util.DEFAULT_LOCAL_DIR, "radarr", "radarr_1.zip")]
 
 
 @pytest.mark.parametrize("name", ["a b.zip", "a;b.zip", ".hidden", "a%0A.zip"])
@@ -98,9 +98,9 @@ def test_unknown_apps_are_refused(authed_client, rclone):
 
 def test_delete_reports_an_rclone_failure(authed_client, isolated_webui, monkeypatch):
     def fail(path):
-        raise isolated_webui.rclone_util.RcloneError("permission denied")
+        raise isolated_webui.backups.rclone_util.RcloneError("permission denied")
 
-    monkeypatch.setattr(isolated_webui.rclone_util, "delete_file", fail)
+    monkeypatch.setattr(isolated_webui.backups.rclone_util, "delete_file", fail)
     response = authed_client.delete("/api/history/local/radarr/a.zip")
     assert response.status_code == 500 and "permission denied" in response.get_json()["error"]
 
@@ -118,9 +118,9 @@ def test_a_failed_download_cleans_up_and_explains(authed_client, isolated_webui,
 
     def fail(src, dst):
         seen.append(dst)
-        raise isolated_webui.rclone_util.RcloneError("not found")
+        raise isolated_webui.backups.rclone_util.RcloneError("not found")
 
-    monkeypatch.setattr(isolated_webui.rclone_util, "copyto", fail)
+    monkeypatch.setattr(isolated_webui.backups.rclone_util, "copyto", fail)
     response = authed_client.get("/api/history/local/radarr/a.zip/download")
     assert response.status_code == 500 and "not found" in response.get_json()["error"]
     assert not os.path.exists(os.path.dirname(seen[0]))
@@ -137,7 +137,7 @@ def test_restore_listing_reports_an_rclone_failure(authed_client, isolated_webui
     def fail(path):
         raise requests.exceptions.ConnectionError("boom")
 
-    monkeypatch.setattr(isolated_webui.rclone_util, "lsf", fail)
+    monkeypatch.setattr(isolated_webui.backups.rclone_util, "lsf", fail)
     response = authed_client.get("/api/restore/local/radarr/backups")
     assert response.status_code == 500 and "couldn't connect" in response.get_json()["error"]
 
@@ -260,7 +260,7 @@ def test_bazarr_restore_needs_its_backup_folder(restore, authed_client):
 
 
 def test_only_one_restore_runs_at_a_time(restore, authed_client, inline):
-    inline.RESTORE_RUN_STATE["running"] = True
+    inline.runs.RESTORE_RUN_STATE["running"] = True
     response = start(authed_client)
     assert response.status_code == 409 and restore["calls"] == []
 
@@ -441,7 +441,7 @@ def test_override_can_supply_a_target_for_an_unconfigured_app(restore, authed_cl
 
 
 def test_a_restore_waits_for_a_running_backup(restore, authed_client, isolated_webui, monkeypatch):
-    monkeypatch.setitem(isolated_webui.RUN_STATE, "running", True)
+    monkeypatch.setitem(isolated_webui.runs.RUN_STATE, "running", True)
     response = start(authed_client)
     assert response.status_code == 409 and "a backup is running" in response.get_json()["error"]
     assert not [c for c in restore["calls"] if c[0] == "restore"]

@@ -20,11 +20,11 @@ def load_webui():
     """webui.app freshly reloaded, so its module-level settings read the
     environment again, with the session key create_app() would load - but no
     scheduler thread and no log file."""
-    if "webui.app" in sys.modules:
-        module = importlib.reload(sys.modules["webui.app"])
-    else:
-        module = importlib.import_module("webui.app")
-    module.app.secret_key = module._load_or_create_secret_key()
+    # Dependencies first, so each module binds the fresh state of the next.
+    for name in ("webui.settings", "webui.services", "webui.auth", "webui.destinations", "webui.runs",
+                 "webui.backups", "webui.app"):
+        module = importlib.reload(sys.modules[name]) if name in sys.modules else importlib.import_module(name)
+    module.app.secret_key = module.auth._load_or_create_secret_key()
     module.app.config.update(TESTING=True)
     return module
 

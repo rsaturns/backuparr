@@ -248,7 +248,7 @@ def test_factory_settings_and_token_storage(authed_client, isolated_webui, monke
     cfg = {'enabled': True, 'url': 'http://plex:32400', 'api_key': 'private-plex-token', 'data_dir': '/mnt/plex'}
     assert authed_client.post('/api/config', json={'apps': {'plex': cfg}}).status_code == 200
     assert authed_client.get('/api/config').json['apps']['plex']['api_key'] == 'private-plex-token'
-    assert 'private-plex-token' not in Path(isolated_webui.CONFIG_PATH).read_text()
+    assert 'private-plex-token' not in Path(isolated_webui.auth.CONFIG_PATH).read_text()
     monkeypatch.setattr(PlexApp, 'test_connection', lambda self: 'Plex reachable')
     assert authed_client.post('/api/test/plex', json=cfg).json['ok']
 

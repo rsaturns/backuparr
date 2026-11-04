@@ -1,5 +1,5 @@
 """Resolves each enabled destination's rclone remote root generically, so
-backup.py/restore_actions.py/webui/app.py don't need destination-specific
+backup.py, restore_actions.py and the web UI don't need destination-specific
 branching beyond "which id is this".
 """
 import os
