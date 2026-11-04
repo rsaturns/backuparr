@@ -1,9 +1,9 @@
 """Trigger each configured app's own backup mechanism, zip the result if
 needed, and upload it to the configured rclone remote. Most apps are backed
 up over their HTTP API. A few need their folder mounted into this container:
-Jellyfin's API can't download the backup it creates, so that archive is
-picked up from its mounted backups folder; Emby and Seerr have no backup API,
-so their files are read from their mounted data folders; and Plex's settings
+Jellyfin's and LazyLibrarian's APIs can't download the backup they create, so
+it's picked up from the mounted folder; Emby and Seerr have no backup API, so
+their files are read from their mounted data folders; and Plex's settings
 and server identity come from its mounted data folder.
 Settings come from config_store, not environment variables.
 """
@@ -25,25 +25,26 @@ import requests
 
 import destination_util
 import rclone_util
-from apps.bazarr import BazarrApp, BazarrError
+from apps.base import AppError
+from apps.bazarr import BazarrApp
+from apps.emby import EmbyApp
 from apps.http_headers import RequestHeadersError, app_connection_config, configure_app_headers
-from apps.emby import EmbyApp, EmbyError
-from apps.jellyfin import JellyfinApp, JellyfinError
-from apps.lazylibrarian import LazyLibrarianApp, LazyLibrarianError
+from apps.jellyfin import JellyfinApp
+from apps.lazylibrarian import LazyLibrarianApp
 from apps.lidarr import LidarrApp
-from apps.nzbget import NzbgetApp, NzbgetError
-from apps.plex import PlexApp, PlexError
-from apps.profilarr import ProfilarrApp, ProfilarrError
+from apps.nzbget import NzbgetApp
+from apps.plex import PlexApp
+from apps.profilarr import ProfilarrApp
 from apps.prowlarr import ProwlarrApp
 from apps.radarr import RadarrApp
-from apps.sabnzbd import SabnzbdApp, SabnzbdError
-from apps.seerr import SeerrApp, SeerrError
-from apps.servarr import ServarrError, UnsafeRedirectError
+from apps.sabnzbd import SabnzbdApp
+from apps.seerr import SeerrApp
+from apps.servarr import UnsafeRedirectError
 from apps.sonarr import SonarrApp
-from apps.tautulli import TautulliApp, TautulliError
-from apps.tdarr import TdarrApp, TdarrError
+from apps.tautulli import TautulliApp
+from apps.tdarr import TdarrApp
 from apps.whisparr import WhisparrApp
-from config_store import ConfigError, enabled_apps, enabled_destinations, instance_type
+from config_store import ConfigError, app_meta, enabled_apps, enabled_destinations, instance_type
 
 LOG_DIR = os.environ.get("BACKUPARR_LOG_DIR", "/var/log/backuparr")
 LOG_FILE = os.path.join(LOG_DIR, "backup.log")
@@ -56,40 +57,31 @@ def _log_level(value):
     return name if name in logging.getLevelNamesMapping() else "INFO"
 
 
-logging.basicConfig(
-    level=_log_level(os.environ.get("LOG_LEVEL")),
-    format="%(asctime)s %(levelname)s %(message)s",
-)
 log = logging.getLogger("backuparr")
+_LOG_FORMAT = "%(asctime)s %(levelname)s %(message)s"
 
-# So the web UI's status view can show past run results too.
-try:
-    os.makedirs(LOG_DIR, exist_ok=True)
-    _file_handler = logging.handlers.RotatingFileHandler(LOG_FILE, maxBytes=1_000_000, backupCount=3)
-    _file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
-    log.addHandler(_file_handler)
-except OSError:
-    log.warning("could not open %s for writing, file logging disabled", LOG_FILE)
+
+def configure_logging():
+    """Logs to stdout at LOG_LEVEL, and Backuparr's own lines to LOG_FILE as
+    well, so the web UI's status view can show past runs. Called once, at
+    startup."""
+    logging.basicConfig(level=_log_level(os.environ.get("LOG_LEVEL")), format=_LOG_FORMAT)
+    try:
+        os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+        handler = logging.handlers.RotatingFileHandler(LOG_FILE, maxBytes=1_000_000, backupCount=3)
+    except OSError:
+        log.warning("could not open %s for writing, file logging disabled", LOG_FILE)
+        return
+    handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+    log.addHandler(handler)
 
 
 # Errors whose message was written for humans (and carries no URL or key).
 _CLEAN_MESSAGE_ERRORS = (
-    RequestHeadersError,
-    BazarrError,
+    AppError,
     ConfigError,
     destination_util.DestinationError,
-    JellyfinError,
-    LazyLibrarianError,
-    NzbgetError,
-    EmbyError,
-    PlexError,
-    ProfilarrError,
-    rclone_util.RcloneError,
-    SabnzbdError,
-    SeerrError,
-    ServarrError,
-    TautulliError,
-    TdarrError,
+    RequestHeadersError,
     UnsafeRedirectError,
 )
 
@@ -223,45 +215,37 @@ def build_app(name, app_cfg):
     return configure_app_headers(_build_app(instance_type(name), app_cfg), app_cfg.get("request_headers", []))
 
 
+# Every app type's driver. Each takes (url, api_key, **extra fields) - the
+# extra fields being its APP_META extra_fields - or, for an app with
+# no_api_key, (url, **extra fields).
+DRIVERS = {
+    "radarr": RadarrApp,
+    "sonarr": SonarrApp,
+    "lidarr": LidarrApp,
+    "whisparr": WhisparrApp,
+    "prowlarr": ProwlarrApp,
+    "profilarr": ProfilarrApp,
+    "bazarr": BazarrApp,
+    "tdarr": TdarrApp,
+    "sabnzbd": SabnzbdApp,
+    "nzbget": NzbgetApp,
+    "tautulli": TautulliApp,
+    "jellyfin": JellyfinApp,
+    "emby": EmbyApp,
+    "plex": PlexApp,
+    "seerr": SeerrApp,
+    "lazylibrarian": LazyLibrarianApp,
+}
+
+
 def _build_app(name, app_cfg):
-    if name == "radarr":
-        return RadarrApp(app_cfg["url"], app_cfg["api_key"])
-    if name == "sonarr":
-        return SonarrApp(app_cfg["url"], app_cfg["api_key"])
-    if name == "lidarr":
-        return LidarrApp(app_cfg["url"], app_cfg["api_key"])
-    if name == "whisparr":
-        return WhisparrApp(app_cfg["url"], app_cfg["api_key"])
-    if name == "prowlarr":
-        return ProwlarrApp(app_cfg["url"], app_cfg["api_key"])
-    if name == "profilarr":
-        return ProfilarrApp(app_cfg["url"], app_cfg["api_key"])
-    if name == "bazarr":
-        return BazarrApp(
-            app_cfg["url"],
-            app_cfg["api_key"],
-            username=app_cfg.get("username") or None,
-            password=app_cfg.get("password") or None,
-        )
-    if name == "tdarr":
-        return TdarrApp(app_cfg["url"], api_key=app_cfg.get("api_key") or None)
-    if name == "sabnzbd":
-        return SabnzbdApp(app_cfg["url"], app_cfg["api_key"])
-    if name == "nzbget":
-        return NzbgetApp(app_cfg["url"], app_cfg.get("username") or None, app_cfg.get("password") or None)
-    if name == "tautulli":
-        return TautulliApp(app_cfg["url"], app_cfg["api_key"])
-    if name == "jellyfin":
-        return JellyfinApp(app_cfg["url"], app_cfg["api_key"], backup_dir=app_cfg.get("backup_dir") or None)
-    if name == "emby":
-        return EmbyApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
-    if name == "plex":
-        return PlexApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
-    if name == "seerr":
-        return SeerrApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
-    if name == "lazylibrarian":
-        return LazyLibrarianApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
-    raise ValueError(f"Unknown app: {name}")
+    meta = app_meta(name)
+    if name not in DRIVERS or meta is None:
+        raise ValueError(f"Unknown app: {name}")
+    extras = {field["name"]: app_cfg.get(field["name"]) or None for field in meta["extra_fields"]}
+    if meta.get("no_api_key"):
+        return DRIVERS[name](app_cfg["url"], **extras)
+    return DRIVERS[name](app_cfg["url"], app_cfg.get("api_key", ""), **extras)
 
 
 _TAR_SUFFIX = re.compile(r"\.tar\.(?:gz|bz2|xz|zst)$")
@@ -278,7 +262,9 @@ def archive_suffix(path):
 
 
 def zip_dir(src_dir, zip_path):
-    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
+    # zlib's default level: 9 is far slower on multi-GB databases for a few
+    # percent less size.
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for root, _dirs, files in os.walk(src_dir):
             for name in files:
                 full = os.path.join(root, name)
@@ -305,10 +291,8 @@ def notify(notify_url, message, raise_on_error=False):
     try:
         if _DISCORD_WEBHOOK_RE.search(notify_url):
             res = requests.post(notify_url, json={"content": message[:2000]}, timeout=10)  # 2000 = Discord's limit
-        elif _SLACK_WEBHOOK_RE.search(notify_url):
-            res = requests.post(notify_url, json={"text": message}, timeout=10)
-        elif _TELEGRAM_RE.search(notify_url):
-            # chat_id stays in notify_url's own query string.
+        elif _SLACK_WEBHOOK_RE.search(notify_url) or _TELEGRAM_RE.search(notify_url):
+            # Telegram's chat_id stays in notify_url's own query string.
             res = requests.post(notify_url, json={"text": message}, timeout=10)
         elif _is_gotify_url(parsed):
             res = requests.post(notify_url, json={"title": "Backuparr", "message": message}, timeout=10)
@@ -339,8 +323,13 @@ def apply_retention(root, retention_days, now=None, only=None):
     timestamp in the name, written in this container's local time. only,
     if given, limits it to that one app or instance's backups."""
     cutoff = (now or datetime.now()) - timedelta(days=int(retention_days))
+    try:
+        entries = rclone_util.lsjson(root, recursive=True)
+    except rclone_util.RcloneError as exc:
+        log.warning("retention: couldn't list %s, nothing removed: %s", root, exc.detail)
+        return
     per_app = {}
-    for entry in rclone_util.lsjson(root, recursive=True):
+    for entry in entries:
         app, sep, name = entry.get("Path", "").partition("/")
         if entry.get("IsDir") or not sep or not instance_type(app) or not destination_util.is_backup_name(app, name):
             continue

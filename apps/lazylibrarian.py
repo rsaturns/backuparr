@@ -33,8 +33,9 @@ import tempfile
 
 import requests
 
-from apps import sqlite_snapshot
-from apps.servarr import ApiKeySession, UnsafeRedirectError
+from apps import mounted, sqlite_snapshot
+from apps.base import AppError
+from apps.servarr import SameHostSession, UnsafeRedirectError
 
 logger = logging.getLogger(f"backuparr.{__name__}")
 
@@ -45,10 +46,9 @@ _MEMBER = re.compile(r"(lazylibrarian\.db|config\.ini|dicts\.json|genres\.json|"
                      r"(?:file|login)template\.[A-Za-z0-9_.-]+\.text)")
 # The name dbbackup gives an archive made through the API.
 _API_ARCHIVE = re.compile(r"api_[A-Za-z0-9_]+\.tgz")
-_MIB = 1024 * 1024
 
 
-class LazyLibrarianError(RuntimeError):
+class LazyLibrarianError(AppError):
     pass
 
 
@@ -75,7 +75,7 @@ class LazyLibrarianApp:
         self.api_key = api_key
         self.data_dir = data_dir or None
         self.timeout = timeout
-        self.session = ApiKeySession(self.url)
+        self.session = SameHostSession(self.url)
 
     def _call(self, cmd, timeout=None):
         try:
@@ -117,13 +117,8 @@ class LazyLibrarianApp:
         return os.path.join(self.data_dir, name)
 
     def _require_folder(self, match_key=True):
-        if not self.data_dir:
-            raise LazyLibrarianError(
-                "lazylibrarian: set the data folder - LazyLibrarian's /config folder, mounted into this container")
-        if not os.path.isdir(self.data_dir):
-            raise LazyLibrarianError(
-                f"lazylibrarian: data folder {self.data_dir} doesn't exist in this container - "
-                "mount the folder LazyLibrarian has at /config there")
+        mounted.require_dir(self.data_dir, LazyLibrarianError, "lazylibrarian", "data folder",
+                            "LazyLibrarian's /config folder", "mount the folder LazyLibrarian has at /config there")
         if not os.path.isfile(self._path(DATABASE)) or not os.path.isfile(self._path(CONFIG)):
             raise LazyLibrarianError(
                 f"lazylibrarian: {self.data_dir} doesn't look like LazyLibrarian's data folder (no {DATABASE} "
@@ -179,24 +174,12 @@ class LazyLibrarianApp:
             running = False
         if running:
             raise LazyLibrarianError("lazylibrarian: stop LazyLibrarian before restoring - it's still answering at " + self.url)
-        # Leaving WAL mode needs sole use of the database: refused while
-        # LazyLibrarian has it open, and when granted it folds the -wal into
-        # the database and deletes it. LazyLibrarian turns WAL on again.
-        db = sqlite3.connect(self._path(DATABASE), timeout=0, isolation_level=None)
-        try:
-            db.execute("PRAGMA journal_mode=DELETE").fetchone()
-        except sqlite3.OperationalError as exc:
-            raise LazyLibrarianError(
-                "lazylibrarian: stop LazyLibrarian before restoring - its database is in use"
-                + (" (is it still running somewhere?)" if "locked" in str(exc) else f" ({exc})")
-            ) from exc
-        finally:
-            db.close()
+        mounted.claim_database(self._path(DATABASE), LazyLibrarianError, "lazylibrarian", "LazyLibrarian")
 
     def restore_from_file(self, local_path):
         """Writes the backup's files over LazyLibrarian's while it's stopped.
         Existing files are rewritten in place, so they keep their owner and
-        permissions."""
+        permissions; new ones are made readable to LazyLibrarian."""
         names = archive_members(local_path)
         self._require_folder(match_key=False)
         targets = [self._path(n) for n in names]
@@ -220,12 +203,7 @@ class LazyLibrarianApp:
                 raise LazyLibrarianError(f"lazylibrarian: the backup's database failed SQLite's check ({status})")
             self._check_stopped()
             for name, target in zip(names, targets):
-                # "wb" truncates in place: owner and mode stay LazyLibrarian's.
-                with open(os.path.join(work, name), "rb") as src, open(target, "wb") as dst:
-                    shutil.copyfileobj(src, dst, _MIB)
-        # _check_stopped removed the -wal; any -shm index left is stale.
-        for leftover in (self._path(DATABASE) + "-wal", self._path(DATABASE) + "-shm"):
-            if os.path.exists(leftover):
-                os.remove(leftover)
+                mounted.copy_in_place(os.path.join(work, name), target)
+        mounted.remove_journal_files(self._path(DATABASE))
         logger.info("lazylibrarian: restored %s into %s - start LazyLibrarian to load them",
                     ", ".join(names), self.data_dir)

@@ -4,28 +4,17 @@ requiring an Azure app registration (Microsoft has required new
 registrations to live in a directory since June 2024, which most
 personal accounts don't have); rclone's own built-in Microsoft app
 predates that requirement. Personal Microsoft accounts only.
-
-rclone.conf is encrypted (see entrypoint.sh), so it's written via
-rclone_util's `rclone config` wrappers, not configparser directly.
 """
 import requests
 
-import rclone_token
 import rclone_util
 
 REMOTE_NAME = "backuparr-onedrive"
+TOKEN_FIELD = "token"
 
 
 class OneDriveOAuthError(RuntimeError):
     pass
-
-
-def parse_token_blob(pasted):
-    """See rclone_token.parse_token_blob."""
-    try:
-        return rclone_token.parse_token_blob(pasted, "onedrive")
-    except rclone_token.TokenError as exc:
-        raise OneDriveOAuthError(str(exc)) from exc
 
 
 def approot_metadata(access_token):
@@ -52,6 +41,10 @@ def remote_root(dest_cfg):
     return f"{REMOTE_NAME}:"
 
 
+def backup_target(dest_cfg):
+    return "your OneDrive app folder"
+
+
 def sync_rclone_remote(dest_cfg, force=False, remotes=None):
     """Writes (or removes) the REMOTE_NAME remote in rclone.conf to match
     destinations.onedrive. Unlike Google Drive, does NOT overwrite an
@@ -61,10 +54,8 @@ def sync_rclone_remote(dest_cfg, force=False, remotes=None):
     from our (stale) config.json copy would clobber a valid token.
     `remotes` is a config_dump() the caller already has; nothing is
     written when the remote already matches."""
-    remote = (rclone_util.config_dump() if remotes is None else remotes).get(REMOTE_NAME)
+    remote = rclone_util.connected_remote(REMOTE_NAME, dest_cfg.get("token"), remotes)
     if not dest_cfg.get("token"):
-        if remote is not None:
-            rclone_util.config_delete(REMOTE_NAME)
         return
 
     fields = {

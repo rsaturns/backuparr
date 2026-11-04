@@ -10,9 +10,14 @@ class RcloneError(RuntimeError):
     """str() is the full failed command line; .detail is just the cause (and
     a hint), which is what a log line or the UI needs."""
 
-    def __init__(self, message, detail=None):
+    def __init__(self, message, detail=None, returncode=None):
         super().__init__(message)
         self.detail = detail or message
+        self.returncode = returncode
+
+
+# rclone's exit code for "directory not found".
+_DIR_NOT_FOUND = 3
 
 
 SENSITIVE_FIELDS = {"client_secret", "token", "password", "pass"}
@@ -68,7 +73,7 @@ def _run(args, redact=()):
             if secret:
                 message = message.replace(secret, "***")
                 detail = detail.replace(secret, "***")
-        raise RcloneError(message, detail)
+        raise RcloneError(message, detail, proc.returncode)
     return proc.stdout
 
 
@@ -99,6 +104,17 @@ def config_delete(name):
     _run(["config", "delete", name])
 
 
+def connected_remote(name, connected, remotes=None):
+    """name's section in rclone.conf, or None. remotes is a config_dump()
+    the caller already has. When its destination isn't connected the remote
+    is removed, if it's there, and None returned."""
+    remote = (config_dump() if remotes is None else remotes).get(name)
+    if not connected and remote is not None:
+        config_delete(name)
+        return None
+    return remote
+
+
 def copyto(local_path, remote_path):
     _run(["copyto", local_path, remote_path])
 
@@ -108,23 +124,26 @@ def delete_file(remote_path):
     _run(["deletefile", remote_path])
 
 
-def lsf(remote_dir):
-    """Returns [] instead of raising when the directory doesn't exist yet."""
+def _list(args):
+    """A listing's output, or "" when the directory doesn't exist yet. Any
+    other failure - an expired token, say - raises, so it can't pass for an
+    empty destination."""
     try:
-        out = _run(["lsf", remote_dir])
-    except RcloneError:
-        return []
+        return _run(args)
+    except RcloneError as exc:
+        if exc.returncode == _DIR_NOT_FOUND:
+            return ""
+        raise
+
+
+def lsf(remote_dir):
+    out = _list(["lsf", remote_dir])
     return [line.strip() for line in out.splitlines() if line.strip()]
 
 
 def lsjson(remote_dir, recursive=False):
-    """Returns [] instead of raising when the directory doesn't exist yet."""
-    args = ["lsjson", "--recursive", remote_dir] if recursive else ["lsjson", remote_dir]
-    try:
-        out = _run(args)
-    except RcloneError:
-        return []
-    return json.loads(out)
+    out = _list(["lsjson", "--recursive", remote_dir] if recursive else ["lsjson", remote_dir])
+    return json.loads(out) if out.strip() else []
 
 
 def check_remote(remote_dir):

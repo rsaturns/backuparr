@@ -2,16 +2,13 @@
 `rclone authorize dropbox` prints - the same flow as OneDrive. rclone's own
 built-in Dropbox app is used, so there's no Dropbox app registration to set
 up; the trade-off is that it's shared by every rclone user.
-
-rclone.conf is encrypted (see entrypoint.sh), so it's written via
-rclone_util's `rclone config` wrappers, not configparser directly.
 """
 import requests
 
-import rclone_token
 import rclone_util
 
 REMOTE_NAME = "backuparr-dropbox"
+TOKEN_FIELD = "token"
 
 # Backups go in this folder instead of the Dropbox root, which the built-in
 # app may be allowed to see in full.
@@ -20,14 +17,6 @@ BACKUP_FOLDER = "Backuparr"
 
 class DropboxOAuthError(RuntimeError):
     pass
-
-
-def parse_token_blob(pasted):
-    """See rclone_token.parse_token_blob."""
-    try:
-        return rclone_token.parse_token_blob(pasted, "dropbox")
-    except rclone_token.TokenError as exc:
-        raise DropboxOAuthError(str(exc)) from exc
 
 
 def verify_access_token(access_token):
@@ -53,6 +42,10 @@ def remote_root(dest_cfg):
     return f"{REMOTE_NAME}:{BACKUP_FOLDER}"
 
 
+def backup_target(dest_cfg):
+    return f"the {BACKUP_FOLDER} folder in your Dropbox"
+
+
 def sync_rclone_remote(dest_cfg, force=False, remotes=None):
     """Writes (or removes) the REMOTE_NAME remote in rclone.conf to match
     destinations.dropbox. Only writes the token when force=True or the
@@ -60,10 +53,8 @@ def sync_rclone_remote(dest_cfg, force=False, remotes=None):
     rclone rewrites the refreshed one into this file, so replacing it from
     our (older) config.json copy on every sync would throw that away.
     `remotes` is a config_dump() the caller already has."""
-    remote = (rclone_util.config_dump() if remotes is None else remotes).get(REMOTE_NAME)
+    remote = rclone_util.connected_remote(REMOTE_NAME, dest_cfg.get("token"), remotes)
     if not dest_cfg.get("token"):
-        if remote is not None:
-            rclone_util.config_delete(REMOTE_NAME)
         return
     if force or remote is None:
         rclone_util.config_set(REMOTE_NAME, "dropbox", {"token": dest_cfg["token"]}, force=force)

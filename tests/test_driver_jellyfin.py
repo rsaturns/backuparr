@@ -2,11 +2,12 @@ import io
 import json
 import os
 import zipfile
+from types import SimpleNamespace
 
 import pytest
 import requests
 
-from apps import jellyfin
+from apps import base, jellyfin
 from apps.jellyfin import BACKUP_OPTIONS, JellyfinApp, JellyfinError
 
 KEY = "jellyfin-secret-key"
@@ -62,8 +63,8 @@ def app(folder):
 @pytest.fixture
 def fast_clock(monkeypatch):
     now = [0.0]
-    monkeypatch.setattr(jellyfin.time, "time", lambda: now[0])
-    monkeypatch.setattr(jellyfin.time, "sleep", lambda s: now.__setitem__(0, now[0] + s))
+    monkeypatch.setattr(base, "time", SimpleNamespace(monotonic=lambda: now[0],
+                                                      sleep=lambda s: now.__setitem__(0, now[0] + s)))
 
 
 # --- connection --------------------------------------------------------------

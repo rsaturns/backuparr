@@ -1,32 +1,20 @@
 """Backup/restore driver for Bazarr's own backup feature.
 
-Bazarr's backup zip (bazarr.db snapshotted via sqlite's native .backup(),
-plus config.yaml) is created through its REST API
-(POST/GET/DELETE /api/system/backups, authenticated with X-API-KEY like the
-rest of Bazarr's API). The one wrinkle: the download route itself,
-/system/backup/download/<filename>, lives outside the /api blueprint and is
-gated by Bazarr's own web-auth setting (Settings > General > Security)
-rather than the API key - so if that's set to "Forms", automated download
-isn't supported (switch it to "None" or "Basic" for this tool to work, or
-protect it at the reverse-proxy layer instead).
+Bazarr's backup zip (bazarr.db via SQLite's .backup(), plus config.yaml) is
+created, listed and deleted through /api/system/backups with the X-API-KEY
+header. Its quirks:
 
-Restore is the other wrinkle: Bazarr only restores from a file already
-sitting in its own backup folder (there's no upload-restore endpoint), so
-restore_from_file() takes the *local path to that mounted folder* and places
-the file there itself before calling the restore API. Bazarr also only
-accepts a restore filename matching its own naming convention
-(bazarr_backup_v<anything>.zip, see utilities/backup.py's
-_BACKUP_FILENAME_RE) - anything else, including our own bazarr_<timestamp>
-storage name, gets refused with a 500. restore_from_file() writes the copy
-under a name that fits instead of reusing the source filename.
-
-A third wrinkle in backup(): the filename appears in Bazarr's listing the
-moment the file is created, before a multi-MB db backup is done being
-written - downloading right then silently returns a truncated, unreadable
-zip (no error; the response's Content-Length just matches whatever was on
-disk at that instant). Fine for a small backup, hit reliably for a real
-production-sized one. backup() re-downloads until the zip actually
-validates.
+- The download route, /system/backup/download/<filename>, is outside the
+  /api blueprint and gated by Bazarr's web auth (Settings > General >
+  Security) instead of the API key: it works with "None" or "Basic" (the
+  card's username and password), not "Forms".
+- A backup is listed as soon as the file is created, before a large
+  database is written, and downloading it then returns a truncated zip with
+  no error. backup() downloads again until the zip reads back whole.
+- There's no upload restore: Bazarr only restores a file already in its own
+  backup folder, named bazarr_backup_v<anything>.zip (anything else is a
+  500). restore_from_file() copies the archive into that mounted folder
+  under such a name, then calls the restore API.
 """
 import logging
 import os
@@ -36,12 +24,13 @@ import zipfile
 
 import requests
 
-from apps.servarr import ApiKeySession
+from apps.base import AppError, poll_until, save_stream
+from apps.servarr import SameHostSession
 
 logger = logging.getLogger(f"backuparr.{__name__}")
 
 
-class BazarrError(RuntimeError):
+class BazarrError(AppError):
     pass
 
 
@@ -58,9 +47,8 @@ def _complete_zip(path):
 class BazarrApp:
     def __init__(self, url, api_key, username=None, password=None, timeout=30):
         self.url = url.rstrip("/")
-        self.api_key = api_key
         self.timeout = timeout
-        self.session = ApiKeySession(self.url)
+        self.session = SameHostSession(self.url)
         self.session.headers.update({"X-API-KEY": api_key, "Accept": "application/json"})
         self.download_auth = (username, password) if username and password else None
 
@@ -92,28 +80,22 @@ class BazarrApp:
         self.trigger_backup()
         logger.info("bazarr: backup triggered, waiting for the file to appear...")
 
-        deadline = time.time() + timeout_s
-        new_filename = None
-        waited = 0
-        while time.time() < deadline:
-            after = {b["filename"] for b in self.list_backups()}
-            new = after - before
-            if new:
-                new_filename = os.path.basename(sorted(new)[-1])
-                break
-            time.sleep(poll_interval)
-            waited += poll_interval
-            if waited % 10 == 0:
-                logger.info("bazarr: still waiting on the backup file (%ds)...", waited)
+        deadline = time.monotonic() + timeout_s
+
+        def new_file():
+            new = {b["filename"] for b in self.list_backups()} - before
+            return os.path.basename(sorted(new)[-1]) if new else None
+
+        new_filename = poll_until(new_file, timeout_s, poll_interval,
+                                  lambda waited: logger.info("bazarr: still waiting on the backup file (%ds)...", waited))
         if not new_filename:
             raise BazarrError("bazarr: backup job did not produce a new file in time")
 
         dest = os.path.join(dest_dir, new_filename)
         download_url = f"{self.url}/system/backup/download/{new_filename}"
 
-        # See the module docstring's third wrinkle - keep re-downloading
-        # until the zip actually validates.
-        while True:
+        # Listed before it's fully written: download until it reads back whole.
+        def complete_download():
             with self.session.get(download_url, auth=self.download_auth, timeout=self.timeout, stream=True) as res:
                 if res.status_code == 401:
                     raise BazarrError(
@@ -122,16 +104,14 @@ class BazarrApp:
                         "password on Bazarr's card) for automated backups to work"
                     )
                 res.raise_for_status()
-                with open(dest, "wb") as f:
-                    for chunk in res.iter_content(chunk_size=1024 * 1024):
-                        f.write(chunk)
-
+                save_stream(res, dest)
             if _complete_zip(dest):
-                break
-            if time.time() >= deadline:
-                raise BazarrError(f"bazarr: {new_filename} never finished writing on the server in time")
+                return True
             logger.info("bazarr: backup file still being written, retrying download...")
-            time.sleep(poll_interval)
+            return None
+
+        if not poll_until(complete_download, deadline - time.monotonic(), poll_interval):
+            raise BazarrError(f"bazarr: {new_filename} never finished writing on the server in time")
 
         try:
             self.delete_backup(new_filename)
@@ -141,14 +121,9 @@ class BazarrApp:
         return dest
 
     def restore_from_file(self, local_zip_path, bazarr_backup_dir):
-        """Place `local_zip_path` into Bazarr's own backup folder (as seen on
-        the local filesystem, e.g. a bind-mounted /config/backup) and trigger
-        the restore. Bazarr restarts itself once the restore completes.
-
-        See the module docstring's second wrinkle for why the copy is
-        written under a renamed bazarr_backup_v<stem>.zip rather than
-        reusing the source filename as-is.
-        """
+        """Copies local_zip_path into Bazarr's backup folder (as mounted
+        here) as bazarr_backup_v<stem>.zip and triggers the restore. Bazarr
+        restarts itself once it's done."""
         # Check Bazarr answers before the restore request: after it, a dropped
         # connection or a proxy's gateway error means a restart, not an outage.
         self.list_backups()

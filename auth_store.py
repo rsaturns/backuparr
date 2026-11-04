@@ -8,10 +8,11 @@ match one of OWASP's listed acceptable configurations.
 import hmac
 import json
 import os
-import tempfile
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
+
+import atomic_file
 
 AUTH_PATH = os.environ.get("BACKUPARR_AUTH", "/config/backuparr/auth.json")
 _hasher = PasswordHasher()
@@ -28,18 +29,7 @@ def _load():
 
 def set_credentials(username, password):
     data = {"username": username, "password_hash": _hasher.hash(password)}
-    auth_dir = os.path.dirname(AUTH_PATH)
-    os.makedirs(auth_dir, exist_ok=True)
-    # Unique tmp filename avoids concurrent-write collisions.
-    fd, tmp_path = tempfile.mkstemp(dir=auth_dir, prefix=".auth.json.")
-    try:
-        with os.fdopen(fd, "w") as f:
-            json.dump(data, f, indent=2)
-        os.chmod(tmp_path, 0o600)
-        os.replace(tmp_path, AUTH_PATH)
-    except BaseException:
-        os.remove(tmp_path)
-        raise
+    atomic_file.write_private(AUTH_PATH, json.dumps(data, indent=2))
 
 
 def verify_password(username, password):

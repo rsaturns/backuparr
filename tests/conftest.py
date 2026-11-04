@@ -7,12 +7,26 @@ import threading
 import pytest
 
 import auth_store
+import backup
 import config_store
 import destination_util
 import rclone_util
 import secrets_crypto
 
 PASSWORD = "test-password"
+
+
+def load_webui():
+    """webui.app freshly reloaded, so its module-level settings read the
+    environment again, with the session key create_app() would load - but no
+    scheduler thread and no log file."""
+    # Dependencies first, so each module binds the fresh state of the next.
+    for name in ("webui.settings", "webui.services", "webui.auth", "webui.destinations", "webui.runs",
+                 "webui.backups", "webui.app"):
+        module = importlib.reload(sys.modules[name]) if name in sys.modules else importlib.import_module(name)
+    module.app.secret_key = module.auth._load_or_create_secret_key()
+    module.app.config.update(TESTING=True)
+    return module
 
 
 @pytest.fixture
@@ -26,6 +40,7 @@ def isolated_webui(tmp_path, monkeypatch):
     monkeypatch.setenv("RCLONE_CONFIG", str(tmp_path / "rclone.conf"))
     monkeypatch.setenv("RCLONE_CONFIG_PASS_FILE", str(tmp_path / "rclone.pass"))
     monkeypatch.setattr(auth_store, "AUTH_PATH", str(tmp_path / "auth.json"))
+    monkeypatch.setattr(backup, "LOG_FILE", str(tmp_path / "logs" / "backup.log"))
     monkeypatch.setattr(config_store, "CONFIG_PATH", str(tmp_path / "config.json"))
     monkeypatch.setattr(secrets_crypto, "KEY_PATH", str(tmp_path / "secrets.key"))
     monkeypatch.setattr(secrets_crypto, "_fernet", None)
@@ -36,13 +51,7 @@ def isolated_webui(tmp_path, monkeypatch):
         raise AssertionError("this test ran the real rclone; stub the rclone_util function it needs (CI has no rclone binary)")
 
     monkeypatch.setattr(rclone_util, "_run", no_real_rclone)
-    with pytest.MonkeyPatch.context() as startup:
-        startup.setattr("threading.Thread.start", lambda self: None)
-        if "webui.app" in sys.modules:
-            module = importlib.reload(sys.modules["webui.app"])
-        else:
-            module = importlib.import_module("webui.app")
-    module.app.config.update(TESTING=True)
+    module = load_webui()
     yield module
     monkeypatch.setattr(secrets_crypto, "_fernet", None)
 

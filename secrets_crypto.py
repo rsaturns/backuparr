@@ -12,9 +12,10 @@ entirely for stronger protection.
 """
 import logging
 import os
-import tempfile
 
 from cryptography.fernet import Fernet, InvalidToken
+
+import atomic_file
 
 log = logging.getLogger("backuparr.secrets_crypto")
 
@@ -32,17 +33,7 @@ def _load_or_create_key():
         with open(KEY_PATH, "rb") as f:
             return f.read().strip()
     key = Fernet.generate_key()
-    key_dir = os.path.dirname(KEY_PATH)
-    os.makedirs(key_dir, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(dir=key_dir, prefix=".secrets.key.")
-    try:
-        with os.fdopen(fd, "wb") as f:
-            f.write(key)
-        os.chmod(tmp_path, 0o600)
-        os.replace(tmp_path, KEY_PATH)
-    except BaseException:
-        os.remove(tmp_path)
-        raise
+    atomic_file.write_private(KEY_PATH, key)
     return key
 
 

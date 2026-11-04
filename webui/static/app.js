@@ -1,8 +1,7 @@
 "use strict";
 
 const AUTH_DISABLED = document.body.dataset.authDisabled === "true";
-let APP_META = [];
-let DESTINATION_META = [];
+const { apps: APP_META, destinations: DESTINATION_META } = JSON.parse(document.body.dataset.uiMeta);
 let RUN_POLL_TIMER = null;
 let RESTORE_POLL_TIMER = null;
 let SETTINGS_SNAPSHOT = null;
@@ -157,7 +156,10 @@ async function loadOverview() {
     const destIds = enabledDestinationIds(cfg);
 
     const [histories, status] = await Promise.all([
-      Promise.all(destIds.map((id) => apiFetch(`/api/history/${id}`).catch(() => ({})))),
+      Promise.all(destIds.map((id) => apiFetch(`/api/history/${id}`).catch((e) => {
+        toast(`${destLabel(id)}: ${e.message}`, "fail");
+        return {};
+      }))),
       apiFetch("/api/backup/status"),
     ]);
     // Per app, the single most recent backup across every enabled destination.
@@ -336,7 +338,6 @@ function fillAppCard(appId, cfg) {
   if (!card) return;
   card.querySelector(".f-enabled").checked = !!cfg.enabled;
   const urlInput = card.querySelector(".f-url");
-  if (!urlInput) return; // coming_soon app - no body/fields rendered
   urlInput.value = cfg.url || "";
   const keyInput = card.querySelector(".f-api_key");
   if (keyInput) keyInput.value = cfg.api_key || ""; // absent for apps without an API key
@@ -370,7 +371,6 @@ function updateDiscoveryButton() {
 function readAppCard(appId) {
   const card = appCard(appId);
   const urlInput = card.querySelector(".f-url");
-  if (!urlInput) return { enabled: false }; // coming_soon app
   const keyInput = card.querySelector(".f-api_key");
   const out = {
     enabled: card.querySelector(".f-enabled").checked,
@@ -598,9 +598,7 @@ async function startPlexLogin() {
   const status = document.getElementById("plex-auth-status");
   status.textContent = "Opening Plex sign-in...";
   try {
-    const login = await apiFetch("/api/plex/auth", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
-    });
+    const login = await apiFetch("/api/plex/auth", { method: "POST" });
     flow.jobId = login.job_id;
     if (PLEX_LOGIN !== flow) { forgetPlexLogin(flow.jobId); return; }
     const link = document.getElementById("plex-auth-link");
@@ -924,7 +922,7 @@ async function discoverServices() {
   let finished = false;
   try {
     ({ job_id: jobId } = await apiFetch("/api/discovery/prowlarr", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(credentials),
+      method: "POST", body: JSON.stringify(credentials),
     }));
     const state = await pollDiscovery(jobId, status);
     finished = true;
@@ -1029,9 +1027,8 @@ function buildHeaderScope(apps) {
     options.append(wrap);
   };
   option("header-scope-all", "", "All apps", !apps);
-  // Keep a saved scope's apps listed even if one stops being "available".
   // Each app's extra instances (from the Settings cards) follow it.
-  APP_META.filter((m) => m.status === "available" || (apps || []).includes(m.id)).forEach((m) => {
+  APP_META.forEach((m) => {
     option("header-scope-app", m.id, m.label, !apps || apps.includes(m.id));
     instanceCards(m.id).filter((card) => card.dataset.app !== m.id).forEach((card) => {
       option("header-scope-app", card.dataset.app, card.querySelector("h3").textContent, !apps || apps.includes(card.dataset.app));
@@ -1264,7 +1261,6 @@ async function saveSettings() {
     const cfg = collectConfig();
     await apiFetch("/api/config", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(cfg),
     });
     REMOVED_INSTANCES.forEach((appId) => RETIRED_INSTANCES.add(appId));
@@ -1317,7 +1313,6 @@ async function testApp(appId) {
     request: () =>
       apiFetch(`/api/test/${appId}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       }),
   });
@@ -1337,7 +1332,6 @@ async function testDestination(destId) {
     request: () =>
       apiFetch(`/api/test-destination/${destId}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       }),
   });
@@ -1359,7 +1353,6 @@ async function testNotifyUrl() {
     request: () =>
       apiFetch("/api/test-notify", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ notify_url: notifyUrl }),
       }),
   });
@@ -1378,7 +1371,6 @@ async function connectGdrive() {
   try {
     await apiFetch("/api/config", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(collectConfig()),
     });
     snapshotSettingsState();
@@ -1443,7 +1435,6 @@ async function gdrivePickerCallback(data) {
   try {
     await apiFetch("/api/destinations/gdrive/folder", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ folder_id: folder.id, folder_name: folder.name }),
     });
     toast(`Backing up to "${folder.name}"`, "ok");
@@ -1498,7 +1489,6 @@ async function connectTokenDest(destId) {
   try {
     await apiFetch(`/api/destinations/${destId}/connect`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token_blob: tokenBlob }),
     });
     input.value = "";
@@ -2078,6 +2068,25 @@ function initRestoreAppOptions() {
   if (Array.from(select.options).some((opt) => opt.value === previous)) select.value = previous;
 }
 
+// <label class="field">: a caption, a muted "(hint)" if any, and an input
+// with the given properties. Text goes in as text, never as markup.
+function overrideField(caption, hint, inputProps) {
+  const label = document.createElement("label");
+  label.className = "field";
+  const text = document.createElement("span");
+  text.className = "field-label";
+  text.textContent = caption;
+  if (hint) {
+    const muted = document.createElement("span");
+    muted.className = "muted";
+    muted.textContent = `(${hint})`;
+    text.append(" ", muted);
+  }
+  const input = Object.assign(document.createElement("input"), { autocomplete: "off" }, inputProps);
+  label.append(text, input);
+  return label;
+}
+
 function renderRestoreOverride() {
   const appId = document.getElementById("r-app").value;
   const meta = appMeta(appId);
@@ -2088,27 +2097,15 @@ function renderRestoreOverride() {
   const block = document.createElement("div");
   block.className = "extra-field-block";
 
-  const urlLabel = document.createElement("label");
-  urlLabel.className = "field";
-  urlLabel.innerHTML = `<span class="field-label">URL</span><input type="text" id="r-ovr-url" placeholder="${meta.url_placeholder || ""}" autocomplete="off">`;
-  block.appendChild(urlLabel);
-
+  block.appendChild(overrideField("URL", "", { type: "text", id: "r-ovr-url", placeholder: meta.url_placeholder || "" }));
   if (!meta.no_api_key) {
-    const keyLabel = document.createElement("label");
-    keyLabel.className = "field";
-    const keyHint = !meta.key_required
-      ? `<span class="muted">(optional${meta.key_help ? ` &mdash; ${meta.key_help}` : ""})</span>`
-      : meta.key_help ? `<span class="muted">(${meta.key_help})</span>` : "";
-    keyLabel.innerHTML = `<span class="field-label">${meta.key_label || "API key"} ${keyHint}</span><input type="password" id="r-ovr-api_key" autocomplete="off">`;
-    block.appendChild(keyLabel);
+    const hint = meta.key_required ? meta.key_help : `optional${meta.key_help ? ` \u2014 ${meta.key_help}` : ""}`;
+    block.appendChild(overrideField(meta.key_label || "API key", hint, { type: "password", id: "r-ovr-api_key" }));
   }
-
   (meta.extra_fields || []).forEach((f) => {
-    const label = document.createElement("label");
-    label.className = "field";
-    const help = f.help ? `<span class="muted">(${f.help})</span>` : "";
-    label.innerHTML = `<span class="field-label">${f.label} ${help}</span><input type="${f.type}" class="r-ovr-extra" data-field="${f.name}" placeholder="${f.placeholder || ""}" autocomplete="off">`;
-    block.appendChild(label);
+    const field = overrideField(f.label, f.help, { type: f.type, className: "r-ovr-extra", placeholder: f.placeholder || "" });
+    field.querySelector("input").dataset.field = f.name;
+    block.appendChild(field);
   });
 
   root.appendChild(block);
@@ -2170,62 +2167,17 @@ function renderRestoreExtra() {
   const extraRoot = document.getElementById("r-extra");
   extraRoot.innerHTML = "";
 
-  if (appId === "plex") {
+  const warning = appMeta(appId)?.restore_warning;
+  if (warning) {
     const block = document.createElement("div");
     block.className = "extra-field-block";
-    block.innerHTML =
-      "<strong>Stop Plex first</strong> - the restore is refused while it's running. " +
-      "It replaces Plex's library database and settings with the backup's - libraries, playlists, collections, every user's watched state, " +
-      "and the server's identity, so a rebuilt server comes back as the same server with its shared users. " +
-      "Anything added since is lost. Never run the original server at the same time. Start Plex again afterwards.";
+    const lead = document.createElement("strong");
+    if (warning.danger) lead.className = "danger-text";
+    lead.textContent = warning.lead;
+    block.append(lead, ` ${warning.text}`);
     extraRoot.appendChild(block);
-  } else if (appId === "tdarr") {
-    const block = document.createElement("div");
-    block.className = "extra-field-block";
-    block.innerHTML =
-      '<strong style="color:var(--danger)">Destructive:</strong> this wipes each Tdarr database collection before repopulating it from the backup.';
-    extraRoot.appendChild(block);
-  } else if (appId === "jellyfin") {
-    const block = document.createElement("div");
-    block.className = "extra-field-block";
-    block.innerHTML =
-      "<strong>Replaces Jellyfin's database and settings</strong> with the backup's - users, watch history, libraries and API keys. " +
-      "Anything added since is lost. Jellyfin restarts to apply it.";
-    extraRoot.appendChild(block);
-  } else if (appId === "emby") {
-    const block = document.createElement("div");
-    block.className = "extra-field-block";
-    block.innerHTML =
-      "<strong>Stop Emby first</strong> - the restore is refused while it's running. " +
-      "It replaces Emby's databases and settings with the backup's - users, watch history, playlists, collections and API keys. " +
-      "Anything added since is lost. Start Emby again afterwards.";
-    extraRoot.appendChild(block);
-  } else if (appId === "nzbget") {
-    const block = document.createElement("div");
-    block.className = "extra-field-block";
-    block.innerHTML =
-      "<strong>Replaces NZBGet's settings</strong> with the backup's - news servers and their passwords, categories, paths, " +
-      "extension settings, and the username and password. NZBGet reloads to apply them; the queue and history are kept. " +
-      "If the backup's username or password differ from the ones in Settings, update them there afterwards.";
-    extraRoot.appendChild(block);
-  } else if (appId === "seerr") {
-    const block = document.createElement("div");
-    block.className = "extra-field-block";
-    block.innerHTML =
-      "<strong>Stop Seerr first</strong> - the restore is refused while it's running. " +
-      "It replaces Seerr's database and settings with the backup's - users, requests, issues, " +
-      "the media server and Radarr/Sonarr connections, notifications and the API key. " +
-      "Anything added since is lost. Start Seerr again afterwards.";
-    extraRoot.appendChild(block);
-  } else if (appId === "lazylibrarian") {
-    const block = document.createElement("div");
-    block.className = "extra-field-block";
-    block.innerHTML =
-      "<strong>Stop LazyLibrarian first</strong> - the restore is refused while it's running. " +
-      "It replaces LazyLibrarian's database and settings with the backup's, its API key included. " +
-      "Anything added since is lost. Start LazyLibrarian again afterwards.";
-    extraRoot.appendChild(block);
-  } else if (appId === "bazarr") {
+  }
+  if (appId === "bazarr") {
     const block = document.createElement("div");
     block.className = "extra-field-block";
     block.innerHTML =
@@ -2251,7 +2203,6 @@ async function loadSabnzbdPreview() {
   try {
     const res = await apiFetch(`/api/restore/${destId}/sabnzbd/preview`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ file: fileSelect.value }),
     });
     RESTORE_STATE.servers = res.servers;
@@ -2329,7 +2280,6 @@ async function doRestore() {
   try {
     await apiFetch(`/api/restore/${destId}/${appId}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
     refreshRestoreStatus();
@@ -2638,16 +2588,6 @@ async function init() {
       e.returnValue = "";
     }
   });
-  try {
-    APP_META = await apiFetch("/api/meta");
-  } catch (e) {
-    toast(`Could not load app metadata: ${e.message}`, "fail");
-  }
-  try {
-    DESTINATION_META = await apiFetch("/api/destinations");
-  } catch (e) {
-    toast(`Could not load destination metadata: ${e.message}`, "fail");
-  }
   try {
     await loadConfig();
   } catch (e) {

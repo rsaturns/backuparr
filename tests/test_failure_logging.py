@@ -14,6 +14,7 @@ import backup
 import config_store
 import destination_util
 import rclone_util
+from apps.plex import PlexError
 from apps.servarr import ServarrError, UnsafeRedirectError
 
 KEY = "SECRET-APP-KEY"
@@ -172,7 +173,7 @@ def test_a_work_folder_that_cannot_be_created_fails_that_app_only(one_app_run, m
 
 @pytest.mark.parametrize("app_name, driver, error", [
     ("sonarr", backup.SonarrApp, ServarrError("sonarr: unauthorized - check the API key")),
-    ("plex", backup.PlexApp, backup.PlexError("plex: access denied; use the server owner's Plex token")),
+    ("plex", backup.PlexApp, PlexError("plex: access denied; use the server owner's Plex token")),
 ])
 def test_a_rejected_api_key_is_one_clean_line(one_app_run, monkeypatch, caplog, app_name, driver, error):
     def unauthorized(self, work_dir):
@@ -243,3 +244,20 @@ def test_an_instances_label_drops_its_drivers_app_prefix(caplog):
     assert backup.humanize_error(error, app="sonarr-anime") == "radarr: unauthorized - check the API key"
     backup.log_failure(backup.log, "radarr-4k: backup failed", error, app="radarr-4k")
     assert "radarr-4k: backup failed - unauthorized - check the API key" in caplog.text
+
+
+def test_every_driver_error_is_a_clean_message():
+    import importlib
+    import pkgutil
+
+    import apps
+    from apps.base import AppError
+    errors = [obj for info in pkgutil.iter_modules(apps.__path__)
+              for obj in vars(importlib.import_module(f"apps.{info.name}")).values()
+              if isinstance(obj, type) and issubclass(obj, Exception) and obj.__name__.endswith("Error")
+              and obj.__module__ == f"apps.{info.name}"]
+    assert len(errors) > 10
+    for error in errors:
+        if error.__name__ not in ("RequestHeadersError", "UnsafeRedirectError", "AppError"):
+            assert issubclass(error, AppError), error
+        assert backup.describe_failure(error("app: says what to do")) == "app: says what to do"

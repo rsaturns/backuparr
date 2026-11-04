@@ -39,7 +39,10 @@ fi
 USER_NAME="$(getent passwd "$PUID" | cut -d: -f1)"
 
 mkdir -p "$(dirname "$BACKUPARR_CONFIG")" "$BACKUPARR_LOG_DIR"
-chown -R "$PUID:$PGID" "$(dirname "$BACKUPARR_CONFIG")" "$BACKUPARR_LOG_DIR"
+# Only what isn't PUID:PGID's already, so a start doesn't rewrite every
+# local backup. -h changes a symlink itself, never what it points to.
+find "$(dirname "$BACKUPARR_CONFIG")" "$BACKUPARR_LOG_DIR" \( ! -user "$PUID" -o ! -group "$PGID" \) \
+    -exec chown -h "$PUID:$PGID" {} +
 
 WAITRESS_ARGS=(--host="${WEBUI_HOST}" --port="${WEBUI_PORT}" --threads=6)
 
@@ -70,4 +73,4 @@ esac
 umask "$UMASK"
 
 echo "Backuparr: starting web UI on ${WEBUI_HOST}:${WEBUI_PORT} (as ${USER_NAME}:${GROUP_NAME}, ${PUID}:${PGID})"
-exec su-exec "$PUID:$PGID" waitress-serve "${WAITRESS_ARGS[@]}" webui.app:app
+exec su-exec "$PUID:$PGID" waitress-serve "${WAITRESS_ARGS[@]}" --call webui.app:create_app

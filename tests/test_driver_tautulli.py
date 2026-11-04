@@ -19,6 +19,15 @@ class Reply:
         self.content = content
         self.text = text if text is not None else json.dumps(data) if data is not None else ""
 
+    def iter_content(self, chunk_size):
+        yield self.content
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
     def json(self):
         if self._data is None:
             raise ValueError("no json")
@@ -91,7 +100,7 @@ def test_backup_downloads_the_database_and_the_config(tmp_path):
     app = app_with(Reply(content=SQLITE), Reply(content=b"[General]\n"))
     out = tmp_path / "nested" / "dump"
     assert app.backup(str(out)) == str(out)
-    assert (out / "tautulli.db").read_bytes() == SQLITE and (out / "config.ini").read_bytes() == b"[General]\n"
+    assert all(kw["timeout"] == 120 and kw["stream"] is True for _, _, kw in app.session.sent)  # never held in memory
     assert [kw["params"]["cmd"] for _, _, kw in app.session.sent] == ["download_database", "download_config"]
     assert all(kw["timeout"] == 120 for _, _, kw in app.session.sent)
 

@@ -1,13 +1,14 @@
 """Google Drive as a Backuparr destination, connected via an OAuth
-"Connect" button (see webui/app.py's /api/destinations/gdrive/* routes)
-instead of rclone's interactive config wizard. Scoped to drive.file -
+"Connect" button (see webui/destinations.py) instead of rclone's
+interactive config wizard. Scoped to drive.file -
 only files/folders this app created or the user picked via the Google
 Picker widget, not the whole Drive.
 
 Keeps a single rclone remote (REMOTE_NAME) in sync with the stored
 refresh token, so the rest of the codebase just sees an ordinary rclone
 remote. rclone.conf is encrypted (see entrypoint.sh), so it's written via
-rclone_util's `rclone config` wrappers, not configparser directly.
+rclone_util's `rclone config` wrappers, not configparser directly - the
+same goes for the OneDrive and Dropbox remotes.
 """
 import json
 
@@ -19,6 +20,7 @@ AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 SCOPE = "https://www.googleapis.com/auth/drive.file"
 REMOTE_NAME = "backuparr-gdrive"
+TOKEN_FIELD = "refresh_token"
 
 
 class GDriveOAuthError(RuntimeError):
@@ -90,6 +92,10 @@ def remote_root(dest_cfg):
     return f"{REMOTE_NAME}:"
 
 
+def backup_target(dest_cfg):
+    return f"\"{dest_cfg.get('folder_name') or 'My Drive (root)'}\""
+
+
 def _remote_matches(remote, fields, refresh_token):
     """Whether rclone.conf's remote already holds these settings. rclone
     rewrites the token's access_token and expiry itself; only the refresh
@@ -110,10 +116,8 @@ def sync_rclone_remote(dest_cfg, remotes=None):
     OneDrive, Google's refresh tokens don't rotate on use - but only when
     something changed, since the secrets go on rclone's command line.
     `remotes` is a config_dump() the caller already has."""
-    remote = (rclone_util.config_dump() if remotes is None else remotes).get(REMOTE_NAME)
+    remote = rclone_util.connected_remote(REMOTE_NAME, dest_cfg.get("refresh_token"), remotes)
     if not dest_cfg.get("refresh_token"):
-        if remote is not None:
-            rclone_util.config_delete(REMOTE_NAME)
         return
 
     # access_token must be non-empty or rclone discards the token as

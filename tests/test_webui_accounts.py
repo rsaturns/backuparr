@@ -49,7 +49,7 @@ def test_setup_creates_the_account_logs_in_and_can_only_run_once(isolated_webui)
     client = isolated_webui.app.test_client()
     assert client.post("/api/setup", json=creds("  admin  ")).status_code == 200
     assert auth_store.has_credentials()
-    assert client.get("/api/meta").status_code == 200
+    assert client.get("/api/restore/status").status_code == 200
 
     assert client.post("/api/setup", json=creds("other")).status_code == 403
     assert client.get("/setup").headers["Location"] == "/login"
@@ -67,9 +67,9 @@ def test_the_password_is_not_stored_in_plaintext(isolated_webui):
 
 def test_login_accepts_the_right_password_and_rejects_the_wrong_one(anonymous):
     assert anonymous.post("/api/login", json=creds(password="wrong-password")).status_code == 401
-    assert anonymous.get("/api/meta").status_code == 401
+    assert anonymous.get("/api/restore/status").status_code == 401
     assert anonymous.post("/api/login", json=creds()).status_code == 200
-    assert anonymous.get("/api/meta").status_code == 200
+    assert anonymous.get("/api/restore/status").status_code == 200
 
 
 def test_login_trims_the_username_and_ignores_a_missing_body(anonymous):
@@ -87,7 +87,7 @@ def test_an_already_logged_in_visitor_skips_the_login_page(anonymous):
 def test_logout_ends_the_session(anonymous):
     anonymous.post("/api/login", json=creds())
     assert anonymous.post("/api/logout", json={}).status_code == 200
-    assert anonymous.get("/api/meta").status_code == 401
+    assert anonymous.get("/api/restore/status").status_code == 401
     assert anonymous.get("/").headers["Location"] == "/login"
 
 
@@ -114,36 +114,36 @@ def test_a_successful_login_clears_earlier_failures(anonymous, isolated_webui):
     for _ in range(4):
         anonymous.post("/api/login", json=creds(password="nope-nope"))
     assert anonymous.post("/api/login", json=creds()).status_code == 200
-    assert "127.0.0.1" not in isolated_webui._LOGIN_FAILURES
+    assert "127.0.0.1" not in isolated_webui.auth._LOGIN_FAILURES
 
 
 def test_lockout_grows_with_each_failure_then_caps(isolated_webui):
-    now = time.time()
-    remaining = isolated_webui._login_lockout_remaining
+    now = time.monotonic()
+    remaining = isolated_webui.auth._login_lockout_remaining
     cases = {4: 0, 5: 5, 6: 10, 7: 20, 9: 80, 11: 300, 40: 300}
     for failures, expected in cases.items():
-        isolated_webui._LOGIN_FAILURES["10.0.0.1"] = (failures, now)
+        isolated_webui.auth._LOGIN_FAILURES["10.0.0.1"] = (failures, now)
         assert remaining("10.0.0.1") == pytest.approx(expected, abs=1), failures
 
 
 def test_lockout_expires_and_old_records_are_forgotten(isolated_webui):
-    failures = isolated_webui._LOGIN_FAILURES
-    failures["10.0.0.1"] = (5, time.time() - 6)  # a 5s lockout, 6s ago
-    failures["10.0.0.2"] = (50, time.time() - isolated_webui._LOGIN_FAILURE_TTL - 1)
-    assert isolated_webui._login_lockout_remaining("10.0.0.1") == 0
+    failures = isolated_webui.auth._LOGIN_FAILURES
+    failures["10.0.0.1"] = (5, time.monotonic() - 6)  # a 5s lockout, 6s ago
+    failures["10.0.0.2"] = (50, time.monotonic() - isolated_webui.auth._LOGIN_FAILURE_TTL - 1)
+    assert isolated_webui.auth._login_lockout_remaining("10.0.0.1") == 0
     assert "10.0.0.2" not in failures
 
 
 def test_lockout_is_tracked_per_address(isolated_webui):
-    isolated_webui._LOGIN_FAILURES["10.0.0.1"] = (9, time.time())
-    assert isolated_webui._login_lockout_remaining("10.0.0.1") > 0
-    assert isolated_webui._login_lockout_remaining("10.0.0.2") == 0
+    isolated_webui.auth._LOGIN_FAILURES["10.0.0.1"] = (9, time.monotonic())
+    assert isolated_webui.auth._login_lockout_remaining("10.0.0.1") > 0
+    assert isolated_webui.auth._login_lockout_remaining("10.0.0.2") == 0
 
 
 # --- the auth gate ---------------------------------------------------------
 
 PROTECTED = [
-    ("GET", "/api/config"), ("POST", "/api/config"), ("GET", "/api/meta"), ("GET", "/api/destinations"),
+    ("GET", "/api/config"), ("POST", "/api/config"),
     ("POST", "/api/test/radarr"), ("POST", "/api/test-notify"), ("POST", "/api/test-destination/local"),
     ("POST", "/api/discovery/prowlarr"), ("GET", "/api/discovery/prowlarr/x"),
     ("POST", "/api/plex/auth"), ("GET", "/api/plex/auth/x"), ("DELETE", "/api/plex/auth/x"),
@@ -157,6 +157,7 @@ PROTECTED = [
     ("POST", "/api/destinations/gdrive/disconnect"), ("POST", "/api/destinations/onedrive/connect"),
     ("POST", "/api/destinations/onedrive/disconnect"),
     ("POST", "/api/destinations/dropbox/connect"), ("POST", "/api/destinations/dropbox/disconnect"),
+    ("POST", "/api/destinations/local/disconnect"),
 ]
 
 
@@ -191,7 +192,7 @@ def test_every_registered_api_route_is_covered_by_the_gate_list(isolated_webui):
 
 def seed_state(webui, client):
     client.post("/api/config", json={"apps": {"radarr": {"enabled": True, "url": "http://r", "api_key": "k"}}})
-    backups = os.path.join(webui.destination_util.DEFAULT_LOCAL_DIR)
+    backups = os.path.join(webui.destinations.destination_util.DEFAULT_LOCAL_DIR)
     os.makedirs(os.path.join(backups, "radarr"))
     open(os.path.join(backups, "radarr", "radarr_20261001_030000.zip"), "w").write("data")
     for path in (os.environ["RCLONE_CONFIG"], os.environ["RCLONE_CONFIG_PASS_FILE"]):
@@ -204,19 +205,19 @@ def test_reset_needs_the_exact_phrase_and_deletes_nothing_without_it(isolated_we
     backups = seed_state(isolated_webui, authed_client)
     response = authed_client.post("/api/reset", json=body)
     assert response.status_code == 400
-    assert os.path.exists(auth_store.AUTH_PATH) and os.path.exists(backups) and os.path.exists(isolated_webui.CONFIG_PATH)
+    assert os.path.exists(auth_store.AUTH_PATH) and os.path.exists(backups) and os.path.exists(isolated_webui.auth.CONFIG_PATH)
 
 
 def test_reset_wipes_all_local_state_and_returns_to_setup(isolated_webui, authed_client):
     backups = seed_state(isolated_webui, authed_client)
     anonymous = isolated_webui.app.test_client()  # reset is the forgot-password path: no login needed
-    response = anonymous.post("/api/reset", json={"confirm": isolated_webui.RESET_CONFIRM_PHRASE})
+    response = anonymous.post("/api/reset", json={"confirm": isolated_webui.auth.RESET_CONFIRM_PHRASE})
     assert response.status_code == 200
 
     assert os.listdir(backups) == []  # Backuparr's archives and their app folder are gone
-    for path in (isolated_webui.CONFIG_PATH, auth_store.AUTH_PATH, os.environ["RCLONE_CONFIG"],
+    for path in (isolated_webui.auth.CONFIG_PATH, auth_store.AUTH_PATH, os.environ["RCLONE_CONFIG"],
                  os.environ["RCLONE_CONFIG_PASS_FILE"], os.environ["BACKUPARR_SECRET_KEY_PATH"],
-                 isolated_webui.secrets_crypto.KEY_PATH):
+                 isolated_webui.auth.secrets_crypto.KEY_PATH):
         assert not os.path.exists(path), path
     assert anonymous.get("/").headers["Location"] == "/setup"
 
@@ -239,7 +240,7 @@ def test_reset_removes_only_backuparrs_archives_from_a_custom_local_folder(isola
     (custom / "plex-2").mkdir()
     (custom / "plex-2" / "plex-2_20261001_030000.zip").write_text("not an instance")
     authed_client.post("/api/config", json={"destinations": {"local": {"path": str(custom)}}})
-    authed_client.post("/api/reset", json={"confirm": isolated_webui.RESET_CONFIRM_PHRASE})
+    authed_client.post("/api/reset", json={"confirm": isolated_webui.auth.RESET_CONFIRM_PHRASE})
     assert sorted(p.relative_to(custom).as_posix() for p in custom.rglob("*")) == [
         "photos", "photos/holiday.jpg", "plex-2", "plex-2/plex-2_20261001_030000.zip",
         "radarr_20261001_030000.zip", "sonarr", "sonarr/notes.txt",
@@ -247,10 +248,10 @@ def test_reset_removes_only_backuparrs_archives_from_a_custom_local_folder(isola
 
 
 def test_reset_signs_out_the_caller_and_tolerates_missing_files(isolated_webui, authed_client):
-    assert authed_client.post("/api/reset", json={"confirm": isolated_webui.RESET_CONFIRM_PHRASE}).status_code == 200
-    again = authed_client.post("/api/reset", json={"confirm": isolated_webui.RESET_CONFIRM_PHRASE})
+    assert authed_client.post("/api/reset", json={"confirm": isolated_webui.auth.RESET_CONFIRM_PHRASE}).status_code == 200
+    again = authed_client.post("/api/reset", json={"confirm": isolated_webui.auth.RESET_CONFIRM_PHRASE})
     assert again.status_code == 200
-    assert authed_client.get("/api/meta").status_code == 302  # nothing left, so back to setup
+    assert authed_client.get("/api/restore/status").status_code == 302  # nothing left, so back to setup
 
 
 @pytest.mark.parametrize("error", [PermissionError(13, "Permission denied"), OSError(5, "Input/output error")])
@@ -259,8 +260,19 @@ def test_reset_still_resets_when_the_backup_folder_cant_be_cleared(isolated_webu
 
     def unreadable(path):
         raise error
-    monkeypatch.setattr(isolated_webui.os, "listdir", unreadable)
-    response = authed_client.post("/api/reset", json={"confirm": isolated_webui.RESET_CONFIRM_PHRASE})
+    monkeypatch.setattr(isolated_webui.auth.os, "listdir", unreadable)
+    response = authed_client.post("/api/reset", json={"confirm": isolated_webui.auth.RESET_CONFIRM_PHRASE})
     assert response.status_code == 200
-    assert not os.path.exists(auth_store.AUTH_PATH) and not os.path.exists(isolated_webui.CONFIG_PATH)
+    assert not os.path.exists(auth_store.AUTH_PATH) and not os.path.exists(isolated_webui.auth.CONFIG_PATH)
     assert "couldn't remove the local backups" in caplog.text
+
+
+def test_failed_logins_from_concurrent_requests_all_count(isolated_webui):
+    import threading
+    threads = [threading.Thread(target=lambda: [isolated_webui.auth._login_record_failure("10.0.0.9") for _ in range(200)])
+               for _ in range(6)]  # waitress's thread count
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert isolated_webui.auth._LOGIN_FAILURES["10.0.0.9"][0] == 1200

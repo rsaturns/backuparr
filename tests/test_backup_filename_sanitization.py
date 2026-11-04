@@ -51,8 +51,9 @@ def test_profilarr_download_latest_sanitizes_malicious_filename(tmp_path):
 
     fake_response = MagicMock()
     fake_response.status_code = 200
-    fake_response.content = _valid_zip_bytes()
     fake_response.raise_for_status = MagicMock()
+    fake_response.iter_content = lambda chunk_size: iter([_valid_zip_bytes()])
+    fake_response.__enter__.return_value = fake_response
 
     with patch.object(
         app, "list_backups", return_value=[{"filename": malicious_name}]
@@ -86,7 +87,9 @@ def test_bazarr_restore_file_stays_readable_by_bazarr_under_a_private_umask(tmp_
 
 def test_profilarr_refuses_a_download_that_isnt_an_archive(tmp_path):
     app = ProfilarrApp("http://profilarr.example", "fake-api-key")
-    fake_response = MagicMock(status_code=200, content=b'{"error": "unauthorized"}')
+    fake_response = MagicMock(status_code=200)
+    fake_response.iter_content = lambda chunk_size: iter([b'{"error": "unauthorized"}'])
+    fake_response.__enter__.return_value = fake_response
     with patch.object(app, "list_backups", return_value=[{"filename": "backup.tar.gz"}]), \
             patch.object(app.session, "get", return_value=fake_response):
         with pytest.raises(ProfilarrError, match="didn't download as a backup archive"):

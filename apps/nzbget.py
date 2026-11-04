@@ -35,6 +35,8 @@ import zipfile
 
 import requests
 
+from apps.base import AppError
+
 logger = logging.getLogger(f"backuparr.{__name__}")
 
 CONFIG = "nzbget.conf"
@@ -42,7 +44,7 @@ MANIFEST = "backuparr-nzbget.json"
 _RESTRICTED = "***"
 
 
-class NzbgetError(RuntimeError):
+class NzbgetError(AppError):
     pass
 
 

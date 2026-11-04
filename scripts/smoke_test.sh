@@ -26,7 +26,7 @@ echo "1/6 every module is in the image"
 MODULES="$(cd "$ROOT" && for f in *.py; do printf '%s ' "${f%.py}"; done)webui.app"
 docker run --rm --entrypoint python "$IMAGE" -c \
     "import importlib, sys; [importlib.import_module(m) for m in sys.argv[1:]]" $MODULES \
-    || fail "an application module is missing from the image (check the Dockerfile COPY list)"
+    || fail "an application module is missing from the image (check the Dockerfile COPY lines)"
 
 echo "2/6 container starts and turns healthy"
 docker run -d --name "$NAME" -p 127.0.0.1::8990 -e PUID="$(id -u)" -e PGID="$(id -g)" \

@@ -37,8 +37,9 @@ import zipfile
 
 import requests
 
-from apps import sqlite_snapshot
-from apps.servarr import ApiKeySession
+from apps import mounted, sqlite_snapshot
+from apps.base import AppError
+from apps.servarr import SameHostSession
 
 logger = logging.getLogger(f"backuparr.{__name__}")
 
@@ -46,10 +47,9 @@ MANIFEST = "backuparr-seerr.json"
 DATABASE = "db/db.sqlite3"
 SETTINGS = "settings.json"
 _MEMBERS = {MANIFEST, DATABASE, SETTINGS}
-_MIB = 1024 * 1024
 
 
-class SeerrError(RuntimeError):
+class SeerrError(AppError):
     pass
 
 
@@ -65,11 +65,7 @@ def migration_level(path):
 
 
 def is_seerr_backup(path):
-    try:
-        with zipfile.ZipFile(path) as zf:
-            return MANIFEST in zf.namelist() and zf.testzip() is None
-    except zipfile.BadZipFile:
-        return False
+    return mounted.is_backup_zip(path, {MANIFEST})
 
 
 class SeerrApp:
@@ -77,7 +73,7 @@ class SeerrApp:
         self.url = url.rstrip("/")
         self.data_dir = data_dir or None
         self.timeout = timeout
-        self.session = ApiKeySession(self.url)
+        self.session = SameHostSession(self.url)
         self.session.headers.update({"X-Api-Key": api_key, "Accept": "application/json"})
 
     def identity(self):
@@ -110,13 +106,8 @@ class SeerrApp:
         return settings
 
     def _require_folder(self, client_id=None):
-        if not self.data_dir:
-            raise SeerrError("seerr: set the data folder - Seerr's /app/config folder, mounted into this container")
-        if not os.path.isdir(self.data_dir):
-            raise SeerrError(
-                f"seerr: data folder {self.data_dir} doesn't exist in this container - "
-                "mount the folder Seerr has at /app/config there"
-            )
+        mounted.require_dir(self.data_dir, SeerrError, "seerr", "data folder", "Seerr's /app/config folder",
+                            "mount the folder Seerr has at /app/config there")
         if not os.path.isfile(self._path(SETTINGS)):
             raise SeerrError(
                 f"seerr: {self.data_dir} doesn't look like Seerr's config folder (no {SETTINGS}) - "
@@ -172,19 +163,7 @@ class SeerrApp:
             running = False
         if running:
             raise SeerrError("seerr: stop Seerr before restoring - it's still answering at " + self.url)
-        # Leaving WAL mode needs sole use of the database: refused while
-        # Seerr has it open, and when granted it folds the -wal into the
-        # database and deletes it. Seerr turns WAL back on when it starts.
-        db = sqlite3.connect(self._path(*DATABASE.split("/")), timeout=0, isolation_level=None)
-        try:
-            db.execute("PRAGMA journal_mode=DELETE").fetchone()
-        except sqlite3.OperationalError as exc:
-            raise SeerrError(
-                "seerr: stop Seerr before restoring - its database is in use"
-                + (" (is it still running somewhere?)" if "locked" in str(exc) else f" ({exc})")
-            ) from exc
-        finally:
-            db.close()
+        mounted.claim_database(self._path(*DATABASE.split("/")), SeerrError, "seerr", "Seerr")
 
     def restore_from_file(self, local_zip_path):
         """Writes the backup's database and settings.json over Seerr's while
@@ -221,13 +200,8 @@ class SeerrApp:
                     "seerr: this backup comes from a newer Seerr than the one installed - update Seerr first"
                 )
             self._check_stopped()
-            # "wb" truncates in place: owner and mode stay Seerr's.
-            for src_path, dst_path in ((restored, target), (restored_settings, settings)):
-                with open(src_path, "rb") as src, open(dst_path, "wb") as dst:
-                    shutil.copyfileobj(src, dst, _MIB)
-        # _check_stopped removed the -wal; any -shm index left is stale.
-        for leftover in (target + "-wal", target + "-shm"):
-            if os.path.exists(leftover):
-                os.remove(leftover)
+            mounted.copy_in_place(restored, target)
+            mounted.copy_in_place(restored_settings, settings)
+        mounted.remove_journal_files(target)
         logger.info("seerr: restored the database and settings (client id %s) into %s - start Seerr to load them",
                     client_id or "?", self.data_dir)

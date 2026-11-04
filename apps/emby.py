@@ -41,8 +41,9 @@ import zipfile
 
 import requests
 
-from apps import sqlite_snapshot
-from apps.servarr import ApiKeySession
+from apps import mounted, sqlite_snapshot
+from apps.base import AppError
+from apps.servarr import SameHostSession
 
 logger = logging.getLogger(f"backuparr.{__name__}")
 
@@ -60,7 +61,7 @@ _RESTORABLE = re.compile(
 )
 
 
-class EmbyError(RuntimeError):
+class EmbyError(AppError):
     pass
 
 
@@ -85,11 +86,7 @@ def snapshot_db(src, dest):
 
 
 def is_emby_backup(path):
-    try:
-        with zipfile.ZipFile(path) as zf:
-            return MANIFEST in zf.namelist() and zf.testzip() is None
-    except zipfile.BadZipFile:
-        return False
+    return mounted.is_backup_zip(path, {MANIFEST})
 
 
 class EmbyApp:
@@ -99,7 +96,7 @@ class EmbyApp:
         self.url = re.sub(r"/emby/?$", "", url.rstrip("/"))
         self.data_dir = data_dir or None
         self.timeout = timeout
-        self.session = ApiKeySession(self.url)
+        self.session = SameHostSession(self.url)
         self.session.headers.update({"X-Emby-Token": api_key, "Accept": "application/json"})
 
     def server_info(self):
@@ -113,13 +110,8 @@ class EmbyApp:
         return os.path.join(self.data_dir, *parts)
 
     def _require_folder(self, server_id=None):
-        if not self.data_dir:
-            raise EmbyError("emby: set the data folder - Emby's /config folder, mounted into this container")
-        if not os.path.isdir(self.data_dir):
-            raise EmbyError(
-                f"emby: data folder {self.data_dir} doesn't exist in this container - "
-                "mount the folder Emby has at /config there"
-            )
+        mounted.require_dir(self.data_dir, EmbyError, "emby", "data folder", "Emby's /config folder",
+                            "mount the folder Emby has at /config there")
         if not os.path.isfile(self._path("data", "library.db")) or not os.path.isdir(self._path("config")):
             raise EmbyError(
                 f"emby: {self.data_dir} doesn't look like Emby's data folder (no data/library.db) - "
@@ -268,11 +260,5 @@ class EmbyApp:
             if not os.path.isdir(folder):
                 os.mkdir(folder)
                 os.chmod(folder, 0o755)  # Backuparr's private umask would hide it from Emby.
-        target = os.path.join(folder, parts[-1])
-        existed = os.path.exists(target)
-        # "wb" on an existing file truncates it in place: owner and mode stay.
-        with zf.open(info) as src, open(target, "wb") as dst:
-            shutil.copyfileobj(src, dst, 1024 * 1024)
-        if not existed:
-            # Backuparr's private umask would hide a new file from Emby.
-            os.chmod(target, 0o644)
+        with zf.open(info) as src:
+            mounted.write_in_place(src, os.path.join(folder, parts[-1]))
