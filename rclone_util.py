@@ -99,6 +99,17 @@ def config_delete(name):
     _run(["config", "delete", name])
 
 
+def connected_remote(name, connected, remotes=None):
+    """name's section in rclone.conf, or None. remotes is a config_dump()
+    the caller already has. When its destination isn't connected the remote
+    is removed, if it's there, and None returned."""
+    remote = (config_dump() if remotes is None else remotes).get(name)
+    if not connected and remote is not None:
+        config_delete(name)
+        return None
+    return remote
+
+
 def copyto(local_path, remote_path):
     _run(["copyto", local_path, remote_path])
 

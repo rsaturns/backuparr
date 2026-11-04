@@ -24,6 +24,7 @@ import discovery
 import gdrive_oauth
 import dropbox_oauth
 import onedrive_oauth
+import rclone_token
 import rclone_util
 import restore_actions as ra
 import secrets_crypto
@@ -43,6 +44,7 @@ from config_store import (
     CONFIG_PATH,
     ConfigError,
     DEFAULT_APP,
+    DEFAULT_DEST,
     DEFAULT_INSTANCE,
     DEST_EDITABLE_FIELDS,
     DEST_NAMES,
@@ -933,10 +935,13 @@ def api_destinations():
     return jsonify(DESTINATION_META)
 
 
-def _not_connected_message(dest_id, label, request_data):
+def _not_connected_message(dest_id, request_data):
     """Test only checks the saved connection, so a token that's pasted but not
     yet connected (the UI sends token_pasted) gets a pointer to Connect."""
+    if dest_id == "gdrive":
+        return "Not connected yet - click Connect Google Drive first"
     if request_data.get("token_pasted"):
+        label = {"onedrive": "OneDrive", "dropbox": "Dropbox"}[dest_id]
         return f"The pasted token isn't used until you click Connect {label} - connect first, then test"
     return f"Not connected yet - paste a token from `rclone authorize {dest_id}` first"
 
@@ -960,35 +965,13 @@ def api_test_destination(dest_id):
             os.remove(probe)
             return jsonify({"ok": True, "message": f"{path} is writable"})
 
-        if dest_id == "gdrive":
-            if not dest_cfg.get("refresh_token"):
-                return jsonify({"ok": False, "message": "Not connected yet - click Connect Google Drive first"})
-            cfg["destinations"]["gdrive"] = dest_cfg
-            destination_util.sync(cfg)
-            root = destination_util.remote_root("gdrive", dest_cfg)
-            rclone_util.check_remote(root)
-            folder = dest_cfg.get("folder_name") or "My Drive (root)"
-            return jsonify({"ok": True, "message": f"connected, backing up to \"{folder}\""})
-
-        if dest_id == "onedrive":
-            if not dest_cfg.get("token"):
-                return jsonify({"ok": False, "message": _not_connected_message("onedrive", "OneDrive", data)})
-            cfg["destinations"]["onedrive"] = dest_cfg
-            destination_util.sync(cfg)
-            root = destination_util.remote_root("onedrive", dest_cfg)
-            rclone_util.check_remote(root)
-            return jsonify({"ok": True, "message": "connected, backing up to your OneDrive app folder"})
-
-        if dest_id == "dropbox":
-            if not dest_cfg.get("token"):
-                return jsonify({"ok": False, "message": _not_connected_message("dropbox", "Dropbox", data)})
-            cfg["destinations"]["dropbox"] = dest_cfg
-            destination_util.sync(cfg)
-            root = destination_util.remote_root("dropbox", dest_cfg)
-            rclone_util.check_remote(root)
-            return jsonify({"ok": True, "message": f"connected, backing up to the {dropbox_oauth.BACKUP_FOLDER} folder in your Dropbox"})
-
-        return jsonify({"ok": False, "message": f"{dest_id} is not available yet"})
+        remote = destination_util.REMOTES[dest_id]
+        if not dest_cfg.get(remote.TOKEN_FIELD):
+            return jsonify({"ok": False, "message": _not_connected_message(dest_id, data)})
+        cfg["destinations"][dest_id] = dest_cfg
+        destination_util.sync(cfg)
+        rclone_util.check_remote(destination_util.remote_root(dest_id, dest_cfg))
+        return jsonify({"ok": True, "message": f"connected, backing up to {remote.backup_target(dest_cfg)}"})
     except (rclone_util.RcloneError, destination_util.DestinationError, OSError) as exc:
         return jsonify({"ok": False, "message": str(exc)})
 
@@ -1383,12 +1366,16 @@ def api_gdrive_folder():
     return jsonify({"ok": True})
 
 
-@app.post("/api/destinations/gdrive/disconnect")
-def api_gdrive_disconnect():
+@app.post("/api/destinations/<dest_id>/disconnect")
+def api_destination_disconnect(dest_id):
+    """Forgets a connected destination's account; what the user entered
+    themselves (Google Drive's OAuth client) stays."""
+    if dest_id not in destination_util.REMOTES:
+        return jsonify({"error": "unknown destination"}), 404
     cfg = load_config()
-    cfg["destinations"]["gdrive"].update({
-        "enabled": False, "refresh_token": "", "folder_id": "", "folder_name": "",
-    })
+    kept = DEST_EDITABLE_FIELDS[dest_id] - {"enabled"}
+    cfg["destinations"][dest_id].update(
+        {key: value for key, value in DEFAULT_DEST[dest_id].items() if key not in kept}, enabled=False)
     save_config(cfg)
     destination_util.sync(cfg)
     return jsonify({"ok": True})
@@ -1401,7 +1388,7 @@ def api_onedrive_connect():
     the app folder's drive_id/drive_type via one Graph API call."""
     data = request.get_json(force=True, silent=True) or {}
     try:
-        token_json, access_token = onedrive_oauth.parse_token_blob(data.get("token_blob", ""))
+        token_json, access_token = rclone_token.parse_token_blob(data.get("token_blob", ""), "onedrive")
         approot = onedrive_oauth.approot_metadata(access_token)
     except Exception as exc:
         return jsonify({"error": humanize_error(exc)}), 400
@@ -1419,17 +1406,6 @@ def api_onedrive_connect():
     return jsonify({"ok": True})
 
 
-@app.post("/api/destinations/onedrive/disconnect")
-def api_onedrive_disconnect():
-    cfg = load_config()
-    cfg["destinations"]["onedrive"].update({
-        "enabled": False, "token": "", "drive_id": "", "drive_type": "", "item_id": "",
-    })
-    save_config(cfg)
-    destination_util.sync(cfg)
-    return jsonify({"ok": True})
-
-
 # ---------------------------------------------------------- dropbox ----
 @app.post("/api/destinations/dropbox/connect")
 def api_dropbox_connect():
@@ -1437,7 +1413,7 @@ def api_dropbox_connect():
     Dropbox before saving it."""
     data = request.get_json(force=True, silent=True) or {}
     try:
-        token_json, access_token = dropbox_oauth.parse_token_blob(data.get("token_blob", ""))
+        token_json, access_token = rclone_token.parse_token_blob(data.get("token_blob", ""), "dropbox")
         dropbox_oauth.verify_access_token(access_token)
     except Exception as exc:
         return jsonify({"error": humanize_error(exc)}), 400
@@ -1449,15 +1425,6 @@ def api_dropbox_connect():
     save_config(cfg)
     # force=True: fresh token should win over whatever's already stored.
     dropbox_oauth.sync_rclone_remote(dropbox_cfg, force=True)
-    return jsonify({"ok": True})
-
-
-@app.post("/api/destinations/dropbox/disconnect")
-def api_dropbox_disconnect():
-    cfg = load_config()
-    cfg["destinations"]["dropbox"].update({"enabled": False, "token": ""})
-    save_config(cfg)
-    destination_util.sync(cfg)
     return jsonify({"ok": True})
 
 

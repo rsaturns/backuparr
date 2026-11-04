@@ -157,6 +157,7 @@ PROTECTED = [
     ("POST", "/api/destinations/gdrive/disconnect"), ("POST", "/api/destinations/onedrive/connect"),
     ("POST", "/api/destinations/onedrive/disconnect"),
     ("POST", "/api/destinations/dropbox/connect"), ("POST", "/api/destinations/dropbox/disconnect"),
+    ("POST", "/api/destinations/local/disconnect"),
 ]
 
 

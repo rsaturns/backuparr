@@ -47,27 +47,24 @@ def local_root(dest_cfg):
     return path
 
 
+# The connected destinations, each an rclone remote kept in rclone.conf.
+# Each module has TOKEN_FIELD (the destination field set once connected),
+# remote_root(), backup_target() and sync_rclone_remote().
+REMOTES = {"gdrive": gdrive_oauth, "onedrive": onedrive_oauth, "dropbox": dropbox_oauth}
+_REMOTE_ERRORS = (gdrive_oauth.GDriveOAuthError, onedrive_oauth.OneDriveOAuthError, dropbox_oauth.DropboxOAuthError)
+
+
 def remote_root(dest_id, dest_cfg):
     """The rclone remote root (a plain local path, or "name:" for a
     connected OAuth remote) to pass to rclone_util for this destination."""
     if dest_id == "local":
         return local_root(dest_cfg)
-    if dest_id == "gdrive":
-        try:
-            return gdrive_oauth.remote_root(dest_cfg)
-        except gdrive_oauth.GDriveOAuthError as exc:
-            raise DestinationError(str(exc)) from exc
-    if dest_id == "onedrive":
-        try:
-            return onedrive_oauth.remote_root(dest_cfg)
-        except onedrive_oauth.OneDriveOAuthError as exc:
-            raise DestinationError(str(exc)) from exc
-    if dest_id == "dropbox":
-        try:
-            return dropbox_oauth.remote_root(dest_cfg)
-        except dropbox_oauth.DropboxOAuthError as exc:
-            raise DestinationError(str(exc)) from exc
-    raise DestinationError(f"unknown or unsupported destination: {dest_id}")
+    if dest_id not in REMOTES:
+        raise DestinationError(f"unknown or unsupported destination: {dest_id}")
+    try:
+        return REMOTES[dest_id].remote_root(dest_cfg)
+    except _REMOTE_ERRORS as exc:
+        raise DestinationError(str(exc)) from exc
 
 
 def sync(cfg):
@@ -75,6 +72,5 @@ def sync(cfg):
     before an operation touches them - safe/cheap to call unconditionally:
     one `rclone config dump`, and a write only for a remote that differs."""
     remotes = rclone_util.config_dump()
-    gdrive_oauth.sync_rclone_remote(cfg["destinations"]["gdrive"], remotes=remotes)
-    onedrive_oauth.sync_rclone_remote(cfg["destinations"]["onedrive"], remotes=remotes)
-    dropbox_oauth.sync_rclone_remote(cfg["destinations"]["dropbox"], remotes=remotes)
+    for dest_id, module in REMOTES.items():
+        module.sync_rclone_remote(cfg["destinations"][dest_id], remotes=remotes)
