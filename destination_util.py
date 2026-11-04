@@ -1,7 +1,6 @@
 """Resolves each enabled destination's rclone remote root generically, so
 backup.py/restore_actions.py/webui/app.py don't need destination-specific
-branching beyond "which id is this". Local, gdrive, onedrive, and dropbox
-all have real backends.
+branching beyond "which id is this".
 """
 import os
 import re

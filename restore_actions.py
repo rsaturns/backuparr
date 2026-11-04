@@ -1,6 +1,6 @@
-"""Restore logic for the web UI: one implementation per app. See apps/*.py
-for the actual API mechanics; this module just wires config + rclone + zip
-handling around them. Each app is built by backup.build_app, exactly as a
+"""Restore logic for the web UI, one RESTORES entry per app type. See
+apps/*.py for the actual API mechanics; this module just wires config +
+rclone + zip handling around them. Each app is built by backup.build_app, exactly as a
 backup builds it, so headers and credentials can't drift between the two.
 """
 import json
@@ -19,8 +19,9 @@ from config_store import instance_type
 # Restored by uploading the archive to the app, which then restarts.
 UPLOAD_RESTORE_APPS = {"radarr", "sonarr", "lidarr", "whisparr", "prowlarr"}
 
-# Backup filenames are always <app>_<timestamp>.<ext> (.zip, or .tar.gz for
-# Profilarr). filename can come straight from a request body, so reject
+# Backup filenames are always <app>_<timestamp>.<ext> (.zip, or an app's own
+# archive: Profilarr's .tar.gz, LazyLibrarian's .tgz). filename can come
+# straight from a request body, so reject
 # anything else to block path traversal into a local path.join() or remote
 # rclone path.
 SAFE_FILENAME = re.compile(r"^(?!\.)[A-Za-z0-9._-]+\Z")  # no leading dot: "." and ".." are directories

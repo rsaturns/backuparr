@@ -1,9 +1,9 @@
 """Trigger each configured app's own backup mechanism, zip the result if
 needed, and upload it to the configured rclone remote. Most apps are backed
 up over their HTTP API. A few need their folder mounted into this container:
-Jellyfin's API can't download the backup it creates, so that archive is
-picked up from its mounted backups folder; Emby and Seerr have no backup API,
-so their files are read from their mounted data folders; and Plex's settings
+Jellyfin's and LazyLibrarian's APIs can't download the backup they create, so
+it's picked up from the mounted folder; Emby and Seerr have no backup API, so
+their files are read from their mounted data folders; and Plex's settings
 and server identity come from its mounted data folder.
 Settings come from config_store, not environment variables.
 """
