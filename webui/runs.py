@@ -11,6 +11,7 @@ from flask import Blueprint, jsonify, request
 
 import backup
 import config_store
+import runlog
 from backup import describe_failure, format_run_message, log_failure, notify, run_backup
 from config_store import enabled_apps, load_config
 
@@ -258,6 +259,21 @@ def _tail_lines(path, count=200, chunk=64 * 1024):
         lines.pop()
     # Past count+1 newlines the first, possibly partial, line falls outside.
     return [line.decode("utf-8", "replace") for line in lines[-count:]]
+
+
+@bp.get("/api/runlogs")
+def api_runlogs():
+    """Each app's latest saved run, without its log lines: the Overview's
+    status for each tile."""
+    return jsonify(runlog.latest())
+
+
+@bp.get("/api/runlogs/<app_name>/<run_id>")
+def api_runlog(app_name, run_id):
+    run = runlog.get(app_name, run_id)
+    if run is None:
+        return jsonify({"error": "no saved log for that run"}), 404
+    return jsonify(run)
 
 
 @bp.get("/api/backup/status")

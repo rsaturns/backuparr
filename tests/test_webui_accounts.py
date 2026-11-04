@@ -152,6 +152,7 @@ PROTECTED = [
     ("GET", "/api/history/local/radarr/a.zip/download"),
     ("GET", "/api/restore/status"), ("GET", "/api/restore/local/radarr/backups"),
     ("POST", "/api/restore/local/sabnzbd/preview"), ("POST", "/api/restore/local/radarr"), ("POST", "/api/restore/local/radarr/check"),
+    ("GET", "/api/runlogs"), ("GET", "/api/runlogs/radarr/radarr_20261101_030000"),
     ("GET", "/api/destinations/gdrive/oauth/start"), ("GET", "/api/destinations/gdrive/oauth/callback"),
     ("POST", "/api/destinations/gdrive/access-token"), ("POST", "/api/destinations/gdrive/folder"),
     ("POST", "/api/destinations/gdrive/disconnect"), ("POST", "/api/destinations/onedrive/connect"),
@@ -182,7 +183,7 @@ def test_every_registered_api_route_is_covered_by_the_gate_list(isolated_webui):
     listed = {path for _, path in PROTECTED}
 
     def normalise(rule):
-        return rule.replace("<job_id>", "x").replace("<dest_id>", "local").replace("<app_name>", "radarr").replace("<filename>", "a.zip")
+        return rule.replace("<job_id>", "x").replace("<dest_id>", "local").replace("<app_name>", "radarr").replace("<filename>", "a.zip").replace("<run_id>", "radarr_20261101_030000")
 
     uncovered = {normalise(rule) for rule in routes - public} - listed - {"/api/restore/local/sabnzbd/backups"}
     assert not uncovered, f"add these routes to PROTECTED: {sorted(uncovered)}"

@@ -17,7 +17,7 @@ import shutil
 import socket
 import tempfile
 import zipfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -27,6 +27,7 @@ import archive_check
 import destination_util
 import manifest
 import rclone_util
+import runlog
 from apps.base import AppError
 from apps.bazarr import BazarrApp
 from apps.emby import EmbyApp
@@ -368,6 +369,10 @@ class RunCancelled(Exception):
     pass
 
 
+def _utc_now():
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
 def _app_version(app, name, url):
     """The app's version for the manifest, or None - logged - when the app
     can't say. A backup that worked isn't failed over it."""
@@ -444,6 +449,10 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
 
             work_dir = os.path.join(run_tmp, name)
             archive_path = None
+            # This app's run log: None for a destination its upload never reached.
+            run = {"id": f"{name}_{timestamp}", "app": name, "started": _utc_now(), "finished": None, "file": None,
+                   "ok": False, "error": None, "app_version": None, "destinations": {d: None for d in dest_roots}}
+            capture = runlog.Capture().start()
 
             try:
                 os.makedirs(work_dir, exist_ok=True)
@@ -460,6 +469,7 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
                     archive_name = f"{name}_{timestamp}{archive_suffix(result_path)}"
                     archive_path = os.path.join(run_tmp, archive_name)
                     shutil.move(result_path, archive_path)
+                run["file"] = archive_name
 
                 # A backup that fails is never uploaded; retention keeps the
                 # app's newest, so its last good backup stays.
@@ -467,7 +477,7 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
                 archive_check.check(name, archive_path)
                 size = os.path.getsize(archive_path)
                 sha256 = manifest.file_sha256(archive_path)
-                app_version = _app_version(app, name, app_cfg.get("url"))
+                app_version = run["app_version"] = _app_version(app, name, app_cfg.get("url"))
                 uploaded = []
                 dest_failures = []
                 for dest_id, root in dest_roots.items():
@@ -478,9 +488,11 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
                         rclone_util.copyto(archive_path, remote_dest)
                         log.info("%s: uploaded -> %s (%d bytes)", name, remote_dest, size)
                         uploaded.append(dest_id)
+                        run["destinations"][dest_id] = {"ok": True, "error": None}
                     except rclone_util.RcloneError as exc:
                         log.error("%s: upload to %s failed: %s", name, dest_id, exc.detail)
                         dest_failures.append(f"{dest_id}: {exc.detail}")
+                        run["destinations"][dest_id] = {"ok": False, "error": exc.detail}
 
                 if uploaded:
                     try:
@@ -490,15 +502,23 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
                         # The backup itself is uploaded; only its record is missing.
                         log.warning("%s: couldn't write the backup record: %s", name, exc.strerror or type(exc).__name__)
                 if dest_failures:
-                    failed.append(f"{name}: failed on {'; '.join(dest_failures)}")
+                    run["error"] = f"failed on {'; '.join(dest_failures)}"
+                    failed.append(f"{name}: {run['error']}")
                 else:
+                    run["ok"] = True
                     ok.append(name)
             except RunCancelled:
+                run["error"] = "the run was cancelled"
                 raise
             except Exception as exc:
                 log_failure(log, f"{name}: backup failed", exc, app_cfg.get("url"), app=name)
-                failed.append(f"{name}: {humanize_error(exc, app_cfg.get('url'), app=name)}")
+                run["error"] = humanize_error(exc, app_cfg.get("url"), app=name)
+                failed.append(f"{name}: {run['error']}")
             finally:
+                capture.stop()
+                run["finished"] = _utc_now()
+                run["lines"] = capture.result()
+                runlog.save(run)
                 shutil.rmtree(work_dir, ignore_errors=True)
                 if archive_path and os.path.exists(archive_path):
                     os.remove(archive_path)
@@ -515,5 +535,6 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
     log.info("Applying retention (%sd) per destination", retention_days)
     for dest_id, root in dest_roots.items():
         apply_retention(root, retention_days, only=only, dest_id=dest_id)
+    runlog.prune(retention_days)
 
     return ok, failed

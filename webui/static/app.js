@@ -155,19 +155,19 @@ async function loadOverview() {
     const cfg = await apiFetch("/api/config");
     const destIds = enabledDestinationIds(cfg);
 
-    const [histories, status] = await Promise.all([
+    const [histories, latestRuns] = await Promise.all([
       Promise.all(destIds.map((id) => apiFetch(`/api/history/${id}`).catch((e) => {
         toast(`${destLabel(id)}: ${e.message}`, "fail");
         return {};
       }))),
-      apiFetch("/api/backup/status"),
+      apiFetch("/api/runlogs"),
     ]);
     // Per app, the single most recent backup across every enabled destination.
     const latestByApp = {};
     histories.forEach((history, i) => {
       const destId = destIds[i];
       Object.keys(history).forEach((appId) => {
-        const entry = (history[appId] || [])[0];
+        const entry = (history[appId] || []).find((e) => !e.missing);
         if (entry && (!latestByApp[appId] || entry.mod_time > latestByApp[appId].mod_time)) {
           latestByApp[appId] = { ...entry, destId };
         }
@@ -177,11 +177,10 @@ async function loadOverview() {
     const allIds = Object.keys(cfg.apps || {});
     const enabledIds = allIds.filter((id) => cfg.apps[id].enabled);
 
-    // "<app>: <error message>" strings, see run_backup() in backup.py.
+    // Each app's latest saved run (runlog.py), so its status survives a restart.
     const failureByApp = {};
-    (status.failed || []).forEach((entry) => {
-      const idx = entry.indexOf(":");
-      if (idx > -1) failureByApp[entry.slice(0, idx)] = entry.slice(idx + 1).trim();
+    Object.entries(latestRuns || {}).forEach(([appId, run]) => {
+      if (!run.ok) failureByApp[appId] = run.error || "unknown error";
     });
 
     summaryEl.innerHTML = "";
@@ -253,13 +252,18 @@ async function loadOverview() {
       }
       card.appendChild(last);
 
+      const links = document.createElement("div");
+      links.className = "overview-links";
       if (latest) {
         const dlLink = document.createElement("a");
         dlLink.className = "overview-download-link";
         dlLink.textContent = "Download latest backup";
         dlLink.href = `/api/history/${latest.destId}/${appId}/${encodeURIComponent(latest.name)}/download`;
-        card.appendChild(dlLink);
+        links.appendChild(dlLink);
       }
+      const latestRun = (latestRuns || {})[appId];
+      if (latestRun) links.appendChild(viewLogButton(appId, latestRun.id));
+      if (links.childElementCount) card.appendChild(links);
 
       appsEl.appendChild(card);
     });
@@ -270,6 +274,88 @@ async function loadOverview() {
     error.textContent = `Error loading overview: ${e.message}`;
     appsEl.replaceChildren(error);
   }
+}
+
+// ------------------------------------------------------------ run log ----
+// One app's log from one run, in a floating panel over the page.
+let logPanelSeq = 0;
+
+function destinationResultText(result) {
+  if (!result) return "not uploaded";
+  return result.ok ? "uploaded" : `failed - ${result.error}`;
+}
+
+async function openRunLog(appId, runId) {
+  const panel = document.getElementById("log-panel");
+  const meta = document.getElementById("log-panel-meta");
+  const lines = document.getElementById("log-panel-lines");
+  document.getElementById("log-panel-title").textContent = `${appLabel(appId)} - run log`;
+  meta.textContent = "Loading...";
+  lines.innerHTML = "";
+  panel.classList.remove("hidden");
+  const seq = ++logPanelSeq;
+  let run;
+  try {
+    run = await apiFetch(`/api/runlogs/${encodeURIComponent(appId)}/${encodeURIComponent(runId)}`);
+  } catch (e) {
+    if (seq === logPanelSeq) meta.textContent = e.message;
+    return;
+  }
+  if (seq !== logPanelSeq) return;
+
+  meta.innerHTML = "";
+  const when = document.createElement("p");
+  when.textContent = `Run: ${fmtTime(run.started)}${run.app_version ? ` - ${appMeta(appId)?.label || appId} ${run.app_version}` : ""}`;
+  const result = document.createElement("p");
+  result.className = run.ok ? "ok" : "fail";
+  result.textContent = run.ok ? `Backed up: ${run.file}` : `Failed: ${run.error || "unknown error"}`;
+  meta.append(when, result);
+  const destIds = Object.keys(run.destinations || {});
+  if (destIds.length) {
+    const list = document.createElement("ul");
+    destIds.forEach((destId) => {
+      const r = run.destinations[destId];
+      const li = document.createElement("li");
+      li.className = !r ? "muted" : r.ok ? "ok" : "fail";
+      li.textContent = `${destLabel(destId)}: ${destinationResultText(r)}`;
+      list.appendChild(li);
+    });
+    meta.appendChild(list);
+  }
+
+  (run.lines || []).forEach((line) => {
+    const li = document.createElement("li");
+    li.className = `log-${String(line.level || "").toLowerCase()}`;
+    const time = document.createElement("span");
+    time.className = "log-time";
+    time.textContent = new Date(line.time).toLocaleTimeString();
+    const text = document.createElement("span");
+    text.textContent = line.message;
+    li.append(time, text);
+    lines.appendChild(li);
+  });
+  if (!(run.lines || []).length) lines.innerHTML = '<li class="log-time">No log lines were kept for this run.</li>';
+}
+
+function closeRunLog() {
+  logPanelSeq++;
+  document.getElementById("log-panel").classList.add("hidden");
+}
+
+function initRunLogPanel() {
+  document.getElementById("log-panel-close").addEventListener("click", closeRunLog);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !document.getElementById("log-panel").classList.contains("hidden")) closeRunLog();
+  });
+}
+
+function viewLogButton(appId, runId) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "link-btn";
+  btn.textContent = "View log";
+  btn.addEventListener("click", () => openRunLog(appId, runId));
+  return btn;
 }
 
 // ------------------------------------------------------------- layout ----
@@ -1940,6 +2026,28 @@ function appLabel(appId) {
   return isExtraInstance(appId) ? `${m.label} (${INSTANCE_NAMES.get(appId) || appId.slice(m.id.length + 1)})` : m.label;
 }
 
+// A run that left no file on this destination: greyed, with the reason in
+// place of a size, and only its log.
+function missingHistoryRow(appId, e) {
+  const tr = document.createElement("tr");
+  tr.className = "history-missing";
+  // The reason spans the Version and Size columns, on one line; the full
+  // text is its tooltip and in the log.
+  const cells = [e.name || "No backup file", e.reason, fmtTime(e.mod_time)].map((text) => {
+    const td = document.createElement("td");
+    td.textContent = text;
+    return td;
+  });
+  cells[1].className = "history-reason";
+  cells[1].colSpan = 2;
+  cells[1].title = e.reason;
+  const actionsTd = document.createElement("td");
+  actionsTd.className = "actions-cell";
+  actionsTd.appendChild(viewLogButton(appId, e.run_id));
+  tr.append(...cells, actionsTd);
+  return tr;
+}
+
 async function deleteBackup(destId, appId, filename, row) {
   if (!confirm(`Delete ${filename}? This can't be undone.`)) return;
   try {
@@ -2016,6 +2124,10 @@ async function loadHistory() {
       const tbody = document.createElement("tbody");
       entries.forEach((e) => {
         const tr = document.createElement("tr");
+        if (e.missing) {
+          tbody.appendChild(missingHistoryRow(appId, e));
+          return;
+        }
         const nameTd = document.createElement("td");
         nameTd.textContent = e.name;
         const versionTd = document.createElement("td");
@@ -2040,6 +2152,7 @@ async function loadHistory() {
         delBtn.title = "Delete this backup";
         delBtn.textContent = "×";
         delBtn.addEventListener("click", () => deleteBackup(destId, appId, e.name, tr));
+        if (e.run_id) actionsTd.append(viewLogButton(appId, e.run_id));
         actionsTd.append(dlLink, delBtn);
         tr.append(nameTd, versionTd, sizeTd, timeTd, actionsTd);
         tbody.appendChild(tr);
@@ -2640,6 +2753,7 @@ async function init() {
   initTheme();
   initLogout();
   initWhatsChangedEvents();
+  initRunLogPanel();
   initSettingsEvents();
   initRunEvents();
   initHistoryEvents();

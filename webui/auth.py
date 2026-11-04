@@ -12,6 +12,7 @@ import atomic_file
 import auth_store
 import destination_util
 import manifest
+import runlog
 import secrets_crypto
 from config_store import CONFIG_PATH, instance_type, load_config
 from webui.services import DISCOVERY_JOBS, PLEX_LOGINS
@@ -229,6 +230,7 @@ def api_reset():
         except FileNotFoundError:
             pass
     manifest.clear()
+    runlog.clear()
 
     session.clear()
     return jsonify({"ok": True})

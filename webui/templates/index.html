@@ -449,6 +449,15 @@
   </div>
 </div>
 
+<div id="log-panel" class="log-panel hidden" role="dialog" aria-labelledby="log-panel-title">
+  <div class="log-panel-head">
+    <h3 id="log-panel-title">Run log</h3>
+    <button type="button" class="icon-btn" id="log-panel-close" aria-label="Close">&times;</button>
+  </div>
+  <div id="log-panel-meta" class="log-panel-meta"></div>
+  <ol id="log-panel-lines" class="log-panel-lines"></ol>
+</div>
+
 <div id="toast-root" class="toast-root"></div>
 <script src="https://apis.google.com/js/api.js"></script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>

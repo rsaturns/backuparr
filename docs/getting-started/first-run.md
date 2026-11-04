@@ -20,3 +20,8 @@ Then, on the **Settings** tab:
 
 **Run & Status** runs a backup now - of every app, or just one - and shows it
 live, **History** lists, downloads and deletes backups, and **Restore** restores them.
+
+Each app's log from each run is kept, for as long as retention keeps backups
+(its latest run is always kept). **View log** on an app's Overview tile shows
+its latest run; in History, each backup has its own, and runs that left no
+backup on that destination are listed greyed with the reason.

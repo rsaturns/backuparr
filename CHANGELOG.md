@@ -10,6 +10,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Backuparr keeps a record of every backup: the app version it came from, its checksum and which destinations hold it. History shows each backup's app version, and existing backups are added in the background after the update (#106).
 - Each backup is checked before upload: it must read back intact, its SQLite databases must pass a quick check, and the files its restore needs must be in it. A backup that fails isn't uploaded, and the app shows as failed with the reason (#107).
 - Restores only go onto the exact app version the backup came from. The Restore tab checks it when you pick a backup, before Emby, Plex, Seerr or LazyLibrarian need stopping, and names the version to install when they differ; each download is checked against its recorded checksum (#108).
+- Each app's log and result from every run are kept across restarts: **View log** on its Overview tile and on each History row, and History lists runs that left no backup with the reason. The Overview's status is right after a restart (#109).
 
 ### Changed
 
