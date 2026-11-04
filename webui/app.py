@@ -19,6 +19,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 import atomic_file
 import auth_store
+import config_store
 import destination_util
 import discovery
 import gdrive_oauth
@@ -479,16 +480,34 @@ def _cancel_backup_run():
 
 
 # ------------------------------------------------------------ scheduler ----
-# In-process, not an external cron daemon - re-reads cron_schedule from
-# config.json every tick, so a Settings change applies immediately.
+# In-process, not an external cron daemon - re-reads cron_schedule whenever
+# config.json changes, so a Settings change applies on the next tick.
 _SCHEDULER_INTERVAL_SECONDS = 20
-_scheduler_state = {"last_run_minute": None, "last_error": None}
+_scheduler_state = {"last_run_minute": None, "last_error": None, "config_stamp": None, "schedule": None}
+
+
+def _config_stamp():
+    """Changes whenever config.json does; None while it doesn't exist."""
+    try:
+        stat = os.stat(config_store.CONFIG_PATH)
+    except FileNotFoundError:
+        return None
+    return stat.st_mtime_ns, stat.st_size, stat.st_ino
+
+
+def _scheduled_cron():
+    """cron_schedule, without decrypting the whole config every tick."""
+    stamp = _config_stamp()
+    if stamp is None or stamp != _scheduler_state["config_stamp"]:
+        _scheduler_state["schedule"] = load_config().get("cron_schedule", "0 3 * * *")
+        _scheduler_state["config_stamp"] = stamp
+    return _scheduler_state["schedule"]
 
 
 def _scheduler_loop():
     while True:
         try:
-            schedule = load_config().get("cron_schedule", "0 3 * * *")
+            schedule = _scheduled_cron()
             now = datetime.now().replace(second=0, microsecond=0)
             # Dedup: a matching minute is seen on more than one ~20s tick.
             if (

@@ -246,6 +246,7 @@ def clock(isolated_webui, monkeypatch):
     monkeypatch.setattr(isolated_webui, "datetime", FakeDateTime)
     monkeypatch.setattr(isolated_webui, "_start_backup_run", lambda: starts.append(FakeDateTime.current) or True)
     isolated_webui._scheduler_state["last_run_minute"] = None
+    monkeypatch.setattr(isolated_webui, "_config_stamp", object)  # config.json changes every tick
 
     def run(schedule, ticks, load=None):
         ticks = iter(ticks)
@@ -298,6 +299,21 @@ def test_the_scheduler_re_reads_the_schedule_every_tick(clock):
     assert starts == [at(5, 3, 0), at(5, 3, 5)]
 
 
+def test_the_scheduler_reads_the_config_only_when_it_changes(isolated_webui, monkeypatch):
+    loads = []
+    monkeypatch.setattr(isolated_webui, "load_config", lambda: loads.append(1) or {"cron_schedule": "0 4 * * *"})
+    monkeypatch.setitem(isolated_webui._scheduler_state, "config_stamp", None)
+    path = isolated_webui.config_store.CONFIG_PATH
+    with open(path, "w") as f:
+        f.write("{}")
+    assert isolated_webui._scheduled_cron() == isolated_webui._scheduled_cron() == "0 4 * * *"
+    assert len(loads) == 1
+    with open(path, "w") as f:
+        f.write('{"cron_schedule": "0 4 * * *"}')
+    isolated_webui._scheduled_cron()
+    assert len(loads) == 2
+
+
 def test_the_scheduler_does_not_retry_a_minute_skipped_because_a_run_was_active(isolated_webui, monkeypatch, clock):
     attempts = []
     monkeypatch.setattr(isolated_webui, "_start_backup_run", lambda: attempts.append(1) or False)
@@ -338,6 +354,7 @@ def _ticks(inline, monkeypatch, errors):
             raise _StopLoop
 
     monkeypatch.setattr(inline, "load_config", load_config)
+    monkeypatch.setattr(inline, "_config_stamp", object)
     monkeypatch.setattr(inline.time, "sleep", sleep)
     with pytest.raises(_StopLoop):
         inline._scheduler_loop()
