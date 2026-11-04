@@ -100,3 +100,12 @@ def test_a_real_local_folder_with_other_files(tmp_path, monkeypatch):
     assert sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob("*") if p.is_file()) == [
         "media/old.mkv", "radarr/keep.txt", "radarr/radarr_20261029_030000.zip",
     ]
+
+
+def test_a_destination_that_cant_be_listed_is_left_alone(monkeypatch, caplog):
+    def expired(root, recursive=False):
+        raise backup.rclone_util.RcloneError("rclone lsjson failed", "token expired", 1)
+
+    monkeypatch.setattr(backup.rclone_util, "lsjson", expired)
+    backup.apply_retention("dest:", 7, now=NOW)
+    assert "retention: couldn't list dest:, nothing removed: token expired" in caplog.text

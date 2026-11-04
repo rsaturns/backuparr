@@ -1028,7 +1028,11 @@ def api_history(dest_id):
     # call per app - much faster against remote destinations (Drive/OneDrive).
     # Keyed by instance id; a removed instance's backups are listed while any remain.
     history = {name: [] for name in instance_ids(cfg) if app_meta(name)["status"] == "available"}
-    for entry in rclone_util.lsjson(root, recursive=True):
+    try:
+        entries = rclone_util.lsjson(root, recursive=True)
+    except rclone_util.RcloneError as exc:
+        return jsonify({"error": humanize_error(exc)}), 502
+    for entry in entries:
         if entry.get("IsDir"):
             continue
         app_name, _, _ = entry["Path"].partition("/")

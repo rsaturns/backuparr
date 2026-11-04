@@ -47,6 +47,15 @@ def test_history_groups_files_by_app_newest_first(authed_client, rclone):
     assert rclone["lsjson"][0][1] is True
 
 
+def test_history_reports_a_destination_it_cant_list(authed_client, isolated_webui, monkeypatch):
+    def expired(root, recursive=False):
+        raise isolated_webui.rclone_util.RcloneError("rclone lsjson failed", "invalid_grant (reconnect it)", 1)
+
+    monkeypatch.setattr(isolated_webui.rclone_util, "lsjson", expired)
+    response = authed_client.get("/api/history/local")
+    assert response.status_code == 502 and response.get_json() == {"error": "invalid_grant (reconnect it)"}
+
+
 def test_history_for_an_empty_destination_lists_every_app_with_nothing(authed_client, rclone):
     history = authed_client.get("/api/history/local").get_json()
     assert history and all(files == [] for files in history.values())

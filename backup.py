@@ -322,8 +322,13 @@ def apply_retention(root, retention_days, now=None, only=None):
     timestamp in the name, written in this container's local time. only,
     if given, limits it to that one app or instance's backups."""
     cutoff = (now or datetime.now()) - timedelta(days=int(retention_days))
+    try:
+        entries = rclone_util.lsjson(root, recursive=True)
+    except rclone_util.RcloneError as exc:
+        log.warning("retention: couldn't list %s, nothing removed: %s", root, exc.detail)
+        return
     per_app = {}
-    for entry in rclone_util.lsjson(root, recursive=True):
+    for entry in entries:
         app, sep, name = entry.get("Path", "").partition("/")
         if entry.get("IsDir") or not sep or not instance_type(app) or not destination_util.is_backup_name(app, name):
             continue

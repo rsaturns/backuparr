@@ -157,7 +157,10 @@ async function loadOverview() {
     const destIds = enabledDestinationIds(cfg);
 
     const [histories, status] = await Promise.all([
-      Promise.all(destIds.map((id) => apiFetch(`/api/history/${id}`).catch(() => ({})))),
+      Promise.all(destIds.map((id) => apiFetch(`/api/history/${id}`).catch((e) => {
+        toast(`${destLabel(id)}: ${e.message}`, "fail");
+        return {};
+      }))),
       apiFetch("/api/backup/status"),
     ]);
     // Per app, the single most recent backup across every enabled destination.
