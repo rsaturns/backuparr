@@ -49,6 +49,11 @@ class ProfilarrApp:
         info = res.json()
         return f"profilarr {info.get('version', '?')} reachable"
 
+    def app_version(self):
+        res = self.session.get(self._api("/status"), timeout=10)
+        res.raise_for_status()
+        return res.json().get("version")
+
     def trigger_backup(self, poll_interval=2, timeout_s=300):
         res = self.session.post(self._api("/backups"), timeout=self.timeout)
         res.raise_for_status()

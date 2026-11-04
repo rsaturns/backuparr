@@ -119,13 +119,18 @@ class ServarrApp:
     def _api(self, path):
         return f"{self.url}/api/{self.api_version}{path}"
 
-    def test_connection(self):
+    def _status(self):
         res = self.session.get(self._api("/system/status"), timeout=10)
         if res.status_code == 401:
             raise ServarrError(f"{self.name}: unauthorized - check the API key")
         res.raise_for_status()
-        info = res.json()
-        return f"{self.name} {info.get('version', '?')} reachable"
+        return res.json()
+
+    def test_connection(self):
+        return f"{self.name} {self._status().get('version', '?')} reachable"
+
+    def app_version(self):
+        return self._status().get("version")
 
     def trigger_backup(self, poll_interval=2, timeout_s=300, request_headers=None):
         """Run a Backup command and wait for it; returns the finished command."""

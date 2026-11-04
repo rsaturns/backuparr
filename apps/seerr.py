@@ -125,6 +125,9 @@ class SeerrApp:
                 f"this server is {client_id}) - check the volume mount"
             )
 
+    def app_version(self):
+        return self.identity()[0]
+
     def test_connection(self):
         version, client_id = self.identity()
         self._require_folder(client_id)

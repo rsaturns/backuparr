@@ -208,6 +208,9 @@ class PlexApp:
             raise PlexError("plex: server identity is missing its version or identifier")
         return {"version": version, "machine_identifier": identifier}
 
+    def app_version(self):
+        return self.identity()["version"]
+
     def _path(self, *parts):
         return os.path.join(self.data_dir, *parts)
 

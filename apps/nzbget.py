@@ -130,6 +130,9 @@ class NzbgetApp:
             )
         return [{"Name": o["Name"], "Value": o["Value"]} for o in options]
 
+    def app_version(self):
+        return self.version()
+
     def test_connection(self):
         version = self.version()
         self.load_config()

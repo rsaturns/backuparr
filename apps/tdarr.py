@@ -102,6 +102,9 @@ class TdarrApp:
         except (ValueError, AttributeError):
             raise TdarrError("tdarr: /api/v2/status didn't return Tdarr's status - check the URL (Tdarr's server port, 8266)") from None
 
+    def app_version(self):
+        return self.version()
+
     def test_connection(self):
         version = self.version()
         # status answers without auth; this proves the key, or that none is needed.

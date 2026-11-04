@@ -113,6 +113,9 @@ class LazyLibrarianApp:
                 "lazylibrarian: this is the read-only API key - use the full-access API key (Config > Interface > API)")
         return version
 
+    def app_version(self):
+        return self._json("getVersion", timeout=10).get("current_version")
+
     def _path(self, name):
         return os.path.join(self.data_dir, name)
 

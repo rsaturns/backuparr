@@ -76,6 +76,10 @@ class TautulliApp:
             raise TautulliError(f"tautulli: {data.get('message') or 'unexpected response'}")
         return "tautulli reachable"
 
+    def app_version(self):
+        res = self._call("get_tautulli_info", timeout=10)
+        return ((res.json().get("response") or {}).get("data") or {}).get("tautulli_version")
+
     @staticmethod
     def _check_download(cmd, path):
         """An API error comes back as a JSON body, not an HTTP error: refuse

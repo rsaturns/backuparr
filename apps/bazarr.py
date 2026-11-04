@@ -60,6 +60,11 @@ class BazarrApp:
         count = len(res.json().get("data", []))
         return f"bazarr reachable ({count} existing backup(s) on server)"
 
+    def app_version(self):
+        res = self.session.get(f"{self.url}/api/system/status", timeout=10)
+        res.raise_for_status()
+        return (res.json().get("data") or {}).get("bazarr_version")
+
     def list_backups(self):
         res = self.session.get(f"{self.url}/api/system/backups", timeout=self.timeout)
         res.raise_for_status()

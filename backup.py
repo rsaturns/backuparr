@@ -24,6 +24,7 @@ from urllib.parse import parse_qs, urlparse
 import requests
 
 import destination_util
+import manifest
 import rclone_util
 from apps.base import AppError
 from apps.bazarr import BazarrApp
@@ -45,6 +46,7 @@ from apps.tautulli import TautulliApp
 from apps.tdarr import TdarrApp
 from apps.whisparr import WhisparrApp
 from config_store import ConfigError, app_meta, enabled_apps, enabled_destinations, instance_type
+from webui.version import VERSION
 
 LOG_DIR = os.environ.get("BACKUPARR_LOG_DIR", "/var/log/backuparr")
 LOG_FILE = os.path.join(LOG_DIR, "backup.log")
@@ -314,14 +316,17 @@ def format_run_message(ok, failed):
     return "\n".join(lines)
 
 
-def apply_retention(root, retention_days, now=None, only=None):
+def apply_retention(root, retention_days, now=None, only=None, dest_id=None):
     """Deletes each app's backups older than retention_days from one
     destination, always keeping its newest - so an app that keeps failing,
     or was switched off (or an instance that was removed), still has its
     last good backup. Only Backuparr's own <app>/<app>_<timestamp> archives
     are touched, <app> being an app or instance id; age comes from the
     timestamp in the name, written in this container's local time. only,
-    if given, limits it to that one app or instance's backups."""
+    if given, limits it to that one app or instance's backups.
+
+    dest_id, if given, is the destination's id: the manifest drops what
+    retention deletes, and any entry for a file the listing didn't find."""
     cutoff = (now or datetime.now()) - timedelta(days=int(retention_days))
     try:
         entries = rclone_util.lsjson(root, recursive=True)
@@ -329,13 +334,17 @@ def apply_retention(root, retention_days, now=None, only=None):
         log.warning("retention: couldn't list %s, nothing removed: %s", root, exc.detail)
         return
     per_app = {}
+    present = set()
     for entry in entries:
         app, sep, name = entry.get("Path", "").partition("/")
         if entry.get("IsDir") or not sep or not instance_type(app) or not destination_util.is_backup_name(app, name):
             continue
+        present.add(manifest.key(app, name))
         if only is not None and app != only:
             continue
         per_app.setdefault(app, []).append(name)
+    if dest_id is not None:
+        manifest.reconcile(dest_id, present)
     for app, names in per_app.items():
         names.sort()  # The timestamp makes name order oldest-first.
         for name in names[:-1]:
@@ -348,12 +357,24 @@ def apply_retention(root, retention_days, now=None, only=None):
             try:
                 rclone_util.delete_file(f"{root}/{app}/{name}")
                 log.info("retention: removed %s/%s", app, name)
+                if dest_id is not None:
+                    manifest.remove(app, name, dest_id)
             except rclone_util.RcloneError as exc:
                 log.warning("retention: couldn't remove %s/%s: %s", app, name, exc.detail)
 
 
 class RunCancelled(Exception):
     pass
+
+
+def _app_version(app, name, url):
+    """The app's version for the manifest, or None - logged - when the app
+    can't say. A backup that worked isn't failed over it."""
+    try:
+        return manifest.normalise_version(instance_type(name), app.app_version())
+    except Exception as exc:
+        log.warning("%s: couldn't read its version for the backup record: %s", name, humanize_error(exc, url, app=name))
+        return None
 
 
 def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
@@ -440,6 +461,9 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
                     shutil.move(result_path, archive_path)
 
                 size = os.path.getsize(archive_path)
+                sha256 = manifest.file_sha256(archive_path)
+                app_version = _app_version(app, name, app_cfg.get("url"))
+                uploaded = []
                 dest_failures = []
                 for dest_id, root in dest_roots.items():
                     check_cancel()
@@ -448,10 +472,18 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
                     try:
                         rclone_util.copyto(archive_path, remote_dest)
                         log.info("%s: uploaded -> %s (%d bytes)", name, remote_dest, size)
+                        uploaded.append(dest_id)
                     except rclone_util.RcloneError as exc:
                         log.error("%s: upload to %s failed: %s", name, dest_id, exc.detail)
                         dest_failures.append(f"{dest_id}: {exc.detail}")
 
+                if uploaded:
+                    try:
+                        manifest.record(name, archive_name, uploaded, app_version=app_version, sha256=sha256,
+                                        size=size, backuparr_version=VERSION)
+                    except OSError as exc:
+                        # The backup itself is uploaded; only its record is missing.
+                        log.warning("%s: couldn't write the backup record: %s", name, exc.strerror or type(exc).__name__)
                 if dest_failures:
                     failed.append(f"{name}: failed on {'; '.join(dest_failures)}")
                 else:
@@ -476,7 +508,7 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
         return ok, failed
 
     log.info("Applying retention (%sd) per destination", retention_days)
-    for root in dest_roots.values():
-        apply_retention(root, retention_days, only=only)
+    for dest_id, root in dest_roots.items():
+        apply_retention(root, retention_days, only=only, dest_id=dest_id)
 
     return ok, failed

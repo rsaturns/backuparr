@@ -7,6 +7,7 @@ import tempfile
 from flask import after_this_request, Blueprint, jsonify, request, send_file
 
 import destination_util
+import manifest
 import rclone_util
 import restore_actions as ra
 from apps.http_headers import app_connection_config
@@ -43,17 +44,24 @@ def api_history(dest_id):
     # One recursive listing of the whole destination instead of one rclone
     # call per app - much faster against remote destinations (Drive/OneDrive).
     # Keyed by instance id; a removed instance's backups are listed while any remain.
+    # The app version comes from the manifest; "recorded" is False for a
+    # backup the startup backfill hasn't reached yet.
     history = {name: [] for name in instance_ids(cfg)}
     try:
         entries = rclone_util.lsjson(root, recursive=True)
     except rclone_util.RcloneError as exc:
         return jsonify({"error": humanize_error(exc)}), 502
+    recorded = manifest.backups()
     for entry in entries:
         if entry.get("IsDir"):
             continue
         app_name, _, _ = entry["Path"].partition("/")
         if app_name in history or (instance_type(app_name) and app_name not in APP_NAMES):
-            history.setdefault(app_name, []).append({"name": entry["Name"], "size": entry["Size"], "mod_time": entry["ModTime"]})
+            details = recorded.get(manifest.key(app_name, entry["Name"]))
+            history.setdefault(app_name, []).append({
+                "name": entry["Name"], "size": entry["Size"], "mod_time": entry["ModTime"],
+                "app_version": details.get("app_version") if details else None, "recorded": details is not None,
+            })
     for entries in history.values():
         entries.sort(key=lambda e: e["mod_time"], reverse=True)
     return jsonify(history)
@@ -75,6 +83,7 @@ def api_history_delete(dest_id, app_name, filename):
         rclone_util.delete_file(f"{root}/{app_name}/{filename}")
     except rclone_util.RcloneError as exc:
         return jsonify({"error": humanize_error(exc)}), 500
+    manifest.remove(app_name, filename, dest_id)
     return jsonify({"ok": True})
 
 

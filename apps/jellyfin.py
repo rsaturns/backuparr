@@ -88,6 +88,9 @@ class JellyfinApp:
     def server_version(self):
         return self._check(self.session.get(f"{self.url}/System/Info", timeout=10)).json().get("Version", "?")
 
+    def app_version(self):
+        return self.server_version()
+
     def list_backups(self):
         res = self.session.get(f"{self.url}/Backup", timeout=self.timeout)
         if res.status_code == 404:

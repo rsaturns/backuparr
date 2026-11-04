@@ -173,7 +173,7 @@ def test_a_single_app_run_backs_up_and_prunes_only_that_instance(monkeypatch):
     monkeypatch.setattr(backup.destination_util, "remote_root", lambda dest_id, cfg: "/dest")
     monkeypatch.setattr(backup, "build_app", lambda name, app_cfg: built.append(name) or Fake())
     monkeypatch.setattr(backup.rclone_util, "copyto", lambda src, dst: uploaded.append(dst))
-    monkeypatch.setattr(backup, "apply_retention", lambda root, days, only=None: retention.append((root, only)))
+    monkeypatch.setattr(backup, "apply_retention", lambda root, days, only=None, **kw: retention.append((root, only)))
     progress = []
 
     ok, failed = backup.run_backup(cfg, on_progress=lambda *args: progress.append(args), only="radarr-4k")

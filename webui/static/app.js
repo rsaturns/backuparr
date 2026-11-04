@@ -2012,12 +2012,17 @@ async function loadHistory() {
 
       const table = document.createElement("table");
       table.className = "history-table";
-      table.innerHTML = "<thead><tr><th>File</th><th>Size</th><th>Modified</th><th></th></tr></thead>";
+      table.innerHTML = "<thead><tr><th>File</th><th>Version</th><th>Size</th><th>Modified</th><th></th></tr></thead>";
       const tbody = document.createElement("tbody");
       entries.forEach((e) => {
         const tr = document.createElement("tr");
         const nameTd = document.createElement("td");
         nameTd.textContent = e.name;
+        const versionTd = document.createElement("td");
+        versionTd.textContent = e.app_version || "-";
+        if (!e.app_version) {
+          versionTd.title = e.recorded ? "This backup doesn't record the app's version" : "Not checked yet";
+        }
         const sizeTd = document.createElement("td");
         sizeTd.textContent = fmtBytes(e.size);
         const timeTd = document.createElement("td");
@@ -2036,7 +2041,7 @@ async function loadHistory() {
         delBtn.textContent = "×";
         delBtn.addEventListener("click", () => deleteBackup(destId, appId, e.name, tr));
         actionsTd.append(dlLink, delBtn);
-        tr.append(nameTd, sizeTd, timeTd, actionsTd);
+        tr.append(nameTd, versionTd, sizeTd, timeTd, actionsTd);
         tbody.appendChild(tr);
       });
       table.appendChild(tbody);
