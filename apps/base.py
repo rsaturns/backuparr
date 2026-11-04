@@ -2,11 +2,20 @@
 import time
 
 _PROGRESS_EVERY = 10  # seconds between "still waiting" log lines
+_MIB = 1024 * 1024
 
 
 class AppError(RuntimeError):
     """A driver failure whose message was written for the user: it starts
     with "<app>: " and holds no URL or credential."""
+
+
+def save_stream(response, path):
+    """Writes a streamed (stream=True) response's body to path in chunks, so
+    a large download never sits in memory."""
+    with open(path, "wb") as f:
+        for chunk in response.iter_content(chunk_size=_MIB):
+            f.write(chunk)
 
 
 def poll_until(check, timeout_s, interval, on_wait=None):

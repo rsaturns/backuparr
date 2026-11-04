@@ -36,7 +36,7 @@ import zipfile
 
 import requests
 
-from apps.base import AppError, poll_until
+from apps.base import AppError, poll_until, save_stream
 from apps.servarr import ApiKeySession
 
 logger = logging.getLogger(f"backuparr.{__name__}")
@@ -118,9 +118,7 @@ class BazarrApp:
                         "password on Bazarr's card) for automated backups to work"
                     )
                 res.raise_for_status()
-                with open(dest, "wb") as f:
-                    for chunk in res.iter_content(chunk_size=1024 * 1024):
-                        f.write(chunk)
+                save_stream(res, dest)
             if _complete_zip(dest):
                 return True
             logger.info("bazarr: backup file still being written, retrying download...")

@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-from apps.base import AppError, poll_until
+from apps.base import AppError, poll_until, save_stream
 from apps.servarr import ApiKeySession
 
 logger = logging.getLogger(f"backuparr.{__name__}")
@@ -90,12 +90,10 @@ class ProfilarrApp:
             raise ProfilarrError("profilarr: no backup found after trigger")
         filename = os.path.basename(backups[0]["filename"])  # API returns newest first
 
-        res = self.session.get(self._api(f"/backups/{filename}"), timeout=self.timeout)
-        res.raise_for_status()
-
         dest = os.path.join(dest_dir, filename)
-        with open(dest, "wb") as f:
-            f.write(res.content)
+        with self.session.get(self._api(f"/backups/{filename}"), timeout=self.timeout, stream=True) as res:
+            res.raise_for_status()
+            save_stream(res, dest)
         if not (tarfile.is_tarfile(dest) or zipfile.is_zipfile(dest)):
             raise ProfilarrError(f"profilarr: {filename} didn't download as a backup archive - check the URL and API key")
         return dest, filename

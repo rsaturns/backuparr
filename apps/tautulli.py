@@ -50,9 +50,12 @@ import os
 
 import requests
 
-from apps.base import AppError
+from apps.base import AppError, save_stream
 
 logger = logging.getLogger(f"backuparr.{__name__}")
+
+# Enough of a download to tell a file from an API error's JSON body.
+_ERROR_BODY_MAX = 64 * 1024
 
 
 class TautulliError(AppError):
@@ -79,9 +82,9 @@ class TautulliApp:
         except requests.exceptions.RequestException as exc:
             raise type(exc)(f"tautulli: {type(exc).__name__} calling {cmd}") from None
 
-    def _call(self, cmd, timeout=None, **params):
+    def _call(self, cmd, timeout=None, stream=False, **params):
         payload = {"apikey": self.api_key, "cmd": cmd, **params}
-        res = self._send("GET", cmd, params=payload, timeout=timeout or self.timeout)
+        res = self._send("GET", cmd, params=payload, timeout=timeout or self.timeout, stream=stream)
         if res.status_code == 401:
             raise TautulliError("tautulli: unauthorized - check the API key")
         try:
@@ -100,9 +103,11 @@ class TautulliApp:
         return "tautulli reachable"
 
     @staticmethod
-    def _check_download(cmd, content):
+    def _check_download(cmd, path):
         """An API error comes back as a JSON body, not an HTTP error: refuse
         to keep it as a "backup" of the database or config."""
+        with open(path, "rb") as f:
+            content = f.read(_ERROR_BODY_MAX)
         if cmd == "download_database":
             if content.startswith(b"SQLite format 3\x00"):
                 return
@@ -117,10 +122,11 @@ class TautulliApp:
     def backup(self, dest_dir):
         os.makedirs(dest_dir, exist_ok=True)
         for cmd, filename in (("download_database", "tautulli.db"), ("download_config", "config.ini")):
-            res = self._call(cmd, timeout=120)
-            self._check_download(cmd, res.content)
-            with open(os.path.join(dest_dir, filename), "wb") as f:
-                f.write(res.content)
+            path = os.path.join(dest_dir, filename)
+            # Streamed: tautulli.db can be gigabytes.
+            with self._call(cmd, timeout=120, stream=True) as res:
+                save_stream(res, path)
+            self._check_download(cmd, path)
         return dest_dir
 
     def _import(self, cmd, field_name, file_path, extra):
