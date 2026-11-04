@@ -9,6 +9,7 @@ rclone.conf
 __pycache__/
 *.pyc
 .claude/
+CLAUDE.md
 .playwright-mcp/
 README.md
 LICENSE
