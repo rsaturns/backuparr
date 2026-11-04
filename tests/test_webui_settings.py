@@ -399,3 +399,23 @@ def test_oauth_tokens_are_reported_as_connected_never_sent(authed_client, isolat
     stored_cfg = isolated_webui.load_config()["destinations"]
     assert stored_cfg["gdrive"]["refresh_token"] == "gdrive-refresh"
     assert stored_cfg["onedrive"]["token"] == '{"refresh_token":"onedrive-refresh"}'
+
+
+def test_importing_the_web_app_has_no_side_effects(tmp_path, monkeypatch):
+    import importlib
+    import sys
+    import threading
+    monkeypatch.setenv("BACKUPARR_SECRET_KEY_PATH", str(tmp_path / "secret_key"))
+    started = []
+    monkeypatch.setattr(threading.Thread, "start", lambda self: started.append(self))
+    importlib.reload(sys.modules["webui.app"]) if "webui.app" in sys.modules else importlib.import_module("webui.app")
+    assert started == [] and not (tmp_path / "secret_key").exists()
+
+
+def test_create_app_loads_the_session_key_and_starts_the_scheduler(isolated_webui, monkeypatch):
+    calls = []
+    monkeypatch.setattr(isolated_webui.backup, "configure_logging", lambda: calls.append("logging"))
+    monkeypatch.setattr(isolated_webui, "start_scheduler", lambda: calls.append("scheduler"))
+    isolated_webui.app.secret_key = None
+    assert isolated_webui.create_app() is isolated_webui.app
+    assert calls == ["logging", "scheduler"] and isolated_webui.app.secret_key == isolated_webui._load_or_create_secret_key()

@@ -57,20 +57,23 @@ def _log_level(value):
     return name if name in logging.getLevelNamesMapping() else "INFO"
 
 
-logging.basicConfig(
-    level=_log_level(os.environ.get("LOG_LEVEL")),
-    format="%(asctime)s %(levelname)s %(message)s",
-)
 log = logging.getLogger("backuparr")
+_LOG_FORMAT = "%(asctime)s %(levelname)s %(message)s"
 
-# So the web UI's status view can show past run results too.
-try:
-    os.makedirs(LOG_DIR, exist_ok=True)
-    _file_handler = logging.handlers.RotatingFileHandler(LOG_FILE, maxBytes=1_000_000, backupCount=3)
-    _file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
-    log.addHandler(_file_handler)
-except OSError:
-    log.warning("could not open %s for writing, file logging disabled", LOG_FILE)
+
+def configure_logging():
+    """Logs to stdout at LOG_LEVEL, and Backuparr's own lines to LOG_FILE as
+    well, so the web UI's status view can show past runs. Called once, at
+    startup."""
+    logging.basicConfig(level=_log_level(os.environ.get("LOG_LEVEL")), format=_LOG_FORMAT)
+    try:
+        os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+        handler = logging.handlers.RotatingFileHandler(LOG_FILE, maxBytes=1_000_000, backupCount=3)
+    except OSError:
+        log.warning("could not open %s for writing, file logging disabled", LOG_FILE)
+        return
+    handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+    log.addHandler(handler)
 
 
 # Errors whose message was written for humans (and carries no URL or key).

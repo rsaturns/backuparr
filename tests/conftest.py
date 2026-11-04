@@ -16,6 +16,19 @@ import secrets_crypto
 PASSWORD = "test-password"
 
 
+def load_webui():
+    """webui.app freshly reloaded, so its module-level settings read the
+    environment again, with the session key create_app() would load - but no
+    scheduler thread and no log file."""
+    if "webui.app" in sys.modules:
+        module = importlib.reload(sys.modules["webui.app"])
+    else:
+        module = importlib.import_module("webui.app")
+    module.app.secret_key = module._load_or_create_secret_key()
+    module.app.config.update(TESTING=True)
+    return module
+
+
 @pytest.fixture
 def isolated_webui(tmp_path, monkeypatch):
     """webui.app reloaded with every state path under tmp_path, auth enabled,
@@ -38,13 +51,7 @@ def isolated_webui(tmp_path, monkeypatch):
         raise AssertionError("this test ran the real rclone; stub the rclone_util function it needs (CI has no rclone binary)")
 
     monkeypatch.setattr(rclone_util, "_run", no_real_rclone)
-    with pytest.MonkeyPatch.context() as startup:
-        startup.setattr("threading.Thread.start", lambda self: None)
-        if "webui.app" in sys.modules:
-            module = importlib.reload(sys.modules["webui.app"])
-        else:
-            module = importlib.import_module("webui.app")
-    module.app.config.update(TESTING=True)
+    module = load_webui()
     yield module
     monkeypatch.setattr(secrets_crypto, "_fernet", None)
 

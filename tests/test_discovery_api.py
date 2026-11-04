@@ -1,20 +1,18 @@
 import re
-import importlib
 import threading
 import copy
 
 import pytest
 import requests
 
+from conftest import load_webui
+
 
 @pytest.fixture
 def webui(tmp_path, monkeypatch):
     monkeypatch.setenv("BACKUPARR_SECRET_KEY_PATH", str(tmp_path / "session.key"))
     monkeypatch.setenv("BACKUPARR_LOG_DIR", str(tmp_path / "logs"))
-    # The first import of webui.app starts the scheduler; keep it from running in tests.
-    with pytest.MonkeyPatch.context() as startup:
-        startup.setattr("threading.Thread.start", lambda self: None)
-        module = importlib.import_module("webui.app")
+    module = load_webui()
     import config_store
     monkeypatch.setattr(module, "load_config", lambda: copy.deepcopy(config_store.DEFAULTS))
     monkeypatch.setattr(module.auth_store, "has_credentials", lambda: True)

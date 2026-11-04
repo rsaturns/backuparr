@@ -73,4 +73,4 @@ esac
 umask "$UMASK"
 
 echo "Backuparr: starting web UI on ${WEBUI_HOST}:${WEBUI_PORT} (as ${USER_NAME}:${GROUP_NAME}, ${PUID}:${PGID})"
-exec su-exec "$PUID:$PGID" waitress-serve "${WAITRESS_ARGS[@]}" webui.app:app
+exec su-exec "$PUID:$PGID" waitress-serve "${WAITRESS_ARGS[@]}" --call webui.app:create_app

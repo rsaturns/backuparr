@@ -113,14 +113,9 @@ def _load_or_create_secret_key():
 _BEHIND_HTTPS_PROXY = os.environ.get("BACKUPARR_FORCE_HTTPS", "").lower() in ("1", "true", "yes")
 # Deployment setting: read at startup, never controlled by a request or config.json.
 _AUTH_DISABLED = os.environ.get("BACKUPARR_DISABLE_AUTH", "").lower() in ("1", "true", "yes")
-if _AUTH_DISABLED:
-    log.warning("BACKUPARR_DISABLE_AUTH is set: local authentication is DISABLED. "
-                "Anyone who can reach this port has full access - make sure an "
-                "authenticating reverse proxy protects it and direct access is blocked.")
 if _BEHIND_HTTPS_PROXY:
     app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_for=1)
 
-app.secret_key = _load_or_create_secret_key()
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
@@ -1390,10 +1385,22 @@ def api_dropbox_connect():
 
 
 # ------------------------------------------------------------- startup ----
-start_scheduler()
+def create_app():
+    """The app, ready to serve: logging set up, the session key loaded and
+    the scheduler running. Importing this module does none of that; waitress
+    calls this (entrypoint.sh), once."""
+    backup.configure_logging()
+    if _AUTH_DISABLED:
+        log.warning("BACKUPARR_DISABLE_AUTH is set: local authentication is DISABLED. "
+                    "Anyone who can reach this port has full access - make sure an "
+                    "authenticating reverse proxy protects it and direct access is blocked.")
+    app.secret_key = _load_or_create_secret_key()
+    start_scheduler()
+    return app
+
 
 if __name__ == "__main__":
-    app.run(
+    create_app().run(
         host=os.environ.get("WEBUI_HOST") or "0.0.0.0",
         port=int(os.environ.get("WEBUI_PORT", 8990)),
         debug=False,

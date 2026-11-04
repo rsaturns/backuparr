@@ -1,6 +1,4 @@
 """Authentication modes: default local login vs BACKUPARR_DISABLE_AUTH."""
-import importlib
-import sys
 from pathlib import Path
 
 import pytest
@@ -9,19 +7,11 @@ import auth_store
 import config_store
 import destination_util
 import secrets_crypto
+from conftest import load_webui
 
 
 def _load_webui():
-    # Reload so module-level env parsing runs again. Block thread starts so
-    # the scheduler never runs during tests.
-    with pytest.MonkeyPatch.context() as startup:
-        startup.setattr("threading.Thread.start", lambda self: None)
-        if "webui.app" in sys.modules:
-            module = importlib.reload(sys.modules["webui.app"])
-        else:
-            module = importlib.import_module("webui.app")
-    module.app.config.update(TESTING=True)
-    return module
+    return load_webui()
 
 
 @pytest.fixture
