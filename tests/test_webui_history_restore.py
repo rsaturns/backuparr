@@ -41,7 +41,7 @@ def test_history_groups_files_by_app_newest_first(authed_client, rclone):
     history = authed_client.get("/api/history/local").get_json()
     assert [f["name"] for f in history["radarr"]] == ["radarr_3.zip", "radarr_1.zip"]
     assert history["radarr"][0] == {"name": "radarr_3.zip", "size": 7, "mod_time": "2026-01-03T00:00:00Z",
-                                    "app_version": None, "recorded": False}
+                                    "app_version": None, "recorded": False, "run_id": None}
     assert [f["name"] for f in history["sonarr"]] == ["sonarr_2.zip"]
     assert "stranger" not in history and "lonely.zip" not in history
     assert set(history) == set(APP_NAMES)

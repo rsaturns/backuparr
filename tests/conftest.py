@@ -14,6 +14,7 @@ import destination_util
 import manifest
 import rclone_util
 import restore_version
+import runlog
 import secrets_crypto
 
 PASSWORD = "test-password"
@@ -21,10 +22,12 @@ PASSWORD = "test-password"
 
 @pytest.fixture(autouse=True)
 def manifest_in_tmp(tmp_path, monkeypatch):
-    """Every test's manifest.json lives in its own tmp_path, never beside a
-    real config.json."""
+    """Every test's manifest.json and run_logs.json live in its own
+    tmp_path, never beside a real config.json."""
     path = str(tmp_path / "manifest.json")
     monkeypatch.setattr(manifest, "path", lambda: path)
+    run_logs = str(tmp_path / "run_logs.json")
+    monkeypatch.setattr(runlog, "path", lambda: run_logs)
     return path
 
 

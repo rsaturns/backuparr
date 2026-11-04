@@ -1,16 +1,20 @@
 """A destination's backups: History (list, delete, download) and Restore."""
 import logging
 import os
+import re
 import shutil
 import tempfile
 import threading
 import time
+
+from datetime import datetime, timezone
 
 from flask import after_this_request, Blueprint, jsonify, request, send_file
 
 import destination_util
 import manifest
 import rclone_util
+import runlog
 import restore_actions as ra
 import restore_version as rv
 from apps.http_headers import app_connection_config
@@ -36,6 +40,40 @@ def _destination_root_or_error(cfg, dest_id):
         return destination_util.remote_root(dest_id, dest_cfg), None
     except destination_util.DestinationError as exc:
         return None, (jsonify({"error": str(exc)}), 400)
+
+
+def _when(timestamp):
+    """A listing's or a run's time, for sorting: rclone gives nanoseconds
+    and a local offset, Backuparr's own times are UTC to the second."""
+    text = re.sub(r"(\.\d{6})\d+", r"\1", (timestamp or "").replace("Z", "+00:00"))
+    try:
+        when = datetime.fromisoformat(text)
+    except ValueError:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    return when if when.tzinfo else when.replace(tzinfo=timezone.utc)
+
+
+def _add_runs(history, dest_id):
+    """Links each backup to the run log that made it, and lists the runs
+    that left no file on this destination - the backup failed, or its
+    upload here did - with the reason."""
+    for app_name, app_runs in runlog.all_runs().items():
+        if not instance_type(app_name):
+            continue
+        entries = history.setdefault(app_name, [])
+        listed = {e["name"]: e for e in entries}
+        for run in app_runs:
+            if run.get("file") in listed:
+                listed[run["file"]]["run_id"] = run["id"]
+                continue
+            if dest_id not in run.get("destinations", {}):
+                continue  # this destination wasn't on in that run
+            result = run["destinations"][dest_id] or {}
+            entries.append({
+                "name": run.get("file") or "", "size": None, "mod_time": run.get("finished") or run.get("started"),
+                "app_version": run.get("app_version"), "recorded": True, "run_id": run["id"], "missing": True,
+                "reason": result.get("error") or run.get("error") or "not uploaded",
+            })
 
 
 @bp.get("/api/history/<dest_id>")
@@ -64,9 +102,11 @@ def api_history(dest_id):
             history.setdefault(app_name, []).append({
                 "name": entry["Name"], "size": entry["Size"], "mod_time": entry["ModTime"],
                 "app_version": details.get("app_version") if details else None, "recorded": details is not None,
+                "run_id": None,
             })
+    _add_runs(history, dest_id)
     for entries in history.values():
-        entries.sort(key=lambda e: e["mod_time"], reverse=True)
+        entries.sort(key=lambda e: _when(e["mod_time"]), reverse=True)
     return jsonify(history)
 
 
@@ -87,6 +127,8 @@ def api_history_delete(dest_id, app_name, filename):
     except rclone_util.RcloneError as exc:
         return jsonify({"error": humanize_error(exc)}), 500
     manifest.remove(app_name, filename, dest_id)
+    if manifest.get(app_name, filename) is None:
+        runlog.forget_file(app_name, filename)  # gone from every destination
     return jsonify({"ok": True})
 
 
