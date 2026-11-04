@@ -151,7 +151,7 @@ PROTECTED = [
     ("GET", "/api/history/local"), ("DELETE", "/api/history/local/radarr/a.zip"),
     ("GET", "/api/history/local/radarr/a.zip/download"),
     ("GET", "/api/restore/status"), ("GET", "/api/restore/local/radarr/backups"),
-    ("POST", "/api/restore/local/sabnzbd/preview"), ("POST", "/api/restore/local/radarr"),
+    ("POST", "/api/restore/local/sabnzbd/preview"), ("POST", "/api/restore/local/radarr"), ("POST", "/api/restore/local/radarr/check"),
     ("GET", "/api/destinations/gdrive/oauth/start"), ("GET", "/api/destinations/gdrive/oauth/callback"),
     ("POST", "/api/destinations/gdrive/access-token"), ("POST", "/api/destinations/gdrive/folder"),
     ("POST", "/api/destinations/gdrive/disconnect"), ("POST", "/api/destinations/onedrive/connect"),

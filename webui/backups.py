@@ -3,6 +3,8 @@ import logging
 import os
 import shutil
 import tempfile
+import threading
+import time
 
 from flask import after_this_request, Blueprint, jsonify, request, send_file
 
@@ -10,6 +12,7 @@ import destination_util
 import manifest
 import rclone_util
 import restore_actions as ra
+import restore_version as rv
 from apps.http_headers import app_connection_config
 from backup import humanize_error, log_failure
 from config_store import APP_NAMES, DEST_NAMES, instance_ids, instance_type, key_required, load_config, restore_supported
@@ -121,12 +124,75 @@ def api_history_download(dest_id, app_name, filename):
 # UI polls for instead of blocking on one long request.
 
 
+# Version checks passed on the Restore tab, for the apps restored while
+# stopped: {(app, file, url): (time.monotonic(), result)}.
+_VERSION_CHECKS = {}
+_VERSION_CHECKS_LOCK = threading.Lock()
+VERSION_CHECK_TTL = 6 * 3600
+
+
+def _remember_check(app_name, file, app_cfg, result):
+    with _VERSION_CHECKS_LOCK:
+        now = time.monotonic()
+        for key in [k for k, (at, _r) in _VERSION_CHECKS.items() if now - at > VERSION_CHECK_TTL]:
+            del _VERSION_CHECKS[key]
+        _VERSION_CHECKS[(app_name, file, app_cfg.get("url"))] = (now, result)
+
+
+def _remembered_check(app_name, file, app_cfg):
+    with _VERSION_CHECKS_LOCK:
+        found = _VERSION_CHECKS.get((app_name, file, app_cfg.get("url")))
+    if found and time.monotonic() - found[0] <= VERSION_CHECK_TTL:
+        return found[1]
+    return None
+
+
+def _version_gate(app_name, file, app_cfg):
+    """The restore's first step: the backup must come from the installed
+    version. An app restored while stopped can't be asked, so it needs the
+    check the Restore tab ran while it was still running."""
+    log.info("restore: checking %s's version...", app_name)
+    try:
+        result = rv.check(app_name, file, app_cfg)
+    except rv.RestoreVersionError:
+        if instance_type(app_name) not in rv.STOPPED_FOR_RESTORE:
+            raise
+        try:
+            rv.installed_version(app_name, app_cfg)
+        except rv.RestoreVersionError:
+            # Stopped, as it should be: use the check made before it was.
+            result = _remembered_check(app_name, file, app_cfg)
+            if result is None:
+                label = rv.app_label(app_name)
+                raise rv.RestoreVersionError(
+                    f"{app_name}: {label}'s version hasn't been checked against this backup. Start {label}, pick the "
+                    f"backup on the Restore tab so its version is checked, then stop {label} and restore.") from None
+        else:
+            raise  # It answered, so the mismatch is real.
+    if result["status"] == "unknown":
+        log.warning("restore: %s", result["message"])
+    else:
+        log.info("restore: %s", result["message"])
+    return result
+
+
 def _restore_work(app_name, root, app_cfg, data, bazarr_backup_dir):
     tmp_dir = None
     try:
-        log.info("restore: fetching %s backup...", app_name)
-        tmp_dir, local_zip, filename = ra.fetch_backup(root, app_name, data.get("file"))
+        filename = data.get("file")
+        if not filename:
+            files = ra.list_backups(root, app_name)
+            if not files:
+                raise FileNotFoundError(f"no backups of {app_name} on this destination")
+            filename = files[-1]
         RESTORE_RUN_STATE["file"] = filename
+        _version_gate(app_name, filename, app_cfg)
+        log.info("restore: fetching %s backup...", app_name)
+        tmp_dir, local_zip, filename = ra.fetch_backup(root, app_name, filename)
+        if rv.verify_checksum(app_name, filename, local_zip):
+            log.info("restore: the download matches the backup's checksum")
+        else:
+            log.warning("restore: no checksum is recorded for this backup, so the download couldn't be verified")
 
         passwords = data.get("passwords", {})
 
@@ -223,33 +289,9 @@ def api_restore(dest_id, app_name):
     if not data.get("confirm"):
         return jsonify({"error": "confirm must be true"}), 400
 
-    cfg = load_config()
-    if app_name not in cfg["apps"]:
-        return jsonify({"error": f"{app_name} is not configured"}), 400
-    root, error = _destination_root_or_error(cfg, dest_id)
+    cfg, root, app_cfg, error = _restore_target(dest_id, app_name, data)
     if error:
         return error
-    app_cfg = app_connection_config(cfg, app_name)
-
-    # One-off target override for this restore only - never written back to
-    # config.json. Lets you point a restore at a throwaway/test instance
-    # without touching the app's configured connection in Settings.
-    override = data.get("override")
-    if override and not isinstance(override, dict):
-        return jsonify({"error": "override must be an object"}), 400
-    if override:
-        allowed = _restore_override_fields(app_name)
-        app_cfg = dict(app_cfg)
-        for field in allowed:
-            value = override.get(field)
-            if value:
-                app_cfg[field] = value
-
-    if not app_cfg.get("url") or (key_required(app_name) and not app_cfg.get("api_key")):
-        return jsonify({"error": f"{app_name} is not configured"}), 400
-    missing = _missing_required_field(app_name, app_cfg)
-    if missing:
-        return jsonify({"error": f"{app_name}: {missing} is not configured"}), 400
 
     bazarr_backup_dir = None
     if app_name == "bazarr":
@@ -262,3 +304,60 @@ def api_restore(dest_id, app_name):
             return jsonify({"error": "a backup is running - restore when it finishes"}), 409
         return jsonify({"error": "a restore is already running"}), 409
     return jsonify({"started": True})
+
+
+@bp.post("/api/restore/<dest_id>/<app_name>/check")
+def api_restore_check(dest_id, app_name):
+    """The version check, run on the Restore tab when a backup is picked -
+    for Emby, Plex, Seerr and LazyLibrarian while they're still running."""
+    if not instance_type(app_name):
+        return jsonify({"error": "unknown app"}), 404
+    data = request.get_json(force=True, silent=True) or {}
+    file = data.get("file")
+    if not isinstance(file, str) or not ra.SAFE_FILENAME.match(file):
+        return jsonify({"error": "invalid filename"}), 400
+    _cfg, _root, app_cfg, error = _restore_target(dest_id, app_name, data)
+    if error:
+        return error
+    try:
+        result = rv.check(app_name, file, app_cfg)
+    except rv.RestoreVersionError as exc:
+        return jsonify({"error": humanize_error(exc, app=app_name)}), 409
+    _remember_check(app_name, file, app_cfg, result)
+    return jsonify(result)
+
+
+def _restore_target(dest_id, app_name, data):
+    """(cfg, destination root, app connection, None) for a restore or its
+    check, with the request's one-off override applied, or
+    (None, None, None, error response)."""
+    if not restore_supported(app_name):
+        return None, None, None, (jsonify({"error": f"{app_name} does not support automated restore - see its page in the docs"}), 400)
+    cfg = load_config()
+    if app_name not in cfg["apps"]:
+        return None, None, None, (jsonify({"error": f"{app_name} is not configured"}), 400)
+    root, error = _destination_root_or_error(cfg, dest_id)
+    if error:
+        return None, None, None, error
+    app_cfg = app_connection_config(cfg, app_name)
+
+    # One-off target override for this restore only - never written back to
+    # config.json. Lets you point a restore at a throwaway/test instance
+    # without touching the app's configured connection in Settings.
+    override = data.get("override")
+    if override and not isinstance(override, dict):
+        return None, None, None, (jsonify({"error": "override must be an object"}), 400)
+    if override:
+        allowed = _restore_override_fields(app_name)
+        app_cfg = dict(app_cfg)
+        for field in allowed:
+            value = override.get(field)
+            if value:
+                app_cfg[field] = value
+
+    if not app_cfg.get("url") or (key_required(app_name) and not app_cfg.get("api_key")):
+        return None, None, None, (jsonify({"error": f"{app_name} is not configured"}), 400)
+    missing = _missing_required_field(app_name, app_cfg)
+    if missing:
+        return None, None, None, (jsonify({"error": f"{app_name}: {missing} is not configured"}), 400)
+    return cfg, root, app_cfg, None

@@ -13,6 +13,7 @@ import config_store
 import destination_util
 import manifest
 import rclone_util
+import restore_version
 import secrets_crypto
 
 PASSWORD = "test-password"
@@ -33,6 +34,15 @@ def skip_archive_check(request, monkeypatch):
     aren't real backups; tests marked archive_check run the real check."""
     if request.node.get_closest_marker("archive_check") is None:
         monkeypatch.setattr(archive_check, "check", lambda app, path: None)
+
+
+@pytest.fixture(autouse=True)
+def skip_version_check(request, monkeypatch):
+    """Restore tests use fake apps that can't report a version; tests
+    marked version_check run the real check."""
+    if request.node.get_closest_marker("version_check") is None:
+        monkeypatch.setattr(restore_version, "check", lambda app, file, app_cfg: {
+            "status": "match", "backup_version": "1", "installed_version": "1", "message": "versions match"})
 
 
 def load_webui():
