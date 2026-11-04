@@ -21,17 +21,29 @@ from apps.servarr import ServarrError, UnsafeRedirectError
 from config_store import DISCOVERABLE_APPS
 
 _CLIENT_PORTS = {"sabnzbd": 8080, "nzbget": 6789}  # Prowlarr's defaults
+MAX_BACKUP_BYTES = 512 * 1024 * 1024
+
+# Each app's masked secret: (candidate field, its label, Prowlarr's setting).
+# NZBGet has a password where the others have an API key.
+_API_KEY = ("api_key", "API key", "apikey")
+_SECRETS = {"nzbget": ("password", "password", "password")}
 
 
 def secret_field(app):
     """The candidate field holding the app's masked secret."""
-    return "password" if app == "nzbget" else "api_key"
+    return _SECRETS.get(app, _API_KEY)[0]
 
 
 def _secret_label(app):
-    return "password" if app == "nzbget" else "API key"
+    return _SECRETS.get(app, _API_KEY)[1]
 
-MAX_BACKUP_BYTES = 512 * 1024 * 1024
+
+def _secret(app, settings):
+    return _real_key(settings.get(_SECRETS.get(app, _API_KEY)[2]))
+
+
+def _missing_secret(candidates):
+    return any(not candidate[secret_field(candidate["app"])] for candidate in candidates)
 
 
 class DiscoveryError(RuntimeError):
@@ -94,10 +106,6 @@ def _client_url(settings, default_port):
 def _service_url(app, settings):
     url = _client_url(settings, _CLIENT_PORTS[app]) if app in _CLIENT_PORTS else settings.get("baseurl", "")
     return url.rstrip("/") if isinstance(url, str) and valid_service_url(url) else ""
-
-
-def _secret(app, settings):
-    return _real_key(settings.get("password" if app == "nzbget" else "apikey"))
 
 
 def _get_providers(instance, path):
@@ -270,8 +278,7 @@ def discover_prowlarr(instance, progress=lambda message: None):
             candidate["username"] = username.strip() if isinstance(username, str) else ""
         candidates.append(candidate)
 
-    missing = lambda: any(not candidate[secret_field(candidate["app"])] for candidate in candidates)
-    if missing():
+    if _missing_secret(candidates):
         _fill_missing_keys(instance, candidates, progress, warnings)
 
     unique = {}
@@ -280,6 +287,6 @@ def discover_prowlarr(instance, progress=lambda message: None):
         field = secret_field(candidate["app"])
         unique.setdefault((candidate["app"], candidate["url"], candidate.get("username"), candidate[field]), candidate)
     candidates = list(unique.values())
-    if missing():
+    if _missing_secret(candidates):
         warnings.append("Some API keys or passwords are unavailable. Their URLs can be filled in; enter the rest manually.")
     return {"candidates": candidates, "warnings": warnings}
