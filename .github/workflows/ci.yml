@@ -1,11 +1,13 @@
 name: CI
 
-# Every PR to main must pass the tests, the container smoke test and a
-# multi-arch build. The push trigger covers anything that lands outside a PR.
+# Every PR to main or to a release branch must pass the tests, the
+# container smoke test and a multi-arch build. The push trigger covers
+# anything that lands on main outside a PR.
 on:
   pull_request:
     branches:
       - main
+      - 'release-*'
   push:
     branches:
       - main
