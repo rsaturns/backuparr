@@ -1,3 +1,4 @@
+import os
 """Tests for rclone_util._run()'s secret redaction and config_set()'s use
 of SENSITIVE_FIELDS to drive it."""
 from unittest.mock import MagicMock, patch
@@ -167,3 +168,12 @@ def test_any_other_listing_failure_raises_instead_of_looking_empty(listing):
         with pytest.raises(rclone_util.RcloneError, match="expired or been revoked") as exc:
             listing()
     assert exc.value.returncode == 1
+
+
+def test_the_bandwidth_limit_applies_to_remotes_but_not_local_storage(monkeypatch):
+    monkeypatch.setenv("RCLONE_BWLIMIT", "1M")
+    assert rclone_util._env(["copyto", "/tmp/a.zip", "gdrive:radarr/a.zip"]) is None  # inherits the limit
+    local = rclone_util._env(["copyto", "/tmp/a.zip", "/config/backuparr/backups/radarr/a.zip"])
+    assert "RCLONE_BWLIMIT" not in local and local.get("PATH") == os.environ.get("PATH")
+    monkeypatch.delenv("RCLONE_BWLIMIT")
+    assert rclone_util._env(["copyto", "/tmp/a", "/tmp/b"]) is None
