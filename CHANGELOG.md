@@ -5,7 +5,17 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed
+
+- Backups are zipped at the default compression level instead of the maximum, so large databases (Emby, Plex, Seerr) zip much faster.
+- The container starts faster: it fixes the ownership of only the files that need it, not every local backup.
+- Tautulli and Profilarr backups are streamed to disk instead of held in memory.
+
+### Fixed
+
+- A destination that can't be listed (an expired or revoked connection, say) shows its error in History and on the Overview instead of looking empty, and retention skips it with a warning.
+- A LazyLibrarian restore makes the files it creates readable by LazyLibrarian.
+- Failed logins arriving at the same moment all count towards the login lockout.
 
 ## [2.0.0] - 2026-11-03
 
