@@ -106,7 +106,7 @@ def run_backup(tmp_path, downloads, timeout_s=180):
 
 
 def test_a_download_with_a_bad_crc_is_fetched_again(tmp_path):
-    with patch("apps.bazarr.time.sleep"):
+    with patch("apps.base.time.sleep"):
         path, fake = run_backup(tmp_path, [zip_bytes(corrupt=True), zip_bytes()])
     assert open(path, "rb").read() == zip_bytes() and fake.downloads == []
     assert fake.deleted == ["bazarr_backup_v1.zip"]
@@ -115,9 +115,11 @@ def test_a_download_with_a_bad_crc_is_fetched_again(tmp_path):
 def test_a_download_that_never_reads_back_fails_and_keeps_the_server_copy(tmp_path):
     from apps.bazarr import BazarrError
     downloads = [zip_bytes(corrupt=True)] * 3
-    clock = iter([0, 0])  # the deadline, the listing loop; then it has passed
-    fake_time = SimpleNamespace(time=lambda: next(clock, 1000), sleep=lambda seconds: None)
-    with patch("apps.bazarr.time", fake_time):
+    # The deadline, the listing wait, the time left and the download wait
+    # start; then it has passed.
+    clock = iter([0, 0, 0, 0])
+    fake_time = SimpleNamespace(monotonic=lambda: next(clock, 1000), sleep=lambda seconds: None)
+    with patch("apps.bazarr.time", fake_time), patch("apps.base.time", fake_time):
         with pytest.raises(BazarrError, match="never finished writing"):
             run_backup(tmp_path, downloads)
     assert len(downloads) == 2  # one download, then the deadline had passed

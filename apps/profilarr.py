@@ -29,12 +29,11 @@ docs/apps/profilarr.md for the manual restore steps this leaves you with.
 import logging
 import os
 import tarfile
-import time
 import zipfile
 
 import requests
 
-from apps.base import AppError
+from apps.base import AppError, poll_until
 from apps.servarr import ApiKeySession
 
 logger = logging.getLogger(f"backuparr.{__name__}")
@@ -68,21 +67,17 @@ class ProfilarrApp:
         job_id = res.json()["jobId"]
         logger.info("profilarr: backup job %s started, waiting for it to finish...", job_id)
 
-        deadline = time.time() + timeout_s
-        waited = 0
-        while time.time() < deadline:
+        def finished():
             res = self.session.get(self._api(f"/jobs/{job_id}"), timeout=self.timeout)
             res.raise_for_status()
             status = res.json().get("status")
-            if status == "success":
-                return
             if status in ("failed", "cancelled"):
                 raise ProfilarrError(f"profilarr: backup job {status}")
-            time.sleep(poll_interval)
-            waited += poll_interval
-            if waited % 10 == 0:
-                logger.info("profilarr: still waiting on the backup job (%ds)...", waited)
-        raise ProfilarrError(f"profilarr: backup job timed out after {timeout_s}s")
+            return True if status == "success" else None
+
+        if not poll_until(finished, timeout_s, poll_interval,
+                          lambda waited: logger.info("profilarr: still waiting on the backup job (%ds)...", waited)):
+            raise ProfilarrError(f"profilarr: backup job timed out after {timeout_s}s")
 
     def list_backups(self):
         res = self.session.get(self._api("/backups"), timeout=self.timeout)

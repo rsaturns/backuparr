@@ -70,3 +70,4 @@ def test_remove_journal_files(tmp_path):
     mounted.remove_journal_files(str(tmp_path / "app.db"))
     mounted.remove_journal_files(str(tmp_path / "app.db"))  # nothing left to remove
     assert list(tmp_path.iterdir()) == []
+

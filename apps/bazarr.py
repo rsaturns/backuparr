@@ -36,7 +36,7 @@ import zipfile
 
 import requests
 
-from apps.base import AppError
+from apps.base import AppError, poll_until
 from apps.servarr import ApiKeySession
 
 logger = logging.getLogger(f"backuparr.{__name__}")
@@ -93,19 +93,14 @@ class BazarrApp:
         self.trigger_backup()
         logger.info("bazarr: backup triggered, waiting for the file to appear...")
 
-        deadline = time.time() + timeout_s
-        new_filename = None
-        waited = 0
-        while time.time() < deadline:
-            after = {b["filename"] for b in self.list_backups()}
-            new = after - before
-            if new:
-                new_filename = os.path.basename(sorted(new)[-1])
-                break
-            time.sleep(poll_interval)
-            waited += poll_interval
-            if waited % 10 == 0:
-                logger.info("bazarr: still waiting on the backup file (%ds)...", waited)
+        deadline = time.monotonic() + timeout_s
+
+        def new_file():
+            new = {b["filename"] for b in self.list_backups()} - before
+            return os.path.basename(sorted(new)[-1]) if new else None
+
+        new_filename = poll_until(new_file, timeout_s, poll_interval,
+                                  lambda waited: logger.info("bazarr: still waiting on the backup file (%ds)...", waited))
         if not new_filename:
             raise BazarrError("bazarr: backup job did not produce a new file in time")
 
@@ -114,7 +109,7 @@ class BazarrApp:
 
         # See the module docstring's third wrinkle - keep re-downloading
         # until the zip actually validates.
-        while True:
+        def complete_download():
             with self.session.get(download_url, auth=self.download_auth, timeout=self.timeout, stream=True) as res:
                 if res.status_code == 401:
                     raise BazarrError(
@@ -126,13 +121,13 @@ class BazarrApp:
                 with open(dest, "wb") as f:
                     for chunk in res.iter_content(chunk_size=1024 * 1024):
                         f.write(chunk)
-
             if _complete_zip(dest):
-                break
-            if time.time() >= deadline:
-                raise BazarrError(f"bazarr: {new_filename} never finished writing on the server in time")
+                return True
             logger.info("bazarr: backup file still being written, retrying download...")
-            time.sleep(poll_interval)
+            return None
+
+        if not poll_until(complete_download, deadline - time.monotonic(), poll_interval):
+            raise BazarrError(f"bazarr: {new_filename} never finished writing on the server in time")
 
         try:
             self.delete_backup(new_filename)

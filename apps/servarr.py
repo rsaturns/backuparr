@@ -12,13 +12,12 @@ at all.
 import logging
 import os
 import tempfile
-import time
 from urllib.parse import urljoin, urlsplit
 import zipfile
 
 import requests
 
-from apps.base import AppError
+from apps.base import AppError, poll_until
 
 logger = logging.getLogger(f"backuparr.{__name__}")
 
@@ -135,18 +134,19 @@ class ServarrApp:
         res.raise_for_status()
         command_id = res.json()["id"]
 
-        deadline = time.time() + timeout_s
-        while time.time() < deadline:
+        def finished():
             res = self.session.get(self._api(f"/command/{command_id}"), timeout=self.timeout)
             res.raise_for_status()
             command = res.json()
             status = command.get("status")
-            if status == "completed":
-                return command
             if status in ("failed", "aborted"):
                 raise ServarrError(f"{self.name}: backup command {status}")
-            time.sleep(poll_interval)
-        raise ServarrError(f"{self.name}: backup command timed out after {timeout_s}s")
+            return command if status == "completed" else None
+
+        command = poll_until(finished, timeout_s, poll_interval)
+        if command is None:
+            raise ServarrError(f"{self.name}: backup command timed out after {timeout_s}s")
+        return command
 
     def list_backups(self):
         res = self.session.get(self._api("/system/backup"), timeout=self.timeout)

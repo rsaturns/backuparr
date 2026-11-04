@@ -30,12 +30,11 @@ import logging
 import os
 import re
 import shutil
-import time
 
 import requests
 
 from apps import mounted
-from apps.base import AppError
+from apps.base import AppError, poll_until
 
 logger = logging.getLogger(f"backuparr.{__name__}")
 
@@ -121,10 +120,7 @@ class JellyfinApp:
 
     def _wait_for_file(self, path, wait_s=10):
         # A network share can show a new file a moment after Jellyfin wrote it.
-        deadline = time.time() + wait_s
-        while not os.path.isfile(path) and time.time() < deadline:
-            time.sleep(1)
-        return os.path.isfile(path)
+        return bool(poll_until(lambda: os.path.isfile(path) or None, wait_s, 1))
 
     def backup(self, dest_dir):
         self._require_folder()
