@@ -59,7 +59,6 @@ def _complete_zip(path):
 class BazarrApp:
     def __init__(self, url, api_key, username=None, password=None, timeout=30):
         self.url = url.rstrip("/")
-        self.api_key = api_key
         self.timeout = timeout
         self.session = ApiKeySession(self.url)
         self.session.headers.update({"X-API-KEY": api_key, "Accept": "application/json"})

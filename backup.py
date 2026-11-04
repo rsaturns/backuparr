@@ -288,10 +288,8 @@ def notify(notify_url, message, raise_on_error=False):
     try:
         if _DISCORD_WEBHOOK_RE.search(notify_url):
             res = requests.post(notify_url, json={"content": message[:2000]}, timeout=10)  # 2000 = Discord's limit
-        elif _SLACK_WEBHOOK_RE.search(notify_url):
-            res = requests.post(notify_url, json={"text": message}, timeout=10)
-        elif _TELEGRAM_RE.search(notify_url):
-            # chat_id stays in notify_url's own query string.
+        elif _SLACK_WEBHOOK_RE.search(notify_url) or _TELEGRAM_RE.search(notify_url):
+            # Telegram's chat_id stays in notify_url's own query string.
             res = requests.post(notify_url, json={"text": message}, timeout=10)
         elif _is_gotify_url(parsed):
             res = requests.post(notify_url, json={"title": "Backuparr", "message": message}, timeout=10)

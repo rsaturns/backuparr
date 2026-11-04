@@ -107,7 +107,7 @@ class ApiKeySession(requests.Session):
 
 
 class ServarrApp:
-    api_version = "v3"
+    api_version = "v3"  # Lidarr and Prowlarr override it with v1
 
     def __init__(self, name, url, api_key, timeout=30, strict_redirects=False):
         self.name = name
@@ -222,8 +222,7 @@ class ServarrApp:
         manual = [b for b in self.list_backups() if b.get("type") == "manual"]
         if not manual:
             raise ServarrError(f"{self.name}: no manual backup found after trigger")
-        manual.sort(key=lambda b: b.get("time", ""), reverse=True)
-        latest = manual[0]
+        latest = max(manual, key=lambda b: b.get("time", ""))
 
         filename = os.path.basename(latest["path"])
         dest = os.path.join(dest_dir, filename)

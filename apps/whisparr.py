@@ -27,8 +27,6 @@ _ACCEPTED_DB = "whisparr.db"
 
 
 class WhisparrApp(ServarrApp):
-    api_version = "v3"
-
     def __init__(self, url, api_key, **kwargs):
         super().__init__("whisparr", url, api_key, **kwargs)
 

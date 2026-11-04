@@ -2,7 +2,6 @@
 history, and restore - all from the browser instead of editing
 docker-compose env vars by hand.
 """
-import copy
 import logging
 import os
 import secrets
@@ -561,16 +560,13 @@ def index():
 
 
 # -------------------------------------------------------------- config ----
-# OAuth tokens the UI only needs to know are there. Only the connect and
-# disconnect routes write them, so they never have to come back.
-_CONNECTED_TOKENS = (("gdrive", "refresh_token"), ("onedrive", "token"), ("dropbox", "token"))
-
-
 @app.get("/api/config")
 def api_get_config():
     cfg = load_config()
-    for dest, key in _CONNECTED_TOKENS:
-        cfg["destinations"][dest][key] = bool(cfg["destinations"][dest][key])
+    # The UI only needs to know a destination's OAuth token is there. Only the
+    # connect and disconnect routes write it, so it never has to come back.
+    for dest, remote in destination_util.REMOTES.items():
+        cfg["destinations"][dest][remote.TOKEN_FIELD] = bool(cfg["destinations"][dest][remote.TOKEN_FIELD])
     return jsonify(cfg)
 
 
@@ -734,7 +730,7 @@ def api_test(app_name):
     if key_required(app_name) and not data.get("api_key"):
         return jsonify({"ok": False, "message": f"{app_meta(app_name).get('key_label', 'API key')} is required"}), 400
 
-    app_cfg = copy.deepcopy(DEFAULT_APP)
+    app_cfg = dict(DEFAULT_APP)
     app_cfg.update(data)
     try:
         cfg = load_config()
@@ -832,30 +828,23 @@ def _discovery_work(job_id, url, api_key, request_headers):
         DISCOVERY_RUN_LOCK.release()
 
 
-def _discovery_response(data, status=200):
-    response = jsonify(data)
-    response.status_code = status
-    response.headers["Cache-Control"] = "no-store"
-    return response
-
-
 @app.post("/api/discovery/prowlarr")
 def api_discovery_prowlarr():
     data = request.get_json(silent=True)
     if not isinstance(data, dict) or not discovery.valid_service_url(data.get("url")):
-        return _discovery_response({"error": "A valid Prowlarr URL starting with http:// or https:// is required."}, 400)
+        return jsonify({"error": "A valid Prowlarr URL starting with http:// or https:// is required."}), 400
     api_key = data.get("api_key")
     if not isinstance(api_key, str) or not api_key.strip():
-        return _discovery_response({"error": "Prowlarr's API key is required."}, 400)
+        return jsonify({"error": "Prowlarr's API key is required."}), 400
     try:
         cfg = load_config()
         headers = data["request_headers"] if "request_headers" in data else cfg.get("request_headers", [])
         validate_request_headers(headers, _instances_after({}, cfg, unsaved=_header_scope_ids(headers)))
     except RequestHeadersError as exc:
-        return _discovery_response({"error": str(exc)}, 400)
+        return jsonify({"error": str(exc)}), 400
     headers = headers_for_app(headers, "prowlarr")
     if not DISCOVERY_RUN_LOCK.acquire(blocking=False):
-        return _discovery_response({"error": "Discovery is already running. Try again when it finishes."}, 409)
+        return jsonify({"error": "Discovery is already running. Try again when it finishes."}), 409
     owner, new_owner = DISCOVERY_JOBS.owner()
     job_id = DISCOVERY_JOBS.add(owner, {"state": "running", "message": "Connecting to Prowlarr..."})
     try:
@@ -863,10 +852,10 @@ def api_discovery_prowlarr():
     except RuntimeError:
         DISCOVERY_JOBS.discard(job_id)
         DISCOVERY_RUN_LOCK.release()
-        return _discovery_response({"error": "Could not start discovery. Try again."}, 503)
-    response = _discovery_response({"job_id": job_id}, 202)
+        return jsonify({"error": "Could not start discovery. Try again."}), 503
+    response = jsonify({"job_id": job_id})
     DISCOVERY_JOBS.set_cookie(response, new_owner, app.config["SESSION_COOKIE_SECURE"])
-    return response
+    return response, 202
 
 
 @app.route("/api/discovery/prowlarr/<job_id>", methods=["GET", "DELETE"])
@@ -874,13 +863,13 @@ def api_discovery_status(job_id):
     with DISCOVERY_JOBS.lock:
         job = DISCOVERY_JOBS.mine_locked(job_id)
         if job is None:
-            return _discovery_response({"error": "Discovery results expired. Run discovery again."}, 404)
+            return jsonify({"error": "Discovery results expired. Run discovery again."}), 404
         if request.method == "DELETE":
             if job["state"] == "running":
-                return _discovery_response({"error": "Discovery is still running."}, 409)
+                return jsonify({"error": "Discovery is still running."}), 409
             del DISCOVERY_JOBS.jobs[job_id]
-            return _discovery_response({"ok": True})
-        return _discovery_response({key: value for key, value in job.items() if key != "finished"})
+            return jsonify({"ok": True})
+        return jsonify({key: value for key, value in job.items() if key != "finished"})
 
 
 @app.post("/api/test-notify")
@@ -1085,7 +1074,6 @@ def api_history_download(dest_id, app_name, filename):
 # Shares _start_tracked_run()/_run_tracked() with the backup run state above:
 # a lock guarding one-at-a-time, a background thread, and live log output the
 # UI polls for instead of blocking on one long request.
-RESTORE_LOCK = RUN_LOCK  # One lock: a backup and a restore never run at once.
 RESTORE_RUN_STATE = {
     "running": False,
     "app": None,
@@ -1131,7 +1119,7 @@ def _start_restore_run(app_name, root, app_cfg, data, bazarr_backup_dir):
     whether it started."""
     return _start_tracked_run(
         RESTORE_RUN_STATE,
-        RESTORE_LOCK,
+        RUN_LOCK,  # one lock: a backup and a restore never run at once
         {
             "app": app_name,
             "file": None,
