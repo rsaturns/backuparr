@@ -8,6 +8,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - Backuparr keeps a record of every backup: the app version it came from, its checksum and which destinations hold it. History shows each backup's app version, and existing backups are added in the background after the update (#106).
+- Each backup is checked before upload: it must read back intact, its SQLite databases must pass a quick check, and the files its restore needs must be in it. A backup that fails isn't uploaded, and the app shows as failed with the reason (#107).
 
 ### Changed
 

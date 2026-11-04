@@ -23,6 +23,7 @@ from urllib.parse import parse_qs, urlparse
 
 import requests
 
+import archive_check
 import destination_util
 import manifest
 import rclone_util
@@ -460,6 +461,10 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
                     archive_path = os.path.join(run_tmp, archive_name)
                     shutil.move(result_path, archive_path)
 
+                # A backup that fails is never uploaded; retention keeps the
+                # app's newest, so its last good backup stays.
+                log.info("%s: checking the backup...", name)
+                archive_check.check(name, archive_path)
                 size = os.path.getsize(archive_path)
                 sha256 = manifest.file_sha256(archive_path)
                 app_version = _app_version(app, name, app_cfg.get("url"))
