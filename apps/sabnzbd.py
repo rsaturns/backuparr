@@ -73,6 +73,9 @@ class SabnzbdApp:
         self.get_config()
         return "sabnzbd reachable, API key OK"
 
+    def app_version(self):
+        return self._call({"mode": "version"}).get("version")
+
     def get_config(self):
         data = self._call({"mode": "get_config"})
         if "config" not in data:

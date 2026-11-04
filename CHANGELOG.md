@@ -5,6 +5,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Backuparr keeps a record of every backup: the app version it came from, its checksum and which destinations hold it. History shows each backup's app version, and existing backups are added in the background after the update (#106).
+
 ### Changed
 
 - Backups are zipped at the default compression level instead of the maximum, so large databases (Emby, Plex, Seerr) zip much faster.

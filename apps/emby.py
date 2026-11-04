@@ -106,6 +106,9 @@ class EmbyApp:
         res.raise_for_status()
         return res.json()
 
+    def app_version(self):
+        return self.server_info().get("Version")
+
     def _path(self, *parts):
         return os.path.join(self.data_dir, *parts)
 

@@ -65,6 +65,11 @@ class _ListLogHandler(logging.Handler):
             del self.sink[:-self.MAX_LINES]
 
 
+def busy():
+    """Whether a backup or a restore is running."""
+    return RUN_STATE["running"] or RESTORE_RUN_STATE["running"]
+
+
 def _run_tracked(state, work, *args):
     """Runs work(*args) with a temporary log handler feeding state["log"],
     then marks the run finished. `state["running"]` must already be True -

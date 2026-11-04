@@ -11,6 +11,7 @@ from flask import Flask, jsonify, render_template, request
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 import backup
+import manifest_backfill
 from backup import describe_failure
 from config_store import APP_META, ConfigError, DESTINATION_META, DISCOVERABLE_APPS
 from webui import auth, backups, destinations, runs, services, settings
@@ -97,8 +98,9 @@ def index():
 
 # ------------------------------------------------------------- startup ----
 def create_app():
-    """The app, ready to serve: logging set up, the session key loaded and
-    the scheduler running. Importing this module does none of that; waitress
+    """The app, ready to serve: logging set up, the session key loaded, the
+    scheduler running and existing backups being added to the manifest
+    (paused while a backup or restore runs). Importing this module does none of that; waitress
     calls this (entrypoint.sh), once."""
     backup.configure_logging()
     if auth._AUTH_DISABLED:
@@ -107,6 +109,7 @@ def create_app():
                     "authenticating reverse proxy protects it and direct access is blocked.")
     app.secret_key = auth._load_or_create_secret_key()
     runs.start_scheduler()
+    manifest_backfill.start(should_pause=runs.busy)
     return app
 
 

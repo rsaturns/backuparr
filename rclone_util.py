@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import re
 import subprocess
 
@@ -62,9 +63,21 @@ def _hint(cleaned):
     return ""
 
 
+# "gdrive:", "onedrive:folder/x" - a path on a remote, not a local one.
+_REMOTE_PATH = re.compile(r"^[A-Za-z0-9_.-]+:")
+
+
+def _env(args):
+    """RCLONE_BWLIMIT is for the connection: a command that only touches
+    local paths (Local storage) runs without it."""
+    if "RCLONE_BWLIMIT" in os.environ and not any(_REMOTE_PATH.match(a) for a in args):
+        return {k: v for k, v in os.environ.items() if k != "RCLONE_BWLIMIT"}
+    return None
+
+
 def _run(args, redact=()):
     # stdin closed so an inherited TTY (e.g. manual docker exec) can't hang.
-    proc = subprocess.run(["rclone", *args], capture_output=True, text=True, stdin=subprocess.DEVNULL)
+    proc = subprocess.run(["rclone", *args], capture_output=True, text=True, stdin=subprocess.DEVNULL, env=_env(args))
     if proc.returncode != 0:
         cleaned = _clean_stderr(proc.stderr)
         detail = f"{cleaned}{_hint(cleaned)}"

@@ -784,9 +784,11 @@ input:focus, select:focus, textarea:focus {
    Size and Modified in one line down the page. */
 @media (min-width: 720px) {
   .history-table { table-layout: fixed; }
-  .history-table th:nth-child(2) { width: 7em; }
-  .history-table th:nth-child(3) { width: 13em; }
-  .history-table th:nth-child(4) { width: 80px; }
+  .history-table th:nth-child(2) { width: 11em; }
+  .history-table th:nth-child(3) { width: 7em; }
+  .history-table th:nth-child(4) { width: 13em; }
+  .history-table th:nth-child(5) { width: 80px; }
+  .history-table td:nth-child(2) { overflow-wrap: anywhere; }
   .history-table td:first-child { overflow-wrap: anywhere; }
 }
 
