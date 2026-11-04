@@ -36,6 +36,7 @@ from apps.http_headers import (
     validate_request_headers,
 )
 from apps.prowlarr import ProwlarrApp
+from webui.jobs import OwnedJobs
 from webui.plex_auth import PlexAuthError, PlexLogin
 from backup import build_app, describe_failure, format_run_message, humanize_error, log_failure, notify, run_backup
 from config_store import (
@@ -298,10 +299,10 @@ def api_login():
 @app.post("/api/logout")
 def api_logout():
     session.clear()
-    _discard_plex_logins(request.cookies.get(PLEX_OWNER_COOKIE))
+    PLEX_LOGINS.discard_owner(request.cookies.get(PLEX_LOGINS.cookie))
     response = jsonify({"ok": True})
-    response.delete_cookie(DISCOVERY_OWNER_COOKIE)
-    response.delete_cookie(PLEX_OWNER_COOKIE)
+    response.delete_cookie(DISCOVERY_JOBS.cookie)
+    response.delete_cookie(PLEX_LOGINS.cookie)
     return response
 
 
@@ -741,23 +742,9 @@ def api_test(app_name):
 
 
 # ------------------------------------------------------- Plex sign-in ----
-PLEX_OWNER_COOKIE = "backuparr_plex_login"
-PLEX_LOGINS = {}
-PLEX_LOGINS_LOCK = threading.Lock()
+PLEX_LOGINS = OwnedJobs("backuparr_plex_login", lambda login: time.monotonic() >= login.expires_at)
 PLEX_START_LOCK = threading.Lock()
-
-
-def _purge_plex_logins_locked():
-    for job_id, (_, login) in list(PLEX_LOGINS.items()):
-        if time.monotonic() >= login.expires_at:
-            del PLEX_LOGINS[job_id]
-
-
-def _discard_plex_logins(owner):
-    with PLEX_LOGINS_LOCK:
-        for job_id, (job_owner, _) in list(PLEX_LOGINS.items()):
-            if job_owner == owner:
-                del PLEX_LOGINS[job_id]
+MAX_PLEX_LOGINS = 20
 
 
 @app.post("/api/plex/auth")
@@ -768,23 +755,16 @@ def api_plex_auth_start():
     if not PLEX_START_LOCK.acquire(blocking=False):
         return jsonify({"error": "Plex sign-in is starting. Try again in a moment."}), 429
     try:
-        new_owner = None if request.cookies.get(PLEX_OWNER_COOKIE) else secrets.token_urlsafe(24)
-        owner = new_owner or request.cookies.get(PLEX_OWNER_COOKIE)
-        _discard_plex_logins(owner)
-        with PLEX_LOGINS_LOCK:
-            _purge_plex_logins_locked()
-            if len(PLEX_LOGINS) >= 20:
+        owner, new_owner = PLEX_LOGINS.owner()
+        PLEX_LOGINS.discard_owner(owner)
+        with PLEX_LOGINS.lock:
+            PLEX_LOGINS.purge_locked()
+            if len(PLEX_LOGINS.jobs) >= MAX_PLEX_LOGINS:
                 return jsonify({"error": "Too many pending Plex sign-ins. Try again later."}), 429
         login = PlexLogin(VERSION)
-        job_id = secrets.token_urlsafe(24)
-        with PLEX_LOGINS_LOCK:
-            PLEX_LOGINS[job_id] = (owner, login)
+        job_id = PLEX_LOGINS.add(owner, login)
         response = jsonify({"job_id": job_id, "auth_url": login.auth_url, "expires_in": login.expires_in})
-        # Separate from Flask's refreshing session cookie, as with discovery.
-        # Set only when new, so a browser's own cookie is never echoed back.
-        if new_owner:
-            response.set_cookie(PLEX_OWNER_COOKIE, new_owner, httponly=True,
-                                secure=app.config["SESSION_COOKIE_SECURE"], samesite="Strict")
+        PLEX_LOGINS.set_cookie(response, new_owner, app.config["SESSION_COOKIE_SECURE"])
         return response, 201
     except PlexAuthError as exc:
         return jsonify({"error": str(exc)}), exc.status
@@ -794,18 +774,17 @@ def api_plex_auth_start():
 
 @app.route("/api/plex/auth/<job_id>", methods=["GET", "DELETE"])
 def api_plex_auth_status(job_id):
-    with PLEX_LOGINS_LOCK:
-        _purge_plex_logins_locked()
-        job = PLEX_LOGINS.get(job_id)
-        if not job or job[0] != request.cookies.get(PLEX_OWNER_COOKIE):
+    with PLEX_LOGINS.lock:
+        login = PLEX_LOGINS.mine_locked(job_id)
+        if login is None:
             return jsonify({"error": "Plex sign-in expired or was cancelled. Click Get Plex token to try again."}), 404
         if request.method == "DELETE":
-            del PLEX_LOGINS[job_id]
+            del PLEX_LOGINS.jobs[job_id]
             return jsonify({"ok": True})
     try:
-        result = job[1].poll()
-        with PLEX_LOGINS_LOCK:
-            if PLEX_LOGINS.get(job_id) is not job:
+        result = login.poll()
+        with PLEX_LOGINS.lock:
+            if PLEX_LOGINS.current_locked(job_id) is not login:
                 return jsonify({"error": "Plex sign-in was cancelled."}), 404
         return jsonify(result)
     except PlexAuthError as exc:
@@ -816,34 +795,22 @@ def api_plex_auth_status(job_id):
 # visible only to the browser that started the job, and are purged on the next
 # discovery request.
 DISCOVERY_RUN_LOCK = threading.Lock()
-DISCOVERY_JOBS_LOCK = threading.Lock()
-DISCOVERY_JOBS = {}
 DISCOVERY_RESULT_TTL = 600
-DISCOVERY_OWNER_COOKIE = "backuparr_discovery"
-
-
-def _purge_discovery_locked():
-    cutoff = time.time() - DISCOVERY_RESULT_TTL
-    expired = [j for j, job in DISCOVERY_JOBS.items() if job.get("finished", float("inf")) < cutoff]
-    for job_id in expired:
-        del DISCOVERY_JOBS[job_id]
-
-
-def _forget_discovery(job_id):
-    with DISCOVERY_JOBS_LOCK:
-        DISCOVERY_JOBS.pop(job_id, None)
+DISCOVERY_JOBS = OwnedJobs(
+    "backuparr_discovery", lambda job: job.get("finished", float("inf")) < time.monotonic() - DISCOVERY_RESULT_TTL)
 
 
 def _discovery_work(job_id, url, api_key, request_headers):
-    def progress(message):
-        with DISCOVERY_JOBS_LOCK:
-            if job_id in DISCOVERY_JOBS:
-                DISCOVERY_JOBS[job_id]["message"] = message
+    def update(**fields):
+        with DISCOVERY_JOBS.lock:
+            job = DISCOVERY_JOBS.current_locked(job_id)
+            if job is not None:
+                job.update(fields)
 
     try:
         instance = ProwlarrApp(url, api_key, strict_redirects=True)
         configure_app_headers(instance, request_headers)
-        result = discovery.discover_prowlarr(instance, progress)
+        result = discovery.discover_prowlarr(instance, lambda message: update(message=message))
         outcome = {"state": "completed", "message": "Discovery complete.", "result": result}
     except discovery.DiscoveryError as exc:
         outcome = {"state": "failed", "message": str(exc)}
@@ -851,9 +818,7 @@ def _discovery_work(job_id, url, api_key, request_headers):
         # Remote error text can carry URLs or credentials, so it is never surfaced.
         outcome = {"state": "failed", "message": "Could not discover services. Check Prowlarr's URL, API key and that it is reachable from Backuparr."}
     finally:
-        with DISCOVERY_JOBS_LOCK:
-            if job_id in DISCOVERY_JOBS:
-                DISCOVERY_JOBS[job_id].update(outcome, finished=time.time())
+        update(**outcome, finished=time.monotonic())
         DISCOVERY_RUN_LOCK.release()
 
 
@@ -881,39 +846,31 @@ def api_discovery_prowlarr():
     headers = headers_for_app(headers, "prowlarr")
     if not DISCOVERY_RUN_LOCK.acquire(blocking=False):
         return _discovery_response({"error": "Discovery is already running. Try again when it finishes."}, 409)
-    # A separate cookie: a stale concurrent response must not clobber the refreshing session cookie.
-    new_owner = None if request.cookies.get(DISCOVERY_OWNER_COOKIE) else secrets.token_urlsafe(24)
-    owner = new_owner or request.cookies.get(DISCOVERY_OWNER_COOKIE)
-    job_id = secrets.token_urlsafe(24)
-    with DISCOVERY_JOBS_LOCK:
-        _purge_discovery_locked()
-        DISCOVERY_JOBS[job_id] = {"owner": owner, "state": "running", "message": "Connecting to Prowlarr..."}
+    owner, new_owner = DISCOVERY_JOBS.owner()
+    job_id = DISCOVERY_JOBS.add(owner, {"state": "running", "message": "Connecting to Prowlarr..."})
     try:
         threading.Thread(target=_discovery_work, args=(job_id, data["url"].strip(), api_key.strip(), headers), daemon=True).start()
     except RuntimeError:
-        _forget_discovery(job_id)
+        DISCOVERY_JOBS.discard(job_id)
         DISCOVERY_RUN_LOCK.release()
         return _discovery_response({"error": "Could not start discovery. Try again."}, 503)
     response = _discovery_response({"job_id": job_id}, 202)
-    if new_owner:
-        response.set_cookie(DISCOVERY_OWNER_COOKIE, new_owner, httponly=True,
-                            secure=app.config["SESSION_COOKIE_SECURE"], samesite="Strict")
+    DISCOVERY_JOBS.set_cookie(response, new_owner, app.config["SESSION_COOKIE_SECURE"])
     return response
 
 
 @app.route("/api/discovery/prowlarr/<job_id>", methods=["GET", "DELETE"])
 def api_discovery_status(job_id):
-    with DISCOVERY_JOBS_LOCK:
-        _purge_discovery_locked()
-        job = DISCOVERY_JOBS.get(job_id)
-        if not job or job["owner"] != request.cookies.get(DISCOVERY_OWNER_COOKIE):
+    with DISCOVERY_JOBS.lock:
+        job = DISCOVERY_JOBS.mine_locked(job_id)
+        if job is None:
             return _discovery_response({"error": "Discovery results expired. Run discovery again."}, 404)
         if request.method == "DELETE":
             if job["state"] == "running":
                 return _discovery_response({"error": "Discovery is still running."}, 409)
-            DISCOVERY_JOBS.pop(job_id)
+            del DISCOVERY_JOBS.jobs[job_id]
             return _discovery_response({"ok": True})
-        return _discovery_response({key: value for key, value in job.items() if key not in ("owner", "finished")})
+        return _discovery_response({key: value for key, value in job.items() if key != "finished"})
 
 
 @app.post("/api/test-notify")

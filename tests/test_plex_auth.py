@@ -68,7 +68,7 @@ def test_login_returns_owned_server_token_without_saving(authed_client, isolated
     original = authed_client.get("/api/config").json
     response, path = start(authed_client)
     assert response.headers["Cache-Control"] == "no-store"
-    cookie = authed_client.get_cookie(isolated_webui.PLEX_OWNER_COOKIE)
+    cookie = authed_client.get_cookie(isolated_webui.PLEX_LOGINS.cookie)
     assert cookie.http_only and cookie.same_site == "Strict"
     assert response.json["expires_in"] == 600
     auth_url = urlsplit(response.json["auth_url"])
@@ -80,7 +80,7 @@ def test_login_returns_owned_server_token_without_saving(authed_client, isolated
     assert query["context[device][product]"] == ["Backuparr"]
     assert authed_client.get(path).json == {"state": "pending"}
     plex_api.claimed = True
-    isolated_webui.PLEX_LOGINS[response.json["job_id"]][1].next_poll = 0
+    isolated_webui.PLEX_LOGINS.jobs[response.json["job_id"]][1].next_poll = 0
     result = authed_client.get(path)
     assert result.json == {"state": "completed", "servers": [{"name": "My server", "api_key": "server-secret"}]}
     assert result.headers["Cache-Control"] == "no-store"
@@ -89,16 +89,16 @@ def test_login_returns_owned_server_token_without_saving(authed_client, isolated
     assert authed_client.get(path).json == result.json  # Retry a lost response until acknowledged.
     assert authed_client.delete(path).status_code == 200
     assert authed_client.get(path).status_code == 404
-    assert not isolated_webui.PLEX_LOGINS
+    assert not isolated_webui.PLEX_LOGINS.jobs
 
 
 def test_the_owner_cookie_is_set_once_and_never_echoed_back(authed_client, isolated_webui, plex_api):
     first, _ = start(authed_client)
-    owner = authed_client.get_cookie(isolated_webui.PLEX_OWNER_COOKIE).value
-    assert any(c.startswith(isolated_webui.PLEX_OWNER_COOKIE + "=") for c in first.headers.getlist("Set-Cookie"))
+    owner = authed_client.get_cookie(isolated_webui.PLEX_LOGINS.cookie).value
+    assert any(c.startswith(isolated_webui.PLEX_LOGINS.cookie + "=") for c in first.headers.getlist("Set-Cookie"))
     second, path = start(authed_client)
-    assert not any(c.startswith(isolated_webui.PLEX_OWNER_COOKIE + "=") for c in second.headers.getlist("Set-Cookie"))
-    assert authed_client.get_cookie(isolated_webui.PLEX_OWNER_COOKIE).value == owner
+    assert not any(c.startswith(isolated_webui.PLEX_LOGINS.cookie + "=") for c in second.headers.getlist("Set-Cookie"))
+    assert authed_client.get_cookie(isolated_webui.PLEX_LOGINS.cookie).value == owner
     assert authed_client.get(path).json == {"state": "pending"}
 
 
@@ -139,24 +139,24 @@ def test_logout_forgets_token_and_cookie(authed_client, isolated_webui, plex_api
     _, path = start(authed_client)
     assert authed_client.get(path).json["state"] == "completed"
     assert authed_client.post("/api/logout", json={}).status_code == 200
-    assert authed_client.get_cookie(isolated_webui.PLEX_OWNER_COOKIE) is None
-    assert not isolated_webui.PLEX_LOGINS
+    assert authed_client.get_cookie(isolated_webui.PLEX_LOGINS.cookie) is None
+    assert not isolated_webui.PLEX_LOGINS.jobs
 
 
 def test_new_login_invalidates_previous_attempt(authed_client, isolated_webui, plex_api):
     _, old = start(authed_client)
     _, current = start(authed_client)
-    assert old != current and len(isolated_webui.PLEX_LOGINS) == 1
+    assert old != current and len(isolated_webui.PLEX_LOGINS.jobs) == 1
     assert authed_client.get(old).status_code == 404
     assert authed_client.get(current).json["state"] == "pending"
 
 
 def test_expiration_drops_login_without_network(authed_client, isolated_webui, plex_api):
     response, path = start(authed_client)
-    isolated_webui.PLEX_LOGINS[response.json["job_id"]][1].expires_at = time.monotonic() - 1
+    isolated_webui.PLEX_LOGINS.jobs[response.json["job_id"]][1].expires_at = time.monotonic() - 1
     assert authed_client.get(path).status_code == 404
     assert len(plex_api.calls) == 1
-    assert not isolated_webui.PLEX_LOGINS
+    assert not isolated_webui.PLEX_LOGINS.jobs
 
 
 def test_repeated_polls_are_throttled(authed_client, plex_api):
@@ -168,9 +168,9 @@ def test_repeated_polls_are_throttled(authed_client, plex_api):
 
 def test_cancel_during_remote_request_does_not_return_token(authed_client, isolated_webui, plex_api, monkeypatch):
     response, path = start(authed_client)
-    login = isolated_webui.PLEX_LOGINS[response.json["job_id"]][1]
+    login = isolated_webui.PLEX_LOGINS.jobs[response.json["job_id"]][1]
     def late_result():
-        isolated_webui.PLEX_LOGINS.clear()
+        isolated_webui.PLEX_LOGINS.jobs.clear()
         return {"state": "completed", "servers": [{"name": "My server", "api_key": "late-secret"}]}
     monkeypatch.setattr(login, "poll", late_result)
     result = authed_client.get(path)
@@ -192,7 +192,7 @@ def test_remote_start_errors_never_leak_secrets(authed_client, isolated_webui, p
     response = authed_client.post("/api/plex/auth", json={})
     assert response.status_code == 502
     assert all(secret not in response.text + caplog.text for secret in ("account-secret", "server-secret", "strong-pin-secret"))
-    assert not isolated_webui.PLEX_LOGINS and not isolated_webui.PLEX_START_LOCK.locked()
+    assert not isolated_webui.PLEX_LOGINS.jobs and not isolated_webui.PLEX_START_LOCK.locked()
 
 
 def test_shared_account_cannot_supply_backup_token(authed_client, plex_api):
@@ -215,12 +215,12 @@ def test_mismatched_pin_is_rejected(authed_client, plex_api):
 def test_plex_auth_cookie_is_secure_behind_https(authed_client, isolated_webui, plex_api):
     isolated_webui.app.config["SESSION_COOKIE_SECURE"] = True
     start(authed_client)
-    assert authed_client.get_cookie(isolated_webui.PLEX_OWNER_COOKIE).secure
+    assert authed_client.get_cookie(isolated_webui.PLEX_LOGINS.cookie).secure
 
 
 def test_pending_logins_are_bounded(authed_client, isolated_webui, plex_api):
     login = PlexLogin("test")
-    isolated_webui.PLEX_LOGINS.update({str(i): ("another-owner", login) for i in range(20)})
+    isolated_webui.PLEX_LOGINS.jobs.update({str(i): ("another-owner", login) for i in range(20)})
     response = authed_client.post("/api/plex/auth", json={})
     assert response.status_code == 429
     assert len(plex_api.calls) == 1

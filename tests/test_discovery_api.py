@@ -18,7 +18,7 @@ def webui(tmp_path, monkeypatch):
     import config_store
     monkeypatch.setattr(module, "load_config", lambda: copy.deepcopy(config_store.DEFAULTS))
     monkeypatch.setattr(module.auth_store, "has_credentials", lambda: True)
-    monkeypatch.setattr(module, "DISCOVERY_JOBS", {})
+    monkeypatch.setattr(module.DISCOVERY_JOBS, "jobs", {})
     monkeypatch.setattr(module, "DISCOVERY_RUN_LOCK", threading.Lock())
 
     class InlineThread:
@@ -52,7 +52,7 @@ def test_discovery_requires_login(webui):
 def test_discovery_validates_inputs(webui, data):
     response = client_for(webui).post("/api/discovery/prowlarr", json=data)
     assert response.status_code == 400
-    assert not webui.DISCOVERY_JOBS
+    assert not webui.DISCOVERY_JOBS.jobs
 
 
 def test_result_is_private_uncached_and_can_be_discarded(webui):
@@ -96,20 +96,20 @@ def test_the_owner_cookie_is_set_once_and_never_echoed_back(webui):
     client = client_for(webui)
     body = {"url": "http://prowlarr:9696", "api_key": "key"}
     first = client.post("/api/discovery/prowlarr", json=body)
-    owner = client.get_cookie(webui.DISCOVERY_OWNER_COOKIE).value
-    assert any(c.startswith(webui.DISCOVERY_OWNER_COOKIE + "=") for c in first.headers.getlist("Set-Cookie"))
+    owner = client.get_cookie(webui.DISCOVERY_JOBS.cookie).value
+    assert any(c.startswith(webui.DISCOVERY_JOBS.cookie + "=") for c in first.headers.getlist("Set-Cookie"))
     second = client.post("/api/discovery/prowlarr", json=body)
-    assert not any(c.startswith(webui.DISCOVERY_OWNER_COOKIE + "=") for c in second.headers.getlist("Set-Cookie"))
-    assert client.get_cookie(webui.DISCOVERY_OWNER_COOKIE).value == owner
+    assert not any(c.startswith(webui.DISCOVERY_JOBS.cookie + "=") for c in second.headers.getlist("Set-Cookie"))
+    assert client.get_cookie(webui.DISCOVERY_JOBS.cookie).value == owner
     assert client.get("/api/discovery/prowlarr/" + second.json["job_id"]).json["result"]["candidates"]
 
 
 def test_logout_discards_discovery_cookie(webui):
     client = client_for(webui)
     client.post("/api/discovery/prowlarr", json={"url": "http://prowlarr:9696", "api_key": "key"})
-    assert client.get_cookie(webui.DISCOVERY_OWNER_COOKIE)
+    assert client.get_cookie(webui.DISCOVERY_JOBS.cookie)
     assert client.post("/api/logout", json={}).status_code == 200
-    assert client.get_cookie(webui.DISCOVERY_OWNER_COOKIE) is None
+    assert client.get_cookie(webui.DISCOVERY_JOBS.cookie) is None
 
 
 def test_remote_errors_do_not_expose_secrets_and_allow_retry(webui, monkeypatch, caplog):
@@ -124,7 +124,7 @@ def test_remote_errors_do_not_expose_secrets_and_allow_retry(webui, monkeypatch,
     assert result.json["state"] == "failed"
     assert "do-not-leak-key" not in result.text + caplog.text
     assert not webui.DISCOVERY_RUN_LOCK.locked()
-    webui._forget_discovery(response.json["job_id"])
+    webui.DISCOVERY_JOBS.discard(response.json["job_id"])
     assert client.get(path).status_code == 404
 
 
@@ -148,16 +148,16 @@ def test_finished_results_are_purged_after_the_ttl(webui, monkeypatch):
     response = client.post("/api/discovery/prowlarr", json={"url": "http://prowlarr:9696", "api_key": "key"})
     path = "/api/discovery/prowlarr/" + response.json["job_id"]
     assert client.get(path).status_code == 200
-    webui.DISCOVERY_JOBS[response.json["job_id"]]["finished"] -= webui.DISCOVERY_RESULT_TTL + 1
+    webui.DISCOVERY_JOBS.jobs[response.json["job_id"]][1]["finished"] -= webui.DISCOVERY_RESULT_TTL + 1
     assert client.get(path).status_code == 404
-    assert not webui.DISCOVERY_JOBS
+    assert not webui.DISCOVERY_JOBS.jobs
 
 
 def test_running_jobs_are_never_purged(webui):
-    webui.DISCOVERY_JOBS["job"] = {"owner": "o", "state": "running", "message": "..."}
-    with webui.DISCOVERY_JOBS_LOCK:
-        webui._purge_discovery_locked()
-    assert "job" in webui.DISCOVERY_JOBS
+    webui.DISCOVERY_JOBS.jobs["job"] = ("o", {"state": "running", "message": "..."})
+    with webui.DISCOVERY_JOBS.lock:
+        webui.DISCOVERY_JOBS.purge_locked()
+    assert "job" in webui.DISCOVERY_JOBS.jobs
 
 
 def test_prowlarr_and_discovered_apps_lead_the_app_list(webui):
