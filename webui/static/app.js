@@ -599,9 +599,7 @@ async function startPlexLogin() {
   const status = document.getElementById("plex-auth-status");
   status.textContent = "Opening Plex sign-in...";
   try {
-    const login = await apiFetch("/api/plex/auth", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
-    });
+    const login = await apiFetch("/api/plex/auth", { method: "POST" });
     flow.jobId = login.job_id;
     if (PLEX_LOGIN !== flow) { forgetPlexLogin(flow.jobId); return; }
     const link = document.getElementById("plex-auth-link");
@@ -925,7 +923,7 @@ async function discoverServices() {
   let finished = false;
   try {
     ({ job_id: jobId } = await apiFetch("/api/discovery/prowlarr", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(credentials),
+      method: "POST", body: JSON.stringify(credentials),
     }));
     const state = await pollDiscovery(jobId, status);
     finished = true;
@@ -1264,7 +1262,6 @@ async function saveSettings() {
     const cfg = collectConfig();
     await apiFetch("/api/config", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(cfg),
     });
     REMOVED_INSTANCES.forEach((appId) => RETIRED_INSTANCES.add(appId));
@@ -1317,7 +1314,6 @@ async function testApp(appId) {
     request: () =>
       apiFetch(`/api/test/${appId}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       }),
   });
@@ -1337,7 +1333,6 @@ async function testDestination(destId) {
     request: () =>
       apiFetch(`/api/test-destination/${destId}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       }),
   });
@@ -1359,7 +1354,6 @@ async function testNotifyUrl() {
     request: () =>
       apiFetch("/api/test-notify", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ notify_url: notifyUrl }),
       }),
   });
@@ -1378,7 +1372,6 @@ async function connectGdrive() {
   try {
     await apiFetch("/api/config", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(collectConfig()),
     });
     snapshotSettingsState();
@@ -1443,7 +1436,6 @@ async function gdrivePickerCallback(data) {
   try {
     await apiFetch("/api/destinations/gdrive/folder", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ folder_id: folder.id, folder_name: folder.name }),
     });
     toast(`Backing up to "${folder.name}"`, "ok");
@@ -1498,7 +1490,6 @@ async function connectTokenDest(destId) {
   try {
     await apiFetch(`/api/destinations/${destId}/connect`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token_blob: tokenBlob }),
     });
     input.value = "";
@@ -2206,7 +2197,6 @@ async function loadSabnzbdPreview() {
   try {
     const res = await apiFetch(`/api/restore/${destId}/sabnzbd/preview`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ file: fileSelect.value }),
     });
     RESTORE_STATE.servers = res.servers;
@@ -2284,7 +2274,6 @@ async function doRestore() {
   try {
     await apiFetch(`/api/restore/${destId}/${appId}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
     refreshRestoreStatus();
