@@ -53,7 +53,6 @@ from config_store import (
     DESTINATION_META,
     DISCOVERABLE_APPS,
     app_meta,
-    destination_meta,
     enabled_apps,
     instance_ids,
     instance_type,
@@ -664,8 +663,6 @@ def _validate_config(data, cfg):
         if app_data is None:
             continue
         meta = app_meta(name)
-        if app_data.get("enabled") and meta["status"] != "available":
-            return f"{meta['label']} isn't available yet"
         if app_data.get("enabled") and not app_data.get("url"):
             return f"{name}: a URL is required to enable it"
         if app_data.get("enabled") and key_required(name) and not app_data.get("api_key"):
@@ -676,9 +673,6 @@ def _validate_config(data, cfg):
     for name, dest_data in data.get("destinations", {}).items():
         if name not in DEST_NAMES:
             return f"unknown destination: {name}"
-        meta = destination_meta(name)
-        if dest_data.get("enabled") and meta["status"] != "available":
-            return f"{meta['label']} isn't available yet"
         if name == "gdrive" and dest_data.get("enabled") and not dest_data.get("client_id"):
             return "Google Drive: a Client ID is required to enable it (paste it in first, then Connect)"
         if name == "onedrive" and dest_data.get("enabled") and not cfg["destinations"]["onedrive"].get("token"):
@@ -732,16 +726,13 @@ def api_test(app_name):
     # Any well-formed id: an instance can be tested before it's saved.
     if not instance_type(app_name):
         return jsonify({"ok": False, "message": "unknown app"}), 404
-    meta = app_meta(app_name)
-    if meta["status"] != "available":
-        return jsonify({"ok": False, "message": f"{meta['label']} isn't available yet"})
     data = request.get_json(force=True, silent=True) or {}
     if not isinstance(data, dict):
         return jsonify({"ok": False, "message": "expected a JSON object"}), 400
     if not data.get("url"):
         return jsonify({"ok": False, "message": "URL is required"}), 400
     if key_required(app_name) and not data.get("api_key"):
-        return jsonify({"ok": False, "message": f"{meta.get('key_label', 'API key')} is required"}), 400
+        return jsonify({"ok": False, "message": f"{app_meta(app_name).get('key_label', 'API key')} is required"}), 400
 
     app_cfg = copy.deepcopy(DEFAULT_APP)
     app_cfg.update(data)
@@ -1027,7 +1018,7 @@ def api_history(dest_id):
     # One recursive listing of the whole destination instead of one rclone
     # call per app - much faster against remote destinations (Drive/OneDrive).
     # Keyed by instance id; a removed instance's backups are listed while any remain.
-    history = {name: [] for name in instance_ids(cfg) if app_meta(name)["status"] == "available"}
+    history = {name: [] for name in instance_ids(cfg)}
     try:
         entries = rclone_util.lsjson(root, recursive=True)
     except rclone_util.RcloneError as exc:

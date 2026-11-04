@@ -185,7 +185,7 @@ def test_a_read_only_folder_passes_with_a_note(app, server, monkeypatch):
 
 def test_it_is_a_restorable_app_with_a_data_folder():
     meta = app_meta("lazylibrarian")
-    assert meta["status"] == "available" and restore_supported("lazylibrarian")
+    assert restore_supported("lazylibrarian")
     assert [f["name"] for f in meta["extra_fields"]] == ["data_dir"]
 
 

@@ -339,7 +339,6 @@ function fillAppCard(appId, cfg) {
   if (!card) return;
   card.querySelector(".f-enabled").checked = !!cfg.enabled;
   const urlInput = card.querySelector(".f-url");
-  if (!urlInput) return; // coming_soon app - no body/fields rendered
   urlInput.value = cfg.url || "";
   const keyInput = card.querySelector(".f-api_key");
   if (keyInput) keyInput.value = cfg.api_key || ""; // absent for apps without an API key
@@ -373,7 +372,6 @@ function updateDiscoveryButton() {
 function readAppCard(appId) {
   const card = appCard(appId);
   const urlInput = card.querySelector(".f-url");
-  if (!urlInput) return { enabled: false }; // coming_soon app
   const keyInput = card.querySelector(".f-api_key");
   const out = {
     enabled: card.querySelector(".f-enabled").checked,
@@ -1032,9 +1030,8 @@ function buildHeaderScope(apps) {
     options.append(wrap);
   };
   option("header-scope-all", "", "All apps", !apps);
-  // Keep a saved scope's apps listed even if one stops being "available".
   // Each app's extra instances (from the Settings cards) follow it.
-  APP_META.filter((m) => m.status === "available" || (apps || []).includes(m.id)).forEach((m) => {
+  APP_META.forEach((m) => {
     option("header-scope-app", m.id, m.label, !apps || apps.includes(m.id));
     instanceCards(m.id).filter((card) => card.dataset.app !== m.id).forEach((card) => {
       option("header-scope-app", card.dataset.app, card.querySelector("h3").textContent, !apps || apps.includes(card.dataset.app));

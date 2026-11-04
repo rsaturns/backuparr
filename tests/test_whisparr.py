@@ -80,7 +80,7 @@ def whisparr():
 
 def test_whisparr_is_a_multi_instance_app_restored_by_upload():
     meta = config_store.app_meta("whisparr-v3")
-    assert meta["id"] == "whisparr" and meta["multi_instance"] is True and meta["status"] == "available"
+    assert meta["id"] == "whisparr" and meta["multi_instance"] is True
     assert config_store.key_required("whisparr") is True
     assert config_store.restore_supported("whisparr-v3") is True
     assert "whisparr" in restore_actions.UPLOAD_RESTORE_APPS

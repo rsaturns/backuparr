@@ -78,7 +78,7 @@ def lidarr():
 
 def test_lidarr_is_a_multi_instance_app_restored_by_upload():
     meta = config_store.app_meta("lidarr-flac")
-    assert meta["id"] == "lidarr" and meta["multi_instance"] is True and meta["status"] == "available"
+    assert meta["id"] == "lidarr" and meta["multi_instance"] is True
     assert config_store.key_required("lidarr") is True
     assert config_store.restore_supported("lidarr-flac") is True
     assert "lidarr" in restore_actions.UPLOAD_RESTORE_APPS

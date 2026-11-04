@@ -994,24 +994,6 @@ code {
 /* -------------------------------------------------------- destinations --- */
 .dest-description { margin: 6px 0 0; }
 
-.card-soon {
-  opacity: 0.55;
-}
-
-.card-soon .app-card-head h3 { color: var(--text-muted); }
-
-.badge-soon {
-  font-size: 12.5px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 2px 8px;
-}
-
 /* -------------------------------------------------------------- modal --- */
 .modal-overlay {
   position: fixed;

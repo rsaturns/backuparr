@@ -7,7 +7,7 @@ import pytest
 import requests
 
 import destination_util
-from config_store import APP_NAMES, DEST_NAMES, app_meta
+from config_store import APP_NAMES, DEST_NAMES
 
 
 def save(client, body):
@@ -32,7 +32,6 @@ def test_a_new_install_has_every_app_off_and_local_storage_on(authed_client):
 def test_meta_and_destinations_describe_what_the_ui_can_configure(authed_client):
     apps = authed_client.get("/api/meta").get_json()
     assert {a["id"] for a in apps} == set(APP_NAMES)
-    assert all(a["status"] == "available" for a in apps)
     destinations = authed_client.get("/api/destinations").get_json()
     assert [d["id"] for d in destinations] == DEST_NAMES
 
@@ -214,17 +213,8 @@ class StubApp:
         return self.message
 
 
-def test_testing_an_unknown_or_unavailable_app(authed_client, monkeypatch):
+def test_testing_an_unknown_app(authed_client):
     assert authed_client.post("/api/test/nope", json={}).status_code == 404
-    monkeypatch.setitem(app_meta("tautulli"), "status", "coming_soon")
-    unavailable = authed_client.post("/api/test/tautulli", json={"url": "http://t", "api_key": "k"}).get_json()
-    assert unavailable["ok"] is False and "isn't available yet" in unavailable["message"]
-
-
-def test_a_coming_soon_app_cant_be_enabled(authed_client, monkeypatch):
-    monkeypatch.setitem(app_meta("tautulli"), "status", "coming_soon")
-    response = save(authed_client, {"apps": {"tautulli": {"enabled": True, "url": "http://t", "api_key": "k"}}})
-    assert response.status_code == 400 and "isn't available yet" in response.get_json()["error"]
 
 
 def test_testing_needs_a_url_and_where_required_a_key(authed_client):

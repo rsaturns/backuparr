@@ -39,20 +39,18 @@ DISCOVERABLE_APPS = ("radarr", "sonarr", "lidarr", "whisparr", "lazylibrarian", 
 # An extra instance also has a display name, e.g. "Radarr 4K".
 DEFAULT_INSTANCE = {**DEFAULT_APP, "name": ""}
 
-# Drives the web UI's forms generically. "coming_soon" apps render
-# disabled with a badge, same as DESTINATION_META below. restore_warning is
-# shown on the Restore tab before an app's restore.
+# Drives the web UI's forms generically. restore_warning is shown on the
+# Restore tab before an app's restore.
 APP_META = [
-    {"id": "radarr", "label": "Radarr", "icon": "radarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://radarr:7878", "extra_fields": [], "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
-    {"id": "sonarr", "label": "Sonarr", "icon": "sonarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://sonarr:8989", "extra_fields": [], "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
-    {"id": "lidarr", "label": "Lidarr", "icon": "lidarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://lidarr:8686", "extra_fields": [], "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
-    {"id": "whisparr", "label": "Whisparr", "icon": "whisparr.svg", "status": "available", "key_required": True, "url_placeholder": "http://whisparr:6969", "extra_fields": [], "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
-    {"id": "prowlarr", "label": "Prowlarr", "icon": "prowlarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://prowlarr:9696", "extra_fields": []},
+    {"id": "radarr", "label": "Radarr", "icon": "radarr.svg", "key_required": True, "url_placeholder": "http://radarr:7878", "extra_fields": [], "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
+    {"id": "sonarr", "label": "Sonarr", "icon": "sonarr.svg", "key_required": True, "url_placeholder": "http://sonarr:8989", "extra_fields": [], "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
+    {"id": "lidarr", "label": "Lidarr", "icon": "lidarr.svg", "key_required": True, "url_placeholder": "http://lidarr:8686", "extra_fields": [], "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
+    {"id": "whisparr", "label": "Whisparr", "icon": "whisparr.svg", "key_required": True, "url_placeholder": "http://whisparr:6969", "extra_fields": [], "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
+    {"id": "prowlarr", "label": "Prowlarr", "icon": "prowlarr.svg", "key_required": True, "url_placeholder": "http://prowlarr:9696", "extra_fields": []},
     {
         "id": "profilarr",
         "label": "Profilarr",
         "icon": "profilarr.svg",
-        "status": "available",
         "key_required": True,
         "url_placeholder": "http://profilarr:6868",
         "extra_fields": [],
@@ -63,7 +61,6 @@ APP_META = [
         "id": "bazarr",
         "label": "Bazarr",
         "icon": "bazarr.svg",
-        "status": "available",
         "key_required": True,
         "url_placeholder": "http://bazarr:6767",
         "extra_fields": [
@@ -77,19 +74,17 @@ APP_META = [
         "id": "tdarr",
         "label": "Tdarr",
         "icon": "tdarr.png",
-        "status": "available",
         "key_required": False,
         "url_placeholder": "http://192.168.1.10:8266",
         "extra_fields": [],
         "key_help": "Tools > API Keys - needed when Tdarr's authentication is on, the default from Tdarr 3",
         "restore_warning": {"lead": "Destructive:", "text": "this wipes each Tdarr database collection before repopulating it from the backup.", "danger": True},
     },
-    {"id": "sabnzbd", "label": "SABnzbd", "icon": "sabnzbd.svg", "status": "available", "key_required": True, "url_placeholder": "http://sabnzbd:8080", "extra_fields": []},
+    {"id": "sabnzbd", "label": "SABnzbd", "icon": "sabnzbd.svg", "key_required": True, "url_placeholder": "http://sabnzbd:8080", "extra_fields": []},
     {
         "id": "nzbget",
         "label": "NZBGet",
         "icon": "nzbget.svg",
-        "status": "available",
         # NZBGet has no API key: its JSON-RPC API takes the username and
         # password of the Control user - see apps/nzbget.py.
         "key_required": False,
@@ -103,12 +98,11 @@ APP_META = [
         ],
         "restore_warning": {"lead": "Replaces NZBGet's settings", "text": "with the backup's - news servers and their passwords, categories, paths, extension settings, and the username and password. NZBGet reloads to apply them; the queue and history are kept. If the backup's username or password differ from the ones in Settings, update them there afterwards."},
     },
-    {"id": "tautulli", "label": "Tautulli", "icon": "tautulli.svg", "status": "available", "key_required": True, "url_placeholder": "http://tautulli:8181", "extra_fields": []},
+    {"id": "tautulli", "label": "Tautulli", "icon": "tautulli.svg", "key_required": True, "url_placeholder": "http://tautulli:8181", "extra_fields": []},
     {
         "id": "jellyfin",
         "label": "Jellyfin",
         "icon": "jellyfin.svg",
-        "status": "available",
         "key_required": True,
         "url_placeholder": "http://jellyfin:8096",
         "key_help": "Dashboard > API Keys",
@@ -125,7 +119,6 @@ APP_META = [
         "id": "emby",
         "label": "Emby",
         "icon": "emby.svg",
-        "status": "available",
         "key_required": True,
         "url_placeholder": "http://emby:8096",
         "key_help": "Settings > Advanced > API Keys",
@@ -142,7 +135,6 @@ APP_META = [
         "id": "plex",
         "label": "Plex",
         "icon": "plex.svg",
-        "status": "available",
         "key_required": True,
         "key_label": "Plex token",
         "url_placeholder": "http://plex:32400",
@@ -160,7 +152,6 @@ APP_META = [
         "id": "seerr",
         "label": "Seerr",
         "icon": "seerr.svg",
-        "status": "available",
         "key_required": True,
         "url_placeholder": "http://seerr:5055",
         "key_help": "Settings > General > API Key",
@@ -177,7 +168,6 @@ APP_META = [
         "id": "lazylibrarian",
         "label": "LazyLibrarian",
         "icon": "lazylibrarian.png",
-        "status": "available",
         "key_required": True,
         "url_placeholder": "http://lazylibrarian:5299",
         "key_help": "Config > Interface > API > API Key",
@@ -235,7 +225,6 @@ DESTINATION_META = [
         "id": "local",
         "label": "Local storage",
         "icon": "local.svg",
-        "status": "available",
         "description": "Written straight to this container's own volume - nothing to connect. Download any backup from the History tab.",
         "setup_help": {
             "title": "Local storage",
@@ -255,7 +244,6 @@ DESTINATION_META = [
         "id": "gdrive",
         "label": "Google Drive",
         "icon": "google-drive.svg",
-        "status": "available",
         "description": "Backed up to a folder in your Google Drive. Click-through OAuth - no rclone config, no terminal.",
         "setup_help": {
             "title": "Connect Google Drive",
@@ -327,7 +315,6 @@ DESTINATION_META = [
         "id": "onedrive",
         "label": "Microsoft OneDrive",
         "icon": "microsoft-onedrive.svg",
-        "status": "available",
         "description": "Backed up to a dedicated app folder in your personal OneDrive. Uses rclone's own built-in Microsoft app - no Azure account, no app registration. Personal Microsoft accounts only, not work/school (Microsoft 365) accounts.",
         "setup_help": {
             "title": "Connect OneDrive",
@@ -361,7 +348,6 @@ DESTINATION_META = [
         "id": "dropbox",
         "label": "Dropbox",
         "icon": "dropbox.svg",
-        "status": "available",
         "description": "Backed up to a Backuparr folder in your Dropbox. Uses rclone's own built-in Dropbox app - no Dropbox developer account, no app registration.",
         "setup_help": {
             "title": "Connect Dropbox",
@@ -546,16 +532,9 @@ def save_config(cfg):
     atomic_file.write_private(CONFIG_PATH, json.dumps(to_write, indent=2))
 
 
-def _enabled(names, meta, cfg_section, kind=lambda name: name):
-    """Only "available" entries can be enabled - guards against a
-    hand-edited config.json flipping on a coming_soon entry."""
-    available = {m["id"] for m in meta if m["status"] == "available"}
-    return [name for name in names if kind(name) in available and cfg_section.get(name, {}).get("enabled")]
-
-
 def enabled_apps(cfg):
     """Enabled instance ids, e.g. ["radarr", "radarr-4k", "sonarr"]."""
-    return _enabled(instance_ids(cfg), APP_META, cfg["apps"], instance_type)
+    return [name for name in instance_ids(cfg) if cfg["apps"][name].get("enabled")]
 
 
 # These take an app or an instance id: an instance shares its app's metadata.
@@ -572,8 +551,5 @@ def app_meta(name):
 
 
 def enabled_destinations(cfg):
-    return _enabled(DEST_NAMES, DESTINATION_META, cfg["destinations"])
+    return [name for name in DEST_NAMES if cfg["destinations"][name].get("enabled")]
 
-
-def destination_meta(name):
-    return next((m for m in DESTINATION_META if m["id"] == name), None)
