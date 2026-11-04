@@ -453,3 +453,28 @@ def test_reset_deletes_the_manifest(authed_client, isolated_webui, manifest_in_t
     response = authed_client.post("/api/reset", json={"confirm": isolated_webui.auth.RESET_CONFIRM_PHRASE})
     assert response.status_code == 200
     assert not os.path.exists(manifest_in_tmp)
+
+
+def test_backfill_waits_while_a_backup_or_restore_runs(destinations, monkeypatch):
+    destinations.remote["radarr/radarr_20261101_030000.zip"] = radarr_zip("6.4")
+    monkeypatch.setattr(manifest_backfill, "_PAUSE_POLL_SECONDS", 0)
+    busy = iter([True, True, True])  # busy for the first three checks
+
+    def should_pause():
+        paused = next(busy, False)
+        if paused:
+            assert destinations.downloads == []  # nothing downloaded while busy
+        return paused
+
+    manifest_backfill.backfill(destinations.cfg, should_pause=should_pause)
+    assert destinations.downloads == ["radarr/radarr_20261101_030000.zip"]
+
+
+def test_the_web_app_pauses_the_backfill_during_runs(isolated_webui):
+    runs = isolated_webui.runs
+    assert runs.busy() is False
+    runs.RUN_STATE["running"] = True
+    try:
+        assert runs.busy() is True
+    finally:
+        runs.RUN_STATE["running"] = False

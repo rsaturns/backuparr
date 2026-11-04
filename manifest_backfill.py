@@ -19,6 +19,7 @@ import sqlite3
 import tarfile
 import tempfile
 import threading
+import time
 import zipfile
 
 import destination_util
@@ -33,6 +34,19 @@ _OWN_MANIFEST = {"plex", "emby", "seerr", "nzbget"}
 _MAX_MEMBER = 1024 * 1024  # A version file larger than this isn't one.
 
 _running = threading.Lock()
+_PAUSE_POLL_SECONDS = 5
+
+
+def _wait_while(should_pause):
+    """Holds off while should_pause() is true - a backup or restore is
+    running - so the backfill doesn't share the connection with it. The
+    download already in progress, at most one archive, still finishes."""
+    if not should_pause or not should_pause():
+        return
+    log.info("manifest: paused while a backup or restore runs")
+    while should_pause():
+        time.sleep(_PAUSE_POLL_SECONDS)
+    log.info("manifest: carrying on with existing backups")
 
 
 def _zip_text(archive, name):
@@ -139,13 +153,14 @@ def _examine(dest_id, root, app, name, tmp_dir):
             os.remove(local)
 
 
-def backfill_destination(dest_id, root, expected_generation, should_stop=None):
+def backfill_destination(dest_id, root, expected_generation, should_stop=None, should_pause=None):
     """Records every unrecorded backup on one destination. Returns how many
     it added, or None if the manifest was cleared meanwhile."""
     added = 0
     tmp_dir = tempfile.mkdtemp(prefix="backuparr-backfill-")
     try:
         for app, name, size in _backups_on(root):
+            _wait_while(should_pause)
             if should_stop and should_stop():
                 return added
             entry = manifest.get(app, name)
@@ -171,11 +186,14 @@ def backfill_destination(dest_id, root, expected_generation, should_stop=None):
     return added
 
 
-def backfill(cfg=None, should_stop=None):
-    """One pass over every enabled destination; at most one runs at a time."""
+def backfill(cfg=None, should_stop=None, should_pause=None):
+    """One pass over every enabled destination; at most one runs at a time.
+    should_pause(), if given, is checked before each destination and each
+    archive, and the pass waits while it's true."""
     if not _running.acquire(blocking=False):
         return
     try:
+        _wait_while(should_pause)
         expected_generation = manifest.generation()
         cfg = cfg or load_config()
         destinations = enabled_destinations(cfg)
@@ -183,9 +201,10 @@ def backfill(cfg=None, should_stop=None):
             return
         destination_util.sync(cfg)
         for dest_id in destinations:
+            _wait_while(should_pause)
             try:
                 root = destination_util.remote_root(dest_id, cfg["destinations"][dest_id]).rstrip("/")
-                added = backfill_destination(dest_id, root, expected_generation, should_stop)
+                added = backfill_destination(dest_id, root, expected_generation, should_stop, should_pause)
             except (destination_util.DestinationError, rclone_util.RcloneError) as exc:
                 log.warning("manifest: couldn't check the backups on %s: %s", dest_id, getattr(exc, "detail", exc))
                 continue
@@ -199,6 +218,6 @@ def backfill(cfg=None, should_stop=None):
         _running.release()
 
 
-def start():
+def start(should_pause=None):
     """Runs backfill() in a background thread."""
-    threading.Thread(target=backfill, name="manifest-backfill", daemon=True).start()
+    threading.Thread(target=backfill, kwargs={"should_pause": should_pause}, name="manifest-backfill", daemon=True).start()

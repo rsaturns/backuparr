@@ -35,6 +35,10 @@ nav_order: 10
 destinations holding it, the version of the app it came from, Backuparr's
 version, its size and its SHA-256. Backuparr keeps it up to date - don't edit
 it. Backups made before 2.5.0 are added in the background after the update:
-each one is read once, so this downloads every backup on Google Drive,
-OneDrive and Dropbox one time. Bazarr, SABnzbd and Tdarr backups made before
-2.5.0 don't hold a version, so theirs is unknown.
+each one is read once. Local storage is read first, and a cloud copy of a
+backup already read there isn't downloaded; any other backup on Google Drive,
+OneDrive or Dropbox is downloaded one time. This pauses while a backup or
+restore runs, and later startups only download backups that aren't recorded
+yet. On a slow or metered connection, set
+[`RCLONE_BWLIMIT`](environment-variables.md). Bazarr, SABnzbd and Tdarr
+backups made before 2.5.0 don't hold a version, so theirs is unknown.

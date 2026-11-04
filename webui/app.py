@@ -99,7 +99,8 @@ def index():
 # ------------------------------------------------------------- startup ----
 def create_app():
     """The app, ready to serve: logging set up, the session key loaded, the
-    scheduler running and existing backups being added to the manifest. Importing this module does none of that; waitress
+    scheduler running and existing backups being added to the manifest
+    (paused while a backup or restore runs). Importing this module does none of that; waitress
     calls this (entrypoint.sh), once."""
     backup.configure_logging()
     if auth._AUTH_DISABLED:
@@ -108,7 +109,7 @@ def create_app():
                     "authenticating reverse proxy protects it and direct access is blocked.")
     app.secret_key = auth._load_or_create_secret_key()
     runs.start_scheduler()
-    manifest_backfill.start()
+    manifest_backfill.start(should_pause=runs.busy)
     return app
 
 
