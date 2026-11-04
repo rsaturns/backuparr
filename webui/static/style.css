@@ -780,6 +780,16 @@ input:focus, select:focus, textarea:focus {
   font-size: 13.5px;
 }
 
+/* Each app has its own table: with room to spare, fixed column widths keep
+   Size and Modified in one line down the page. */
+@media (min-width: 720px) {
+  .history-table { table-layout: fixed; }
+  .history-table th:nth-child(2) { width: 7em; }
+  .history-table th:nth-child(3) { width: 13em; }
+  .history-table th:nth-child(4) { width: 80px; }
+  .history-table td:first-child { overflow-wrap: anywhere; }
+}
+
 .empty-note {
   color: var(--text-muted);
   font-size: 14.5px;
