@@ -28,6 +28,7 @@ import destination_util
 import manifest
 import rclone_util
 import runlog
+import self_backup
 from apps.base import AppError
 from apps.bazarr import BazarrApp
 from apps.emby import EmbyApp
@@ -339,7 +340,7 @@ def apply_retention(root, retention_days, now=None, only=None, dest_id=None):
     present = set()
     for entry in entries:
         app, sep, name = entry.get("Path", "").partition("/")
-        if entry.get("IsDir") or not sep or not instance_type(app) or not destination_util.is_backup_name(app, name):
+        if entry.get("IsDir") or not sep or not destination_util.is_backup_folder(app) or not destination_util.is_backup_name(app, name):
             continue
         present.add(manifest.key(app, name))
         if only is not None and app != only:
@@ -536,5 +537,12 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
     for dest_id, root in dest_roots.items():
         apply_retention(root, retention_days, only=only, dest_id=dest_id)
     runlog.prune(retention_days)
+
+    # Last, so its manifest and run logs include this run. Only a full run
+    # makes one: a single app's run leaves Backuparr's backup as it was.
+    if only is None and cfg.get("self_backup", True):
+        problem = self_backup.run(dest_roots, timestamp)
+        if problem:
+            failed.append(f"backuparr: {problem}")
 
     return ok, failed

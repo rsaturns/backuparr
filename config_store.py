@@ -393,9 +393,44 @@ DEFAULTS = {
     # Ids of removed extra instances. Their backups are kept, so an id is
     # never given to another instance.
     "removed_instances": [],
+    # Back up Backuparr's own configuration at the end of each full run (#110).
+    "self_backup": True,
+    # Whether the user has confirmed saving the encryption key; until then
+    # the web UI shows it and allows nothing else. Set by Backuparr only.
+    "secrets_key_acknowledged": False,
     "apps": {name: dict(DEFAULT_APP) for name in APP_NAMES},
     "destinations": {name: dict(DEFAULT_DEST[name]) for name in DEST_NAMES},
 }
+
+_key_acknowledged = False
+
+
+def secrets_key_acknowledged():
+    """Checked on every API request, so it reads only this one field and
+    remembers a yes."""
+    global _key_acknowledged
+    if not _key_acknowledged:
+        try:
+            with open(CONFIG_PATH, encoding="utf-8") as f:
+                _key_acknowledged = json.load(f).get("secrets_key_acknowledged") is True
+        except (OSError, ValueError, AttributeError):
+            return False
+    return _key_acknowledged
+
+
+def acknowledge_secrets_key():
+    global _key_acknowledged
+    cfg = load_config()
+    cfg["secrets_key_acknowledged"] = True
+    save_config(cfg)
+    _key_acknowledged = True
+
+
+def forget_secrets_key_acknowledged():
+    """Reset: the next install's key has to be saved again."""
+    global _key_acknowledged
+    _key_acknowledged = False
+
 
 def instance_type(instance_id):
     """The app an instance id runs ("radarr" for radarr-4k), or None if

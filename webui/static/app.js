@@ -1228,6 +1228,7 @@ function applyBasicAuthHeader(event) {
 async function loadConfig() {
   const cfg = await apiFetch("/api/config");
   document.getElementById("s-retention_days").value = cfg.retention_days || 7;
+  document.getElementById("s-self_backup").checked = cfg.self_backup !== false;
   document.getElementById("s-cron_schedule").value = cfg.cron_schedule || "";
   initSchedulePicker(cfg.cron_schedule);
   document.getElementById("s-notify_url").value = cfg.notify_url || "";
@@ -1319,6 +1320,7 @@ function collectConfig() {
   });
   return {
     retention_days: Number(document.getElementById("s-retention_days").value || 7),
+    self_backup: document.getElementById("s-self_backup").checked,
     cron_schedule: document.getElementById("s-cron_schedule").value.trim(),
     notify_url: document.getElementById("s-notify_url").value.trim(),
     bazarr_backup_dir: document.getElementById("s-bazarr_backup_dir").value.trim(),
@@ -2021,6 +2023,7 @@ function appMeta(appId) {
 
 // "Radarr (4K)" for an extra instance; a removed one's id stands in for its name.
 function appLabel(appId) {
+  if (appId === "backuparr") return "Backuparr's own configuration";
   const m = appMeta(appId);
   if (!m) return appId;
   return isExtraInstance(appId) ? `${m.label} (${INSTANCE_NAMES.get(appId) || appId.slice(m.id.length + 1)})` : m.label;
@@ -2748,6 +2751,12 @@ function initFeedbackMenu() {
 }
 
 async function init() {
+  // Until the encryption key is saved, the server refuses everything else.
+  try {
+    if (await showKeyPrompt(document.getElementById("key-modal"), () => window.location.reload())) return;
+  } catch (e) {
+    toast(`Could not check the encryption key: ${e.message}`, "fail");
+  }
   initTabs();
   initFeedbackMenu();
   initTheme();

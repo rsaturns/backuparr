@@ -23,6 +23,7 @@ PREFIX = "enc:v1:"
 
 KEY_PATH = os.environ.get("BACKUPARR_SECRETS_KEY_PATH", "/config/backuparr/secrets.key")
 _fernet = None
+_key = None  # the key _fernet was made with
 
 
 def _load_or_create_key():
@@ -38,10 +39,18 @@ def _load_or_create_key():
 
 
 def _get_fernet():
-    global _fernet
+    global _fernet, _key
     if _fernet is None:
-        _fernet = Fernet(_load_or_create_key())
+        _key = _load_or_create_key()
+        _fernet = Fernet(_key)
     return _fernet
+
+
+def forget_key():
+    """Reset deleted the key file: the next use makes a new key, instead of
+    carrying on with the old one, which nothing could read after a restart."""
+    global _fernet, _key
+    _fernet = _key = None
 
 
 def encrypt(value):
@@ -79,3 +88,22 @@ def decrypt(value):
     except InvalidToken:
         log.warning("could not decrypt a stored secret - the encryption key may have changed; treating it as unset")
         return ""
+
+
+def current_key():
+    """The key in use, as text: shown once so the user can keep it (#110).
+    It unlocks every stored secret and Backuparr's own backup - never log it."""
+    _get_fernet()
+    return _key.decode("ascii")
+
+
+def encrypt_bytes(data):
+    """Encrypts a whole file (Backuparr's own backup) with the key."""
+    return _get_fernet().encrypt(data)
+
+
+def decrypt_bytes(token, key=None):
+    """Reverses encrypt_bytes(), with this install's key or the one given.
+    Raises InvalidToken for a wrong key or a damaged or altered file."""
+    fernet = Fernet(key.encode("ascii") if isinstance(key, str) else key) if key else _get_fernet()
+    return fernet.decrypt(token)

@@ -11,6 +11,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Each backup is checked before upload: it must read back intact, its SQLite databases must pass a quick check, and the files its restore needs must be in it. A backup that fails isn't uploaded, and the app shows as failed with the reason (#107).
 - Restores only go onto the exact app version the backup came from. The Restore tab checks it when you pick a backup, before Emby, Plex, Seerr or LazyLibrarian need stopping, and names the version to install when they differ; each download is checked against its recorded checksum (#108).
 - Each app's log and result from every run are kept across restarts: **View log** on its Overview tile and on each History row, and History lists runs that left no backup with the reason. The Overview's status is right after a restart (#109).
+- Backuparr backs up its own configuration at the end of each full run, encrypted with your encryption key, to every destination. Your encryption key is shown once, after setup or after updating, until you confirm you've saved it (#110).
 
 ### Changed
 
@@ -20,6 +21,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- After Reset, settings saved before the next restart were encrypted with the old, deleted key, so they couldn't be read after that restart.
 - A destination that can't be listed (an expired or revoked connection, say) shows its error in History and on the Overview instead of looking empty, and retention skips it with a warning.
 - A LazyLibrarian restore makes the files it creates readable by LazyLibrarian.
 - Failed logins arriving at the same moment all count towards the login lockout.

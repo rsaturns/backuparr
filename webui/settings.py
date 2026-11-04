@@ -114,6 +114,8 @@ def _validate_config(data, cfg):
                 return "retention_days must be a positive number"
         except (TypeError, ValueError):
             return "retention_days must be a number"
+    if "self_backup" in data and not isinstance(data["self_backup"], bool):
+        return "self_backup must be true or false"
     if "cron_schedule" in data:
         schedule = str(data["cron_schedule"])
         if len(schedule.split()) != 5:
@@ -151,7 +153,7 @@ def api_set_config():
     if error:
         return jsonify({"error": error}), 400
 
-    for key in ("retention_days", "cron_schedule", "notify_url", "bazarr_backup_dir", "request_headers"):
+    for key in ("retention_days", "cron_schedule", "notify_url", "bazarr_backup_dir", "request_headers", "self_backup"):
         if key in data:
             cfg[key] = data[key]
     for name, incoming in data.get("apps", {}).items():
