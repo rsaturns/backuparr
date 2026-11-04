@@ -49,7 +49,7 @@ def test_setup_creates_the_account_logs_in_and_can_only_run_once(isolated_webui)
     client = isolated_webui.app.test_client()
     assert client.post("/api/setup", json=creds("  admin  ")).status_code == 200
     assert auth_store.has_credentials()
-    assert client.get("/api/meta").status_code == 200
+    assert client.get("/api/restore/status").status_code == 200
 
     assert client.post("/api/setup", json=creds("other")).status_code == 403
     assert client.get("/setup").headers["Location"] == "/login"
@@ -67,9 +67,9 @@ def test_the_password_is_not_stored_in_plaintext(isolated_webui):
 
 def test_login_accepts_the_right_password_and_rejects_the_wrong_one(anonymous):
     assert anonymous.post("/api/login", json=creds(password="wrong-password")).status_code == 401
-    assert anonymous.get("/api/meta").status_code == 401
+    assert anonymous.get("/api/restore/status").status_code == 401
     assert anonymous.post("/api/login", json=creds()).status_code == 200
-    assert anonymous.get("/api/meta").status_code == 200
+    assert anonymous.get("/api/restore/status").status_code == 200
 
 
 def test_login_trims_the_username_and_ignores_a_missing_body(anonymous):
@@ -87,7 +87,7 @@ def test_an_already_logged_in_visitor_skips_the_login_page(anonymous):
 def test_logout_ends_the_session(anonymous):
     anonymous.post("/api/login", json=creds())
     assert anonymous.post("/api/logout", json={}).status_code == 200
-    assert anonymous.get("/api/meta").status_code == 401
+    assert anonymous.get("/api/restore/status").status_code == 401
     assert anonymous.get("/").headers["Location"] == "/login"
 
 
@@ -143,7 +143,7 @@ def test_lockout_is_tracked_per_address(isolated_webui):
 # --- the auth gate ---------------------------------------------------------
 
 PROTECTED = [
-    ("GET", "/api/config"), ("POST", "/api/config"), ("GET", "/api/meta"), ("GET", "/api/destinations"),
+    ("GET", "/api/config"), ("POST", "/api/config"),
     ("POST", "/api/test/radarr"), ("POST", "/api/test-notify"), ("POST", "/api/test-destination/local"),
     ("POST", "/api/discovery/prowlarr"), ("GET", "/api/discovery/prowlarr/x"),
     ("POST", "/api/plex/auth"), ("GET", "/api/plex/auth/x"), ("DELETE", "/api/plex/auth/x"),
@@ -251,7 +251,7 @@ def test_reset_signs_out_the_caller_and_tolerates_missing_files(isolated_webui, 
     assert authed_client.post("/api/reset", json={"confirm": isolated_webui.auth.RESET_CONFIRM_PHRASE}).status_code == 200
     again = authed_client.post("/api/reset", json={"confirm": isolated_webui.auth.RESET_CONFIRM_PHRASE})
     assert again.status_code == 200
-    assert authed_client.get("/api/meta").status_code == 302  # nothing left, so back to setup
+    assert authed_client.get("/api/restore/status").status_code == 302  # nothing left, so back to setup
 
 
 @pytest.mark.parametrize("error", [PermissionError(13, "Permission denied"), OSError(5, "Input/output error")])

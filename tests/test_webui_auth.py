@@ -48,10 +48,10 @@ def test_auth_enabled_by_default_and_non_opt_in_values(webui):
 
     assert client.post("/api/logout", json={}).status_code == 200
     assert client.get("/").headers["Location"] == "/login"
-    assert client.get("/api/meta").status_code == 401
+    assert client.get("/api/restore/status").status_code == 401
     assert client.post("/api/login", json={"username": "admin", "password": "wrong-password"}).status_code == 401
     assert client.post("/api/login", json={"username": "admin", "password": "test-password"}).status_code == 200
-    assert client.get("/api/meta").status_code == 200
+    assert client.get("/api/restore/status").status_code == 200
 
 
 @pytest.mark.parametrize("webui", ["true", "TRUE", "1", "yes"], indirect=True)
@@ -64,7 +64,7 @@ def test_disabled_auth_fresh_install(webui, monkeypatch):
     assert page.status_code == 200
     assert 'data-auth-disabled="true"' in body
     assert 'id="logout-btn"' not in body
-    assert client.get("/api/meta").status_code == 200
+    assert client.get("/api/restore/status").status_code == 200
     assert client.post("/api/config", json={"retention_days": 30}).status_code == 200
     assert client.get("/api/config").json["retention_days"] == 30
     assert not auth_store.has_credentials()
@@ -108,13 +108,13 @@ def test_auth_api_paths_cover_every_auth_route(webui):
 def test_reenabling_auth_reuses_existing_account(webui, monkeypatch):
     auth_store.set_credentials("admin", "test-password")
     original_auth = Path(auth_store.AUTH_PATH).read_bytes()
-    assert webui.app.test_client().get("/api/meta").status_code == 200
+    assert webui.app.test_client().get("/api/restore/status").status_code == 200
 
     monkeypatch.setenv("BACKUPARR_DISABLE_AUTH", "false")
     client = _load_webui().app.test_client()
-    assert client.get("/api/meta").status_code == 401
+    assert client.get("/api/restore/status").status_code == 401
     assert client.post("/api/login", json={"username": "admin", "password": "test-password"}).status_code == 200
-    assert client.get("/api/meta").status_code == 200
+    assert client.get("/api/restore/status").status_code == 200
     assert Path(auth_store.AUTH_PATH).read_bytes() == original_auth
 
 

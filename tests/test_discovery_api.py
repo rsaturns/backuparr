@@ -82,7 +82,7 @@ def test_late_session_refresh_cannot_erase_discovery_access(webui):
         session.permanent = True
     older_reader = webui.app.test_client()
     older_reader.set_cookie("session", client.get_cookie("session").value)
-    stale_response = older_reader.get("/api/meta")
+    stale_response = older_reader.get("/api/restore/status")
     assert "Set-Cookie" in stale_response.headers
     response = client.post("/api/discovery/prowlarr", json={"url": "http://prowlarr:9696", "api_key": "key"})
     client.set_cookie("session", older_reader.get_cookie("session").value)

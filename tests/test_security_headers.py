@@ -33,7 +33,7 @@ def test_pages_carry_a_policy_that_blocks_inline_and_foreign_scripts(webui):
         assert directive(policy, "frame-ancestors") == ["'none'"]
 
 
-@pytest.mark.parametrize("path", ["/api/config", "/api/history/local", "/api/meta"])
+@pytest.mark.parametrize("path", ["/api/config", "/api/history/local", "/api/restore/status"])
 def test_api_responses_are_never_cached(webui, monkeypatch, path):
     monkeypatch.setattr(webui.backups.rclone_util, "lsjson", lambda root, recursive=False: [])
     assert authed(webui).get(path).headers["Cache-Control"] == "no-store"

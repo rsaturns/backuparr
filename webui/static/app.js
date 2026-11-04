@@ -1,7 +1,6 @@
 "use strict";
 
 const AUTH_DISABLED = document.body.dataset.authDisabled === "true";
-// /api/meta and /api/destinations, as the page was rendered with them.
 const { apps: APP_META, destinations: DESTINATION_META } = JSON.parse(document.body.dataset.uiMeta);
 let RUN_POLL_TIMER = null;
 let RESTORE_POLL_TIMER = null;

@@ -7,7 +7,7 @@ import pytest
 import requests
 
 import destination_util
-from config_store import APP_NAMES, DEST_NAMES
+from config_store import APP_META, APP_NAMES, DEST_NAMES, DESTINATION_META
 
 
 def save(client, body):
@@ -29,11 +29,10 @@ def test_a_new_install_has_every_app_off_and_local_storage_on(authed_client):
     assert cfg["retention_days"] == 7 and cfg["cron_schedule"] == "0 3 * * *"
 
 
-def test_meta_and_destinations_describe_what_the_ui_can_configure(authed_client):
-    apps = authed_client.get("/api/meta").get_json()
-    assert {a["id"] for a in apps} == set(APP_NAMES)
-    destinations = authed_client.get("/api/destinations").get_json()
-    assert [d["id"] for d in destinations] == DEST_NAMES
+def test_the_page_describes_what_the_ui_can_configure(authed_client):
+    meta = ui_meta(authed_client)
+    assert {a["id"] for a in meta["apps"]} == set(APP_NAMES)
+    assert [d["id"] for d in meta["destinations"]] == DEST_NAMES
 
 
 def test_the_dashboard_shows_the_release_version(authed_client, isolated_webui):
@@ -421,11 +420,14 @@ def test_create_app_loads_the_session_key_and_starts_the_scheduler(isolated_webu
     assert calls == ["logging", "scheduler"] and isolated_webui.app.secret_key == isolated_webui.auth._load_or_create_secret_key()
 
 
-def test_the_page_carries_the_ui_metadata_as_data(authed_client):
+def ui_meta(client):
+    """The metadata app.js reads from the dashboard page's data-ui-meta."""
+    import html
     import json
     import re
-    import html
-    page = authed_client.get("/").get_data(as_text=True)
-    block = html.unescape(re.search(r"data-ui-meta='([^']*)'", page).group(1))
-    assert json.loads(block) == {"apps": authed_client.get("/api/meta").get_json(),
-                                 "destinations": authed_client.get("/api/destinations").get_json()}
+    page = client.get("/").get_data(as_text=True)
+    return json.loads(html.unescape(re.search(r"data-ui-meta='([^']*)'", page).group(1)))
+
+
+def test_the_page_carries_the_ui_metadata_as_data(authed_client):
+    assert ui_meta(authed_client) == {"apps": APP_META, "destinations": DESTINATION_META}

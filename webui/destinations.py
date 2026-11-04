@@ -16,7 +16,7 @@ import onedrive_oauth
 import rclone_token
 import rclone_util
 from backup import humanize_error, log_failure
-from config_store import DEFAULT_DEST, DEST_EDITABLE_FIELDS, DEST_NAMES, DESTINATION_META, load_config, save_config
+from config_store import DEFAULT_DEST, DEST_EDITABLE_FIELDS, DEST_NAMES, load_config, save_config
 
 
 bp = Blueprint("destinations", __name__)
@@ -31,11 +31,6 @@ _OAUTH_STATE_LOCK = threading.Lock()
 _OAUTH_STATE_TTL = 600
 
 # --------------------------------------------------------- destinations ----
-@bp.get("/api/destinations")
-def api_destinations():
-    return jsonify(DESTINATION_META)
-
-
 def _not_connected_message(dest_id, request_data):
     """Test only checks the saved connection, so a token that's pasted but not
     yet connected (the UI sends token_pasted) gets a pointer to Connect."""

@@ -7,7 +7,7 @@ from flask import Blueprint, jsonify, request
 import destination_util
 from apps.http_headers import headers_for_app, RequestHeadersError, validate_request_headers
 from backup import build_app, humanize_error, notify
-from config_store import APP_META, app_meta, APP_NAMES, DEFAULT_APP, DEFAULT_INSTANCE, DEST_EDITABLE_FIELDS, DEST_NAMES, instance_ids, instance_type, key_required, load_config, MAX_EXTRA_INSTANCES, MULTI_INSTANCE_APPS, save_config
+from config_store import app_meta, APP_NAMES, DEFAULT_APP, DEFAULT_INSTANCE, DEST_EDITABLE_FIELDS, DEST_NAMES, instance_ids, instance_type, key_required, load_config, MAX_EXTRA_INSTANCES, MULTI_INSTANCE_APPS, save_config
 
 
 bp = Blueprint("settings", __name__)
@@ -38,11 +38,6 @@ def api_get_config():
     for dest, remote in destination_util.REMOTES.items():
         cfg["destinations"][dest][remote.TOKEN_FIELD] = bool(cfg["destinations"][dest][remote.TOKEN_FIELD])
     return jsonify(cfg)
-
-
-@bp.get("/api/meta")
-def api_meta():
-    return jsonify(APP_META)
 
 
 def _instances_after(data, cfg, unsaved=()):
