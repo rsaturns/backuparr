@@ -326,6 +326,13 @@ def test_an_instance_restores_from_its_own_folder_with_its_own_connection(inline
 
 def test_restore_app_uploads_to_an_instance(monkeypatch):
     uploaded = []
-    monkeypatch.setattr(restore_actions, "restore_upload_app", lambda name, app_cfg, local_zip: uploaded.append(name))
+    class Driver:
+        def __init__(self, name):
+            self.name = name
+
+        def restore_upload(self, local_zip):
+            uploaded.append((self.name, local_zip))
+
+    monkeypatch.setattr(restore_actions, "build_app", lambda name, app_cfg: Driver(name))
     assert restore_actions.restore_app("sonarr-anime", {}, "/tmp", "/tmp/b.zip") == {"kind": "upload"}
-    assert uploaded == ["sonarr-anime"]
+    assert uploaded == [("sonarr-anime", "/tmp/b.zip")]

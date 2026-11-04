@@ -90,3 +90,38 @@ def test_extract_zip_extracts_well_formed_zip(tmp_path):
     assert result == str(dest_dir)
     assert (dest_dir / "file1.txt").read_bytes() == b"hello"
     assert (dest_dir / "sub" / "file2.txt").read_bytes() == b"world"
+
+
+# --- the restore table -------------------------------------------------
+
+def test_every_app_with_automated_restore_has_a_restore_and_no_other_does():
+    from config_store import APP_META, restore_supported
+    assert set(restore_actions.RESTORES) == {m["id"] for m in APP_META if restore_supported(m["id"])}
+
+
+def test_restore_warnings_have_a_lead_and_text():
+    from config_store import APP_META
+    warnings = [m["restore_warning"] for m in APP_META if "restore_warning" in m]
+    assert warnings and all(w["lead"] and w["text"] and set(w) <= {"lead", "text", "danger"} for w in warnings)
+
+
+@pytest.mark.parametrize("app, result, message", [
+    ("radarr-4k", {"kind": "upload"}, "radarr-4k restore uploaded, app is restarting"),
+    ("emby", {"kind": "emby"}, "emby restore complete, start Emby again to load it"),
+    ("lazylibrarian", {}, "lazylibrarian restore complete, start LazyLibrarian again to load it"),
+    ("tautulli", {"summary": {"config_staged": "log in"}}, "tautulli config staged, finish it in Tautulli"),
+    ("tautulli", {"summary": {"config": "ok"}}, "tautulli restore uploaded"),
+    ("nzbget", {"reloaded": False}, "nzbget settings restored, but NZBGet didn't confirm the reload - restart NZBGet to apply them"),
+])
+def test_restore_message(app, result, message):
+    assert restore_actions.restore_message(app, result) == message
+
+
+def test_restore_step_names_the_instance():
+    assert restore_actions.restore_step("sonarr-anime") == "uploading backup to sonarr-anime, it will restart"
+    assert restore_actions.restore_step("plex") == "writing the backup into plex's data folder"
+
+
+def test_an_app_without_automated_restore_is_refused():
+    with pytest.raises(ValueError, match="no restore action"):
+        restore_actions.restore_app("profilarr", {"url": "http://p", "api_key": "k"}, "/tmp", "/tmp/b.tar.gz")

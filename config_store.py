@@ -40,7 +40,8 @@ DISCOVERABLE_APPS = ("radarr", "sonarr", "lidarr", "whisparr", "lazylibrarian", 
 DEFAULT_INSTANCE = {**DEFAULT_APP, "name": ""}
 
 # Drives the web UI's forms generically. "coming_soon" apps render
-# disabled with a badge, same as DESTINATION_META below.
+# disabled with a badge, same as DESTINATION_META below. restore_warning is
+# shown on the Restore tab before an app's restore.
 APP_META = [
     {"id": "radarr", "label": "Radarr", "icon": "radarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://radarr:7878", "extra_fields": [], "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
     {"id": "sonarr", "label": "Sonarr", "icon": "sonarr.svg", "status": "available", "key_required": True, "url_placeholder": "http://sonarr:8989", "extra_fields": [], "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
@@ -81,6 +82,7 @@ APP_META = [
         "url_placeholder": "http://192.168.1.10:8266",
         "extra_fields": [],
         "key_help": "Tools > API Keys - needed when Tdarr's authentication is on, the default from Tdarr 3",
+        "restore_warning": {"lead": "Destructive:", "text": "this wipes each Tdarr database collection before repopulating it from the backup.", "danger": True},
     },
     {"id": "sabnzbd", "label": "SABnzbd", "icon": "sabnzbd.svg", "status": "available", "key_required": True, "url_placeholder": "http://sabnzbd:8080", "extra_fields": []},
     {
@@ -99,6 +101,7 @@ APP_META = [
             {"name": "password", "label": "Password", "type": "password",
              "help": "Settings > Security > ControlPassword"},
         ],
+        "restore_warning": {"lead": "Replaces NZBGet's settings", "text": "with the backup's - news servers and their passwords, categories, paths, extension settings, and the username and password. NZBGet reloads to apply them; the queue and history are kept. If the backup's username or password differ from the ones in Settings, update them there afterwards."},
     },
     {"id": "tautulli", "label": "Tautulli", "icon": "tautulli.svg", "status": "available", "key_required": True, "url_placeholder": "http://tautulli:8181", "extra_fields": []},
     {
@@ -116,6 +119,7 @@ APP_META = [
              "placeholder": "/mnt/jellyfin-backups",
              "help": "Jellyfin's backups folder as mounted here; read-write to restore"},
         ],
+        "restore_warning": {"lead": "Replaces Jellyfin's database and settings", "text": "with the backup's - users, watch history, libraries and API keys. Anything added since is lost. Jellyfin restarts to apply it."},
     },
     {
         "id": "emby",
@@ -132,6 +136,7 @@ APP_META = [
              "placeholder": "/mnt/emby",
              "help": "Emby's /config folder as mounted here; read-write to restore"},
         ],
+        "restore_warning": {"lead": "Stop Emby first", "text": "- the restore is refused while it's running. It replaces Emby's databases and settings with the backup's - users, watch history, playlists, collections and API keys. Anything added since is lost. Start Emby again afterwards."},
     },
     {
         "id": "plex",
@@ -149,6 +154,7 @@ APP_META = [
              "placeholder": "/mnt/plex",
              "help": "Plex's \"Plex Media Server\" folder as mounted here; read-write to restore"},
         ],
+        "restore_warning": {"lead": "Stop Plex first", "text": "- the restore is refused while it's running. It replaces Plex's library database and settings with the backup's - libraries, playlists, collections, every user's watched state, and the server's identity, so a rebuilt server comes back as the same server with its shared users. Anything added since is lost. Never run the original server at the same time. Start Plex again afterwards."},
     },
     {
         "id": "seerr",
@@ -165,6 +171,7 @@ APP_META = [
              "placeholder": "/mnt/seerr",
              "help": "Seerr's /app/config folder as mounted here; read-write to restore"},
         ],
+        "restore_warning": {"lead": "Stop Seerr first", "text": "- the restore is refused while it's running. It replaces Seerr's database and settings with the backup's - users, requests, issues, the media server and Radarr/Sonarr connections, notifications and the API key. Anything added since is lost. Start Seerr again afterwards."},
     },
     {
         "id": "lazylibrarian",
@@ -181,6 +188,7 @@ APP_META = [
              "placeholder": "/mnt/lazylibrarian",
              "help": "LazyLibrarian's /config folder as mounted here; read-write to restore"},
         ],
+        "restore_warning": {"lead": "Stop LazyLibrarian first", "text": "- the restore is refused while it's running. It replaces LazyLibrarian's database and settings with the backup's, its API key included. Anything added since is lost. Start LazyLibrarian again afterwards."},
     },
 ]
 for _meta in APP_META:

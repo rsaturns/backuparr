@@ -8,6 +8,8 @@ import os
 import re
 import tempfile
 import zipfile
+from dataclasses import dataclass
+from typing import Callable
 
 import rclone_util
 from apps.sabnzbd import MASKED
@@ -59,48 +61,6 @@ def extract_zip(local_zip, dest_dir):
     return dest_dir
 
 
-def restore_upload_app(name, app_cfg, local_zip):
-    return build_app(name, app_cfg).restore_upload(local_zip)
-
-
-def restore_bazarr(app_cfg, local_zip, backup_dir):
-    return build_app("bazarr", app_cfg).restore_from_file(local_zip, backup_dir)
-
-
-def restore_tdarr(app_cfg, tmp_dir, local_zip):
-    extract_dir = extract_zip(local_zip, os.path.join(tmp_dir, "extracted"))
-    build_app("tdarr", app_cfg).restore(extract_dir)
-
-
-def restore_tautulli(app_cfg, tmp_dir, local_zip):
-    extract_dir = extract_zip(local_zip, os.path.join(tmp_dir, "extracted"))
-    return build_app("tautulli", app_cfg).restore(extract_dir)
-
-
-def restore_jellyfin(app_cfg, local_zip):
-    build_app("jellyfin", app_cfg).restore_from_file(local_zip)
-
-
-def restore_emby(app_cfg, local_zip):
-    build_app("emby", app_cfg).restore_from_file(local_zip)
-
-
-def restore_plex(app_cfg, local_zip):
-    build_app("plex", app_cfg).restore_from_file(local_zip)
-
-
-def restore_nzbget(app_cfg, local_zip):
-    return build_app("nzbget", app_cfg).restore_from_file(local_zip)
-
-
-def restore_seerr(app_cfg, local_zip):
-    build_app("seerr", app_cfg).restore_from_file(local_zip)
-
-
-def restore_lazylibrarian(app_cfg, local_zip):
-    build_app("lazylibrarian", app_cfg).restore_from_file(local_zip)
-
-
 def load_sabnzbd_config(tmp_dir, local_zip):
     extract_dir = extract_zip(local_zip, os.path.join(tmp_dir, "extracted"))
     with open(os.path.join(extract_dir, "sabnzbd_config.json")) as f:
@@ -116,56 +76,107 @@ def sabnzbd_server_summary(config):
     ]
 
 
-def restore_sabnzbd(app_cfg, config, password_prompt):
-    return build_app("sabnzbd", app_cfg).restore(config, password_prompt)
+def _upload(app, tmp_dir, local_zip, options):
+    app.restore_upload(local_zip)
 
 
-def restore_app(app_name, app_cfg, tmp_dir, local_zip, *, bazarr_backup_dir=None, sabnzbd_config=None, sabnzbd_password_prompt=None):
-    """Maps an app or instance id to its restore action. The caller owns the UX around
-    it (confirmation, progress reporting) and any app-specific prep.
+def _from_file(app, tmp_dir, local_zip, options):
+    app.restore_from_file(local_zip)
 
-    bazarr_backup_dir is required for bazarr. sabnzbd_password_prompt is
-    required for sabnzbd; sabnzbd_config can be passed pre-loaded or left
-    out to have it loaded here.
 
-    Returns a small dict describing what happened, shaped per app:
-      {"kind": "upload"} - radarr/sonarr/lidarr/whisparr/prowlarr
-      {"kind": "bazarr"} / {"kind": "tdarr"} / {"kind": "jellyfin"} / {"kind": "emby"} / {"kind": "plex"} / {"kind": "seerr"} / {"kind": "lazylibrarian"} / {"kind": "nzbget"}
-      {"kind": "tautulli", "summary": {...}} / {"kind": "sabnzbd", "summary": {...}}
-    """
-    if instance_type(app_name) in UPLOAD_RESTORE_APPS:
-        restore_upload_app(app_name, app_cfg, local_zip)
-        return {"kind": "upload"}
-    if app_name == "bazarr":
-        if not bazarr_backup_dir:
-            raise ValueError("bazarr restore requires bazarr_backup_dir")
-        restore_bazarr(app_cfg, local_zip, bazarr_backup_dir)
-        return {"kind": "bazarr"}
-    if app_name == "tdarr":
-        restore_tdarr(app_cfg, tmp_dir, local_zip)
-        return {"kind": "tdarr"}
-    if app_name == "jellyfin":
-        restore_jellyfin(app_cfg, local_zip)
-        return {"kind": "jellyfin"}
-    if app_name == "emby":
-        restore_emby(app_cfg, local_zip)
-        return {"kind": "emby"}
-    if app_name == "plex":
-        restore_plex(app_cfg, local_zip)
-        return {"kind": "plex"}
-    if app_name == "seerr":
-        restore_seerr(app_cfg, local_zip)
-        return {"kind": "seerr"}
-    if app_name == "lazylibrarian":
-        restore_lazylibrarian(app_cfg, local_zip)
-        return {"kind": "lazylibrarian"}
-    if app_name == "nzbget":
-        return {"kind": "nzbget", "reloaded": restore_nzbget(app_cfg, local_zip)}
-    if app_name == "tautulli":
-        return {"kind": "tautulli", "summary": restore_tautulli(app_cfg, tmp_dir, local_zip)}
-    if app_name == "sabnzbd":
-        if sabnzbd_password_prompt is None:
-            raise ValueError("sabnzbd restore requires sabnzbd_password_prompt")
-        config = sabnzbd_config if sabnzbd_config is not None else load_sabnzbd_config(tmp_dir, local_zip)
-        return {"kind": "sabnzbd", "summary": restore_sabnzbd(app_cfg, config, sabnzbd_password_prompt)}
-    raise ValueError(f"no restore action for {app_name!r}")
+def _extracted(app, tmp_dir, local_zip, options):
+    return app.restore(extract_zip(local_zip, os.path.join(tmp_dir, "extracted")))
+
+
+def _bazarr(app, tmp_dir, local_zip, options):
+    if not options.get("bazarr_backup_dir"):
+        raise ValueError("bazarr restore requires bazarr_backup_dir")
+    app.restore_from_file(local_zip, options["bazarr_backup_dir"])
+
+
+def _nzbget(app, tmp_dir, local_zip, options):
+    return {"reloaded": app.restore_from_file(local_zip)}
+
+
+def _tautulli(app, tmp_dir, local_zip, options):
+    return {"summary": _extracted(app, tmp_dir, local_zip, options)}
+
+
+def _sabnzbd(app, tmp_dir, local_zip, options):
+    if options.get("sabnzbd_password_prompt") is None:
+        raise ValueError("sabnzbd restore requires sabnzbd_password_prompt")
+    config = options.get("sabnzbd_config")
+    if config is None:
+        config = load_sabnzbd_config(tmp_dir, local_zip)
+    return {"summary": app.restore(config, options["sabnzbd_password_prompt"])}
+
+
+@dataclass(frozen=True)
+class Restore:
+    """How one app restores. run(app, tmp_dir, local_zip, options) returns
+    None or extra result fields; done is the finished message, or a
+    function of the result. {name} is the app or instance id."""
+    doing: str
+    run: Callable
+    done: str | Callable
+
+
+_UPLOAD = Restore("uploading backup to {name}, it will restart", _upload, "{name} restore uploaded, app is restarting")
+
+
+def _mounted(label):
+    return Restore("writing the backup into {name}'s data folder", _from_file,
+                   f"{{name}} restore complete, start {label} again to load it")
+
+
+# Keyed by app type. An app missing here has no automated restore (see
+# restore_supported in config_store).
+RESTORES = {
+    **{name: _UPLOAD for name in UPLOAD_RESTORE_APPS},
+    "bazarr": Restore("triggering bazarr restore", _bazarr, "bazarr restore triggered, app is restarting"),
+    "tdarr": Restore("restoring tdarr collections", _extracted, "tdarr restore complete"),
+    "jellyfin": Restore("copying the backup into jellyfin's backups folder", _from_file,
+                        "jellyfin restore started, Jellyfin is restarting to apply it"),
+    "emby": _mounted("Emby"),
+    "plex": _mounted("Plex"),
+    "seerr": _mounted("Seerr"),
+    "lazylibrarian": _mounted("LazyLibrarian"),
+    "nzbget": Restore("restoring nzbget settings", _nzbget, lambda result: (
+        "nzbget restore complete, NZBGet is reloading to apply it" if result.get("reloaded")
+        else "nzbget settings restored, but NZBGet didn't confirm the reload - restart NZBGet to apply them")),
+    "tautulli": Restore("restoring tautulli", _tautulli, lambda result: (
+        "tautulli config staged, finish it in Tautulli" if (result.get("summary") or {}).get("config_staged")
+        else "tautulli restore uploaded")),
+    "sabnzbd": Restore("restoring sabnzbd config", _sabnzbd, "sabnzbd restore complete"),
+}
+
+
+def _restore_for(app_name):
+    restore = RESTORES.get(instance_type(app_name))
+    if restore is None:
+        raise ValueError(f"no restore action for {app_name!r}")
+    return restore
+
+
+def restore_step(app_name):
+    """What the log says while app_name's restore runs."""
+    return _restore_for(app_name).doing.format(name=app_name)
+
+
+def restore_message(app_name, result):
+    """The finished message for a restore_app() result."""
+    done = _restore_for(app_name).done
+    return done(result) if callable(done) else done.format(name=app_name)
+
+
+def restore_app(app_name, app_cfg, tmp_dir, local_zip, **options):
+    """Runs an app or instance id's restore. The caller owns the UX around
+    it (confirmation, progress reporting). options: bazarr_backup_dir for
+    Bazarr; sabnzbd_password_prompt (and optionally a pre-loaded
+    sabnzbd_config) for SABnzbd.
+
+    Returns {"kind": "upload" or the app type, **whatever the restore adds}."""
+    restore = _restore_for(app_name)
+    extra = restore.run(build_app(app_name, app_cfg), tmp_dir, local_zip, options) or {}
+    kind = "upload" if restore is _UPLOAD else instance_type(app_name)
+    return {"kind": kind, **extra}

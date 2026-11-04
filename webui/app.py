@@ -1162,75 +1162,16 @@ def _restore_work(app_name, root, app_cfg, data, bazarr_backup_dir):
         tmp_dir, local_zip, filename = ra.fetch_backup(root, app_name, data.get("file"))
         RESTORE_RUN_STATE["file"] = filename
 
-        if instance_type(app_name) in ra.UPLOAD_RESTORE_APPS:
-            log.info("restore: uploading backup to %s, it will restart...", app_name)
-            ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
-            RESTORE_RUN_STATE["message"] = f"{app_name} restore uploaded, app is restarting"
+        passwords = data.get("passwords", {})
 
-        elif app_name == "bazarr":
-            log.info("restore: triggering bazarr restore...")
-            ra.restore_app(app_name, app_cfg, tmp_dir, local_zip, bazarr_backup_dir=bazarr_backup_dir)
-            RESTORE_RUN_STATE["message"] = "bazarr restore triggered, app is restarting"
+        def password_prompt(name, _server):
+            return passwords.get(name) or None
 
-        elif app_name == "tdarr":
-            log.info("restore: restoring tdarr collections...")
-            ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
-            RESTORE_RUN_STATE["message"] = "tdarr restore complete"
-
-        elif app_name == "jellyfin":
-            log.info("restore: copying the backup into jellyfin's backups folder...")
-            ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
-            RESTORE_RUN_STATE["message"] = "jellyfin restore started, Jellyfin is restarting to apply it"
-
-        elif app_name == "emby":
-            log.info("restore: writing the backup into emby's data folder...")
-            ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
-            RESTORE_RUN_STATE["message"] = "emby restore complete, start Emby again to load it"
-
-        elif app_name == "plex":
-            log.info("restore: writing the backup into plex's data folder...")
-            ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
-            RESTORE_RUN_STATE["message"] = "plex restore complete, start Plex again to load it"
-
-        elif app_name == "nzbget":
-            log.info("restore: restoring nzbget settings...")
-            result = ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
-            RESTORE_RUN_STATE["message"] = (
-                "nzbget restore complete, NZBGet is reloading to apply it" if result.get("reloaded")
-                else "nzbget settings restored, but NZBGet didn't confirm the reload - restart NZBGet to apply them"
-            )
-
-        elif app_name == "seerr":
-            log.info("restore: writing the backup into seerr's data folder...")
-            ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
-            RESTORE_RUN_STATE["message"] = "seerr restore complete, start Seerr again to load it"
-
-        elif app_name == "lazylibrarian":
-            log.info("restore: writing the backup into lazylibrarian's data folder...")
-            ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
-            RESTORE_RUN_STATE["message"] = "lazylibrarian restore complete, start LazyLibrarian again to load it"
-
-        elif app_name == "tautulli":
-            log.info("restore: restoring tautulli...")
-            result = ra.restore_app(app_name, app_cfg, tmp_dir, local_zip)
-            RESTORE_RUN_STATE["summary"] = result["summary"]
-            RESTORE_RUN_STATE["message"] = (
-                "tautulli config staged, finish it in Tautulli"
-                if result["summary"].get("config_staged")
-                else "tautulli restore uploaded"
-            )
-
-        elif app_name == "sabnzbd":
-            passwords = data.get("passwords", {})
-
-            def password_prompt(name, _server):
-                return passwords.get(name) or None
-
-            log.info("restore: restoring sabnzbd config...")
-            result = ra.restore_app(app_name, app_cfg, tmp_dir, local_zip, sabnzbd_password_prompt=password_prompt)
-            RESTORE_RUN_STATE["summary"] = result["summary"]
-            RESTORE_RUN_STATE["message"] = "sabnzbd restore complete"
-
+        log.info("restore: %s...", ra.restore_step(app_name))
+        result = ra.restore_app(app_name, app_cfg, tmp_dir, local_zip, bazarr_backup_dir=bazarr_backup_dir,
+                                sabnzbd_password_prompt=password_prompt)
+        RESTORE_RUN_STATE["summary"] = result.get("summary")
+        RESTORE_RUN_STATE["message"] = ra.restore_message(app_name, result)
         RESTORE_RUN_STATE["ok"] = True
     except Exception as exc:
         log_failure(log, f"restore failed for {app_name}", exc, app_cfg.get("url"), app=app_name)

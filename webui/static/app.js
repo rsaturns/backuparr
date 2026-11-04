@@ -2170,62 +2170,17 @@ function renderRestoreExtra() {
   const extraRoot = document.getElementById("r-extra");
   extraRoot.innerHTML = "";
 
-  if (appId === "plex") {
+  const warning = appMeta(appId)?.restore_warning;
+  if (warning) {
     const block = document.createElement("div");
     block.className = "extra-field-block";
-    block.innerHTML =
-      "<strong>Stop Plex first</strong> - the restore is refused while it's running. " +
-      "It replaces Plex's library database and settings with the backup's - libraries, playlists, collections, every user's watched state, " +
-      "and the server's identity, so a rebuilt server comes back as the same server with its shared users. " +
-      "Anything added since is lost. Never run the original server at the same time. Start Plex again afterwards.";
+    const lead = document.createElement("strong");
+    if (warning.danger) lead.className = "danger-text";
+    lead.textContent = warning.lead;
+    block.append(lead, ` ${warning.text}`);
     extraRoot.appendChild(block);
-  } else if (appId === "tdarr") {
-    const block = document.createElement("div");
-    block.className = "extra-field-block";
-    block.innerHTML =
-      '<strong style="color:var(--danger)">Destructive:</strong> this wipes each Tdarr database collection before repopulating it from the backup.';
-    extraRoot.appendChild(block);
-  } else if (appId === "jellyfin") {
-    const block = document.createElement("div");
-    block.className = "extra-field-block";
-    block.innerHTML =
-      "<strong>Replaces Jellyfin's database and settings</strong> with the backup's - users, watch history, libraries and API keys. " +
-      "Anything added since is lost. Jellyfin restarts to apply it.";
-    extraRoot.appendChild(block);
-  } else if (appId === "emby") {
-    const block = document.createElement("div");
-    block.className = "extra-field-block";
-    block.innerHTML =
-      "<strong>Stop Emby first</strong> - the restore is refused while it's running. " +
-      "It replaces Emby's databases and settings with the backup's - users, watch history, playlists, collections and API keys. " +
-      "Anything added since is lost. Start Emby again afterwards.";
-    extraRoot.appendChild(block);
-  } else if (appId === "nzbget") {
-    const block = document.createElement("div");
-    block.className = "extra-field-block";
-    block.innerHTML =
-      "<strong>Replaces NZBGet's settings</strong> with the backup's - news servers and their passwords, categories, paths, " +
-      "extension settings, and the username and password. NZBGet reloads to apply them; the queue and history are kept. " +
-      "If the backup's username or password differ from the ones in Settings, update them there afterwards.";
-    extraRoot.appendChild(block);
-  } else if (appId === "seerr") {
-    const block = document.createElement("div");
-    block.className = "extra-field-block";
-    block.innerHTML =
-      "<strong>Stop Seerr first</strong> - the restore is refused while it's running. " +
-      "It replaces Seerr's database and settings with the backup's - users, requests, issues, " +
-      "the media server and Radarr/Sonarr connections, notifications and the API key. " +
-      "Anything added since is lost. Start Seerr again afterwards.";
-    extraRoot.appendChild(block);
-  } else if (appId === "lazylibrarian") {
-    const block = document.createElement("div");
-    block.className = "extra-field-block";
-    block.innerHTML =
-      "<strong>Stop LazyLibrarian first</strong> - the restore is refused while it's running. " +
-      "It replaces LazyLibrarian's database and settings with the backup's, its API key included. " +
-      "Anything added since is lost. Start LazyLibrarian again afterwards.";
-    extraRoot.appendChild(block);
-  } else if (appId === "bazarr") {
+  }
+  if (appId === "bazarr") {
     const block = document.createElement("div");
     block.className = "extra-field-block";
     block.innerHTML =

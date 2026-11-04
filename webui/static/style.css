@@ -800,6 +800,7 @@ input:focus, select:focus, textarea:focus {
   padding: 12px;
   margin: 10px 0;
 }
+.danger-text { color: var(--danger); }
 
 .server-pw-row {
   display: flex;
