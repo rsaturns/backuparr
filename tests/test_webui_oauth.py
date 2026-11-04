@@ -108,7 +108,7 @@ def test_a_state_can_only_be_used_once(authed_client, isolated_webui, monkeypatc
 def test_an_old_state_expires(authed_client, isolated_webui, monkeypatch):
     monkeypatch.setattr(gdrive_oauth, "exchange_code", lambda *a: pytest.fail("must not exchange"))
     state = start_flow(authed_client, isolated_webui)
-    isolated_webui._OAUTH_STATE[state] = time.time() - isolated_webui._OAUTH_STATE_TTL - 1
+    isolated_webui._OAUTH_STATE[state] = time.monotonic() - isolated_webui._OAUTH_STATE_TTL - 1
     assert "invalid or expired" in query(callback(authed_client, state=state, code="c"))["gdrive_error"][0]
     assert state not in isolated_webui._OAUTH_STATE
 
@@ -134,8 +134,8 @@ def test_google_refusing_the_code_shows_googles_reason(authed_client, isolated_w
 
 
 def test_expired_states_are_swept_when_a_new_one_is_made(isolated_webui):
-    isolated_webui._OAUTH_STATE["old"] = time.time() - isolated_webui._OAUTH_STATE_TTL - 5
-    isolated_webui._OAUTH_STATE["recent"] = time.time()
+    isolated_webui._OAUTH_STATE["old"] = time.monotonic() - isolated_webui._OAUTH_STATE_TTL - 5
+    isolated_webui._OAUTH_STATE["recent"] = time.monotonic()
     fresh = isolated_webui._oauth_state_new()
     assert set(isolated_webui._OAUTH_STATE) == {"recent", fresh}
 

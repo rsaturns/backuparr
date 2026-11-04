@@ -118,7 +118,7 @@ def test_a_successful_login_clears_earlier_failures(anonymous, isolated_webui):
 
 
 def test_lockout_grows_with_each_failure_then_caps(isolated_webui):
-    now = time.time()
+    now = time.monotonic()
     remaining = isolated_webui._login_lockout_remaining
     cases = {4: 0, 5: 5, 6: 10, 7: 20, 9: 80, 11: 300, 40: 300}
     for failures, expected in cases.items():
@@ -128,14 +128,14 @@ def test_lockout_grows_with_each_failure_then_caps(isolated_webui):
 
 def test_lockout_expires_and_old_records_are_forgotten(isolated_webui):
     failures = isolated_webui._LOGIN_FAILURES
-    failures["10.0.0.1"] = (5, time.time() - 6)  # a 5s lockout, 6s ago
-    failures["10.0.0.2"] = (50, time.time() - isolated_webui._LOGIN_FAILURE_TTL - 1)
+    failures["10.0.0.1"] = (5, time.monotonic() - 6)  # a 5s lockout, 6s ago
+    failures["10.0.0.2"] = (50, time.monotonic() - isolated_webui._LOGIN_FAILURE_TTL - 1)
     assert isolated_webui._login_lockout_remaining("10.0.0.1") == 0
     assert "10.0.0.2" not in failures
 
 
 def test_lockout_is_tracked_per_address(isolated_webui):
-    isolated_webui._LOGIN_FAILURES["10.0.0.1"] = (9, time.time())
+    isolated_webui._LOGIN_FAILURES["10.0.0.1"] = (9, time.monotonic())
     assert isolated_webui._login_lockout_remaining("10.0.0.1") > 0
     assert isolated_webui._login_lockout_remaining("10.0.0.2") == 0
 
@@ -265,3 +265,14 @@ def test_reset_still_resets_when_the_backup_folder_cant_be_cleared(isolated_webu
     assert response.status_code == 200
     assert not os.path.exists(auth_store.AUTH_PATH) and not os.path.exists(isolated_webui.CONFIG_PATH)
     assert "couldn't remove the local backups" in caplog.text
+
+
+def test_failed_logins_from_concurrent_requests_all_count(isolated_webui):
+    import threading
+    threads = [threading.Thread(target=lambda: [isolated_webui._login_record_failure("10.0.0.9") for _ in range(200)])
+               for _ in range(6)]  # waitress's thread count
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert isolated_webui._LOGIN_FAILURES["10.0.0.9"][0] == 1200

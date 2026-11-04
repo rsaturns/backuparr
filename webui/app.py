@@ -153,12 +153,16 @@ def _security_headers(response):
         response.headers.setdefault("Cache-Control", "no-store")
     return response
 
-# CSRF state for the OAuth callback, no session store needed. state -> ts
+# CSRF state for the OAuth callback, no session store needed. state ->
+# time.monotonic() it was issued. Waitress serves requests on several
+# threads, so these dicts are only touched under their lock.
 _OAUTH_STATE = {}
+_OAUTH_STATE_LOCK = threading.Lock()
 _OAUTH_STATE_TTL = 600
 
-# Login lockout tracking. ip -> (failure_count, last_failure_ts)
+# Login lockout tracking. ip -> (failure_count, last failure's time.monotonic())
 _LOGIN_FAILURES = {}
+_LOGIN_FAILURES_LOCK = threading.Lock()
 _LOGIN_FAILURE_TTL = 3600
 _LOGIN_LOCKOUT_THRESHOLD = 5
 _LOGIN_LOCKOUT_BASE_SECONDS = 5
@@ -166,11 +170,12 @@ _LOGIN_LOCKOUT_MAX_SECONDS = 300
 
 
 def _login_lockout_remaining(ip):
-    now = time.time()
-    for key, (_, last_fail) in list(_LOGIN_FAILURES.items()):
-        if now - last_fail > _LOGIN_FAILURE_TTL:
-            del _LOGIN_FAILURES[key]
-    count, last_fail = _LOGIN_FAILURES.get(ip, (0, 0))
+    now = time.monotonic()
+    with _LOGIN_FAILURES_LOCK:
+        for key, (_, last_fail) in list(_LOGIN_FAILURES.items()):
+            if now - last_fail > _LOGIN_FAILURE_TTL:
+                del _LOGIN_FAILURES[key]
+        count, last_fail = _LOGIN_FAILURES.get(ip, (0, 0))
     if count < _LOGIN_LOCKOUT_THRESHOLD:
         return 0
     lockout = min(_LOGIN_LOCKOUT_BASE_SECONDS * (2 ** (count - _LOGIN_LOCKOUT_THRESHOLD)), _LOGIN_LOCKOUT_MAX_SECONDS)
@@ -178,8 +183,9 @@ def _login_lockout_remaining(ip):
 
 
 def _login_record_failure(ip):
-    count, _ = _LOGIN_FAILURES.get(ip, (0, 0))
-    _LOGIN_FAILURES[ip] = (count + 1, time.time())
+    with _LOGIN_FAILURES_LOCK:
+        count, _ = _LOGIN_FAILURES.get(ip, (0, 0))
+        _LOGIN_FAILURES[ip] = (count + 1, time.monotonic())
 
 
 # ---------------------------------------------------------------- auth ----
@@ -287,7 +293,8 @@ def api_login():
     if not auth_store.verify_password(username, password):
         _login_record_failure(ip)
         return jsonify({"error": "Incorrect username or password"}), 401
-    _LOGIN_FAILURES.pop(ip, None)
+    with _LOGIN_FAILURES_LOCK:
+        _LOGIN_FAILURES.pop(ip, None)
     session.permanent = True
     session["authed"] = True
     return jsonify({"ok": True})
@@ -1238,18 +1245,20 @@ def _redirect_with_error(message):
 
 
 def _oauth_state_new():
-    now = time.time()
-    for s, ts in list(_OAUTH_STATE.items()):
-        if now - ts > _OAUTH_STATE_TTL:
-            del _OAUTH_STATE[s]
+    now = time.monotonic()
     state = secrets.token_urlsafe(24)
-    _OAUTH_STATE[state] = now
+    with _OAUTH_STATE_LOCK:
+        for s, ts in list(_OAUTH_STATE.items()):
+            if now - ts > _OAUTH_STATE_TTL:
+                del _OAUTH_STATE[s]
+        _OAUTH_STATE[state] = now
     return state
 
 
 def _oauth_state_consume(state):
-    ts = _OAUTH_STATE.pop(state, None)
-    return ts is not None and (time.time() - ts) <= _OAUTH_STATE_TTL
+    with _OAUTH_STATE_LOCK:
+        ts = _OAUTH_STATE.pop(state, None)
+    return ts is not None and (time.monotonic() - ts) <= _OAUTH_STATE_TTL
 
 
 @app.get("/api/destinations/gdrive/oauth/start")
