@@ -18,6 +18,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 import atomic_file
 import auth_store
+import backup
 import config_store
 import destination_util
 import discovery
@@ -89,14 +90,16 @@ try:
 except OSError:
     VERSION = "dev"
 
+SECRET_KEY_PATH = os.environ.get("BACKUPARR_SECRET_KEY_PATH", "/config/backuparr/secret_key")
+
+
 def _load_or_create_secret_key():
     """Session-signing key, persisted so sessions survive restarts."""
-    path = os.environ.get("BACKUPARR_SECRET_KEY_PATH", "/config/backuparr/secret_key")
-    if os.path.exists(path):
-        with open(path, "rb") as f:
+    if os.path.exists(SECRET_KEY_PATH):
+        with open(SECRET_KEY_PATH, "rb") as f:
             return f.read()
     key = secrets.token_bytes(32)
-    atomic_file.write_private(path, key)
+    atomic_file.write_private(SECRET_KEY_PATH, key)
     return key
 
 
@@ -339,9 +342,8 @@ def api_reset():
 
     rclone_conf_path = os.environ.get("RCLONE_CONFIG", "/config/backuparr/rclone.conf")
     rclone_pass_path = os.environ.get("RCLONE_CONFIG_PASS_FILE", "/config/backuparr/rclone.pass")
-    secret_key_path = os.environ.get("BACKUPARR_SECRET_KEY_PATH", "/config/backuparr/secret_key")
     # secret_key too, so it invalidates any other already-logged-in session.
-    for path in (CONFIG_PATH, rclone_conf_path, rclone_pass_path, auth_store.AUTH_PATH, secret_key_path, secrets_crypto.KEY_PATH):
+    for path in (CONFIG_PATH, rclone_conf_path, rclone_pass_path, auth_store.AUTH_PATH, SECRET_KEY_PATH, secrets_crypto.KEY_PATH):
         try:
             os.remove(path)
         except FileNotFoundError:
@@ -978,7 +980,7 @@ def api_backup_status():
     state["log_tail"] = []
     if not state["running"]:
         try:
-            state["log_tail"] = _tail_lines(os.path.join(os.environ.get("BACKUPARR_LOG_DIR", "/var/log/backuparr"), "backup.log"))
+            state["log_tail"] = _tail_lines(backup.LOG_FILE)
         except OSError:
             pass
     return jsonify(state)

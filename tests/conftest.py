@@ -7,6 +7,7 @@ import threading
 import pytest
 
 import auth_store
+import backup
 import config_store
 import destination_util
 import rclone_util
@@ -26,6 +27,7 @@ def isolated_webui(tmp_path, monkeypatch):
     monkeypatch.setenv("RCLONE_CONFIG", str(tmp_path / "rclone.conf"))
     monkeypatch.setenv("RCLONE_CONFIG_PASS_FILE", str(tmp_path / "rclone.pass"))
     monkeypatch.setattr(auth_store, "AUTH_PATH", str(tmp_path / "auth.json"))
+    monkeypatch.setattr(backup, "LOG_FILE", str(tmp_path / "logs" / "backup.log"))
     monkeypatch.setattr(config_store, "CONFIG_PATH", str(tmp_path / "config.json"))
     monkeypatch.setattr(secrets_crypto, "KEY_PATH", str(tmp_path / "secrets.key"))
     monkeypatch.setattr(secrets_crypto, "_fernet", None)

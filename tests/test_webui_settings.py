@@ -364,7 +364,7 @@ def test_restore_override_fields_are_the_url_key_and_the_apps_own_extras(isolate
 
 def test_the_session_key_is_created_once_private_and_reused(isolated_webui, tmp_path, monkeypatch):
     path = tmp_path / "keys" / "secret"
-    monkeypatch.setenv("BACKUPARR_SECRET_KEY_PATH", str(path))
+    monkeypatch.setattr(isolated_webui, "SECRET_KEY_PATH", str(path))
     first = isolated_webui._load_or_create_secret_key()
     assert len(first) == 32 and oct(path.stat().st_mode & 0o777) == "0o600"
     assert isolated_webui._load_or_create_secret_key() == first
@@ -373,7 +373,7 @@ def test_the_session_key_is_created_once_private_and_reused(isolated_webui, tmp_
 
 def test_a_failed_key_write_leaves_no_temporary_file(isolated_webui, tmp_path, monkeypatch):
     path = tmp_path / "keys2" / "secret"
-    monkeypatch.setenv("BACKUPARR_SECRET_KEY_PATH", str(path))
+    monkeypatch.setattr(isolated_webui, "SECRET_KEY_PATH", str(path))
 
     def explode(*args, **kwargs):
         raise OSError("disk full")
