@@ -43,7 +43,7 @@ from apps.sonarr import SonarrApp
 from apps.tautulli import TautulliApp, TautulliError
 from apps.tdarr import TdarrApp, TdarrError
 from apps.whisparr import WhisparrApp
-from config_store import ConfigError, enabled_apps, enabled_destinations, instance_type
+from config_store import ConfigError, app_meta, enabled_apps, enabled_destinations, instance_type
 
 LOG_DIR = os.environ.get("BACKUPARR_LOG_DIR", "/var/log/backuparr")
 LOG_FILE = os.path.join(LOG_DIR, "backup.log")
@@ -223,45 +223,37 @@ def build_app(name, app_cfg):
     return configure_app_headers(_build_app(instance_type(name), app_cfg), app_cfg.get("request_headers", []))
 
 
+# Every app type's driver. Each takes (url, api_key, **extra fields) - the
+# extra fields being its APP_META extra_fields - or, for an app with
+# no_api_key, (url, **extra fields).
+DRIVERS = {
+    "radarr": RadarrApp,
+    "sonarr": SonarrApp,
+    "lidarr": LidarrApp,
+    "whisparr": WhisparrApp,
+    "prowlarr": ProwlarrApp,
+    "profilarr": ProfilarrApp,
+    "bazarr": BazarrApp,
+    "tdarr": TdarrApp,
+    "sabnzbd": SabnzbdApp,
+    "nzbget": NzbgetApp,
+    "tautulli": TautulliApp,
+    "jellyfin": JellyfinApp,
+    "emby": EmbyApp,
+    "plex": PlexApp,
+    "seerr": SeerrApp,
+    "lazylibrarian": LazyLibrarianApp,
+}
+
+
 def _build_app(name, app_cfg):
-    if name == "radarr":
-        return RadarrApp(app_cfg["url"], app_cfg["api_key"])
-    if name == "sonarr":
-        return SonarrApp(app_cfg["url"], app_cfg["api_key"])
-    if name == "lidarr":
-        return LidarrApp(app_cfg["url"], app_cfg["api_key"])
-    if name == "whisparr":
-        return WhisparrApp(app_cfg["url"], app_cfg["api_key"])
-    if name == "prowlarr":
-        return ProwlarrApp(app_cfg["url"], app_cfg["api_key"])
-    if name == "profilarr":
-        return ProfilarrApp(app_cfg["url"], app_cfg["api_key"])
-    if name == "bazarr":
-        return BazarrApp(
-            app_cfg["url"],
-            app_cfg["api_key"],
-            username=app_cfg.get("username") or None,
-            password=app_cfg.get("password") or None,
-        )
-    if name == "tdarr":
-        return TdarrApp(app_cfg["url"], api_key=app_cfg.get("api_key") or None)
-    if name == "sabnzbd":
-        return SabnzbdApp(app_cfg["url"], app_cfg["api_key"])
-    if name == "nzbget":
-        return NzbgetApp(app_cfg["url"], app_cfg.get("username") or None, app_cfg.get("password") or None)
-    if name == "tautulli":
-        return TautulliApp(app_cfg["url"], app_cfg["api_key"])
-    if name == "jellyfin":
-        return JellyfinApp(app_cfg["url"], app_cfg["api_key"], backup_dir=app_cfg.get("backup_dir") or None)
-    if name == "emby":
-        return EmbyApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
-    if name == "plex":
-        return PlexApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
-    if name == "seerr":
-        return SeerrApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
-    if name == "lazylibrarian":
-        return LazyLibrarianApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
-    raise ValueError(f"Unknown app: {name}")
+    meta = app_meta(name)
+    if name not in DRIVERS or meta is None:
+        raise ValueError(f"Unknown app: {name}")
+    extras = {field["name"]: app_cfg.get(field["name"]) or None for field in meta["extra_fields"]}
+    if meta.get("no_api_key"):
+        return DRIVERS[name](app_cfg["url"], **extras)
+    return DRIVERS[name](app_cfg["url"], app_cfg.get("api_key", ""), **extras)
 
 
 _TAR_SUFFIX = re.compile(r"\.tar\.(?:gz|bz2|xz|zst)$")

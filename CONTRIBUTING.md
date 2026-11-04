@@ -50,13 +50,13 @@ scripts/smoke_test.sh backuparr:dev    # the same container check CI runs
 ### Adding an app
 
 Each app is a driver in `apps/<name>.py`, researched against the app's real
-API or source code (the existing drivers' docstrings show the depth
-expected). A new app also needs an entry in `config_store.py`'s `APP_META`,
-wiring in `backup.py`'s `_build_app()`, its restore in `restore_actions.py`'s
-`RESTORES` (with a `restore_warning` in `APP_META` when the user must know
-something first), an icon in `webui/static/icons/`, its
-row in `docs/apps/index.md` (plus a page in `docs/apps/` if it needs notes),
-the issue-form dropdown, and the generator in
+API or source code (the existing drivers' docstrings show the depth expected).
+A new app also needs an entry in `config_store.py`'s `APP_META`, its driver in
+`backup.py`'s `DRIVERS` (built from the `APP_META` extra fields), its restore
+in `restore_actions.py`'s `RESTORES` (with a `restore_warning` in `APP_META`
+when the user must know something first), an icon in `webui/static/icons/`,
+its row in `docs/apps/index.md` (plus a page in `docs/apps/` if it needs
+notes), the issue-form dropdown, and the generator in
 `scripts/gen_architecture_diagram.py`. Ask in the issue if any of that is
 unclear.
 
