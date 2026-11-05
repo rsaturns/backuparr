@@ -28,7 +28,11 @@ def _load():
 
 
 def username():
-    return _load().get("username") if has_credentials() else None
+    """The admin's username, or None without a readable account."""
+    try:
+        return _load().get("username")
+    except (OSError, ValueError, AttributeError):
+        return None
 
 
 def set_credentials(username, password):

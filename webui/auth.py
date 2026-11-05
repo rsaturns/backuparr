@@ -78,7 +78,7 @@ _PUBLIC_PATHS = {"/api/logout", "/api/reset"}
 # Every local-auth API route. Keep in sync with the /api/setup, /api/login,
 # /api/logout and /api/reset routes: any listed here is refused with 403 when
 # auth is disabled, and an auth route missing from this set would stay reachable.
-_AUTH_API_PATHS = {"/api/setup", "/api/setup/restore", "/api/login", "/api/logout", "/api/reset"}
+_AUTH_API_PATHS = {"/api/setup", "/api/setup/restore", "/api/login", "/api/logout", "/api/reset", "/api/password"}
 
 
 @bp.before_app_request
@@ -182,8 +182,8 @@ def api_setup():
     username, password = _credentials_from_request()
     if not username or not password:
         return jsonify({"error": "Username and password are required"}), 400
-    if len(password) < 8:
-        return jsonify({"error": "Password must be at least 8 characters"}), 400
+    if len(password) < MIN_PASSWORD_LENGTH:
+        return jsonify({"error": f"Password must be at least {MIN_PASSWORD_LENGTH} characters"}), 400
     auth_store.set_credentials(username, password)
     session.permanent = True
     session["authed"] = True
@@ -221,11 +221,7 @@ def _restore(archive, key):
         except self_restore.SelfRestoreError as exc:
             return jsonify({"error": str(exc).removeprefix("backuparr: ")}), 400
         warnings = self_restore.apply(members, key)
-    try:
-        os.remove(SECRET_KEY_PATH)
-    except FileNotFoundError:
-        pass
-    current_app.secret_key = _load_or_create_secret_key()
+    _new_session_key()
     session.clear()
     return jsonify({"ok": True, "warnings": warnings})
 
@@ -274,6 +270,48 @@ def api_login():
         _LOGIN_FAILURES.pop(ip, None)
     session.permanent = True
     session["authed"] = True
+    return jsonify({"ok": True})
+
+
+MIN_PASSWORD_LENGTH = 8
+
+
+def _new_session_key():
+    """Replaces the key sessions are signed with, so every existing session
+    cookie stops working."""
+    try:
+        os.remove(SECRET_KEY_PATH)
+    except FileNotFoundError:
+        pass
+    current_app.secret_key = _load_or_create_secret_key()
+
+
+@bp.post("/api/password")
+def api_change_password():
+    """Changes the admin password (#120). A wrong current password counts
+    towards the login lockout; every other session is signed out, and this
+    one stays signed in."""
+    ip = request.remote_addr or "unknown"
+    wait = _login_lockout_remaining(ip)
+    if wait:
+        return jsonify({"error": f"Too many failed attempts - try again in {int(wait) + 1}s"}), 429
+    data = request.get_json(force=True, silent=True)
+    data = data if isinstance(data, dict) else {}
+    current, new, confirm = (data.get(k) for k in ("current_password", "new_password", "confirm_password"))
+    if not all(isinstance(v, str) for v in (current, new, confirm)):
+        return jsonify({"error": "Enter the current password and the new one twice"}), 400
+    if not auth_store.verify_password(auth_store.username(), current):
+        _login_record_failure(ip)
+        return jsonify({"error": "The current password isn't right"}), 403
+    if len(new) < MIN_PASSWORD_LENGTH:
+        return jsonify({"error": f"The new password must be at least {MIN_PASSWORD_LENGTH} characters"}), 400
+    if new != confirm:
+        return jsonify({"error": "The new passwords don't match"}), 400
+    auth_store.set_credentials(auth_store.username(), new)
+    _new_session_key()
+    session.clear()
+    session.permanent = True
+    session["authed"] = True  # re-signed with the new key in this response
     return jsonify({"ok": True})
 
 

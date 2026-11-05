@@ -392,6 +392,78 @@ function initTheme() {
   });
 }
 
+// ----------------------------------------------------------- user menu ----
+// The username's menu in the top bar: Change password and Log out (#120).
+// Not on the page when BACKUPARR_DISABLE_AUTH is set.
+function initUserMenu() {
+  const btn = document.getElementById("user-menu-btn");
+  if (!btn) return;
+  const list = document.getElementById("user-menu-list");
+  const setOpen = (open) => {
+    list.classList.toggle("hidden", !open);
+    btn.setAttribute("aria-expanded", String(open));
+  };
+  btn.addEventListener("click", () => setOpen(list.classList.contains("hidden")));
+  document.addEventListener("click", (e) => {
+    if (!document.getElementById("user-menu").contains(e.target)) setOpen(false);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !list.classList.contains("hidden")) {
+      setOpen(false);
+      btn.focus();
+    }
+  });
+  list.addEventListener("click", () => setOpen(false));
+  initChangePassword();
+}
+
+function initChangePassword() {
+  const modal = document.getElementById("password-modal");
+  const form = document.getElementById("password-form");
+  const result = document.getElementById("pw-result");
+  const fields = ["pw-current", "pw-new", "pw-confirm"].map((id) => document.getElementById(id));
+  const close = () => {
+    modal.classList.add("hidden");
+    form.reset();
+    result.textContent = "";
+  };
+  document.getElementById("change-password-btn").addEventListener("click", () => {
+    form.reset();
+    result.textContent = "";
+    modal.classList.remove("hidden");
+    fields[0].focus();
+  });
+  document.getElementById("password-modal-close").addEventListener("click", close);
+  document.getElementById("pw-cancel-btn").addEventListener("click", close);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !modal.classList.contains("hidden")) close();
+  });
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const [current, next, confirmed] = fields.map((f) => f.value);
+    if (next !== confirmed) {
+      result.textContent = "The new passwords don't match";
+      result.className = "save-result fail";
+      return;
+    }
+    const submit = document.getElementById("pw-submit-btn");
+    submit.disabled = true;
+    try {
+      await apiFetch("/api/password", {
+        method: "POST",
+        body: JSON.stringify({ current_password: current, new_password: next, confirm_password: confirmed }),
+      });
+      close();
+      toast("Password changed - other browsers were signed out", "ok");
+    } catch (err) {
+      result.textContent = err.message;
+      result.className = "save-result fail";
+    } finally {
+      submit.disabled = false;
+    }
+  });
+}
+
 // -------------------------------------------------------------- logout ----
 function initLogout() {
   const btn = document.getElementById("logout-btn");
@@ -2795,6 +2867,7 @@ async function init() {
   initTabs();
   initFeedbackMenu();
   initTheme();
+  initUserMenu();
   initLogout();
   initWhatsChangedEvents();
   initRunLogPanel();

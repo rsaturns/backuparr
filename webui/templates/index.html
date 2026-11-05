@@ -27,7 +27,20 @@
     <button class="tab-btn" data-tab="restore" type="button">Restore</button>
   </nav>
   {% if not auth_disabled %}
-  <button type="button" class="btn btn-ghost btn-sm" id="logout-btn">Log out</button>
+  <div class="user-menu" id="user-menu">
+    <button type="button" class="btn btn-ghost btn-sm user-menu-btn" id="user-menu-btn"
+            aria-haspopup="menu" aria-expanded="false" aria-controls="user-menu-list">
+      <svg class="user-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <circle cx="12" cy="8" r="4"></circle>
+        <path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"></path>
+      </svg>
+      <span class="user-name">{{ username }}</span>
+    </button>
+    <div class="user-menu-list hidden" id="user-menu-list" role="menu" aria-label="Account">
+      <button type="button" class="user-menu-item" role="menuitem" id="change-password-btn">Change password</button>
+      <button type="button" class="user-menu-item" role="menuitem" id="logout-btn">Log out</button>
+    </div>
+  </div>
   {% endif %}
   <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle light/dark theme">&#9789;</button>
 </header>
@@ -498,6 +511,40 @@
     </div>
   </div>
 </div>
+
+{% if not auth_disabled %}
+<div id="password-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="password-modal-title">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="password-modal-title">Change password</h3>
+      <button type="button" class="icon-btn modal-close" id="password-modal-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form id="password-form">
+        <input type="text" class="hidden" autocomplete="username" value="{{ username }}" aria-hidden="true" tabindex="-1">
+        <label class="field">
+          <span class="field-label">Current password</span>
+          <input type="password" id="pw-current" autocomplete="current-password" required>
+        </label>
+        <label class="field">
+          <span class="field-label">New password <span class="muted">(at least 8 characters)</span></span>
+          <input type="password" id="pw-new" autocomplete="new-password" minlength="8" required>
+        </label>
+        <label class="field">
+          <span class="field-label">Confirm new password</span>
+          <input type="password" id="pw-confirm" autocomplete="new-password" minlength="8" required>
+        </label>
+        <p class="hint">Every other signed-in browser is signed out; this one stays signed in.</p>
+        <div class="save-row">
+          <button type="submit" class="btn btn-primary" id="pw-submit-btn">Change password</button>
+          <button type="button" class="btn btn-ghost" id="pw-cancel-btn">Cancel</button>
+          <span id="pw-result" class="save-result" role="status" aria-live="polite"></span>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <div id="log-panel" class="log-panel hidden" role="dialog" aria-labelledby="log-panel-title">
   <div class="log-panel-head">

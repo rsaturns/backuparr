@@ -96,7 +96,8 @@ def index():
     lead = ("prowlarr", *DISCOVERABLE_APPS)
     apps = sorted(APP_META, key=lambda m: lead.index(m["id"]) if m["id"] in lead else len(lead))
     return render_template("index.html", app_meta=apps, destination_meta=DESTINATION_META, version=VERSION,
-                           auth_disabled=auth._AUTH_DISABLED, ui_meta={"apps": APP_META, "destinations": DESTINATION_META})
+                           auth_disabled=auth._AUTH_DISABLED, username=auth.auth_store.username() or "",
+                           ui_meta={"apps": APP_META, "destinations": DESTINATION_META})
 
 
 # ------------------------------------------------------------- startup ----
