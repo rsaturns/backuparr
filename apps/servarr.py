@@ -30,6 +30,17 @@ _BACKUP_ACCESS_HINT = (
 )
 
 
+# Backup files are served by the app's web UI, not its API: they take the
+# app's own login (Forms or Basic) and never the API key. So with
+# Authentication Required set to Enabled no API client can download one,
+# while Disabled for Local Addresses lets Backuparr's private address through.
+_LOGIN_REQUIRED = (
+    "it asks every address to log in, and an API key can't download backups past that login. "
+    "In the app, set Settings > General > Security > Authentication Required to "
+    "Disabled for Local Addresses."
+)
+
+
 class ServarrError(AppError):
     pass
 
@@ -127,7 +138,32 @@ class ServarrApp:
         return res.json()
 
     def test_connection(self):
-        return f"{self.name} {self._status().get('version', '?')} reachable"
+        version = self._status().get("version", "?")
+        if self._web_ui_asks_for_login():
+            raise ServarrError(f"{self.name} {version} is reachable, but backups can't be downloaded: {_LOGIN_REQUIRED}")
+        return f"{self.name} {version} reachable"
+
+    def _is_login(self, response):
+        """Whether a response is the app's own login: a Basic challenge, or
+        a redirect to its /login page on the same host."""
+        if response.status_code == 401:
+            return True
+        location = response.headers.get("Location")
+        if response.status_code not in (301, 302, 303, 307, 308) or not location:
+            return False
+        base, target = urlsplit(self.url), urlsplit(urljoin(response.url, location))
+        return (target.hostname == base.hostname
+                and target.path.rstrip("/").lower() == base.path.rstrip("/").lower() + "/login")
+
+    def _web_ui_asks_for_login(self):
+        """Whether the app's web UI - which also serves backup downloads -
+        wants a login. Its front page is behind the same check as /backup/,
+        and asking for it leaves nothing in the app's log."""
+        try:
+            with self.session.get(self.url + "/", timeout=10, stream=True, allow_redirects=False) as response:
+                return self._is_login(response)
+        except requests.RequestException:
+            return False  # the API answered; a backup reports anything else
 
     def app_version(self):
         return self._status().get("version")
@@ -165,11 +201,8 @@ class ServarrApp:
         target = urljoin(current, location) if location else ""
         parts = urlsplit(target)
         if target and not parts.fragment and self.session.redirect_allowed(target):
-            path = parts.path.rstrip("/").lower()
-            if path == base.path.rstrip("/").lower() + "/login":
-                raise ServarrError(
-                    f"{self.name}: backup download redirects to the app's web login (HTTP {status}). "
-                    f"Its API key cannot authenticate /backup/. {_BACKUP_ACCESS_HINT}")
+            if self._is_login(response):
+                raise ServarrError(f"{self.name}: can't download the backup (HTTP {status}): {_LOGIN_REQUIRED}")
             if parts.hostname != base.hostname or parts.path.startswith(base.path.rstrip("/") + "/backup/"):
                 return target
         raise ServarrError(
@@ -208,6 +241,8 @@ class ServarrApp:
                     if response.status_code in (301, 302, 303, 307, 308):
                         url = self._next_download_url(response, url, base)
                         continue
+                    if response.status_code == 401:
+                        raise ServarrError(f"{self.name}: can't download the backup (HTTP 401): {_LOGIN_REQUIRED}")
                     if response.status_code != 200:
                         raise ServarrError(
                             f"{self.name}: could not download the backup (HTTP {response.status_code}). "
