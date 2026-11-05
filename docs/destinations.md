@@ -1,17 +1,12 @@
 ---
 title: Destinations
-nav_order: 4
+nav_order: 5
 ---
 
 # Destinations
 
 Enable one or more on the **Settings** tab; every run uploads to all of them.
-
-Each backup is checked before it's uploaded: the archive opens and reads back
-intact, its SQLite databases pass a quick check, and the files the app's
-restore needs are in it. A backup that fails isn't uploaded, and the app shows
-as failed with the reason. Retention always keeps each app's newest backup, so
-its last good one stays.
+Each backup is [checked before it's uploaded](backups.md#the-check-before-upload).
 
 ## Local storage
 

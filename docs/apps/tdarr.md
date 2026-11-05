@@ -12,5 +12,5 @@ Tdarr 2 and 3 are both supported. Use the server's port (8266), not the web UI's
   Tdarr 3. Create one under **Tools > API Keys**. Tdarr 3 asks for an admin
   account first.
 - **Restore** wipes each of Tdarr's database collections before refilling it,
-  so you're asked to confirm first. A Tdarr 3 backup restored onto Tdarr 2
-  leaves out its dashboards, which Tdarr 2 doesn't have.
+  so you're asked to confirm first. The backup must come from the same Tdarr
+  version, so a Tdarr 3 backup doesn't go onto Tdarr 2.

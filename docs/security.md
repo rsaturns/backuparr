@@ -1,6 +1,6 @@
 ---
 title: Login and security
-nav_order: 6
+nav_order: 9
 ---
 
 # Login and security
@@ -20,10 +20,15 @@ logout, password change and reset endpoints return `403`. **Block direct access 
 anyone who reaches it has full access, stored credentials included.
 
 **Forgot the password?** Click **Reset Backuparr** on the login screen. After
-two confirmations it wipes local state - every app's API key, every cloud
-connection, the admin account and Backuparr's backups in Local storage (other
-files in that folder are left alone) - and returns to the setup screen. Backups
-already in Google Drive, OneDrive or Dropbox are untouched.
+two confirmations it wipes local state and returns to the setup screen:
+
+- every app's settings and API key, and every cloud connection
+- the admin account
+- Backuparr's backups in Local storage, its own backups included (other files
+  in that folder are left alone)
+- the backup record and run logs
+
+Backups already in Google Drive, OneDrive or Dropbox are untouched.
 
 The reset works without logging in, gated only by a confirmation phrase that's
 public in this repo. Other websites can't trigger it (or any other change):
@@ -33,13 +38,18 @@ with its own login and TLS.
 
 ## Encryption at rest
 
-Every app's API key, Bazarr's and NZBGet's passwords, service authentication
-header values, Google Drive's client secret, API key and refresh token,
-OneDrive's and Dropbox's tokens, and the Notify URL are encrypted in
-`config.json` with `secrets.key`, generated on first run (or set
-`BACKUPARR_SECRETS_KEY` to keep it off the volume). `rclone.conf` is encrypted
-with rclone's own config encryption, using a generated password in
-`rclone.pass` (or `RCLONE_CONFIG_PASS`). It's always on.
+These are encrypted in `config.json`:
+
+- every app's API key, and Bazarr's and NZBGet's passwords
+- service authentication header values
+- Google Drive's client secret, API key and refresh token, and OneDrive's and
+  Dropbox's tokens
+- the Notify URL
+
+The key is `secrets.key`, generated on first run; set `BACKUPARR_SECRETS_KEY`
+to keep it off the volume. `rclone.conf` is encrypted with rclone's own config
+encryption, using a generated password in `rclone.pass` (or
+`RCLONE_CONFIG_PASS`). Encryption is always on.
 
 If the key changes (say, a mistyped `BACKUPARR_SECRETS_KEY`), the stored secrets
 show up blank but aren't lost: saving settings keeps them encrypted as they
@@ -56,6 +66,8 @@ Backuparr shows the key and does nothing else until you confirm you've saved
 it. It's never shown again, so save it in a password manager: without it,
 Backuparr's own backup can't be opened and its stored secrets can't be read.
 If you set `BACKUPARR_SECRETS_KEY`, that's the key shown.
+
+![Save your encryption key: the key with a Copy button, and "Yes, I have saved my encryption key"]({{ '/screenshots/encryption-key.png' | relative_url }})
 
 ## Backuparr's own backup
 

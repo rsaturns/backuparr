@@ -24,8 +24,8 @@ the folder belongs to this server.
   runs. Images, cache, logs and transcodes are left out. The archive holds
   password hashes and API keys.
 - **Restore needs Emby stopped** (`docker stop emby`); Backuparr refuses while
-  it's running. It replaces everything above, then you start Emby. A backup
-  from a newer Emby is refused. On a new install, start Emby once (the wizard
+  it's running. It replaces everything above, then you start Emby. The backup
+  must come from the same Emby version. On a new install, start Emby once (the wizard
   can be skipped) and stop it before restoring. API keys come back too, so keep
   the original key in Settings.
 - **To restore by hand:** stop Emby, extract the archive into its `/config`
