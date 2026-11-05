@@ -18,14 +18,11 @@ Backuparr. Then, on the **Settings** tab:
    API key, and click **Test connection**. Using Prowlarr? Set it up first and
    click **Discover services** - see [Prowlarr discovery](../settings.md#prowlarr-discovery).
 2. Enable at least one [destination](../destinations.md).
-3. Set retention and a schedule. Retention deletes each app's backups older
-   than the number of days you set, but always keeps its newest one.
-4. Click **Save settings**. Schedule changes apply without a restart.
+3. Set retention and a schedule under **Schedule & notifications**.
+4. Click **Save settings**.
 
-**Run & Status** runs a backup now - of every app, or just one - and shows it
-live, **History** lists, downloads and deletes backups, and **Restore** restores them.
+![Settings tab: app cards with URL and API key on the left, destinations on the right]({{ '/screenshots/settings.png' | relative_url }})
 
-Each app's log from each run is kept, for as long as retention keeps backups
-(its latest run is always kept). **View log** on an app's Overview tile shows
-its latest run; in History, each backup has its own, and runs that left no
-backup on that destination are listed greyed with the reason.
+Then click **Run backup now** on **Run & Status** to make your first backup.
+See [Backups and history](../backups.md) for the schedule, retention, logs and
+the History tab, and [Restoring](../restoring.md) for restores.

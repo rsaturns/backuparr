@@ -25,19 +25,23 @@ LazyLibrarian also need a folder mounted into Backuparr - see [Apps](apps/index.
 
 ## Where to find things
 
+- [Features](features.md) - everything Backuparr does, in one list.
 - [Getting started](getting-started.md) - install with
   [Docker](getting-started/docker.md), on [Unraid](getting-started/unraid.md)
-  or [from source](getting-started/build-from-source.md), and the
-  [first run](getting-started/first-run.md).
-- [Apps](apps/index.md) - how each app is backed up and restored, with the notes
-  for apps that need extra setup.
+  or [from source](getting-started/build-from-source.md), the
+  [first run](getting-started/first-run.md) and [updating](getting-started/updating.md).
+- [Apps](apps/index.md) - how each app is backed up and restored, with notes
+  for the apps that need extra setup.
 - [Destinations](destinations.md) - Local storage, Google Drive, OneDrive and
   Dropbox.
+- [Backups and history](backups.md) - the schedule, retention, the check
+  before upload, run logs and the History tab.
+- [Restoring](restoring.md) - restoring an app, the version check, and
+  restoring Backuparr itself.
 - [Settings](settings.md) - Prowlarr discovery, more than one instance of an
   app, and authentication headers for apps behind a reverse proxy.
-- [Login and security](security.md) - the admin login, resetting it, and
-  encryption at rest.
-- [Restoring after a disaster](restoring.md)
+- [Login and security](security.md) - the admin login, your encryption key and
+  Backuparr's own backup.
 - [Notifications](notifications.md) - Discord, Slack, Telegram, Gotify, ntfy and
   more.
 - [Environment variables](environment-variables.md) and the

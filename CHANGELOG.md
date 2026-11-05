@@ -17,6 +17,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- The docs have a Features page, a Backups and history page and an Updating page, cover every 2.5.0 change, and have new screenshots.
 - Backups are zipped at the default compression level instead of the maximum, so large databases (Emby, Plex, Seerr) zip much faster.
 - The container starts faster: it fixes the ownership of only the files that need it, not every local backup.
 - Tautulli and Profilarr backups are streamed to disk instead of held in memory.
