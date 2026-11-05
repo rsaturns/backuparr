@@ -3,6 +3,12 @@
 All notable changes to this project are documented in this file. The
 format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.5.2] - 2026-11-04
+
+### Changed
+
+- The encryption key prompt, after setup and after updating, centers its confirm button, with "It will never be shown again." on its own centered line.
+
 ## [2.5.1] - 2026-11-04
 
 ### Fixed
