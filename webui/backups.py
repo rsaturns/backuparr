@@ -19,7 +19,7 @@ import restore_actions as ra
 import restore_version as rv
 from apps.http_headers import app_connection_config
 from backup import humanize_error, log_failure
-from config_store import APP_NAMES, DEST_NAMES, instance_ids, instance_type, key_required, load_config, restore_supported
+from config_store import APP_NAMES, DEST_NAMES, app_meta, instance_ids, instance_type, key_required, load_config, restore_supported
 from webui.runs import _start_tracked_run, RESTORE_RUN_STATE, RUN_LOCK, RUN_STATE
 from webui.settings import _missing_required_field, _restore_override_fields
 
@@ -393,6 +393,12 @@ def _restore_target(dest_id, app_name, data):
     if override:
         allowed = _restore_override_fields(app_name)
         app_cfg = dict(app_cfg)
+        if override.get("url"):
+            # The saved web login belongs to the configured app: never take
+            # it to another one (a restore doesn't need it anyway).
+            for field in (app_meta(app_name) or {}).get("extra_fields", []):
+                if field.get("login_only"):
+                    app_cfg[field["name"]] = ""
         for field in allowed:
             value = override.get(field)
             if value:

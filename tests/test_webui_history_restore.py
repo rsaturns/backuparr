@@ -435,6 +435,17 @@ def test_override_redirects_one_restore_without_touching_settings(restore, authe
     assert authed_client.get("/api/config").get_json() == before
 
 
+def test_an_override_url_never_gets_the_saved_web_login(restore, authed_client):
+    authed_client.post("/api/config", json={"apps": {"radarr": {"enabled": True, "url": "http://radarr:7878", "api_key": "k",
+                                                                  "username": "admin", "password": "web-pass"}}})
+    start(authed_client, "radarr", override={"url": "http://other:7878", "username": "x", "password": "y"})
+    _, _, app_cfg, _ = restore["calls"][-1]
+    assert (app_cfg["url"], app_cfg["username"], app_cfg["password"]) == ("http://other:7878", "", "")
+    start(authed_client, "radarr")
+    _, _, app_cfg, _ = restore["calls"][-1]
+    assert (app_cfg["username"], app_cfg["password"]) == ("admin", "web-pass")
+
+
 def test_override_may_set_an_apps_own_extra_fields(restore, authed_client):
     start(authed_client, "bazarr", override={"username": "u", "password": "p", "enabled": False})
     _, _, app_cfg, _ = restore["calls"][-1]

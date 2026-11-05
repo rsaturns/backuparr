@@ -11,6 +11,7 @@ nav_order: 12
 |---|---|
 | `apps.<name>.enabled/url/api_key` | Per app, as on the Settings tab |
 | `apps.<radarr\|sonarr\|lidarr\|whisparr>-<suffix>` | An extra instance (e.g. `radarr-4k`): the same fields plus `name` |
+| `apps.<radarr\|sonarr\|lidarr\|whisparr\|prowlarr>.username/password` | The app's own login, only if it asks every address to log in ([note](apps/servarr.md)) |
 | `apps.bazarr.username/password` | Only if Bazarr's web auth is `Basic` |
 | `apps.nzbget.username/password` | NZBGet's Control username and password |
 | `apps.jellyfin.backup_dir` | Jellyfin's mounted backups folder - required |

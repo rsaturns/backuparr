@@ -47,7 +47,9 @@ def _missing_secret(candidates):
 
 
 class DiscoveryError(RuntimeError):
-    pass
+    def __init__(self, message, needs_login=False):
+        super().__init__(message)
+        self.needs_login = needs_login  # Prowlarr's card shows its username and password
 
 
 def valid_service_url(value):
@@ -189,7 +191,7 @@ def _backup_settings(instance, progress, warnings):
                 try:
                     instance.download_backup(backup.get("path"), archive_path, max_bytes=MAX_BACKUP_BYTES)
                 except ServarrError as exc:
-                    raise DiscoveryError(str(exc)) from None
+                    raise DiscoveryError(str(exc), needs_login=getattr(exc, "needs_login", False)) from None
                 try:
                     settings, backup_warnings = read_backup_settings(archive_path)
                 except zipfile.BadZipFile:
@@ -211,8 +213,10 @@ def _backup_settings(instance, progress, warnings):
 def _fill_missing_keys(instance, candidates, progress, warnings):
     """Fill candidates' masked API keys and passwords from a temporary
     Prowlarr backup. Candidates that stay without one get an
-    ``api_key_error`` / ``password_error`` saying why."""
+    ``api_key_error`` / ``password_error`` saying why. Returns whether
+    Prowlarr asked for a login Backuparr doesn't have (or that was refused)."""
     key_error = ""
+    needs_login = False
     try:
         saved, backup_warnings = _backup_settings(instance, progress, warnings)
         for candidate in candidates:
@@ -235,6 +239,7 @@ def _fill_missing_keys(instance, candidates, progress, warnings):
                 candidate[f"{field}_error"] = reason
     except DiscoveryError as exc:
         key_error = str(exc)
+        needs_login = exc.needs_login
     except (OSError, RuntimeError):
         key_error = "Could not read API keys and passwords from a temporary Prowlarr backup. Enter them manually."
     if key_error:
@@ -243,6 +248,7 @@ def _fill_missing_keys(instance, candidates, progress, warnings):
             field = secret_field(candidate["app"])
             if not candidate[field]:
                 candidate[f"{field}_error"] = key_error
+    return needs_login
 
 
 def discover_prowlarr(instance, progress=lambda message: None):
@@ -278,8 +284,7 @@ def discover_prowlarr(instance, progress=lambda message: None):
             candidate["username"] = username.strip() if isinstance(username, str) else ""
         candidates.append(candidate)
 
-    if _missing_secret(candidates):
-        _fill_missing_keys(instance, candidates, progress, warnings)
+    needs_login = _missing_secret(candidates) and _fill_missing_keys(instance, candidates, progress, warnings)
 
     unique = {}
     for candidate in candidates:
@@ -289,4 +294,7 @@ def discover_prowlarr(instance, progress=lambda message: None):
     candidates = list(unique.values())
     if _missing_secret(candidates):
         warnings.append("Some API keys or passwords are unavailable. Their URLs can be filled in; enter the rest manually.")
-    return {"candidates": candidates, "warnings": warnings}
+    result = {"candidates": candidates, "warnings": warnings}
+    if needs_login:
+        result["needs_login"] = True  # Prowlarr's card shows its username and password
+    return result

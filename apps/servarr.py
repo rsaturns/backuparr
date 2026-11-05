@@ -31,18 +31,27 @@ _BACKUP_ACCESS_HINT = (
 
 
 # Backup files are served by the app's web UI, not its API: they take the
-# app's own login (Forms or Basic) and never the API key. So with
-# Authentication Required set to Enabled no API client can download one,
-# while Disabled for Local Addresses lets Backuparr's private address through.
-_LOGIN_REQUIRED = (
-    "it asks every address to log in, and an API key can't download backups past that login. "
-    "In the app, set Settings > General > Security > Authentication Required to "
-    "Disabled for Local Addresses."
-)
+# app's own login (Forms or Basic) and never the API key. With Authentication
+# Required set to Disabled for Local Addresses, Backuparr's private address
+# gets through without one; with Enabled, Backuparr signs in with the
+# username and password from the app's card (checked against Sonarr 4.0,
+# Radarr 6.4, Lidarr 3.1, Prowlarr 2.7 and Whisparr 2.2/3.6: Forms is a POST
+# of username/password to /login answered by a redirect, ?loginFailed=true
+# on a wrong password; Basic is the usual Authorization header. Whisparr v3
+# has no Basic). The login method comes from the API's config/host.
+_ASKS_FOR_LOGIN = "the app asks for a login to download backups. Enter its username and password in Settings."
+_WRONG_LOGIN = "wrong username or password. Check them in Settings."
+_LOGIN_METHODS = ("forms", "basic")
 
 
 class ServarrError(AppError):
     pass
+
+
+class LoginRequiredError(ServarrError):
+    """The web UI wants a login Backuparr doesn't have, or that was refused.
+    Test connection then shows the card's username and password fields."""
+    needs_login = True
 
 
 class UnsafeRedirectError(requests.RequestException):
@@ -120,12 +129,17 @@ class SameHostSession(requests.Session):
 class ServarrApp:
     api_version = "v3"  # Lidarr and Prowlarr override it with v1
 
-    def __init__(self, name, url, api_key, timeout=30, strict_redirects=False):
+    def __init__(self, name, url, api_key, timeout=30, strict_redirects=False, username=None, password=None):
         self.name = name
         self.url = url.rstrip("/")
         self.timeout = timeout
         self.session = SameHostSession(self.url, strict=strict_redirects)
         self.session.headers.update({"X-Api-Key": api_key, "Accept": "application/json"})
+        # Only for the web UI (backup downloads), and only once it asks.
+        self.username = username or None
+        self.password = password or ""
+        self._web_auth = None  # (username, password) once Basic is in use
+        self.signed_in = False
 
     def _api(self, path):
         return f"{self.url}/api/{self.api_version}{path}"
@@ -139,8 +153,15 @@ class ServarrApp:
 
     def test_connection(self):
         version = self._status().get("version", "?")
-        if self._web_ui_asks_for_login():
-            raise ServarrError(f"{self.name} {version} is reachable, but backups can't be downloaded: {_LOGIN_REQUIRED}")
+        response = self._front_page()
+        if response is not None and self._is_login(response):
+            if not self.username:
+                raise LoginRequiredError(f"{self.name} {version} asks for a login. Enter its username and password.")
+            self.sign_in(response)
+            response = self._front_page()
+            if response is not None and self._is_login(response):
+                raise self._login_error()
+            return f"{self.name} {version} reachable, signed in"
         return f"{self.name} {version} reachable"
 
     def _is_login(self, response):
@@ -155,15 +176,64 @@ class ServarrApp:
         return (target.hostname == base.hostname
                 and target.path.rstrip("/").lower() == base.path.rstrip("/").lower() + "/login")
 
-    def _web_ui_asks_for_login(self):
-        """Whether the app's web UI - which also serves backup downloads -
-        wants a login. Its front page is behind the same check as /backup/,
-        and asking for it leaves nothing in the app's log."""
+    def _web_get(self, url, timeout=None):
+        """A web UI request (never redirected), with the Basic login once in use."""
+        return self.session.get(url, timeout=timeout or self.timeout, stream=True,
+                                allow_redirects=False, auth=self._web_auth)
+
+    def _front_page(self):
+        """The web UI's front page response, or None if it can't be reached.
+        It's behind the same login check as /backup/, and asking for it
+        leaves nothing in the app's log."""
         try:
-            with self.session.get(self.url + "/", timeout=10, stream=True, allow_redirects=False) as response:
-                return self._is_login(response)
+            with self._web_get(self.url + "/", timeout=10) as response:
+                return response
         except requests.RequestException:
-            return False  # the API answered; a backup reports anything else
+            return None  # the API answered; a backup reports anything else
+
+    def _login_error(self):
+        return LoginRequiredError(f"{self.name}: {_WRONG_LOGIN if self.username else _ASKS_FOR_LOGIN}")
+
+    def _login_method(self, response):
+        """forms or basic: what config/host says, else what ``response`` was."""
+        try:
+            res = self.session.get(self._api("/config/host"), timeout=10)
+            res.raise_for_status()
+            method = res.json().get("authenticationMethod")
+            if isinstance(method, str) and method:
+                return method.lower()
+        except (requests.RequestException, ValueError, AttributeError):
+            pass
+        return "basic" if response.status_code == 401 else "forms"
+
+    def _forms_login(self):
+        try:
+            res = self.session.post(self.url + "/login", data={"username": self.username, "password": self.password},
+                                    timeout=self.timeout, allow_redirects=False)
+        except UnsafeRedirectError:
+            raise
+        except requests.RequestException:
+            raise ServarrError(f"{self.name}: could not connect to sign in. Check the app URL.") from None
+        location = res.headers.get("Location", "")
+        if res.status_code not in (301, 302, 303) or "loginfailed" in location.lower():
+            raise self._login_error()
+
+    def sign_in(self, response):
+        """Signs in to the web UI after ``response`` asked for a login - once:
+        a refused login is never retried, as each is an Auth-Failure in the
+        app's log, which fail2ban may act on."""
+        if self.signed_in or not self.username:
+            raise self._login_error()
+        method = self._login_method(response)
+        if method not in _LOGIN_METHODS:
+            raise ServarrError(
+                f"{self.name}: its {method} login can't be used by Backuparr. In the app, set "
+                "Settings > General > Security > Authentication Required to Disabled for Local Addresses.")
+        self.signed_in = True
+        if method == "basic":
+            self._web_auth = (self.username, self.password)
+        else:
+            self._forms_login()
 
     def app_version(self):
         return self._status().get("version")
@@ -201,8 +271,6 @@ class ServarrApp:
         target = urljoin(current, location) if location else ""
         parts = urlsplit(target)
         if target and not parts.fragment and self.session.redirect_allowed(target):
-            if self._is_login(response):
-                raise ServarrError(f"{self.name}: can't download the backup (HTTP {status}): {_LOGIN_REQUIRED}")
             if parts.hostname != base.hostname or parts.path.startswith(base.path.rstrip("/") + "/backup/"):
                 return target
         raise ServarrError(
@@ -237,12 +305,14 @@ class ServarrApp:
         url = self.url + path
         try:
             for _ in range(6):
-                with self.session.get(url, timeout=self.timeout, stream=True, allow_redirects=False) as response:
+                with self._web_get(url) as response:
+                    if self._is_login(response):
+                        self.sign_in(response)  # or the login error
+                        url = self.url + path
+                        continue
                     if response.status_code in (301, 302, 303, 307, 308):
                         url = self._next_download_url(response, url, base)
                         continue
-                    if response.status_code == 401:
-                        raise ServarrError(f"{self.name}: can't download the backup (HTTP 401): {_LOGIN_REQUIRED}")
                     if response.status_code != 200:
                         raise ServarrError(
                             f"{self.name}: could not download the backup (HTTP {response.status_code}). "

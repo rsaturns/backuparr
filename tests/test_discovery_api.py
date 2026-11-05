@@ -141,6 +141,21 @@ def test_discovery_connects_with_strict_redirects(webui, monkeypatch):
     assert received == [("http://prowlarr:9696", "key", {"strict_redirects": True})]
 
 
+def test_discovery_signs_in_to_prowlarr_with_its_login_when_given(webui, monkeypatch):
+    received = []
+
+    class Instance:
+        def __init__(self, url, api_key, **kwargs):
+            received.append(kwargs)
+
+    monkeypatch.setattr(webui.services, "ProwlarrApp", Instance)
+    client = client_for(webui)
+    response = client.post("/api/discovery/prowlarr", json={"url": "http://prowlarr:9696", "api_key": "key",
+                                                            "username": "admin", "password": "pw"})
+    assert client.get("/api/discovery/prowlarr/" + response.json["job_id"]).json["state"] == "completed"
+    assert received == [{"strict_redirects": True, "username": "admin", "password": "pw"}]
+
+
 def test_finished_results_are_purged_after_the_ttl(webui, monkeypatch):
     client = client_for(webui)
     response = client.post("/api/discovery/prowlarr", json={"url": "http://prowlarr:9696", "api_key": "key"})
