@@ -111,9 +111,27 @@ def open_archive(data, key=None):
     return members
 
 
+def _utc_now():
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
 def run(dest_roots, timestamp):
     """Makes the archive, checks it opens and uploads it to every destination.
-    Returns None, or what went wrong for the run's failed list."""
+    Returns None, or what went wrong for the run's failed list. Its log is
+    kept like an app's, so the Overview and History show it."""
+    record = {"id": f"{FOLDER}_{timestamp}", "app": FOLDER, "started": _utc_now(), "finished": None, "file": None,
+              "ok": False, "error": None, "app_version": VERSION, "destinations": {d: None for d in dest_roots}}
+    capture = runlog.Capture().start()
+    try:
+        problem = _run(dest_roots, timestamp, record)
+    finally:
+        capture.stop()
+    record.update(ok=problem is None, error=problem, finished=_utc_now(), lines=capture.result())
+    runlog.save(record)
+    return problem
+
+
+def _run(dest_roots, timestamp, record):
     name = f"{FOLDER}_{timestamp}{SUFFIX}"
     log.info("=== %s ===", FOLDER)
     log.info("backuparr: backing up its own configuration...")
@@ -124,6 +142,7 @@ def run(dest_roots, timestamp):
         message = getattr(exc, "detail", None) or str(exc).removeprefix("backuparr: ")
         log.error("backuparr: couldn't make its own backup: %s", message)
         return message
+    record["file"] = name
     failures, uploaded = [], []
     with tempfile.TemporaryDirectory(prefix="backuparr-self-") as tmp:
         path = os.path.join(tmp, name)
@@ -134,9 +153,11 @@ def run(dest_roots, timestamp):
                 rclone_util.copyto(path, f"{root}/{FOLDER}/{name}")
                 log.info("backuparr: uploaded its own backup to %s (%d bytes)", dest_id, len(data))
                 uploaded.append(dest_id)
+                record["destinations"][dest_id] = {"ok": True, "error": None}
             except rclone_util.RcloneError as exc:
                 log.error("backuparr: upload of its own backup to %s failed: %s", dest_id, exc.detail)
                 failures.append(f"{dest_id}: {exc.detail}")
+                record["destinations"][dest_id] = {"ok": False, "error": exc.detail}
         if uploaded:
             try:
                 manifest.record(FOLDER, name, uploaded, app_version=VERSION, sha256=manifest.file_sha256(path),

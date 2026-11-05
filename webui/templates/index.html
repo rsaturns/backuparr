@@ -239,46 +239,6 @@
           </div>
         </div>
 
-        <div class="card" id="request-headers-card">
-          <h2>Service authentication</h2>
-          <p class="hint">Optional HTTP headers for apps behind an authenticating reverse proxy, used for connection tests, discovery, backups and restores. Each header goes to all apps or only the ones you pick. Values are stored encrypted.</p>
-          <div id="request-headers-list"></div>
-          <div class="request-headers-actions">
-            <button type="button" class="btn btn-ghost btn-sm" id="add-request-header">Add header</button>
-            <label><input type="checkbox" id="show-request-headers"> Show values</label>
-          </div>
-          <details class="request-headers-help" id="basic-auth-helper">
-            <summary>Generate Basic authentication</summary>
-            <p class="hint">Generate a Basic authentication value from a username and password, then apply it to a new or existing header.</p>
-            <form id="basic-auth-form" class="basic-auth-form">
-              <label class="field">
-                <span class="field-label">Target header</span>
-                <input id="basic-auth-header" type="text" value="Authorization" list="basic-auth-header-options" autocomplete="off" spellcheck="false" required aria-describedby="basic-auth-header-hint">
-              </label>
-              <datalist id="basic-auth-header-options">
-                <option value="Authorization"></option>
-                <option value="Proxy-Authorization"></option>
-              </datalist>
-              <p class="hint" id="basic-auth-header-hint">Use the header your server expects: Authorization for HTTP Basic, Proxy-Authorization for a proxy that accepts it, or a custom name. Applying replaces the value of the row with that name; to add another row with the same name for different apps, add it with an empty value first.</p>
-              <label class="field">
-                <span class="field-label">Username</span>
-                <input id="basic-auth-username" type="text" autocomplete="off" spellcheck="false" required>
-              </label>
-              <label class="field">
-                <span class="field-label">Password</span>
-                <input id="basic-auth-password" type="password" autocomplete="new-password">
-              </label>
-              <button type="submit" class="btn btn-ghost btn-sm">Apply to header</button>
-              <p id="basic-auth-status" class="test-result" role="status" aria-live="polite"></p>
-            </form>
-          </details>
-          <details class="request-headers-help">
-            <summary>Where headers are used</summary>
-            <p class="hint">App API keys are still required. Each app's own authentication takes priority when it uses the same header name; use a separate header if your proxy supports one.</p>
-            <p class="hint">Each header goes to the URLs of the apps it applies to, including a restore target entered for one of them. The same name can be used for different apps, with a different value for each. Headers are not sent to backup storage or notification services. Redirects to another scheme, host or port are blocked.</p>
-          </details>
-        </div>
-
         <div class="card">
           <h2>Schedule &amp; notifications</h2>
           <div class="field">
@@ -336,6 +296,46 @@
               <span class="test-result" id="notify-test-result"></span>
             </div>
           </div>
+        </div>
+
+        <div class="card" id="request-headers-card">
+          <h2>Service authentication</h2>
+          <p class="hint">Optional HTTP headers for apps behind an authenticating reverse proxy, used for connection tests, discovery, backups and restores. Each header goes to all apps or only the ones you pick. Values are stored encrypted.</p>
+          <div id="request-headers-list"></div>
+          <div class="request-headers-actions">
+            <button type="button" class="btn btn-ghost btn-sm" id="add-request-header">Add header</button>
+            <label><input type="checkbox" id="show-request-headers"> Show values</label>
+          </div>
+          <details class="request-headers-help" id="basic-auth-helper">
+            <summary>Generate Basic authentication</summary>
+            <p class="hint">Generate a Basic authentication value from a username and password, then apply it to a new or existing header.</p>
+            <form id="basic-auth-form" class="basic-auth-form">
+              <label class="field">
+                <span class="field-label">Target header</span>
+                <input id="basic-auth-header" type="text" value="Authorization" list="basic-auth-header-options" autocomplete="off" spellcheck="false" required aria-describedby="basic-auth-header-hint">
+              </label>
+              <datalist id="basic-auth-header-options">
+                <option value="Authorization"></option>
+                <option value="Proxy-Authorization"></option>
+              </datalist>
+              <p class="hint" id="basic-auth-header-hint">Use the header your server expects: Authorization for HTTP Basic, Proxy-Authorization for a proxy that accepts it, or a custom name. Applying replaces the value of the row with that name; to add another row with the same name for different apps, add it with an empty value first.</p>
+              <label class="field">
+                <span class="field-label">Username</span>
+                <input id="basic-auth-username" type="text" autocomplete="off" spellcheck="false" required>
+              </label>
+              <label class="field">
+                <span class="field-label">Password</span>
+                <input id="basic-auth-password" type="password" autocomplete="new-password">
+              </label>
+              <button type="submit" class="btn btn-ghost btn-sm">Apply to header</button>
+              <p id="basic-auth-status" class="test-result" role="status" aria-live="polite"></p>
+            </form>
+          </details>
+          <details class="request-headers-help">
+            <summary>Where headers are used</summary>
+            <p class="hint">App API keys are still required. Each app's own authentication takes priority when it uses the same header name; use a separate header if your proxy supports one.</p>
+            <p class="hint">Each header goes to the URLs of the apps it applies to, including a restore target entered for one of them. The same name can be used for different apps, with a different value for each. Headers are not sent to backup storage or notification services. Redirects to another scheme, host or port are blocked.</p>
+          </details>
         </div>
 
         <div class="card">
@@ -487,6 +487,7 @@
     </div>
     <div class="modal-body">
       <div id="whats-changed-body"></div>
+      <p class="whats-changed-all"><a href="https://github.com/rsaturns/backuparr/releases" target="_blank" rel="noopener noreferrer">View all changes</a></p>
     </div>
   </div>
 </div>
@@ -497,13 +498,13 @@
       <h3 id="key-modal-title">Save your encryption key</h3>
     </div>
     <div class="modal-body">
-    <p class="hint">This key encrypts the passwords, API keys and cloud logins Backuparr stores, and Backuparr's own backup. You need it to restore Backuparr after losing this server.</p>
+    <p class="hint">This key encrypts the passwords, API keys and cloud logins Backuparr stores, and Backuparr's own backup. You need it to restore Backuparr.</p>
       <div class="key-box">
         <code id="key-value" class="key-value"></code>
         <button type="button" class="btn btn-ghost btn-sm" id="key-copy-btn">Copy</button>
       </div>
       <p id="key-env-note" class="hint hidden">It's the key set with <code>BACKUPARR_SECRETS_KEY</code>.</p>
-      <p class="key-warning"><strong>Save it in a password manager, or Backuparr can't be restored.</strong> It will never be shown again.</p>
+      <p class="key-warning key-warning-centered"><strong>Save it in a password manager, or Backuparr can't be restored.</strong> It will never be shown again.</p>
       <div class="save-row">
         <button type="button" class="btn btn-primary" id="key-ack-btn">Yes, I have saved my encryption key</button>
         <span id="key-result" class="save-result"></span>

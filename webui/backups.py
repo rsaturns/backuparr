@@ -58,7 +58,7 @@ def _add_runs(history, dest_id):
     that left no file on this destination - the backup failed, or its
     upload here did - with the reason."""
     for app_name, app_runs in runlog.all_runs().items():
-        if not instance_type(app_name):
+        if not destination_util.is_backup_folder(app_name):  # an app, an instance or Backuparr's own
             continue
         entries = history.setdefault(app_name, [])
         listed = {e["name"]: e for e in entries}

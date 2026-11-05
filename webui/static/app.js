@@ -146,6 +146,62 @@ function destinationsStat(destIds) {
   return div;
 }
 
+// One Overview tile: an app's (or Backuparr's own) latest backup, or why its
+// last run failed, with download and log links.
+function overviewCard(appId, { label, icon, latest, failure, latestRun, idleText }) {
+  const card = document.createElement("div");
+  card.className = "overview-app-card";
+
+  const head = document.createElement("div");
+  head.className = "overview-app-head";
+  if (icon) {
+    const img = document.createElement("img");
+    img.className = "app-icon";
+    img.src = icon;
+    img.alt = "";
+    head.appendChild(img);
+  }
+  const h3 = document.createElement("h3");
+  h3.textContent = label;
+  head.appendChild(h3);
+  const dot = document.createElement("span");
+  dot.className = "status-dot";
+  dot.dataset.state = failure ? "fail" : latest ? "ok" : "idle";
+  head.appendChild(dot);
+  card.appendChild(head);
+
+  const last = document.createElement("div");
+  last.className = "overview-app-last";
+  if (failure) {
+    const failLine = document.createElement("span");
+    failLine.textContent = `Last run failed: ${failure}`;
+    last.appendChild(failLine);
+  } else if (latest) {
+    const summaryLine = document.createElement("span");
+    summaryLine.textContent = `Last backup: ${fmtTime(latest.mod_time)} (${fmtBytes(latest.size)})`;
+    const fn = document.createElement("span");
+    fn.className = "filename";
+    fn.textContent = latest.name;
+    last.append(summaryLine, fn);
+  } else {
+    last.textContent = idleText;
+  }
+  card.appendChild(last);
+
+  const links = document.createElement("div");
+  links.className = "overview-links";
+  if (latest) {
+    const dlLink = document.createElement("a");
+    dlLink.className = "overview-download-link";
+    dlLink.textContent = "Download latest backup";
+    dlLink.href = `/api/history/${latest.destId}/${appId}/${encodeURIComponent(latest.name)}/download`;
+    links.appendChild(dlLink);
+  }
+  if (latestRun) links.appendChild(viewLogButton(appId, latestRun.id));
+  if (links.childElementCount) card.appendChild(links);
+  return card;
+}
+
 async function loadOverview() {
   const summaryEl = document.getElementById("overview-summary");
   const appsEl = document.getElementById("overview-apps");
@@ -203,69 +259,25 @@ async function loadOverview() {
     });
     summaryEl.append(enabledStat, destinationsStat(destIds), cronStat, retentionStat);
 
+    // Backuparr's own backup leads, always there (#110); then each enabled app.
+    appsEl.appendChild(overviewCard("backuparr", {
+      label: "Backuparr", icon: "/static/logo.png", latest: latestByApp.backuparr,
+      failure: failureByApp.backuparr, latestRun: (latestRuns || {}).backuparr,
+      idleText: cfg.self_backup === false ? "Turned off in Settings." : "No backups yet.",
+    }));
     if (!enabledIds.length) {
-      appsEl.innerHTML = '<p class="overview-empty">No services enabled yet - head to Settings to add one.</p>';
+      const empty = document.createElement("p");
+      empty.className = "overview-empty";
+      empty.textContent = "No services enabled yet - head to Settings to add one.";
+      appsEl.appendChild(empty);
       return;
     }
-
     enabledIds.forEach((appId) => {
       const meta = appMeta(appId);
-      const latest = latestByApp[appId];
-      const failure = failureByApp[appId];
-
-      const card = document.createElement("div");
-      card.className = "overview-app-card";
-
-      const head = document.createElement("div");
-      head.className = "overview-app-head";
-      if (meta) {
-        const img = document.createElement("img");
-        img.className = "app-icon";
-        img.src = `/static/icons/${meta.icon}`;
-        img.alt = "";
-        head.appendChild(img);
-      }
-      const h3 = document.createElement("h3");
-      h3.textContent = appLabel(appId);
-      head.appendChild(h3);
-      const dot = document.createElement("span");
-      dot.className = "status-dot";
-      dot.dataset.state = failure ? "fail" : latest ? "ok" : "idle";
-      head.appendChild(dot);
-      card.appendChild(head);
-
-      const last = document.createElement("div");
-      last.className = "overview-app-last";
-      if (failure) {
-        const failLine = document.createElement("span");
-        failLine.textContent = `Last run failed: ${failure}`;
-        last.appendChild(failLine);
-      } else if (latest) {
-        const summaryLine = document.createElement("span");
-        summaryLine.textContent = `Last backup: ${fmtTime(latest.mod_time)} (${fmtBytes(latest.size)})`;
-        const fn = document.createElement("span");
-        fn.className = "filename";
-        fn.textContent = latest.name;
-        last.append(summaryLine, fn);
-      } else {
-        last.textContent = "No backups yet.";
-      }
-      card.appendChild(last);
-
-      const links = document.createElement("div");
-      links.className = "overview-links";
-      if (latest) {
-        const dlLink = document.createElement("a");
-        dlLink.className = "overview-download-link";
-        dlLink.textContent = "Download latest backup";
-        dlLink.href = `/api/history/${latest.destId}/${appId}/${encodeURIComponent(latest.name)}/download`;
-        links.appendChild(dlLink);
-      }
-      const latestRun = (latestRuns || {})[appId];
-      if (latestRun) links.appendChild(viewLogButton(appId, latestRun.id));
-      if (links.childElementCount) card.appendChild(links);
-
-      appsEl.appendChild(card);
+      appsEl.appendChild(overviewCard(appId, {
+        label: appLabel(appId), icon: meta ? `/static/icons/${meta.icon}` : null, latest: latestByApp[appId],
+        failure: failureByApp[appId], latestRun: (latestRuns || {})[appId], idleText: "No backups yet.",
+      }));
     });
   } catch (e) {
     summaryEl.innerHTML = "";
@@ -289,7 +301,7 @@ async function openRunLog(appId, runId) {
   const panel = document.getElementById("log-panel");
   const meta = document.getElementById("log-panel-meta");
   const lines = document.getElementById("log-panel-lines");
-  document.getElementById("log-panel-title").textContent = `${appLabel(appId)} - run log`;
+  document.getElementById("log-panel-title").textContent = `${appId === "backuparr" ? "Backuparr" : appLabel(appId)} - run log`;
   meta.textContent = "Loading...";
   lines.innerHTML = "";
   panel.classList.remove("hidden");
@@ -305,7 +317,7 @@ async function openRunLog(appId, runId) {
 
   meta.innerHTML = "";
   const when = document.createElement("p");
-  when.textContent = `Run: ${fmtTime(run.started)}${run.app_version ? ` - ${appMeta(appId)?.label || appId} ${run.app_version}` : ""}`;
+  when.textContent = `Run: ${fmtTime(run.started)}${run.app_version ? ` - ${appId === "backuparr" ? "Backuparr" : appMeta(appId)?.label || appId} ${run.app_version}` : ""}`;
   const result = document.createElement("p");
   result.className = run.ok ? "ok" : "fail";
   result.textContent = run.ok ? `Backed up: ${run.file}` : `Failed: ${run.error || "unknown error"}`;
@@ -347,12 +359,19 @@ function initRunLogPanel() {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && !document.getElementById("log-panel").classList.contains("hidden")) closeRunLog();
   });
+  // A click anywhere outside the panel closes it too - except on a View log
+  // button, which opens (or switches) the panel instead.
+  document.addEventListener("click", (e) => {
+    const panel = document.getElementById("log-panel");
+    if (panel.classList.contains("hidden") || panel.contains(e.target) || e.target.closest(".view-log-btn")) return;
+    closeRunLog();
+  });
 }
 
 function viewLogButton(appId, runId) {
   const btn = document.createElement("button");
   btn.type = "button";
-  btn.className = "link-btn";
+  btn.className = "link-btn view-log-btn";
   btn.textContent = "View log";
   btn.addEventListener("click", () => openRunLog(appId, runId));
   return btn;
@@ -2735,7 +2754,7 @@ function renderChangelogMarkdown(md) {
   return html.join("");
 }
 
-// Lazily fetches the last 3 GitHub Releases and shows them in a modal. Only
+// Lazily fetches the last 5 GitHub Releases and shows them in a modal. Only
 // reachable via the "What's Changed" button, which lives inside #version-check
 // and is therefore only visible once checkForUpdate() has already confirmed
 // GitHub is reachable - no extra eager fetch just to decide whether to show it.
@@ -2744,7 +2763,7 @@ async function openWhatsChanged() {
   body.innerHTML = "";
   document.getElementById("whats-changed-modal").classList.remove("hidden");
   try {
-    const res = await fetch("https://api.github.com/repos/rsaturns/backuparr/releases?per_page=3");
+    const res = await fetch("https://api.github.com/repos/rsaturns/backuparr/releases?per_page=5");
     if (!res.ok) throw new Error(`GitHub returned ${res.status}`);
     const releases = await res.json();
     if (!releases.length) {

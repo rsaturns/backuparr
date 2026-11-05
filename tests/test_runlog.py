@@ -215,6 +215,19 @@ def test_history_links_backups_to_their_runs_and_lists_runs_that_left_no_file(au
     ]
 
 
+def test_history_links_backuparrs_own_backups_to_their_runs(authed_client, listing):
+    listing.append("backuparr/backuparr_20261101_030000.enc")
+    own = run("backuparr", "20261101_030000")
+    own["file"] = "backuparr_20261101_030000.enc"
+    runlog.save(own)
+    runlog.save(run("backuparr", "20261102_030000", ok=False, finished="2026-11-02T03:01:00+00:00"))
+    rows = authed_client.get("/api/history/local").get_json()["backuparr"]
+    assert [(r["name"], r["run_id"], r.get("missing", False)) for r in rows] == [
+        ("", "backuparr_20261102_030000", True),
+        ("backuparr_20261101_030000.enc", "backuparr_20261101_030000", False),
+    ]
+
+
 def test_deleting_a_backup_forgets_its_log_once_no_destination_has_it(authed_client, listing):
     listing.append("radarr/radarr_20261101_030000.zip")
     runlog.save(run("radarr", "20261101_030000"))

@@ -84,13 +84,13 @@
     </div>
     <div id="key-step" class="hidden">
     <h2>Save your encryption key</h2>
-    <p class="hint">This key encrypts the passwords, API keys and cloud logins Backuparr stores, and Backuparr's own backup. You need it to restore Backuparr after losing this server.</p>
+    <p class="hint">This key encrypts the passwords, API keys and cloud logins Backuparr stores, and Backuparr's own backup. You need it to restore Backuparr.</p>
     <div class="key-box">
       <code id="key-value" class="key-value"></code>
       <button type="button" class="btn btn-ghost btn-sm" id="key-copy-btn">Copy</button>
     </div>
     <p id="key-env-note" class="hint hidden">It's the key set with <code>BACKUPARR_SECRETS_KEY</code>.</p>
-    <p class="key-warning"><strong>Save it in a password manager, or Backuparr can't be restored.</strong></p>
+    <p class="key-warning key-warning-centered"><strong>Save it in a password manager, or Backuparr can't be restored.</strong></p>
     <div class="save-row">
       <button type="button" class="btn btn-primary" id="key-ack-btn">Yes, I have saved my encryption key</button>
       <span id="key-result" class="save-result"></span>

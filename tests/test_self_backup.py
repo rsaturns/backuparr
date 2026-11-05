@@ -125,6 +125,23 @@ def test_run_reports_failed_uploads_and_a_backup_it_couldnt_make(state, uploads,
     assert self_backup.run({"local": "local:"}, "20261104_040000") == "couldn't read rclone.conf"
 
 
+@pytest.mark.self_backup
+def test_run_keeps_its_log_like_an_app(state, uploads):
+    """The Overview's Backuparr card and History read it (#110 follow-up)."""
+    uploads.failing.add("gdrive")
+    self_backup.run({"local": "local:", "gdrive": "gdrive:"}, "20261104_030000")
+    latest = runlog.latest()["backuparr"]
+    assert latest["id"] == "backuparr_20261104_030000" and latest["file"] == "backuparr_20261104_030000.enc"
+    assert latest["ok"] is False and latest["error"] == "failed on gdrive: quota exceeded"
+    assert latest["destinations"] == {"local": {"ok": True, "error": None}, "gdrive": {"ok": False, "error": "quota exceeded"}}
+    lines = runlog.get("backuparr", "backuparr_20261104_030000")["lines"]
+    assert any("uploaded its own backup to local" in line["message"] for line in lines)
+
+    uploads.failing.clear()
+    self_backup.run({"local": "local:"}, "20261104_040000")
+    assert runlog.latest()["backuparr"]["ok"] is True
+
+
 @pytest.fixture
 def full_run(state, uploads, monkeypatch):
     calls = []

@@ -1163,6 +1163,7 @@ code {
 .release-body li { margin: 4px 0; }
 
 .whats-changed-error { font-size: 16px; color: var(--danger); }
+.whats-changed-all { margin: 16px 0 0; text-align: center; font-size: 15px; }
 
 /* ------------------------------------------------------------- auth ---- */
 .auth-page {
@@ -1276,6 +1277,7 @@ code {
   user-select: all;
 }
 .key-warning { color: var(--danger); margin: 8px 0 14px; }
+.key-warning-centered { text-align: center; }
 
 /* ------------------------------------------------------------ user menu --- */
 .user-menu { position: relative; }
