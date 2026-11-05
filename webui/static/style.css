@@ -1278,6 +1278,11 @@ code {
 }
 .key-warning { color: var(--danger); margin: 8px 0 14px; }
 .key-warning-centered { text-align: center; }
+/* The key prompt's confirm button sits centered under the warning, its
+   result message (if any) on a line of its own below. */
+.key-ack-row { justify-content: center; flex-wrap: wrap; }
+.key-ack-row .save-result { flex-basis: 100%; text-align: center; }
+.key-ack-row .save-result:empty { display: none; }
 
 /* ------------------------------------------------------------ user menu --- */
 .user-menu { position: relative; }
