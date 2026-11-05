@@ -14,6 +14,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Backuparr backs up its own configuration at the end of each full run, encrypted with your encryption key, to every destination. Your encryption key is shown once, after setup or after updating, until you confirm you've saved it (#110).
 - Restore Backuparr from its own backup with your encryption key: on the setup screen of a new install, or from Settings (#111).
 - Change the admin password: click your username at the top right, which replaces the Log out button and also holds Log out (#120).
+- Forgot your password? Delete `auth.json` and create a new login on the setup screen with your encryption key; your settings are kept. Without the key, an install that already holds settings can't be given a new login (#123).
 
 ### Changed
 

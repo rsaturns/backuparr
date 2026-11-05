@@ -418,6 +418,27 @@ def secrets_key_acknowledged():
     return _key_acknowledged
 
 
+def holds_settings():
+    """True once Backuparr holds stored secrets, or its key was confirmed
+    saved. A lost login is then only replaced with the encryption key (#123):
+    without it, deleting auth.json would hand those secrets to whoever sets
+    up next. Read from the file itself, not the cached flag; an unreadable
+    config.json counts as holding settings."""
+    try:
+        with open(CONFIG_PATH, encoding="utf-8") as f:
+            raw = f.read()
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+    if secrets_crypto.PREFIX in raw:
+        return True
+    try:
+        return json.loads(raw).get("secrets_key_acknowledged") is True
+    except (ValueError, AttributeError):
+        return True
+
+
 def acknowledge_secrets_key():
     global _key_acknowledged
     cfg = load_config()

@@ -19,11 +19,31 @@ container. The UI and API then need no local login, and the setup, login,
 logout, password change and reset endpoints return `403`. **Block direct access to port 8990**:
 anyone who reaches it has full access, stored credentials included.
 
-**Forgot the password?** Click **Reset Backuparr** on the login screen. After
-two confirmations it wipes local state - every app's API key, every cloud
-connection, the admin account and Backuparr's backups in Local storage (other
-files in that folder are left alone) - and returns to the setup screen. Backups
-already in Google Drive, OneDrive or Dropbox are untouched.
+## Forgot your password?
+
+There's no email recovery. There are two ways back in.
+
+**Keep your settings:** delete `auth.json` from Backuparr's config folder
+(`/config/backuparr`), then open Backuparr. The setup screen asks for a new
+username and password, and your [encryption key](#your-encryption-key).
+
+- Your settings, cloud connections, backups and run logs are kept.
+- Every other signed-in browser is signed out.
+- Wrong keys count towards the login lockout.
+- Lost the key as well? It's in `secrets.key` in the same folder, unless you
+  set `BACKUPARR_SECRETS_KEY`.
+
+**Start over:** click **Reset Backuparr** on the login screen. After two
+confirmations it wipes local state and returns to the setup screen of a new
+install:
+
+- every app's settings and API key, and every cloud connection
+- the admin account
+- Backuparr's backups in Local storage, its own backups included (other files
+  in that folder are left alone)
+- the backup record and run logs
+
+Backups already in Google Drive, OneDrive or Dropbox are untouched.
 
 The reset works without logging in, gated only by a confirmation phrase that's
 public in this repo. Other websites can't trigger it (or any other change):

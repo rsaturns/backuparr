@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
+<body{% if needs_key %} data-needs-key="1"{% endif %}>
 <main class="auth-page">
   <div class="auth-card card">
     <div class="brand auth-brand">
@@ -20,7 +20,7 @@
         <span class="brand-tagline">Backup your Arrs</span>
       </span>
     </div>
-    <div id="choice-step">
+    <div id="choice-step"{% if needs_key %} class="hidden"{% endif %}>
     <h2>Welcome to Backuparr</h2>
     <p class="hint">Do you wish to restore your Backuparr configuration?</p>
     <div class="save-row">
@@ -53,10 +53,18 @@
       <a class="btn btn-primary" href="/login">Sign in</a>
     </div>
     </div>
-    <div id="account-step" class="hidden">
+    <div id="account-step"{% if not needs_key %} class="hidden"{% endif %}>
+    {% if needs_key %}
+    <h2>Create a new login</h2>
+    <p class="hint">Backuparr already has settings. Enter your encryption key to keep them.</p>
+    <label class="field">
+      <span class="field-label">Encryption key</span>
+      <input type="text" id="su-key" autocomplete="off" spellcheck="false">
+    </label>
+    {% else %}
     <h2>Create an admin account</h2>
-    <p class="hint">This one-time setup creates the admin account that protects Backuparr's web UI.</p>
-    <p class="hint">There's no email recovery. If you forget the password, click <strong>Reset Backuparr</strong> on the login screen - it wipes all local state (config, connections, backups) and brings you back here.</p>
+    <p class="hint">This one-time setup creates the admin account that protects Backuparr's web UI. If you forget the password, see <a href="https://rsaturns.github.io/backuparr/security/#forgot-your-password" target="_blank" rel="noopener noreferrer">password recovery</a>.</p>
+    {% endif %}
     <label class="field">
       <span class="field-label">Username</span>
       <input type="text" id="su-username" autocomplete="username">

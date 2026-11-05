@@ -4,11 +4,17 @@ async function submitSetup() {
   const username = document.getElementById("su-username").value.trim();
   const password = document.getElementById("su-password").value;
   const password2 = document.getElementById("su-password2").value;
+  const keyEl = document.getElementById("su-key");
   const resultEl = document.getElementById("setup-result");
   const btn = document.getElementById("setup-submit-btn");
 
   if (!username || !password) {
     resultEl.textContent = "Username and password are required";
+    resultEl.className = "save-result fail";
+    return;
+  }
+  if (keyEl && !keyEl.value.trim()) {
+    resultEl.textContent = "Enter your encryption key";
     resultEl.className = "save-result fail";
     return;
   }
@@ -25,7 +31,7 @@ async function submitSetup() {
     const res = await fetch("/api/setup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify(keyEl ? { username, password, key: keyEl.value.trim() } : { username, password }),
     });
     const body = await res.json().catch(() => null);
     if (!res.ok) throw new Error((body && body.error) || `HTTP ${res.status}`);
@@ -68,11 +74,15 @@ async function submitRestore() {
   }
 }
 
-document.getElementById("choice-new-btn").addEventListener("click", () => {
+function startAccountStep() {
   showStep("account-step");
   document.addEventListener("keydown", submitOnEnter);
-  document.getElementById("su-username").focus();
-});
+  (document.getElementById("su-key") || document.getElementById("su-username")).focus();
+}
+
+document.getElementById("choice-new-btn").addEventListener("click", startAccountStep);
+// Settings are already here and only the login is missing (#123): straight to a new login.
+if (document.body.dataset.needsKey) startAccountStep();
 document.getElementById("choice-restore-btn").addEventListener("click", () => showStep("restore-step"));
 document.getElementById("sr-back-btn").addEventListener("click", () => showStep("choice-step"));
 document.getElementById("sr-submit-btn").addEventListener("click", submitRestore);
