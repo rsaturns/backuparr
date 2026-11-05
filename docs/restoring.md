@@ -64,7 +64,7 @@ destination, and you can also download it from History. You need the
 ![Setup screen of a new install: Restore Backuparr, with the backup file and the encryption key]({{ '/screenshots/setup-restore.png' | relative_url }})
 
 - **On a new install:** the setup screen asks "Do you wish to restore your
-  Backuparr configuration?" Choose **Yes, restore it**, pick the file and enter
+  Backuparr configuration?" Choose **Yes, restore**, pick the file and enter
   the key. Then sign in with your old username and password. This is only
   offered until an account exists.
 - **On a running install:** use **Restore Backuparr** at the bottom of the
