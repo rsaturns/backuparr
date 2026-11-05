@@ -7,12 +7,16 @@ nav_order: 6
 
 ## Login
 
-The admin account from the setup screen is required by default.
+The admin account from the setup screen is required by default. To change its
+password, click your username at the top right and choose **Change password**:
+enter the current password and the new one twice (at least 8 characters).
+Every other signed-in browser is signed out, and wrong current passwords count
+towards the login lockout.
 
 **Authentication at a reverse proxy:** if your proxy (e.g. Authelia) already
 protects every request, set `BACKUPARR_DISABLE_AUTH=true` and recreate the
 container. The UI and API then need no local login, and the setup, login,
-logout and reset endpoints return `403`. **Block direct access to port 8990**:
+logout, password change and reset endpoints return `403`. **Block direct access to port 8990**:
 anyone who reaches it has full access, stored credentials included.
 
 **Forgot the password?** Click **Reset Backuparr** on the login screen. After

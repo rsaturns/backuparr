@@ -1271,3 +1271,35 @@ code {
   user-select: all;
 }
 .key-warning { color: var(--danger); margin: 8px 0 14px; }
+
+/* ------------------------------------------------------------ user menu --- */
+.user-menu { position: relative; }
+.user-menu-btn { display: inline-flex; align-items: center; gap: 6px; }
+.user-icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.user-name { max-width: 14em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-menu-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  min-width: 180px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.user-menu-item {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 14.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.user-menu-item + .user-menu-item { border-top: 1px solid var(--border); }
+.user-menu-item:hover, .user-menu-item:focus-visible { background: var(--bg); color: var(--accent); }
