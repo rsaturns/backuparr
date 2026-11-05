@@ -27,6 +27,10 @@ def _load():
         return json.load(f)
 
 
+def username():
+    return _load().get("username") if has_credentials() else None
+
+
 def set_credentials(username, password):
     data = {"username": username, "password_hash": _hasher.hash(password)}
     atomic_file.write_private(AUTH_PATH, json.dumps(data, indent=2))

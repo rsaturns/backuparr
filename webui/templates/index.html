@@ -324,6 +324,31 @@
             </div>
           </div>
         </div>
+
+        <div class="card">
+          <h2>Restore Backuparr</h2>
+          <p class="hint">Replaces all of Backuparr's settings, destinations, cloud connections and login with those in its own backup, and signs everyone out. App backups aren't touched. The file is <code>backuparr_&lt;date&gt;_&lt;time&gt;.enc</code>, in the <code>backuparr</code> folder of a destination or from History.</p>
+          <label class="field">
+            <span class="field-label">Backup file</span>
+            <input type="file" id="br-file" accept=".enc">
+          </label>
+          <label class="field">
+            <span class="field-label">Encryption key</span>
+            <input type="text" id="br-key" autocomplete="off" spellcheck="false">
+          </label>
+          <label class="field" id="br-password-field">
+            <span class="field-label">Admin password</span>
+            <input type="password" id="br-password" autocomplete="current-password">
+          </label>
+          <label class="field checkbox-field">
+            <input type="checkbox" id="br-confirm">
+            <span>I understand this replaces Backuparr's settings and login, and signs everyone out.</span>
+          </label>
+          <div class="save-row">
+            <button type="button" class="btn btn-danger" id="br-submit-btn">Restore Backuparr</button>
+            <span id="br-result" class="save-result"></span>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -486,6 +511,7 @@
 <div id="toast-root" class="toast-root"></div>
 <script src="https://apis.google.com/js/api.js"></script>
 <script src="{{ url_for('static', filename='key-prompt.js') }}"></script>
+<script src="{{ url_for('static', filename='self-restore.js') }}"></script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

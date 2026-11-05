@@ -99,7 +99,7 @@ def test_disabled_auth_blocks_auth_apis_and_preserves_files(webui, existing_acco
 def test_auth_api_paths_cover_every_auth_route(webui):
     auth_rules = {
         rule.rule for rule in webui.app.url_map.iter_rules()
-        if rule.endpoint in ("auth.api_setup", "auth.api_login", "auth.api_logout", "auth.api_reset")
+        if rule.endpoint in ("auth.api_setup", "auth.api_setup_restore", "auth.api_login", "auth.api_logout", "auth.api_reset")
     }
     assert auth_rules == webui.auth._AUTH_API_PATHS
 

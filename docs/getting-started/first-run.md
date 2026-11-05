@@ -6,7 +6,9 @@ nav_order: 4
 
 # First run
 
-Open `http://<host>:8990` and create the admin account on the setup screen.
+Open `http://<host>:8990` and create the admin account on the setup screen
+(rebuilding a server? choose to [restore Backuparr](../restoring.md#restoring-backuparr-itself)
+there instead).
 Backuparr then shows your [encryption key](../security.md#your-encryption-key):
 save it in a password manager before you continue - you need it to restore
 Backuparr. Then, on the **Settings** tab:

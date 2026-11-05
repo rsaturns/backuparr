@@ -12,6 +12,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Restores only go onto the exact app version the backup came from. The Restore tab checks it when you pick a backup, before Emby, Plex, Seerr or LazyLibrarian need stopping, and names the version to install when they differ; each download is checked against its recorded checksum (#108).
 - Each app's log and result from every run are kept across restarts: **View log** on its Overview tile and on each History row, and History lists runs that left no backup with the reason. The Overview's status is right after a restart (#109).
 - Backuparr backs up its own configuration at the end of each full run, encrypted with your encryption key, to every destination. Your encryption key is shown once, after setup or after updating, until you confirm you've saved it (#110).
+- Restore Backuparr from its own backup with your encryption key: on the setup screen of a new install, or from Settings (#111).
 
 ### Changed
 

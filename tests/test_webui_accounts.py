@@ -152,7 +152,7 @@ PROTECTED = [
     ("GET", "/api/history/local/radarr/a.zip/download"),
     ("GET", "/api/restore/status"), ("GET", "/api/restore/local/radarr/backups"),
     ("POST", "/api/restore/local/sabnzbd/preview"), ("POST", "/api/restore/local/radarr"), ("POST", "/api/restore/local/radarr/check"),
-    ("GET", "/api/runlogs"), ("GET", "/api/secrets-key"), ("POST", "/api/secrets-key/acknowledge"), ("GET", "/api/runlogs/radarr/radarr_20261101_030000"),
+    ("GET", "/api/runlogs"), ("GET", "/api/secrets-key"), ("POST", "/api/backuparr/restore"), ("POST", "/api/secrets-key/acknowledge"), ("GET", "/api/runlogs/radarr/radarr_20261101_030000"),
     ("GET", "/api/destinations/gdrive/oauth/start"), ("GET", "/api/destinations/gdrive/oauth/callback"),
     ("POST", "/api/destinations/gdrive/access-token"), ("POST", "/api/destinations/gdrive/folder"),
     ("POST", "/api/destinations/gdrive/disconnect"), ("POST", "/api/destinations/onedrive/connect"),
@@ -178,7 +178,7 @@ def test_static_files_need_no_login(anonymous):
 
 
 def test_every_registered_api_route_is_covered_by_the_gate_list(isolated_webui):
-    public = {"/api/logout", "/api/reset", "/api/setup", "/api/login"}
+    public = {"/api/logout", "/api/reset", "/api/setup", "/api/setup/restore", "/api/login"}
     routes = {rule.rule for rule in isolated_webui.app.url_map.iter_rules() if rule.rule.startswith("/api/")}
     listed = {path for _, path in PROTECTED}
 

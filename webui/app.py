@@ -38,6 +38,9 @@ app.config.update(
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=_BEHIND_HTTPS_PROXY,
     PERMANENT_SESSION_LIFETIME=timedelta(days=30),
+    # Nothing sent here is large; the biggest is Backuparr's own backup,
+    # uploaded as base64 to restore it (#111).
+    MAX_CONTENT_LENGTH=64 * 1024 * 1024,
 )
 
 

@@ -20,7 +20,41 @@
         <span class="brand-tagline">Backup your Arrs</span>
       </span>
     </div>
-    <div id="account-step">
+    <div id="choice-step">
+    <h2>Welcome to Backuparr</h2>
+    <p class="hint">Do you wish to restore your Backuparr configuration?</p>
+    <p class="hint">Choose yes if you're rebuilding a server and have Backuparr's own backup and the encryption key you saved.</p>
+    <div class="save-row">
+      <button type="button" class="btn btn-primary" id="choice-new-btn">No, set up a new Backuparr</button>
+      <button type="button" class="btn btn-ghost" id="choice-restore-btn">Yes, restore it</button>
+    </div>
+    </div>
+    <div id="restore-step" class="hidden">
+    <h2>Restore Backuparr</h2>
+    <p class="hint">Choose Backuparr's own backup - <code>backuparr_&lt;date&gt;_&lt;time&gt;.enc</code>, in the <code>backuparr</code> folder of a destination - and enter the encryption key you saved. Your settings, destinations, cloud connections and login come back.</p>
+    <label class="field">
+      <span class="field-label">Backup file</span>
+      <input type="file" id="sr-file" accept=".enc">
+    </label>
+    <label class="field">
+      <span class="field-label">Encryption key</span>
+      <input type="text" id="sr-key" autocomplete="off" spellcheck="false">
+    </label>
+    <div class="save-row">
+      <button type="button" class="btn btn-primary" id="sr-submit-btn">Restore</button>
+      <button type="button" class="btn btn-ghost" id="sr-back-btn">Back</button>
+      <span id="sr-result" class="save-result"></span>
+    </div>
+    </div>
+    <div id="restored-step" class="hidden">
+    <h2>Backuparr is restored</h2>
+    <div id="sr-warnings"></div>
+    <p class="hint">Sign in with the restored username and password.</p>
+    <div class="save-row">
+      <a class="btn btn-primary" href="/login">Sign in</a>
+    </div>
+    </div>
+    <div id="account-step" class="hidden">
     <h2>Create an admin account</h2>
     <p class="hint">This one-time setup creates the admin account that protects Backuparr's web UI.</p>
     <p class="hint">There's no email recovery. If you forget the password, click <strong>Reset Backuparr</strong> on the login screen - it wipes all local state (config, connections, backups) and brings you back here.</p>
@@ -58,6 +92,7 @@
   </div>
 </main>
 <script src="{{ url_for('static', filename='key-prompt.js') }}"></script>
+<script src="{{ url_for('static', filename='self-restore.js') }}"></script>
 <script src="{{ url_for('static', filename='setup.js') }}"></script>
 </body>
 </html>
