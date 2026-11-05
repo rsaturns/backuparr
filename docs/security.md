@@ -93,6 +93,7 @@ connections, the admin login, the backup record and the run logs. It's
 encrypted with your encryption key and can't be read or changed without it.
 The key itself, the session key and `rclone.pass` aren't in it. Turn it off on
 the Settings tab. History lists these backups under "Backuparr's own
-configuration" for download and delete. See
+configuration" for download and delete, and the Overview shows the latest
+one on its Backuparr card. See
 [Restoring Backuparr itself](restoring.md#restoring-backuparr-itself).
 
