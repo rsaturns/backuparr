@@ -102,6 +102,7 @@ def test_backup_downloads_the_new_manual_backup_and_removes_it(whisparr, tmp_pat
     calls = [(method, path) for method, path, _key, _body in state["requests"]]
     assert calls == [
         ("GET", "/api/v3/system/status"),
+        ("GET", "/"),  # Test connection: does the web UI (and so /backup/) want a login?
         ("POST", "/api/v3/command"),
         ("GET", "/api/v3/command/12"),
         ("GET", "/api/v3/system/backup"),
@@ -109,7 +110,7 @@ def test_backup_downloads_the_new_manual_backup_and_removes_it(whisparr, tmp_pat
         ("DELETE", "/api/v3/system/backup/4"),
     ]
     assert all(key == "whisparr-key" for _method, _path, key, _body in state["requests"])
-    assert json.loads(state["requests"][1][3]) == {"name": "Backup"}
+    assert json.loads(state["requests"][2][3]) == {"name": "Backup"}
 
 
 def test_restore_uploads_the_archive_and_restarts_whisparr(whisparr, tmp_path):

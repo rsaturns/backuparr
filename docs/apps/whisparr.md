@@ -1,13 +1,14 @@
 ---
 title: Whisparr
 parent: Apps
-nav_order: 11
+nav_order: 12
 ---
 
 # Whisparr
 
 Whisparr v2 and v3 are both supported. To back up both, add the second with
-**Add another Whisparr**.
+**Add another Whisparr**. Like Radarr and Sonarr, it needs **Disabled for Local
+Addresses** - see the [Radarr, Sonarr and Lidarr note](servarr.md).
 
 - **v3 restores:** Whisparr v3's own restore skips the database in its backups
   (they hold `whisparr3.db`, but it only accepts `whisparr.db`) and still
