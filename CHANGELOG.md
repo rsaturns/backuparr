@@ -3,7 +3,9 @@
 All notable changes to this project are documented in this file. The
 format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [2.5.0] - 2026-11-04
+
+**"I heard you like backups, so I put another backup in your backups..."** 2.5.0 backs up Backuparr itself, checks every backup before it's uploaded, and only restores onto the exact app version a backup came from.
 
 ### Added
 
