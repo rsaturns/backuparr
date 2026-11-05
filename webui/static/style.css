@@ -1188,6 +1188,11 @@ code {
   font-size: 20.5px;
 }
 
+/* A result message goes under the buttons, so they keep their width. */
+.auth-card .save-row { flex-wrap: wrap; }
+.auth-card .save-result { flex-basis: 100%; }
+.auth-card .save-result:empty { display: none; }
+
 .auth-forgot {
   margin: 16px 0 0;
   text-align: center;

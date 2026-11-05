@@ -2,6 +2,7 @@
 web UI is gated behind (see auth_store.py), and the session key."""
 import base64
 import binascii
+import hmac
 import logging
 import os
 import secrets
@@ -174,7 +175,26 @@ def _credentials_from_request():
 
 @bp.get("/setup")
 def setup_page():
-    return render_template("setup.html", version=VERSION)
+    return render_template("setup.html", version=VERSION, needs_key=config_store.holds_settings())
+
+
+def _existing_settings_key_error(key):
+    """With no login but settings already held (#123), only this install's
+    encryption key may replace the login: None when that's given, else the
+    error response. A wrong key counts towards the login lockout."""
+    if not config_store.holds_settings():
+        return None
+    ip = request.remote_addr or "unknown"
+    wait = _login_lockout_remaining(ip)
+    if wait:
+        return jsonify({"error": f"Too many failed attempts - try again in {int(wait) + 1}s"}), 429
+    if not isinstance(key, str) or not key.strip():
+        return jsonify({"error": "Backuparr already has settings - enter your encryption key to keep them",
+                        "key_required": True}), 400
+    if not hmac.compare_digest(key.strip().encode("utf-8"), secrets_crypto.current_key().encode("utf-8")):
+        _login_record_failure(ip)
+        return jsonify({"error": "That isn't this Backuparr's encryption key", "key_required": True}), 403
+    return None
 
 
 @bp.post("/api/setup")
@@ -184,7 +204,21 @@ def api_setup():
         return jsonify({"error": "Username and password are required"}), 400
     if len(password) < MIN_PASSWORD_LENGTH:
         return jsonify({"error": f"Password must be at least {MIN_PASSWORD_LENGTH} characters"}), 400
+    data = request.get_json(force=True, silent=True)
+    error = _existing_settings_key_error(data.get("key") if isinstance(data, dict) else None)
+    if error:
+        return error
+    replacing = config_store.holds_settings()
     auth_store.set_credentials(username, password)
+    if replacing:
+        # A replaced login: sessions from before it stop working, and the
+        # key was just typed in, so it counts as saved.
+        try:
+            config_store.acknowledge_secrets_key()
+        except (config_store.ConfigError, OSError) as exc:
+            log.warning("setup: couldn't record the encryption key as saved (%s)", exc)
+        _new_session_key()
+        session.clear()
     session.permanent = True
     session["authed"] = True
     return jsonify({"ok": True})
@@ -229,7 +263,9 @@ def _restore(archive, key):
 @bp.post("/api/setup/restore")
 def api_setup_restore():
     archive, key, error = _restore_upload()
-    return error or _restore(archive, key)
+    # On an install that already holds settings, the backup must be one made
+    # with this install's key (#123) - a restore can't replace them otherwise.
+    return error or _existing_settings_key_error(key) or _restore(archive, key)
 
 
 @bp.post("/api/backuparr/restore")

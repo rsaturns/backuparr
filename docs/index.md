@@ -40,8 +40,8 @@ LazyLibrarian also need a folder mounted into Backuparr - see [Apps](apps/index.
   restoring Backuparr itself.
 - [Settings](settings.md) - Prowlarr discovery, more than one instance of an
   app, and authentication headers for apps behind a reverse proxy.
-- [Login and security](security.md) - the admin login, your encryption key and
-  Backuparr's own backup.
+- [Login and security](security.md) - the admin login, password recovery, your
+  encryption key and Backuparr's own backup.
 - [Notifications](notifications.md) - Discord, Slack, Telegram, Gotify, ntfy and
   more.
 - [Environment variables](environment-variables.md) and the
