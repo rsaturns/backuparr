@@ -1251,3 +1251,23 @@ code {
 .history-table tr.history-missing td { color: var(--text-muted); }
 .history-table tr.history-missing td.history-reason { color: var(--danger); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .history-table td.actions-cell .link-btn { font-size: 14px; margin-right: 6px; }
+
+/* ------------------------------------------------------ encryption key --- */
+.key-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.key-value {
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14.5px;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.key-warning { color: var(--danger); margin: 8px 0 14px; }

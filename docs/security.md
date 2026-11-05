@@ -44,3 +44,23 @@ were, and they work again once the original key is back.
 Backup archives themselves aren't encrypted, and some hold app credentials
 (see the [app notes](apps/index.md)), so protect every destination.
 
+## Your encryption key
+
+The key that encrypts those secrets also encrypts Backuparr's own backup
+(below). After the admin account is created, and once after updating to 2.5.0,
+Backuparr shows the key and does nothing else until you confirm you've saved
+it. It's never shown again, so save it in a password manager: without it,
+Backuparr's own backup can't be opened and its stored secrets can't be read.
+If you set `BACKUPARR_SECRETS_KEY`, that's the key shown.
+
+## Backuparr's own backup
+
+At the end of each full run (not a single app's), Backuparr backs up its own
+configuration to every destination as `backuparr/backuparr_<date>_<time>.enc`,
+kept like the app backups: its settings and destinations, the cloud
+connections, the admin login, the backup record and the run logs. It's
+encrypted with your encryption key and can't be read or changed without it.
+The key itself, the session key and `rclone.pass` aren't in it. Turn it off on
+the Settings tab. History lists these backups under "Backuparr's own
+configuration" for download and delete.
+

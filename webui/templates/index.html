@@ -272,6 +272,10 @@
             <span class="field-label">Retention (days)</span>
             <input type="number" id="s-retention_days" min="1" step="1">
           </div>
+          <label class="field checkbox-field">
+            <input type="checkbox" id="s-self_backup">
+            <span>Back up Backuparr's own configuration, encrypted with your encryption key, at the end of each full run</span>
+          </label>
           <div class="field">
             <span class="field-label">Backup schedule</span>
             <div class="schedule-picker">
@@ -449,6 +453,27 @@
   </div>
 </div>
 
+<div id="key-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="key-modal-title">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="key-modal-title">Save your encryption key</h3>
+    </div>
+    <div class="modal-body">
+    <p class="hint">This key encrypts the passwords, API keys and cloud logins Backuparr stores, and Backuparr's own backup. You need it to restore Backuparr after losing this server.</p>
+      <div class="key-box">
+        <code id="key-value" class="key-value"></code>
+        <button type="button" class="btn btn-ghost btn-sm" id="key-copy-btn">Copy</button>
+      </div>
+      <p id="key-env-note" class="hint hidden">It's the key set with <code>BACKUPARR_SECRETS_KEY</code>.</p>
+      <p class="key-warning"><strong>Save it in a password manager, or Backuparr can't be restored.</strong> It will never be shown again.</p>
+      <div class="save-row">
+        <button type="button" class="btn btn-primary" id="key-ack-btn">Yes, I have saved my encryption key</button>
+        <span id="key-result" class="save-result"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="log-panel" class="log-panel hidden" role="dialog" aria-labelledby="log-panel-title">
   <div class="log-panel-head">
     <h3 id="log-panel-title">Run log</h3>
@@ -460,6 +485,7 @@
 
 <div id="toast-root" class="toast-root"></div>
 <script src="https://apis.google.com/js/api.js"></script>
+<script src="{{ url_for('static', filename='key-prompt.js') }}"></script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

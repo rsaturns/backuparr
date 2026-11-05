@@ -7,7 +7,9 @@ nav_order: 4
 # First run
 
 Open `http://<host>:8990` and create the admin account on the setup screen.
-Then, on the **Settings** tab:
+Backuparr then shows your [encryption key](../security.md#your-encryption-key):
+save it in a password manager before you continue - you need it to restore
+Backuparr. Then, on the **Settings** tab:
 
 1. Switch on each app to back up, enter its URL (e.g. `http://radarr:7878` on
    the same Compose network, or `IP:port` for apps on host networking) and its

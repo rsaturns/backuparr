@@ -97,7 +97,7 @@ def api_history(dest_id):
         if entry.get("IsDir"):
             continue
         app_name, _, _ = entry["Path"].partition("/")
-        if app_name in history or (instance_type(app_name) and app_name not in APP_NAMES):
+        if app_name in history or (destination_util.is_backup_folder(app_name) and app_name not in APP_NAMES):
             details = recorded.get(manifest.key(app_name, entry["Name"]))
             history.setdefault(app_name, []).append({
                 "name": entry["Name"], "size": entry["Size"], "mod_time": entry["ModTime"],
@@ -112,7 +112,7 @@ def api_history(dest_id):
 
 @bp.delete("/api/history/<dest_id>/<app_name>/<filename>")
 def api_history_delete(dest_id, app_name, filename):
-    if not instance_type(app_name):
+    if not destination_util.is_backup_folder(app_name):
         return jsonify({"error": "unknown app"}), 404
     if not ra.SAFE_FILENAME.match(filename):
         return jsonify({"error": "invalid filename"}), 400
@@ -134,7 +134,7 @@ def api_history_delete(dest_id, app_name, filename):
 
 @bp.get("/api/history/<dest_id>/<app_name>/<filename>/download")
 def api_history_download(dest_id, app_name, filename):
-    if not instance_type(app_name):
+    if not destination_util.is_backup_folder(app_name):
         return jsonify({"error": "unknown app"}), 404
     if not ra.SAFE_FILENAME.match(filename):
         return jsonify({"error": "invalid filename"}), 400

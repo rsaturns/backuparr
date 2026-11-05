@@ -15,6 +15,7 @@ import manifest
 import rclone_util
 import restore_version
 import runlog
+import self_backup
 import secrets_crypto
 
 PASSWORD = "test-password"
@@ -46,6 +47,21 @@ def skip_version_check(request, monkeypatch):
     if request.node.get_closest_marker("version_check") is None:
         monkeypatch.setattr(restore_version, "check", lambda app, file, app_cfg: {
             "status": "match", "backup_version": "1", "installed_version": "1", "message": "versions match"})
+
+
+@pytest.fixture(autouse=True)
+def skip_self_backup(request, monkeypatch):
+    """run_backup tests are about the apps; tests marked self_backup make
+    Backuparr's own backup for real."""
+    if request.node.get_closest_marker("self_backup") is None:
+        monkeypatch.setattr(self_backup, "run", lambda dest_roots, timestamp: None)
+
+
+@pytest.fixture(autouse=True)
+def key_already_saved(request, monkeypatch):
+    """The encryption key counts as saved, so the web UI isn't held at its
+    prompt; tests marked key_prompt start with it unsaved."""
+    monkeypatch.setattr(config_store, "_key_acknowledged", request.node.get_closest_marker("key_prompt") is None)
 
 
 def load_webui():

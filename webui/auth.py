@@ -10,11 +10,12 @@ from flask import Blueprint, jsonify, redirect, render_template, request, sessio
 
 import atomic_file
 import auth_store
+import config_store
 import destination_util
 import manifest
 import runlog
 import secrets_crypto
-from config_store import CONFIG_PATH, instance_type, load_config
+from config_store import CONFIG_PATH, load_config
 from webui.services import DISCOVERY_JOBS, PLEX_LOGINS
 from webui.version import VERSION
 
@@ -99,7 +100,7 @@ def _check_auth():
             return redirect("/")
         if request.path in _AUTH_API_PATHS:
             return jsonify({"error": "local authentication is disabled"}), 403
-        return None
+        return _require_saved_key()
 
     if request.path in _PUBLIC_PATHS:
         return None
@@ -124,7 +125,37 @@ def _check_auth():
         if request.path.startswith("/api/"):
             return jsonify({"error": "authentication required"}), 401
         return redirect("/login")
+    return _require_saved_key()
+
+
+# ------------------------------------------------------- encryption key ----
+# The key that encrypts the secrets in config.json and Backuparr's own
+# backup is shown until the user confirms they've saved it (#110), and never
+# again. Until then every other API call is refused; scheduled backups run.
+_KEY_PATHS = {"/api/secrets-key", "/api/secrets-key/acknowledge", "/api/logout"}
+
+
+def _require_saved_key():
+    if request.path.startswith("/api/") and request.path not in _KEY_PATHS and not config_store.secrets_key_acknowledged():
+        return jsonify({"error": "save your encryption key first - reload the page to see it", "key_required": True}), 403
     return None
+
+
+@bp.get("/api/secrets-key")
+def api_secrets_key():
+    if config_store.secrets_key_acknowledged():
+        return jsonify({"acknowledged": True})
+    return jsonify({"acknowledged": False, "key": secrets_crypto.current_key(),
+                    "from_environment": bool(os.environ.get("BACKUPARR_SECRETS_KEY"))})
+
+
+@bp.post("/api/secrets-key/acknowledge")
+def api_secrets_key_acknowledge():
+    data = request.get_json(force=True, silent=True) or {}
+    if data.get("confirm") is not True:
+        return jsonify({"error": "confirm must be true"}), 400
+    config_store.acknowledge_secrets_key()
+    return jsonify({"ok": True})
 
 
 def _credentials_from_request():
@@ -215,7 +246,7 @@ def api_reset():
         # Reset is how a forgotten password is recovered, so a backup folder
         # it can't clear (a stale mount, no permission) doesn't stop it.
         try:
-            folders = [name for name in os.listdir(local_backup_dir) if instance_type(name)]
+            folders = [name for name in os.listdir(local_backup_dir) if destination_util.is_backup_folder(name)]
             destination_util.remove_local_backups(local_backup_dir, folders)
         except OSError as exc:
             log.warning("reset: couldn't remove the local backups in %s (%s) - delete them by hand if needed",
@@ -231,6 +262,8 @@ def api_reset():
             pass
     manifest.clear()
     runlog.clear()
+    secrets_crypto.forget_key()
+    config_store.forget_secrets_key_acknowledged()
 
     session.clear()
     return jsonify({"ok": True})

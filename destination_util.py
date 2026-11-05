@@ -9,11 +9,20 @@ import dropbox_oauth
 import gdrive_oauth
 import onedrive_oauth
 import rclone_util
-from config_store import DEFAULT_LOCAL_DIR
+from config_store import DEFAULT_LOCAL_DIR, instance_type
 
 
 class DestinationError(RuntimeError):
     pass
+
+
+# Backuparr's own backups (#110) live beside the apps' folders.
+SELF_BACKUP_FOLDER = "backuparr"
+
+
+def is_backup_folder(name):
+    """An app or instance's backup folder, or Backuparr's own."""
+    return bool(instance_type(name)) or name == SELF_BACKUP_FOLDER
 
 
 def is_backup_name(app, name):

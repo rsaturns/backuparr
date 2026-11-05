@@ -29,7 +29,10 @@ async function submitSetup() {
     });
     const body = await res.json().catch(() => null);
     if (!res.ok) throw new Error((body && body.error) || `HTTP ${res.status}`);
-    window.location.href = "/";
+    document.removeEventListener("keydown", submitOnEnter);
+    document.getElementById("account-step").classList.add("hidden");
+    const shown = await showKeyPrompt(document.getElementById("key-step"), () => { window.location.href = "/"; });
+    if (!shown) window.location.href = "/";
   } catch (e) {
     resultEl.textContent = e.message;
     resultEl.className = "save-result fail";
@@ -37,7 +40,9 @@ async function submitSetup() {
   }
 }
 
-document.getElementById("setup-submit-btn").addEventListener("click", submitSetup);
-document.addEventListener("keydown", (e) => {
+function submitOnEnter(e) {
   if (e.key === "Enter") submitSetup();
-});
+}
+
+document.getElementById("setup-submit-btn").addEventListener("click", submitSetup);
+document.addEventListener("keydown", submitOnEnter);
