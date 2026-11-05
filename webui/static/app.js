@@ -2750,6 +2750,41 @@ function initFeedbackMenu() {
   menu.addEventListener("click", () => setOpen(false));
 }
 
+// ------------------------------------------------- restore Backuparr ----
+function initBackuparrRestore() {
+  if (AUTH_DISABLED) document.getElementById("br-password-field").classList.add("hidden");
+  document.getElementById("br-submit-btn").addEventListener("click", async () => {
+    const resultEl = document.getElementById("br-result");
+    const btn = document.getElementById("br-submit-btn");
+    if (!document.getElementById("br-confirm").checked) {
+      resultEl.textContent = "Check the confirmation box first.";
+      resultEl.className = "save-result fail";
+      return;
+    }
+    btn.disabled = true;
+    resultEl.textContent = "Restoring...";
+    resultEl.className = "save-result";
+    try {
+      const warnings = await restoreBackuparr("/api/backuparr/restore", document.getElementById("br-file").files[0],
+        document.getElementById("br-key").value,
+        { confirm: true, password: document.getElementById("br-password").value });
+      SETTINGS_SNAPSHOT = null; // the settings on screen are gone; don't warn about them
+      const note = warnings.length ? ` ${warnings.join(" ")}` : "";
+      resultEl.textContent = `Restored - everyone is signed out.${note}`;
+      resultEl.className = warnings.length ? "save-result warn" : "save-result ok";
+      const next = document.createElement("a");
+      next.className = "btn btn-primary";
+      next.href = AUTH_DISABLED ? "/" : "/login";
+      next.textContent = AUTH_DISABLED ? "Reload" : "Sign in again";
+      btn.replaceWith(next);
+    } catch (e) {
+      resultEl.textContent = e.message;
+      resultEl.className = "save-result fail";
+      btn.disabled = false;
+    }
+  });
+}
+
 async function init() {
   // Until the encryption key is saved, the server refuses everything else.
   try {
@@ -2763,6 +2798,7 @@ async function init() {
   initLogout();
   initWhatsChangedEvents();
   initRunLogPanel();
+  initBackuparrRestore();
   initSettingsEvents();
   initRunEvents();
   initHistoryEvents();

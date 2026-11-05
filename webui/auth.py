@@ -1,12 +1,14 @@
 """First-run setup, login, logout and reset: the single admin account the
 web UI is gated behind (see auth_store.py), and the session key."""
+import base64
+import binascii
 import logging
 import os
 import secrets
 import threading
 import time
 
-from flask import Blueprint, jsonify, redirect, render_template, request, session
+from flask import Blueprint, current_app, jsonify, redirect, render_template, request, session
 
 import atomic_file
 import auth_store
@@ -15,6 +17,7 @@ import destination_util
 import manifest
 import runlog
 import secrets_crypto
+import self_restore
 from config_store import CONFIG_PATH, load_config
 from webui.services import DISCOVERY_JOBS, PLEX_LOGINS
 from webui.version import VERSION
@@ -75,7 +78,7 @@ _PUBLIC_PATHS = {"/api/logout", "/api/reset"}
 # Every local-auth API route. Keep in sync with the /api/setup, /api/login,
 # /api/logout and /api/reset routes: any listed here is refused with 403 when
 # auth is disabled, and an auth route missing from this set would stay reachable.
-_AUTH_API_PATHS = {"/api/setup", "/api/login", "/api/logout", "/api/reset"}
+_AUTH_API_PATHS = {"/api/setup", "/api/setup/restore", "/api/login", "/api/logout", "/api/reset"}
 
 
 @bp.before_app_request
@@ -107,7 +110,7 @@ def _check_auth():
 
     has_creds = auth_store.has_credentials()
 
-    if request.path in ("/setup", "/api/setup"):
+    if request.path in ("/setup", "/api/setup", "/api/setup/restore"):
         if has_creds:
             return redirect("/login") if request.path == "/setup" else (jsonify({"error": "already set up"}), 403)
         return None
@@ -185,6 +188,70 @@ def api_setup():
     session.permanent = True
     session["authed"] = True
     return jsonify({"ok": True})
+
+
+# ----------------------------------------------- restore Backuparr itself ----
+# From its own encrypted backup (#111): on the setup page until the first
+# account exists, or from Settings with the admin password. The archive comes
+# as base64 in JSON, so the JSON-only guard against cross-site requests holds.
+
+
+def _restore_upload():
+    """(archive bytes, key, None) from the request, or (None, None, error)."""
+    data = request.get_json(force=True, silent=True)
+    archive = data.get("archive") if isinstance(data, dict) else None
+    key = data.get("key") if isinstance(data, dict) else None
+    if not isinstance(archive, str) or not archive or not isinstance(key, str) or not key.strip():
+        return None, None, (jsonify({"error": "Choose Backuparr's backup file and enter its encryption key"}), 400)
+    try:
+        return base64.b64decode(archive, validate=True), key, None
+    except (binascii.Error, ValueError):
+        return None, None, (jsonify({"error": "The backup file couldn't be read"}), 400)
+
+
+def _restore(archive, key):
+    """Restores, then replaces the session key so everyone signs in again."""
+    from webui import runs  # imported here: runs is loaded after this module
+
+    with runs.RUN_LOCK:  # a scheduled run waits until the restore is done
+        if runs.busy():
+            return jsonify({"error": "A backup or restore is running - restore Backuparr when it finishes"}), 409
+        try:
+            members = self_restore.prepare(archive, key)
+        except self_restore.SelfRestoreError as exc:
+            return jsonify({"error": str(exc).removeprefix("backuparr: ")}), 400
+        warnings = self_restore.apply(members, key)
+    try:
+        os.remove(SECRET_KEY_PATH)
+    except FileNotFoundError:
+        pass
+    current_app.secret_key = _load_or_create_secret_key()
+    session.clear()
+    return jsonify({"ok": True, "warnings": warnings})
+
+
+@bp.post("/api/setup/restore")
+def api_setup_restore():
+    archive, key, error = _restore_upload()
+    return error or _restore(archive, key)
+
+
+@bp.post("/api/backuparr/restore")
+def api_backuparr_restore():
+    data = request.get_json(force=True, silent=True) or {}
+    if data.get("confirm") is not True:
+        return jsonify({"error": "Confirm that this replaces Backuparr's settings and login first"}), 400
+    if not _AUTH_DISABLED:
+        ip = request.remote_addr or "unknown"
+        wait = _login_lockout_remaining(ip)
+        if wait:
+            return jsonify({"error": f"Too many failed attempts - try again in {int(wait) + 1}s"}), 429
+        password = data.get("password")
+        if not isinstance(password, str) or not auth_store.verify_password(auth_store.username(), password):
+            _login_record_failure(ip)
+            return jsonify({"error": "That isn't the admin password"}), 403
+    archive, key, error = _restore_upload()
+    return error or _restore(archive, key)
 
 
 @bp.get("/login")

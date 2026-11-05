@@ -43,6 +43,10 @@ SUFFIX = ".enc"
 FORMAT = 1
 META = "backuparr-meta.json"
 REMOTES = "rclone-remotes.json"
+# The only files an archive may hold, and how big they may be unzipped -
+# a restore reads them into memory.
+MEMBERS = {"config.json", "auth.json", "manifest.json", "run_logs.json", REMOTES, META}
+MAX_UNZIPPED = 256 * 1024 * 1024
 
 
 class SelfBackupError(AppError):
@@ -85,9 +89,15 @@ def open_archive(data, key=None):
         raise SelfBackupError("backuparr: this isn't a Backuparr backup made with this key, or it's damaged") from None
     try:
         with zipfile.ZipFile(io.BytesIO(plain)) as z:
+            infos = z.infolist()
+            unexpected = sorted({i.filename for i in infos} - MEMBERS)
+            if unexpected:
+                raise SelfBackupError(f"backuparr: the backup holds an unexpected file ({unexpected[0]})")
+            if sum(i.file_size for i in infos) > MAX_UNZIPPED:
+                raise SelfBackupError("backuparr: the backup is too large to be one of Backuparr's")
             if z.testzip() is not None:
                 raise SelfBackupError("backuparr: the backup is damaged")
-            members = {name: z.read(name) for name in z.namelist()}
+            members = {i.filename: z.read(i) for i in infos}
     except zipfile.BadZipFile:
         raise SelfBackupError("backuparr: the backup is damaged") from None
     for needed in (META, "config.json"):

@@ -38,3 +38,25 @@ renamed instance, or a trial restore on a throwaway copy.
 - **Emby, Plex, Seerr, LazyLibrarian** - stop the app first, restore, then start
   it again. See the [Emby](apps/emby.md), [Plex](apps/plex.md),
   [Seerr](apps/seerr.md) and [LazyLibrarian](apps/lazylibrarian.md) notes.
+
+## Restoring Backuparr itself
+
+Backuparr's own backup (`backuparr/backuparr_<date>_<time>.enc` on each
+destination, or downloaded from History) brings back its settings,
+destinations, cloud connections and login. You need the
+[encryption key](security.md#your-encryption-key) you saved.
+
+- **On a new install:** the setup screen asks "Do you wish to restore your
+  Backuparr configuration?" Choose yes, pick the file and enter the key, then
+  sign in with your old username and password. This is only offered until an
+  account exists.
+- **On a running install:** **Restore Backuparr** at the bottom of the
+  Settings tab, with the key, the admin password and a confirmation. It
+  replaces the settings and login and signs everyone out.
+
+The restored key becomes this install's key. If `BACKUPARR_SECRETS_KEY` is set
+to a different key, set it to the restored key (or remove it) and recreate the
+container; until then the restored passwords, API keys and cloud logins read
+as blank. A backup from a newer Backuparr isn't restored: update Backuparr
+first. A wrong key or a damaged file is refused before anything changes. Then
+restore your apps from the Restore tab as usual.

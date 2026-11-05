@@ -44,5 +44,36 @@ function submitOnEnter(e) {
   if (e.key === "Enter") submitSetup();
 }
 
+function showStep(id) {
+  ["choice-step", "restore-step", "restored-step", "account-step"].forEach((step) => {
+    document.getElementById(step).classList.toggle("hidden", step !== id);
+  });
+}
+
+async function submitRestore() {
+  const resultEl = document.getElementById("sr-result");
+  const btn = document.getElementById("sr-submit-btn");
+  btn.disabled = true;
+  resultEl.textContent = "Restoring...";
+  resultEl.className = "save-result";
+  try {
+    const warnings = await restoreBackuparr("/api/setup/restore", document.getElementById("sr-file").files[0],
+      document.getElementById("sr-key").value);
+    renderRestoreWarnings(document.getElementById("sr-warnings"), warnings);
+    showStep("restored-step");
+  } catch (e) {
+    resultEl.textContent = e.message;
+    resultEl.className = "save-result fail";
+    btn.disabled = false;
+  }
+}
+
+document.getElementById("choice-new-btn").addEventListener("click", () => {
+  showStep("account-step");
+  document.addEventListener("keydown", submitOnEnter);
+  document.getElementById("su-username").focus();
+});
+document.getElementById("choice-restore-btn").addEventListener("click", () => showStep("restore-step"));
+document.getElementById("sr-back-btn").addEventListener("click", () => showStep("choice-step"));
+document.getElementById("sr-submit-btn").addEventListener("click", submitRestore);
 document.getElementById("setup-submit-btn").addEventListener("click", submitSetup);
-document.addEventListener("keydown", submitOnEnter);
