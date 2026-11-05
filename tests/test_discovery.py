@@ -317,10 +317,16 @@ def test_backup_download_failure_reports_stage_without_secrets(status):
     instance.download_status = status
     result = discovery.discover_prowlarr(instance)
     assert result["candidates"][0]["api_key"] == ""
-    # A 401 is the app's own login (Authentication Required = Enabled): the warning names the setting.
-    hint = "Disabled for Local Addresses" if status == 401 else "/backup/"
-    assert any(f"HTTP {status}" in warning and hint in warning for warning in result["warnings"])
-    assert f"HTTP {status}" in result["candidates"][0]["api_key_error"]
+    # A 401 is Prowlarr's own login (Authentication Required = Enabled): the
+    # warning asks for its username and password, and the card shows them.
+    if status == 401:
+        assert any("asks for a login" in warning and "username and password" in warning for warning in result["warnings"])
+        assert "asks for a login" in result["candidates"][0]["api_key_error"]
+        assert result["needs_login"] is True
+    else:
+        assert any(f"HTTP {status}" in warning and "/backup/" in warning for warning in result["warnings"])
+        assert f"HTTP {status}" in result["candidates"][0]["api_key_error"]
+        assert "needs_login" not in result
     assert "sensitive response data" not in str(result)
     assert instance.deleted == [2]
 

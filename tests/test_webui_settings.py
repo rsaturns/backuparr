@@ -249,6 +249,25 @@ def test_a_failed_test_explains_itself_without_raw_exceptions(authed_client, iso
     assert "HTTPConnectionPool" not in result["message"]
 
 
+def test_a_test_that_finds_the_apps_login_tells_the_card_to_ask_for_it(authed_client, isolated_webui, monkeypatch):
+    from apps.servarr import LoginRequiredError
+    error = LoginRequiredError("radarr 6.4 asks for a login. Enter its username and password.")
+    monkeypatch.setattr(isolated_webui.settings, "build_app", lambda name, cfg: StubApp(error=error))
+    result = authed_client.post("/api/test/radarr", json={"url": "http://r", "api_key": "k"}).get_json()
+    assert result == {"ok": False, "needs_login": True, "message": "radarr 6.4 asks for a login. Enter its username and password."}
+    monkeypatch.setattr(isolated_webui.settings, "build_app", lambda name, cfg: StubApp(error=RuntimeError("radarr: down")))
+    assert "needs_login" not in authed_client.post("/api/test/radarr", json={"url": "http://r", "api_key": "k"}).get_json()
+
+
+@pytest.mark.parametrize("app", ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr"])
+def test_servarr_cards_have_hidden_login_fields(authed_client, app):
+    html = authed_client.get("/").get_data(as_text=True)
+    card = html[html.index(f'data-app="{app}"'):]
+    card = card[:card.index("app-card-actions")]
+    assert card.count('class="field login-field hidden"') == 2
+    assert 'data-field="username"' in card and 'type="password" class="f-extra" data-field="password"' in card
+
+
 # --- notifications ---------------------------------------------------------
 
 def test_notification_test_needs_a_url(authed_client):
@@ -350,7 +369,7 @@ def test_cloud_destination_test_reports_a_rejected_remote(authed_client, isolate
 
 def test_restore_override_fields_are_the_url_key_and_the_apps_own_extras(isolated_webui):
     fields = isolated_webui.settings._restore_override_fields
-    assert fields("radarr") == {"url", "api_key"}
+    assert fields("radarr") == {"url", "api_key"}  # its web login is never needed to restore
     assert fields("bazarr") == {"url", "api_key", "username", "password"}
     assert fields("jellyfin") == {"url", "api_key", "backup_dir"}
     assert fields("emby") == {"url", "api_key", "data_dir"}

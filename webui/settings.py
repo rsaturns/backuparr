@@ -20,7 +20,7 @@ log = logging.getLogger("backuparr.webui")
 # anything outside this set.
 def _restore_override_fields(app_name):
     meta = app_meta(app_name) or {}
-    return {"url", "api_key"} | {f["name"] for f in meta.get("extra_fields", [])}
+    return {"url", "api_key"} | {f["name"] for f in meta.get("extra_fields", []) if not f.get("login_only")}
 
 
 def _missing_required_field(app_name, app_data):
@@ -211,7 +211,10 @@ def api_test(app_name):
         message = instance.test_connection()
         return jsonify({"ok": True, "message": message})
     except Exception as exc:
-        return jsonify({"ok": False, "message": humanize_error(exc)})
+        body = {"ok": False, "message": humanize_error(exc)}
+        if getattr(exc, "needs_login", False):
+            body["needs_login"] = True  # the card shows its username and password
+        return jsonify(body)
 
 
 @bp.post("/api/test-notify")

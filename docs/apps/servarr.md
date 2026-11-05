@@ -8,10 +8,23 @@ nav_order: 8
 
 Backuparr asks the app to make a backup over its API, then downloads the file
 from the app's web UI, which doesn't accept the API key. If the app asks every
-address to log in, the download fails and **Test connection** says so.
-Restores go through the API and work either way.
+address to log in, **Test connection** says so and shows **Username** and
+**Password** on the card. Restores go through the API and work either way.
 
-## Let Backuparr through
+Pick one of the two options below.
+
+## Option 1: enter the app's login
+
+Type the username and password you use to sign in to the app, then click
+**Test connection** again. It should say `signed in`. Backuparr finds out by
+itself whether the app uses Forms (a login page) or Basic, and only sends the
+login to the app's own address, to download the backup.
+
+- A wrong username or password is tried once per backup, not retried. The app
+  logs each failed attempt, so check the card if you use fail2ban.
+- If you change the app's password, update it on the card too.
+
+## Option 2: let Backuparr through without a login
 
 In each app, open **Settings > General > Security** and set **Authentication
 Required** to **Disabled for Local Addresses**. It's listed once

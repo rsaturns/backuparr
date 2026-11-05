@@ -1,12 +1,14 @@
 name: Docs site
 
 # Builds the GitHub Pages site from docs/ - only when something under
-# docs/ changes. A PR touching docs/ gets a build check; a push to main
-# also deploys it. Run it by hand to redeploy without a docs change.
+# docs/ changes. A PR touching docs/ (to main or a release branch) gets a
+# build check, so a release merged to main is known to build; a push to
+# main also deploys it. Run it by hand to redeploy without a docs change.
 on:
   pull_request:
     branches:
       - main
+      - "release-*"
     paths:
       - "docs/**"
   push:

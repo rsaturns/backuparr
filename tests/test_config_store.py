@@ -71,6 +71,17 @@ def test_nzbget_password_is_encrypted_at_rest_and_a_config_from_before_it_loads(
         assert "plain-nzbget-pass" not in f.read()
 
 
+@pytest.mark.parametrize("instance_id", ["radarr", "radarr-4k", "sonarr", "lidarr", "whisparr", "prowlarr"])
+def test_servarr_login_password_is_encrypted_at_rest(instance_id):
+    cfg = config_store.load_config()
+    cfg["apps"].setdefault(instance_id, dict(config_store.DEFAULT_INSTANCE))
+    cfg["apps"][instance_id].update(enabled=True, url="http://app", api_key="k", username="admin", password="plain-web-pass")
+    config_store.save_config(cfg)
+    assert config_store.load_config()["apps"][instance_id]["password"] == "plain-web-pass"
+    with open(config_store.CONFIG_PATH) as f:
+        assert "plain-web-pass" not in f.read()
+
+
 def test_a_config_saved_before_dropbox_existed_loads_with_an_empty_token():
     import json
 

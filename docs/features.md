@@ -17,6 +17,8 @@ nav_order: 2
 - **Prowlarr discovery** fills in the apps Prowlarr already knows, API keys
   included. See [Prowlarr discovery](settings.md#prowlarr-discovery).
 - **Test connection** on every app card.
+- Signs in to Radarr, Sonarr, Lidarr, Whisparr and Prowlarr with their own
+  login when they ask for one. See [the note](apps/servarr.md).
 - Works with apps behind an authenticating reverse proxy. See
   [Service authentication headers](settings.md#service-authentication-headers).
 

@@ -3,6 +3,12 @@
 All notable changes to this project are documented in this file. The
 format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.5.3] - 2026-11-05
+
+### Added
+
+- Radarr, Sonarr, Lidarr, Whisparr and Prowlarr can be backed up with Authentication Required set to Enabled: when **Test connection** finds the app asks for a login, the card shows **Username** and **Password**, and Backuparr signs in (Forms or Basic, detected by itself) only to download the backup. Prowlarr discovery uses Prowlarr's login too. A backup that starts needing a login says so in its error and notification. Thanks to u/Neither_Rutabaga_627 for the request: https://www.reddit.com/r/SideProject/comments/1xnc98k/comment/19s5pnjq9tgbo/
+
 ## [2.5.2] - 2026-11-04
 
 ### Changed
