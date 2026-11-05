@@ -1,8 +1,7 @@
 "use strict";
 
 const AUTH_DISABLED = document.body.dataset.authDisabled === "true";
-let APP_META = [];
-let DESTINATION_META = [];
+const { apps: APP_META, destinations: DESTINATION_META } = JSON.parse(document.body.dataset.uiMeta);
 let RUN_POLL_TIMER = null;
 let RESTORE_POLL_TIMER = null;
 let SETTINGS_SNAPSHOT = null;
@@ -147,6 +146,62 @@ function destinationsStat(destIds) {
   return div;
 }
 
+// One Overview tile: an app's (or Backuparr's own) latest backup, or why its
+// last run failed, with download and log links.
+function overviewCard(appId, { label, icon, latest, failure, latestRun, idleText }) {
+  const card = document.createElement("div");
+  card.className = "overview-app-card";
+
+  const head = document.createElement("div");
+  head.className = "overview-app-head";
+  if (icon) {
+    const img = document.createElement("img");
+    img.className = "app-icon";
+    img.src = icon;
+    img.alt = "";
+    head.appendChild(img);
+  }
+  const h3 = document.createElement("h3");
+  h3.textContent = label;
+  head.appendChild(h3);
+  const dot = document.createElement("span");
+  dot.className = "status-dot";
+  dot.dataset.state = failure ? "fail" : latest ? "ok" : "idle";
+  head.appendChild(dot);
+  card.appendChild(head);
+
+  const last = document.createElement("div");
+  last.className = "overview-app-last";
+  if (failure) {
+    const failLine = document.createElement("span");
+    failLine.textContent = `Last run failed: ${failure}`;
+    last.appendChild(failLine);
+  } else if (latest) {
+    const summaryLine = document.createElement("span");
+    summaryLine.textContent = `Last backup: ${fmtTime(latest.mod_time)} (${fmtBytes(latest.size)})`;
+    const fn = document.createElement("span");
+    fn.className = "filename";
+    fn.textContent = latest.name;
+    last.append(summaryLine, fn);
+  } else {
+    last.textContent = idleText;
+  }
+  card.appendChild(last);
+
+  const links = document.createElement("div");
+  links.className = "overview-links";
+  if (latest) {
+    const dlLink = document.createElement("a");
+    dlLink.className = "overview-download-link";
+    dlLink.textContent = "Download latest backup";
+    dlLink.href = `/api/history/${latest.destId}/${appId}/${encodeURIComponent(latest.name)}/download`;
+    links.appendChild(dlLink);
+  }
+  if (latestRun) links.appendChild(viewLogButton(appId, latestRun.id));
+  if (links.childElementCount) card.appendChild(links);
+  return card;
+}
+
 async function loadOverview() {
   const summaryEl = document.getElementById("overview-summary");
   const appsEl = document.getElementById("overview-apps");
@@ -156,16 +211,19 @@ async function loadOverview() {
     const cfg = await apiFetch("/api/config");
     const destIds = enabledDestinationIds(cfg);
 
-    const [histories, status] = await Promise.all([
-      Promise.all(destIds.map((id) => apiFetch(`/api/history/${id}`).catch(() => ({})))),
-      apiFetch("/api/backup/status"),
+    const [histories, latestRuns] = await Promise.all([
+      Promise.all(destIds.map((id) => apiFetch(`/api/history/${id}`).catch((e) => {
+        toast(`${destLabel(id)}: ${e.message}`, "fail");
+        return {};
+      }))),
+      apiFetch("/api/runlogs"),
     ]);
     // Per app, the single most recent backup across every enabled destination.
     const latestByApp = {};
     histories.forEach((history, i) => {
       const destId = destIds[i];
       Object.keys(history).forEach((appId) => {
-        const entry = (history[appId] || [])[0];
+        const entry = (history[appId] || []).find((e) => !e.missing);
         if (entry && (!latestByApp[appId] || entry.mod_time > latestByApp[appId].mod_time)) {
           latestByApp[appId] = { ...entry, destId };
         }
@@ -175,11 +233,10 @@ async function loadOverview() {
     const allIds = Object.keys(cfg.apps || {});
     const enabledIds = allIds.filter((id) => cfg.apps[id].enabled);
 
-    // "<app>: <error message>" strings, see run_backup() in backup.py.
+    // Each app's latest saved run (runlog.py), so its status survives a restart.
     const failureByApp = {};
-    (status.failed || []).forEach((entry) => {
-      const idx = entry.indexOf(":");
-      if (idx > -1) failureByApp[entry.slice(0, idx)] = entry.slice(idx + 1).trim();
+    Object.entries(latestRuns || {}).forEach(([appId, run]) => {
+      if (!run.ok) failureByApp[appId] = run.error || "unknown error";
     });
 
     summaryEl.innerHTML = "";
@@ -202,64 +259,25 @@ async function loadOverview() {
     });
     summaryEl.append(enabledStat, destinationsStat(destIds), cronStat, retentionStat);
 
+    // Backuparr's own backup leads, always there (#110); then each enabled app.
+    appsEl.appendChild(overviewCard("backuparr", {
+      label: "Backuparr", icon: "/static/logo.png", latest: latestByApp.backuparr,
+      failure: failureByApp.backuparr, latestRun: (latestRuns || {}).backuparr,
+      idleText: cfg.self_backup === false ? "Turned off in Settings." : "No backups yet.",
+    }));
     if (!enabledIds.length) {
-      appsEl.innerHTML = '<p class="overview-empty">No services enabled yet - head to Settings to add one.</p>';
+      const empty = document.createElement("p");
+      empty.className = "overview-empty";
+      empty.textContent = "No services enabled yet - head to Settings to add one.";
+      appsEl.appendChild(empty);
       return;
     }
-
     enabledIds.forEach((appId) => {
       const meta = appMeta(appId);
-      const latest = latestByApp[appId];
-      const failure = failureByApp[appId];
-
-      const card = document.createElement("div");
-      card.className = "overview-app-card";
-
-      const head = document.createElement("div");
-      head.className = "overview-app-head";
-      if (meta) {
-        const img = document.createElement("img");
-        img.className = "app-icon";
-        img.src = `/static/icons/${meta.icon}`;
-        img.alt = "";
-        head.appendChild(img);
-      }
-      const h3 = document.createElement("h3");
-      h3.textContent = appLabel(appId);
-      head.appendChild(h3);
-      const dot = document.createElement("span");
-      dot.className = "status-dot";
-      dot.dataset.state = failure ? "fail" : latest ? "ok" : "idle";
-      head.appendChild(dot);
-      card.appendChild(head);
-
-      const last = document.createElement("div");
-      last.className = "overview-app-last";
-      if (failure) {
-        const failLine = document.createElement("span");
-        failLine.textContent = `Last run failed: ${failure}`;
-        last.appendChild(failLine);
-      } else if (latest) {
-        const summaryLine = document.createElement("span");
-        summaryLine.textContent = `Last backup: ${fmtTime(latest.mod_time)} (${fmtBytes(latest.size)})`;
-        const fn = document.createElement("span");
-        fn.className = "filename";
-        fn.textContent = latest.name;
-        last.append(summaryLine, fn);
-      } else {
-        last.textContent = "No backups yet.";
-      }
-      card.appendChild(last);
-
-      if (latest) {
-        const dlLink = document.createElement("a");
-        dlLink.className = "overview-download-link";
-        dlLink.textContent = "Download latest backup";
-        dlLink.href = `/api/history/${latest.destId}/${appId}/${encodeURIComponent(latest.name)}/download`;
-        card.appendChild(dlLink);
-      }
-
-      appsEl.appendChild(card);
+      appsEl.appendChild(overviewCard(appId, {
+        label: appLabel(appId), icon: meta ? `/static/icons/${meta.icon}` : null, latest: latestByApp[appId],
+        failure: failureByApp[appId], latestRun: (latestRuns || {})[appId], idleText: "No backups yet.",
+      }));
     });
   } catch (e) {
     summaryEl.innerHTML = "";
@@ -268,6 +286,95 @@ async function loadOverview() {
     error.textContent = `Error loading overview: ${e.message}`;
     appsEl.replaceChildren(error);
   }
+}
+
+// ------------------------------------------------------------ run log ----
+// One app's log from one run, in a floating panel over the page.
+let logPanelSeq = 0;
+
+function destinationResultText(result) {
+  if (!result) return "not uploaded";
+  return result.ok ? "uploaded" : `failed - ${result.error}`;
+}
+
+async function openRunLog(appId, runId) {
+  const panel = document.getElementById("log-panel");
+  const meta = document.getElementById("log-panel-meta");
+  const lines = document.getElementById("log-panel-lines");
+  document.getElementById("log-panel-title").textContent = `${appId === "backuparr" ? "Backuparr" : appLabel(appId)} - run log`;
+  meta.textContent = "Loading...";
+  lines.innerHTML = "";
+  panel.classList.remove("hidden");
+  const seq = ++logPanelSeq;
+  let run;
+  try {
+    run = await apiFetch(`/api/runlogs/${encodeURIComponent(appId)}/${encodeURIComponent(runId)}`);
+  } catch (e) {
+    if (seq === logPanelSeq) meta.textContent = e.message;
+    return;
+  }
+  if (seq !== logPanelSeq) return;
+
+  meta.innerHTML = "";
+  const when = document.createElement("p");
+  when.textContent = `Run: ${fmtTime(run.started)}${run.app_version ? ` - ${appId === "backuparr" ? "Backuparr" : appMeta(appId)?.label || appId} ${run.app_version}` : ""}`;
+  const result = document.createElement("p");
+  result.className = run.ok ? "ok" : "fail";
+  result.textContent = run.ok ? `Backed up: ${run.file}` : `Failed: ${run.error || "unknown error"}`;
+  meta.append(when, result);
+  const destIds = Object.keys(run.destinations || {});
+  if (destIds.length) {
+    const list = document.createElement("ul");
+    destIds.forEach((destId) => {
+      const r = run.destinations[destId];
+      const li = document.createElement("li");
+      li.className = !r ? "muted" : r.ok ? "ok" : "fail";
+      li.textContent = `${destLabel(destId)}: ${destinationResultText(r)}`;
+      list.appendChild(li);
+    });
+    meta.appendChild(list);
+  }
+
+  (run.lines || []).forEach((line) => {
+    const li = document.createElement("li");
+    li.className = `log-${String(line.level || "").toLowerCase()}`;
+    const time = document.createElement("span");
+    time.className = "log-time";
+    time.textContent = new Date(line.time).toLocaleTimeString();
+    const text = document.createElement("span");
+    text.textContent = line.message;
+    li.append(time, text);
+    lines.appendChild(li);
+  });
+  if (!(run.lines || []).length) lines.innerHTML = '<li class="log-time">No log lines were kept for this run.</li>';
+}
+
+function closeRunLog() {
+  logPanelSeq++;
+  document.getElementById("log-panel").classList.add("hidden");
+}
+
+function initRunLogPanel() {
+  document.getElementById("log-panel-close").addEventListener("click", closeRunLog);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !document.getElementById("log-panel").classList.contains("hidden")) closeRunLog();
+  });
+  // A click anywhere outside the panel closes it too - except on a View log
+  // button, which opens (or switches) the panel instead.
+  document.addEventListener("click", (e) => {
+    const panel = document.getElementById("log-panel");
+    if (panel.classList.contains("hidden") || panel.contains(e.target) || e.target.closest(".view-log-btn")) return;
+    closeRunLog();
+  });
+}
+
+function viewLogButton(appId, runId) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "link-btn view-log-btn";
+  btn.textContent = "View log";
+  btn.addEventListener("click", () => openRunLog(appId, runId));
+  return btn;
 }
 
 // ------------------------------------------------------------- layout ----
@@ -304,6 +411,78 @@ function initTheme() {
   });
 }
 
+// ----------------------------------------------------------- user menu ----
+// The username's menu in the top bar: Change password and Log out (#120).
+// Not on the page when BACKUPARR_DISABLE_AUTH is set.
+function initUserMenu() {
+  const btn = document.getElementById("user-menu-btn");
+  if (!btn) return;
+  const list = document.getElementById("user-menu-list");
+  const setOpen = (open) => {
+    list.classList.toggle("hidden", !open);
+    btn.setAttribute("aria-expanded", String(open));
+  };
+  btn.addEventListener("click", () => setOpen(list.classList.contains("hidden")));
+  document.addEventListener("click", (e) => {
+    if (!document.getElementById("user-menu").contains(e.target)) setOpen(false);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !list.classList.contains("hidden")) {
+      setOpen(false);
+      btn.focus();
+    }
+  });
+  list.addEventListener("click", () => setOpen(false));
+  initChangePassword();
+}
+
+function initChangePassword() {
+  const modal = document.getElementById("password-modal");
+  const form = document.getElementById("password-form");
+  const result = document.getElementById("pw-result");
+  const fields = ["pw-current", "pw-new", "pw-confirm"].map((id) => document.getElementById(id));
+  const close = () => {
+    modal.classList.add("hidden");
+    form.reset();
+    result.textContent = "";
+  };
+  document.getElementById("change-password-btn").addEventListener("click", () => {
+    form.reset();
+    result.textContent = "";
+    modal.classList.remove("hidden");
+    fields[0].focus();
+  });
+  document.getElementById("password-modal-close").addEventListener("click", close);
+  document.getElementById("pw-cancel-btn").addEventListener("click", close);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !modal.classList.contains("hidden")) close();
+  });
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const [current, next, confirmed] = fields.map((f) => f.value);
+    if (next !== confirmed) {
+      result.textContent = "The new passwords don't match";
+      result.className = "save-result fail";
+      return;
+    }
+    const submit = document.getElementById("pw-submit-btn");
+    submit.disabled = true;
+    try {
+      await apiFetch("/api/password", {
+        method: "POST",
+        body: JSON.stringify({ current_password: current, new_password: next, confirm_password: confirmed }),
+      });
+      close();
+      toast("Password changed - other browsers were signed out", "ok");
+    } catch (err) {
+      result.textContent = err.message;
+      result.className = "save-result fail";
+    } finally {
+      submit.disabled = false;
+    }
+  });
+}
+
 // -------------------------------------------------------------- logout ----
 function initLogout() {
   const btn = document.getElementById("logout-btn");
@@ -336,7 +515,6 @@ function fillAppCard(appId, cfg) {
   if (!card) return;
   card.querySelector(".f-enabled").checked = !!cfg.enabled;
   const urlInput = card.querySelector(".f-url");
-  if (!urlInput) return; // coming_soon app - no body/fields rendered
   urlInput.value = cfg.url || "";
   const keyInput = card.querySelector(".f-api_key");
   if (keyInput) keyInput.value = cfg.api_key || ""; // absent for apps without an API key
@@ -370,7 +548,6 @@ function updateDiscoveryButton() {
 function readAppCard(appId) {
   const card = appCard(appId);
   const urlInput = card.querySelector(".f-url");
-  if (!urlInput) return { enabled: false }; // coming_soon app
   const keyInput = card.querySelector(".f-api_key");
   const out = {
     enabled: card.querySelector(".f-enabled").checked,
@@ -598,9 +775,7 @@ async function startPlexLogin() {
   const status = document.getElementById("plex-auth-status");
   status.textContent = "Opening Plex sign-in...";
   try {
-    const login = await apiFetch("/api/plex/auth", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
-    });
+    const login = await apiFetch("/api/plex/auth", { method: "POST" });
     flow.jobId = login.job_id;
     if (PLEX_LOGIN !== flow) { forgetPlexLogin(flow.jobId); return; }
     const link = document.getElementById("plex-auth-link");
@@ -924,7 +1099,7 @@ async function discoverServices() {
   let finished = false;
   try {
     ({ job_id: jobId } = await apiFetch("/api/discovery/prowlarr", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(credentials),
+      method: "POST", body: JSON.stringify(credentials),
     }));
     const state = await pollDiscovery(jobId, status);
     finished = true;
@@ -1029,9 +1204,8 @@ function buildHeaderScope(apps) {
     options.append(wrap);
   };
   option("header-scope-all", "", "All apps", !apps);
-  // Keep a saved scope's apps listed even if one stops being "available".
   // Each app's extra instances (from the Settings cards) follow it.
-  APP_META.filter((m) => m.status === "available" || (apps || []).includes(m.id)).forEach((m) => {
+  APP_META.forEach((m) => {
     option("header-scope-app", m.id, m.label, !apps || apps.includes(m.id));
     instanceCards(m.id).filter((card) => card.dataset.app !== m.id).forEach((card) => {
       option("header-scope-app", card.dataset.app, card.querySelector("h3").textContent, !apps || apps.includes(card.dataset.app));
@@ -1145,6 +1319,7 @@ function applyBasicAuthHeader(event) {
 async function loadConfig() {
   const cfg = await apiFetch("/api/config");
   document.getElementById("s-retention_days").value = cfg.retention_days || 7;
+  document.getElementById("s-self_backup").checked = cfg.self_backup !== false;
   document.getElementById("s-cron_schedule").value = cfg.cron_schedule || "";
   initSchedulePicker(cfg.cron_schedule);
   document.getElementById("s-notify_url").value = cfg.notify_url || "";
@@ -1236,6 +1411,7 @@ function collectConfig() {
   });
   return {
     retention_days: Number(document.getElementById("s-retention_days").value || 7),
+    self_backup: document.getElementById("s-self_backup").checked,
     cron_schedule: document.getElementById("s-cron_schedule").value.trim(),
     notify_url: document.getElementById("s-notify_url").value.trim(),
     bazarr_backup_dir: document.getElementById("s-bazarr_backup_dir").value.trim(),
@@ -1264,7 +1440,6 @@ async function saveSettings() {
     const cfg = collectConfig();
     await apiFetch("/api/config", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(cfg),
     });
     REMOVED_INSTANCES.forEach((appId) => RETIRED_INSTANCES.add(appId));
@@ -1317,7 +1492,6 @@ async function testApp(appId) {
     request: () =>
       apiFetch(`/api/test/${appId}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       }),
   });
@@ -1337,7 +1511,6 @@ async function testDestination(destId) {
     request: () =>
       apiFetch(`/api/test-destination/${destId}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       }),
   });
@@ -1359,7 +1532,6 @@ async function testNotifyUrl() {
     request: () =>
       apiFetch("/api/test-notify", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ notify_url: notifyUrl }),
       }),
   });
@@ -1378,7 +1550,6 @@ async function connectGdrive() {
   try {
     await apiFetch("/api/config", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(collectConfig()),
     });
     snapshotSettingsState();
@@ -1443,7 +1614,6 @@ async function gdrivePickerCallback(data) {
   try {
     await apiFetch("/api/destinations/gdrive/folder", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ folder_id: folder.id, folder_name: folder.name }),
     });
     toast(`Backing up to "${folder.name}"`, "ok");
@@ -1498,7 +1668,6 @@ async function connectTokenDest(destId) {
   try {
     await apiFetch(`/api/destinations/${destId}/connect`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token_blob: tokenBlob }),
     });
     input.value = "";
@@ -1945,9 +2114,32 @@ function appMeta(appId) {
 
 // "Radarr (4K)" for an extra instance; a removed one's id stands in for its name.
 function appLabel(appId) {
+  if (appId === "backuparr") return "Backuparr's own configuration";
   const m = appMeta(appId);
   if (!m) return appId;
   return isExtraInstance(appId) ? `${m.label} (${INSTANCE_NAMES.get(appId) || appId.slice(m.id.length + 1)})` : m.label;
+}
+
+// A run that left no file on this destination: greyed, with the reason in
+// place of a size, and only its log.
+function missingHistoryRow(appId, e) {
+  const tr = document.createElement("tr");
+  tr.className = "history-missing";
+  // The reason spans the Version and Size columns, on one line; the full
+  // text is its tooltip and in the log.
+  const cells = [e.name || "No backup file", e.reason, fmtTime(e.mod_time)].map((text) => {
+    const td = document.createElement("td");
+    td.textContent = text;
+    return td;
+  });
+  cells[1].className = "history-reason";
+  cells[1].colSpan = 2;
+  cells[1].title = e.reason;
+  const actionsTd = document.createElement("td");
+  actionsTd.className = "actions-cell";
+  actionsTd.appendChild(viewLogButton(appId, e.run_id));
+  tr.append(...cells, actionsTd);
+  return tr;
 }
 
 async function deleteBackup(destId, appId, filename, row) {
@@ -2022,12 +2214,21 @@ async function loadHistory() {
 
       const table = document.createElement("table");
       table.className = "history-table";
-      table.innerHTML = "<thead><tr><th>File</th><th>Size</th><th>Modified</th><th></th></tr></thead>";
+      table.innerHTML = "<thead><tr><th>File</th><th>Version</th><th>Size</th><th>Modified</th><th></th></tr></thead>";
       const tbody = document.createElement("tbody");
       entries.forEach((e) => {
         const tr = document.createElement("tr");
+        if (e.missing) {
+          tbody.appendChild(missingHistoryRow(appId, e));
+          return;
+        }
         const nameTd = document.createElement("td");
         nameTd.textContent = e.name;
+        const versionTd = document.createElement("td");
+        versionTd.textContent = e.app_version || "-";
+        if (!e.app_version) {
+          versionTd.title = e.recorded ? "This backup doesn't record the app's version" : "Not checked yet";
+        }
         const sizeTd = document.createElement("td");
         sizeTd.textContent = fmtBytes(e.size);
         const timeTd = document.createElement("td");
@@ -2045,8 +2246,9 @@ async function loadHistory() {
         delBtn.title = "Delete this backup";
         delBtn.textContent = "×";
         delBtn.addEventListener("click", () => deleteBackup(destId, appId, e.name, tr));
+        if (e.run_id) actionsTd.append(viewLogButton(appId, e.run_id));
         actionsTd.append(dlLink, delBtn);
-        tr.append(nameTd, sizeTd, timeTd, actionsTd);
+        tr.append(nameTd, versionTd, sizeTd, timeTd, actionsTd);
         tbody.appendChild(tr);
       });
       table.appendChild(tbody);
@@ -2078,6 +2280,25 @@ function initRestoreAppOptions() {
   if (Array.from(select.options).some((opt) => opt.value === previous)) select.value = previous;
 }
 
+// <label class="field">: a caption, a muted "(hint)" if any, and an input
+// with the given properties. Text goes in as text, never as markup.
+function overrideField(caption, hint, inputProps) {
+  const label = document.createElement("label");
+  label.className = "field";
+  const text = document.createElement("span");
+  text.className = "field-label";
+  text.textContent = caption;
+  if (hint) {
+    const muted = document.createElement("span");
+    muted.className = "muted";
+    muted.textContent = `(${hint})`;
+    text.append(" ", muted);
+  }
+  const input = Object.assign(document.createElement("input"), { autocomplete: "off" }, inputProps);
+  label.append(text, input);
+  return label;
+}
+
 function renderRestoreOverride() {
   const appId = document.getElementById("r-app").value;
   const meta = appMeta(appId);
@@ -2088,27 +2309,15 @@ function renderRestoreOverride() {
   const block = document.createElement("div");
   block.className = "extra-field-block";
 
-  const urlLabel = document.createElement("label");
-  urlLabel.className = "field";
-  urlLabel.innerHTML = `<span class="field-label">URL</span><input type="text" id="r-ovr-url" placeholder="${meta.url_placeholder || ""}" autocomplete="off">`;
-  block.appendChild(urlLabel);
-
+  block.appendChild(overrideField("URL", "", { type: "text", id: "r-ovr-url", placeholder: meta.url_placeholder || "" }));
   if (!meta.no_api_key) {
-    const keyLabel = document.createElement("label");
-    keyLabel.className = "field";
-    const keyHint = !meta.key_required
-      ? `<span class="muted">(optional${meta.key_help ? ` &mdash; ${meta.key_help}` : ""})</span>`
-      : meta.key_help ? `<span class="muted">(${meta.key_help})</span>` : "";
-    keyLabel.innerHTML = `<span class="field-label">${meta.key_label || "API key"} ${keyHint}</span><input type="password" id="r-ovr-api_key" autocomplete="off">`;
-    block.appendChild(keyLabel);
+    const hint = meta.key_required ? meta.key_help : `optional${meta.key_help ? ` \u2014 ${meta.key_help}` : ""}`;
+    block.appendChild(overrideField(meta.key_label || "API key", hint, { type: "password", id: "r-ovr-api_key" }));
   }
-
   (meta.extra_fields || []).forEach((f) => {
-    const label = document.createElement("label");
-    label.className = "field";
-    const help = f.help ? `<span class="muted">(${f.help})</span>` : "";
-    label.innerHTML = `<span class="field-label">${f.label} ${help}</span><input type="${f.type}" class="r-ovr-extra" data-field="${f.name}" placeholder="${f.placeholder || ""}" autocomplete="off">`;
-    block.appendChild(label);
+    const field = overrideField(f.label, f.help, { type: f.type, className: "r-ovr-extra", placeholder: f.placeholder || "" });
+    field.querySelector("input").dataset.field = f.name;
+    block.appendChild(field);
   });
 
   root.appendChild(block);
@@ -2146,7 +2355,8 @@ async function loadRestoreFiles() {
     const res = await apiFetch(`/api/restore/${destId}/${appId}/backups`);
     fileSelect.innerHTML = "";
     if (!res.files.length) {
-      fileSelect.innerHTML = "<option>No backups found</option>";
+      fileSelect.innerHTML = '<option value="">No backups found</option>';
+      setRestoreReady(false);
       return;
     }
     res.files.forEach((f) => {
@@ -2165,67 +2375,78 @@ async function loadRestoreFiles() {
   }
 }
 
-function renderRestoreExtra() {
+// Restore stays disabled until the backup's version has been checked
+// against the installed app - first, while the app is still running, so
+// Emby, Plex, Seerr and LazyLibrarian are only asked to stop after it.
+let restoreCheckSeq = 0;
+
+function setRestoreReady(ready) {
+  document.getElementById("restore-btn").disabled = !ready;
+}
+
+function sentence(text) {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+async function renderRestoreExtra() {
+  const destId = document.getElementById("r-destination").value;
   const appId = document.getElementById("r-app").value;
+  const file = document.getElementById("r-file").value;
   const extraRoot = document.getElementById("r-extra");
   extraRoot.innerHTML = "";
+  setRestoreReady(false);
+  if (!destId || !file) return;
 
-  if (appId === "plex") {
+  const block = document.createElement("div");
+  block.className = "extra-field-block restore-version";
+  block.textContent = "Checking the backup's version against the installed one...";
+  extraRoot.appendChild(block);
+  const seq = ++restoreCheckSeq;
+  const body = { file };
+  const override = readRestoreOverride();
+  if (override) body.override = override;
+  let result;
+  try {
+    result = await apiFetch(`/api/restore/${destId}/${appId}/check`, { method: "POST", body: JSON.stringify(body) });
+  } catch (e) {
+    if (seq !== restoreCheckSeq) return;
+    showRestoreCheckFailure(block, e.message);
+    return;
+  }
+  if (seq !== restoreCheckSeq) return;
+  if (result.status === "refused") {
+    showRestoreCheckFailure(block, result.message);
+    return;
+  }
+  block.textContent = result.message;
+  block.classList.add(result.status === "match" ? "ok" : "warn");
+  renderRestoreDetails(appId, extraRoot);
+  setRestoreReady(true);
+}
+
+function showRestoreCheckFailure(block, message) {
+  block.textContent = "";
+  block.classList.add("fail");
+  const again = document.createElement("button");
+  again.type = "button";
+  again.className = "btn btn-ghost btn-sm";
+  again.textContent = "Check again";
+  again.addEventListener("click", renderRestoreExtra);
+  block.append(sentence(message), " ", again);
+}
+
+function renderRestoreDetails(appId, extraRoot) {
+  const warning = appMeta(appId)?.restore_warning;
+  if (warning) {
     const block = document.createElement("div");
     block.className = "extra-field-block";
-    block.innerHTML =
-      "<strong>Stop Plex first</strong> - the restore is refused while it's running. " +
-      "It replaces Plex's library database and settings with the backup's - libraries, playlists, collections, every user's watched state, " +
-      "and the server's identity, so a rebuilt server comes back as the same server with its shared users. " +
-      "Anything added since is lost. Never run the original server at the same time. Start Plex again afterwards.";
+    const lead = document.createElement("strong");
+    if (warning.danger) lead.className = "danger-text";
+    lead.textContent = warning.lead;
+    block.append(lead, ` ${warning.text}`);
     extraRoot.appendChild(block);
-  } else if (appId === "tdarr") {
-    const block = document.createElement("div");
-    block.className = "extra-field-block";
-    block.innerHTML =
-      '<strong style="color:var(--danger)">Destructive:</strong> this wipes each Tdarr database collection before repopulating it from the backup.';
-    extraRoot.appendChild(block);
-  } else if (appId === "jellyfin") {
-    const block = document.createElement("div");
-    block.className = "extra-field-block";
-    block.innerHTML =
-      "<strong>Replaces Jellyfin's database and settings</strong> with the backup's - users, watch history, libraries and API keys. " +
-      "Anything added since is lost. Jellyfin restarts to apply it.";
-    extraRoot.appendChild(block);
-  } else if (appId === "emby") {
-    const block = document.createElement("div");
-    block.className = "extra-field-block";
-    block.innerHTML =
-      "<strong>Stop Emby first</strong> - the restore is refused while it's running. " +
-      "It replaces Emby's databases and settings with the backup's - users, watch history, playlists, collections and API keys. " +
-      "Anything added since is lost. Start Emby again afterwards.";
-    extraRoot.appendChild(block);
-  } else if (appId === "nzbget") {
-    const block = document.createElement("div");
-    block.className = "extra-field-block";
-    block.innerHTML =
-      "<strong>Replaces NZBGet's settings</strong> with the backup's - news servers and their passwords, categories, paths, " +
-      "extension settings, and the username and password. NZBGet reloads to apply them; the queue and history are kept. " +
-      "If the backup's username or password differ from the ones in Settings, update them there afterwards.";
-    extraRoot.appendChild(block);
-  } else if (appId === "seerr") {
-    const block = document.createElement("div");
-    block.className = "extra-field-block";
-    block.innerHTML =
-      "<strong>Stop Seerr first</strong> - the restore is refused while it's running. " +
-      "It replaces Seerr's database and settings with the backup's - users, requests, issues, " +
-      "the media server and Radarr/Sonarr connections, notifications and the API key. " +
-      "Anything added since is lost. Start Seerr again afterwards.";
-    extraRoot.appendChild(block);
-  } else if (appId === "lazylibrarian") {
-    const block = document.createElement("div");
-    block.className = "extra-field-block";
-    block.innerHTML =
-      "<strong>Stop LazyLibrarian first</strong> - the restore is refused while it's running. " +
-      "It replaces LazyLibrarian's database and settings with the backup's, its API key included. " +
-      "Anything added since is lost. Start LazyLibrarian again afterwards.";
-    extraRoot.appendChild(block);
-  } else if (appId === "bazarr") {
+  }
+  if (appId === "bazarr") {
     const block = document.createElement("div");
     block.className = "extra-field-block";
     block.innerHTML =
@@ -2251,7 +2472,6 @@ async function loadSabnzbdPreview() {
   try {
     const res = await apiFetch(`/api/restore/${destId}/sabnzbd/preview`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ file: fileSelect.value }),
     });
     RESTORE_STATE.servers = res.servers;
@@ -2329,7 +2549,6 @@ async function doRestore() {
   try {
     await apiFetch(`/api/restore/${destId}/${appId}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
     refreshRestoreStatus();
@@ -2416,6 +2635,8 @@ function initRestoreEvents() {
   document.getElementById("r-app").addEventListener("change", updateRestoreOverrideVisibility);
   document.getElementById("r-file").addEventListener("change", renderRestoreExtra);
   document.getElementById("r-override-toggle").addEventListener("change", updateRestoreOverrideVisibility);
+  // The check runs against the restore's target, so a new target needs a new check.
+  document.getElementById("r-override-toggle").addEventListener("change", renderRestoreExtra);
   document.getElementById("restore-btn").addEventListener("click", doRestore);
 }
 
@@ -2533,7 +2754,7 @@ function renderChangelogMarkdown(md) {
   return html.join("");
 }
 
-// Lazily fetches the last 3 GitHub Releases and shows them in a modal. Only
+// Lazily fetches the last 5 GitHub Releases and shows them in a modal. Only
 // reachable via the "What's Changed" button, which lives inside #version-check
 // and is therefore only visible once checkForUpdate() has already confirmed
 // GitHub is reachable - no extra eager fetch just to decide whether to show it.
@@ -2542,7 +2763,7 @@ async function openWhatsChanged() {
   body.innerHTML = "";
   document.getElementById("whats-changed-modal").classList.remove("hidden");
   try {
-    const res = await fetch("https://api.github.com/repos/rsaturns/backuparr/releases?per_page=3");
+    const res = await fetch("https://api.github.com/repos/rsaturns/backuparr/releases?per_page=5");
     if (!res.ok) throw new Error(`GitHub returned ${res.status}`);
     const releases = await res.json();
     if (!releases.length) {
@@ -2620,12 +2841,56 @@ function initFeedbackMenu() {
   menu.addEventListener("click", () => setOpen(false));
 }
 
+// ------------------------------------------------- restore Backuparr ----
+function initBackuparrRestore() {
+  if (AUTH_DISABLED) document.getElementById("br-password-field").classList.add("hidden");
+  document.getElementById("br-submit-btn").addEventListener("click", async () => {
+    const resultEl = document.getElementById("br-result");
+    const btn = document.getElementById("br-submit-btn");
+    if (!document.getElementById("br-confirm").checked) {
+      resultEl.textContent = "Check the confirmation box first.";
+      resultEl.className = "save-result fail";
+      return;
+    }
+    btn.disabled = true;
+    resultEl.textContent = "Restoring...";
+    resultEl.className = "save-result";
+    try {
+      const warnings = await restoreBackuparr("/api/backuparr/restore", document.getElementById("br-file").files[0],
+        document.getElementById("br-key").value,
+        { confirm: true, password: document.getElementById("br-password").value });
+      SETTINGS_SNAPSHOT = null; // the settings on screen are gone; don't warn about them
+      const note = warnings.length ? ` ${warnings.join(" ")}` : "";
+      resultEl.textContent = `Restored - everyone is signed out.${note}`;
+      resultEl.className = warnings.length ? "save-result warn" : "save-result ok";
+      const next = document.createElement("a");
+      next.className = "btn btn-primary";
+      next.href = AUTH_DISABLED ? "/" : "/login";
+      next.textContent = AUTH_DISABLED ? "Reload" : "Sign in again";
+      btn.replaceWith(next);
+    } catch (e) {
+      resultEl.textContent = e.message;
+      resultEl.className = "save-result fail";
+      btn.disabled = false;
+    }
+  });
+}
+
 async function init() {
+  // Until the encryption key is saved, the server refuses everything else.
+  try {
+    if (await showKeyPrompt(document.getElementById("key-modal"), () => window.location.reload())) return;
+  } catch (e) {
+    toast(`Could not check the encryption key: ${e.message}`, "fail");
+  }
   initTabs();
   initFeedbackMenu();
   initTheme();
+  initUserMenu();
   initLogout();
   initWhatsChangedEvents();
+  initRunLogPanel();
+  initBackuparrRestore();
   initSettingsEvents();
   initRunEvents();
   initHistoryEvents();
@@ -2638,16 +2903,6 @@ async function init() {
       e.returnValue = "";
     }
   });
-  try {
-    APP_META = await apiFetch("/api/meta");
-  } catch (e) {
-    toast(`Could not load app metadata: ${e.message}`, "fail");
-  }
-  try {
-    DESTINATION_META = await apiFetch("/api/destinations");
-  } catch (e) {
-    toast(`Could not load destination metadata: ${e.message}`, "fail");
-  }
   try {
     await loadConfig();
   } catch (e) {

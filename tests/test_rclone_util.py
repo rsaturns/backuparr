@@ -1,3 +1,4 @@
+import os
 """Tests for rclone_util._run()'s secret redaction and config_set()'s use
 of SENSITIVE_FIELDS to drive it."""
 from unittest.mock import MagicMock, patch
@@ -149,3 +150,30 @@ def test_error_detail_is_the_cause_without_the_command_and_is_redacted():
             rclone_util._run(["copyto", "a.zip", f"x:{secret}"], redact=[secret])
     assert exc_info.value.detail == "Failed to copyto: no space left on device *** (the destination is out of space)"
     assert "rclone copyto" in str(exc_info.value) and secret not in str(exc_info.value)
+
+
+def _rclone_exits(code, stdout="", stderr="ERROR : boom"):
+    result = MagicMock(returncode=code, stdout=stdout, stderr=stderr)
+    return patch("rclone_util.subprocess.run", return_value=result)
+
+
+def test_a_missing_folder_lists_as_empty():
+    with _rclone_exits(3, stderr="ERROR : error listing: directory not found"):
+        assert rclone_util.lsf("remote:radarr/") == [] and rclone_util.lsjson("remote:", recursive=True) == []
+
+
+@pytest.mark.parametrize("listing", [lambda: rclone_util.lsf("remote:radarr/"), lambda: rclone_util.lsjson("remote:")])
+def test_any_other_listing_failure_raises_instead_of_looking_empty(listing):
+    with _rclone_exits(1, stderr="CRITICAL: couldn't fetch token: invalid_grant"):
+        with pytest.raises(rclone_util.RcloneError, match="expired or been revoked") as exc:
+            listing()
+    assert exc.value.returncode == 1
+
+
+def test_the_bandwidth_limit_applies_to_remotes_but_not_local_storage(monkeypatch):
+    monkeypatch.setenv("RCLONE_BWLIMIT", "1M")
+    assert rclone_util._env(["copyto", "/tmp/a.zip", "gdrive:radarr/a.zip"]) is None  # inherits the limit
+    local = rclone_util._env(["copyto", "/tmp/a.zip", "/config/backuparr/backups/radarr/a.zip"])
+    assert "RCLONE_BWLIMIT" not in local and local.get("PATH") == os.environ.get("PATH")
+    monkeypatch.delenv("RCLONE_BWLIMIT")
+    assert rclone_util._env(["copyto", "/tmp/a", "/tmp/b"]) is None

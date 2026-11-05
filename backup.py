@@ -1,9 +1,9 @@
 """Trigger each configured app's own backup mechanism, zip the result if
 needed, and upload it to the configured rclone remote. Most apps are backed
 up over their HTTP API. A few need their folder mounted into this container:
-Jellyfin's API can't download the backup it creates, so that archive is
-picked up from its mounted backups folder; Emby and Seerr have no backup API,
-so their files are read from their mounted data folders; and Plex's settings
+Jellyfin's and LazyLibrarian's APIs can't download the backup they create, so
+it's picked up from the mounted folder; Emby and Seerr have no backup API, so
+their files are read from their mounted data folders; and Plex's settings
 and server identity come from its mounted data folder.
 Settings come from config_store, not environment variables.
 """
@@ -17,33 +17,39 @@ import shutil
 import socket
 import tempfile
 import zipfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import requests
 
+import archive_check
 import destination_util
+import manifest
 import rclone_util
-from apps.bazarr import BazarrApp, BazarrError
+import runlog
+import self_backup
+from apps.base import AppError
+from apps.bazarr import BazarrApp
+from apps.emby import EmbyApp
 from apps.http_headers import RequestHeadersError, app_connection_config, configure_app_headers
-from apps.emby import EmbyApp, EmbyError
-from apps.jellyfin import JellyfinApp, JellyfinError
-from apps.lazylibrarian import LazyLibrarianApp, LazyLibrarianError
+from apps.jellyfin import JellyfinApp
+from apps.lazylibrarian import LazyLibrarianApp
 from apps.lidarr import LidarrApp
-from apps.nzbget import NzbgetApp, NzbgetError
-from apps.plex import PlexApp, PlexError
-from apps.profilarr import ProfilarrApp, ProfilarrError
+from apps.nzbget import NzbgetApp
+from apps.plex import PlexApp
+from apps.profilarr import ProfilarrApp
 from apps.prowlarr import ProwlarrApp
 from apps.radarr import RadarrApp
-from apps.sabnzbd import SabnzbdApp, SabnzbdError
-from apps.seerr import SeerrApp, SeerrError
-from apps.servarr import ServarrError, UnsafeRedirectError
+from apps.sabnzbd import SabnzbdApp
+from apps.seerr import SeerrApp
+from apps.servarr import UnsafeRedirectError
 from apps.sonarr import SonarrApp
-from apps.tautulli import TautulliApp, TautulliError
-from apps.tdarr import TdarrApp, TdarrError
+from apps.tautulli import TautulliApp
+from apps.tdarr import TdarrApp
 from apps.whisparr import WhisparrApp
-from config_store import ConfigError, enabled_apps, enabled_destinations, instance_type
+from config_store import ConfigError, app_meta, enabled_apps, enabled_destinations, instance_type
+from webui.version import VERSION
 
 LOG_DIR = os.environ.get("BACKUPARR_LOG_DIR", "/var/log/backuparr")
 LOG_FILE = os.path.join(LOG_DIR, "backup.log")
@@ -56,40 +62,31 @@ def _log_level(value):
     return name if name in logging.getLevelNamesMapping() else "INFO"
 
 
-logging.basicConfig(
-    level=_log_level(os.environ.get("LOG_LEVEL")),
-    format="%(asctime)s %(levelname)s %(message)s",
-)
 log = logging.getLogger("backuparr")
+_LOG_FORMAT = "%(asctime)s %(levelname)s %(message)s"
 
-# So the web UI's status view can show past run results too.
-try:
-    os.makedirs(LOG_DIR, exist_ok=True)
-    _file_handler = logging.handlers.RotatingFileHandler(LOG_FILE, maxBytes=1_000_000, backupCount=3)
-    _file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
-    log.addHandler(_file_handler)
-except OSError:
-    log.warning("could not open %s for writing, file logging disabled", LOG_FILE)
+
+def configure_logging():
+    """Logs to stdout at LOG_LEVEL, and Backuparr's own lines to LOG_FILE as
+    well, so the web UI's status view can show past runs. Called once, at
+    startup."""
+    logging.basicConfig(level=_log_level(os.environ.get("LOG_LEVEL")), format=_LOG_FORMAT)
+    try:
+        os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+        handler = logging.handlers.RotatingFileHandler(LOG_FILE, maxBytes=1_000_000, backupCount=3)
+    except OSError:
+        log.warning("could not open %s for writing, file logging disabled", LOG_FILE)
+        return
+    handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+    log.addHandler(handler)
 
 
 # Errors whose message was written for humans (and carries no URL or key).
 _CLEAN_MESSAGE_ERRORS = (
-    RequestHeadersError,
-    BazarrError,
+    AppError,
     ConfigError,
     destination_util.DestinationError,
-    JellyfinError,
-    LazyLibrarianError,
-    NzbgetError,
-    EmbyError,
-    PlexError,
-    ProfilarrError,
-    rclone_util.RcloneError,
-    SabnzbdError,
-    SeerrError,
-    ServarrError,
-    TautulliError,
-    TdarrError,
+    RequestHeadersError,
     UnsafeRedirectError,
 )
 
@@ -223,45 +220,37 @@ def build_app(name, app_cfg):
     return configure_app_headers(_build_app(instance_type(name), app_cfg), app_cfg.get("request_headers", []))
 
 
+# Every app type's driver. Each takes (url, api_key, **extra fields) - the
+# extra fields being its APP_META extra_fields - or, for an app with
+# no_api_key, (url, **extra fields).
+DRIVERS = {
+    "radarr": RadarrApp,
+    "sonarr": SonarrApp,
+    "lidarr": LidarrApp,
+    "whisparr": WhisparrApp,
+    "prowlarr": ProwlarrApp,
+    "profilarr": ProfilarrApp,
+    "bazarr": BazarrApp,
+    "tdarr": TdarrApp,
+    "sabnzbd": SabnzbdApp,
+    "nzbget": NzbgetApp,
+    "tautulli": TautulliApp,
+    "jellyfin": JellyfinApp,
+    "emby": EmbyApp,
+    "plex": PlexApp,
+    "seerr": SeerrApp,
+    "lazylibrarian": LazyLibrarianApp,
+}
+
+
 def _build_app(name, app_cfg):
-    if name == "radarr":
-        return RadarrApp(app_cfg["url"], app_cfg["api_key"])
-    if name == "sonarr":
-        return SonarrApp(app_cfg["url"], app_cfg["api_key"])
-    if name == "lidarr":
-        return LidarrApp(app_cfg["url"], app_cfg["api_key"])
-    if name == "whisparr":
-        return WhisparrApp(app_cfg["url"], app_cfg["api_key"])
-    if name == "prowlarr":
-        return ProwlarrApp(app_cfg["url"], app_cfg["api_key"])
-    if name == "profilarr":
-        return ProfilarrApp(app_cfg["url"], app_cfg["api_key"])
-    if name == "bazarr":
-        return BazarrApp(
-            app_cfg["url"],
-            app_cfg["api_key"],
-            username=app_cfg.get("username") or None,
-            password=app_cfg.get("password") or None,
-        )
-    if name == "tdarr":
-        return TdarrApp(app_cfg["url"], api_key=app_cfg.get("api_key") or None)
-    if name == "sabnzbd":
-        return SabnzbdApp(app_cfg["url"], app_cfg["api_key"])
-    if name == "nzbget":
-        return NzbgetApp(app_cfg["url"], app_cfg.get("username") or None, app_cfg.get("password") or None)
-    if name == "tautulli":
-        return TautulliApp(app_cfg["url"], app_cfg["api_key"])
-    if name == "jellyfin":
-        return JellyfinApp(app_cfg["url"], app_cfg["api_key"], backup_dir=app_cfg.get("backup_dir") or None)
-    if name == "emby":
-        return EmbyApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
-    if name == "plex":
-        return PlexApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
-    if name == "seerr":
-        return SeerrApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
-    if name == "lazylibrarian":
-        return LazyLibrarianApp(app_cfg["url"], app_cfg["api_key"], data_dir=app_cfg.get("data_dir") or None)
-    raise ValueError(f"Unknown app: {name}")
+    meta = app_meta(name)
+    if name not in DRIVERS or meta is None:
+        raise ValueError(f"Unknown app: {name}")
+    extras = {field["name"]: app_cfg.get(field["name"]) or None for field in meta["extra_fields"]}
+    if meta.get("no_api_key"):
+        return DRIVERS[name](app_cfg["url"], **extras)
+    return DRIVERS[name](app_cfg["url"], app_cfg.get("api_key", ""), **extras)
 
 
 _TAR_SUFFIX = re.compile(r"\.tar\.(?:gz|bz2|xz|zst)$")
@@ -278,7 +267,9 @@ def archive_suffix(path):
 
 
 def zip_dir(src_dir, zip_path):
-    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
+    # zlib's default level: 9 is far slower on multi-GB databases for a few
+    # percent less size.
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for root, _dirs, files in os.walk(src_dir):
             for name in files:
                 full = os.path.join(root, name)
@@ -305,10 +296,8 @@ def notify(notify_url, message, raise_on_error=False):
     try:
         if _DISCORD_WEBHOOK_RE.search(notify_url):
             res = requests.post(notify_url, json={"content": message[:2000]}, timeout=10)  # 2000 = Discord's limit
-        elif _SLACK_WEBHOOK_RE.search(notify_url):
-            res = requests.post(notify_url, json={"text": message}, timeout=10)
-        elif _TELEGRAM_RE.search(notify_url):
-            # chat_id stays in notify_url's own query string.
+        elif _SLACK_WEBHOOK_RE.search(notify_url) or _TELEGRAM_RE.search(notify_url):
+            # Telegram's chat_id stays in notify_url's own query string.
             res = requests.post(notify_url, json={"text": message}, timeout=10)
         elif _is_gotify_url(parsed):
             res = requests.post(notify_url, json={"title": "Backuparr", "message": message}, timeout=10)
@@ -330,23 +319,35 @@ def format_run_message(ok, failed):
     return "\n".join(lines)
 
 
-def apply_retention(root, retention_days, now=None, only=None):
+def apply_retention(root, retention_days, now=None, only=None, dest_id=None):
     """Deletes each app's backups older than retention_days from one
     destination, always keeping its newest - so an app that keeps failing,
     or was switched off (or an instance that was removed), still has its
     last good backup. Only Backuparr's own <app>/<app>_<timestamp> archives
     are touched, <app> being an app or instance id; age comes from the
     timestamp in the name, written in this container's local time. only,
-    if given, limits it to that one app or instance's backups."""
+    if given, limits it to that one app or instance's backups.
+
+    dest_id, if given, is the destination's id: the manifest drops what
+    retention deletes, and any entry for a file the listing didn't find."""
     cutoff = (now or datetime.now()) - timedelta(days=int(retention_days))
+    try:
+        entries = rclone_util.lsjson(root, recursive=True)
+    except rclone_util.RcloneError as exc:
+        log.warning("retention: couldn't list %s, nothing removed: %s", root, exc.detail)
+        return
     per_app = {}
-    for entry in rclone_util.lsjson(root, recursive=True):
+    present = set()
+    for entry in entries:
         app, sep, name = entry.get("Path", "").partition("/")
-        if entry.get("IsDir") or not sep or not instance_type(app) or not destination_util.is_backup_name(app, name):
+        if entry.get("IsDir") or not sep or not destination_util.is_backup_folder(app) or not destination_util.is_backup_name(app, name):
             continue
+        present.add(manifest.key(app, name))
         if only is not None and app != only:
             continue
         per_app.setdefault(app, []).append(name)
+    if dest_id is not None:
+        manifest.reconcile(dest_id, present)
     for app, names in per_app.items():
         names.sort()  # The timestamp makes name order oldest-first.
         for name in names[:-1]:
@@ -359,12 +360,28 @@ def apply_retention(root, retention_days, now=None, only=None):
             try:
                 rclone_util.delete_file(f"{root}/{app}/{name}")
                 log.info("retention: removed %s/%s", app, name)
+                if dest_id is not None:
+                    manifest.remove(app, name, dest_id)
             except rclone_util.RcloneError as exc:
                 log.warning("retention: couldn't remove %s/%s: %s", app, name, exc.detail)
 
 
 class RunCancelled(Exception):
     pass
+
+
+def _utc_now():
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _app_version(app, name, url):
+    """The app's version for the manifest, or None - logged - when the app
+    can't say. A backup that worked isn't failed over it."""
+    try:
+        return manifest.normalise_version(instance_type(name), app.app_version())
+    except Exception as exc:
+        log.warning("%s: couldn't read its version for the backup record: %s", name, humanize_error(exc, url, app=name))
+        return None
 
 
 def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
@@ -433,6 +450,10 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
 
             work_dir = os.path.join(run_tmp, name)
             archive_path = None
+            # This app's run log: None for a destination its upload never reached.
+            run = {"id": f"{name}_{timestamp}", "app": name, "started": _utc_now(), "finished": None, "file": None,
+                   "ok": False, "error": None, "app_version": None, "destinations": {d: None for d in dest_roots}}
+            capture = runlog.Capture().start()
 
             try:
                 os.makedirs(work_dir, exist_ok=True)
@@ -449,8 +470,16 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
                     archive_name = f"{name}_{timestamp}{archive_suffix(result_path)}"
                     archive_path = os.path.join(run_tmp, archive_name)
                     shutil.move(result_path, archive_path)
+                run["file"] = archive_name
 
+                # A backup that fails is never uploaded; retention keeps the
+                # app's newest, so its last good backup stays.
+                log.info("%s: checking the backup...", name)
+                archive_check.check(name, archive_path)
                 size = os.path.getsize(archive_path)
+                sha256 = manifest.file_sha256(archive_path)
+                app_version = run["app_version"] = _app_version(app, name, app_cfg.get("url"))
+                uploaded = []
                 dest_failures = []
                 for dest_id, root in dest_roots.items():
                     check_cancel()
@@ -459,20 +488,38 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
                     try:
                         rclone_util.copyto(archive_path, remote_dest)
                         log.info("%s: uploaded -> %s (%d bytes)", name, remote_dest, size)
+                        uploaded.append(dest_id)
+                        run["destinations"][dest_id] = {"ok": True, "error": None}
                     except rclone_util.RcloneError as exc:
                         log.error("%s: upload to %s failed: %s", name, dest_id, exc.detail)
                         dest_failures.append(f"{dest_id}: {exc.detail}")
+                        run["destinations"][dest_id] = {"ok": False, "error": exc.detail}
 
+                if uploaded:
+                    try:
+                        manifest.record(name, archive_name, uploaded, app_version=app_version, sha256=sha256,
+                                        size=size, backuparr_version=VERSION)
+                    except OSError as exc:
+                        # The backup itself is uploaded; only its record is missing.
+                        log.warning("%s: couldn't write the backup record: %s", name, exc.strerror or type(exc).__name__)
                 if dest_failures:
-                    failed.append(f"{name}: failed on {'; '.join(dest_failures)}")
+                    run["error"] = f"failed on {'; '.join(dest_failures)}"
+                    failed.append(f"{name}: {run['error']}")
                 else:
+                    run["ok"] = True
                     ok.append(name)
             except RunCancelled:
+                run["error"] = "the run was cancelled"
                 raise
             except Exception as exc:
                 log_failure(log, f"{name}: backup failed", exc, app_cfg.get("url"), app=name)
-                failed.append(f"{name}: {humanize_error(exc, app_cfg.get('url'), app=name)}")
+                run["error"] = humanize_error(exc, app_cfg.get("url"), app=name)
+                failed.append(f"{name}: {run['error']}")
             finally:
+                capture.stop()
+                run["finished"] = _utc_now()
+                run["lines"] = capture.result()
+                runlog.save(run)
                 shutil.rmtree(work_dir, ignore_errors=True)
                 if archive_path and os.path.exists(archive_path):
                     os.remove(archive_path)
@@ -487,7 +534,15 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
         return ok, failed
 
     log.info("Applying retention (%sd) per destination", retention_days)
-    for root in dest_roots.values():
-        apply_retention(root, retention_days, only=only)
+    for dest_id, root in dest_roots.items():
+        apply_retention(root, retention_days, only=only, dest_id=dest_id)
+    runlog.prune(retention_days)
+
+    # Last, so its manifest and run logs include this run. Only a full run
+    # makes one: a single app's run leaves Backuparr's backup as it was.
+    if only is None and cfg.get("self_backup", True):
+        problem = self_backup.run(dest_roots, timestamp)
+        if problem:
+            failed.append(f"backuparr: {problem}")
 
     return ok, failed

@@ -46,7 +46,8 @@ folder** = `/mnt/plex`.
   sign-in token.
 - **Restore needs Plex stopped** (`docker stop plex`); Backuparr refuses while
   it's running. It replaces the database and `Preferences.xml`, then you start
-  Plex. A backup from a newer Plex is refused; an older one is upgraded by Plex.
+  Plex. The backup must come from the same Plex version - see
+  [The version check](../restoring.md#the-version-check).
 - **Rebuilding a server:** start the new Plex once (no need to sign in), stop
   it, then restore. It comes back as the original server with its shared
   users; keep the original token in Settings. Never run the original and the

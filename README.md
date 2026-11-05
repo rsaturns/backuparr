@@ -29,7 +29,7 @@ notes](https://rsaturns.github.io/backuparr/apps/).
   </tr>
   <tr>
     <td><img src="docs/screenshots/run.png" alt="Run and Status tab: a backup in progress with its live log"><br><b>Run &amp; Status</b></td>
-    <td><img src="docs/screenshots/history.png" alt="History tab: each app's backups on a destination, with download and delete buttons"><br><b>History</b></td>
+    <td><img src="docs/screenshots/history.png" alt="History tab: an app's backups with their version, size and date, View log, download and delete buttons"><br><b>History</b></td>
   </tr>
 </table>
 
@@ -92,7 +92,7 @@ docker run -d --name backuparr --restart unless-stopped \
 ```
 
 Published for `linux/amd64` and `linux/arm64`. `latest` is the newest tagged
-release; pin a version (e.g. `rsaturns/backuparr:2.0.0`) to control
+release; pin a version (e.g. `rsaturns/backuparr:2.5.0`) to control
 upgrades. Tags are on [Docker Hub](https://hub.docker.com/r/rsaturns/backuparr),
 and the same images are on GitHub Container Registry as
 [`ghcr.io/rsaturns/backuparr`](https://github.com/rsaturns/backuparr/pkgs/container/backuparr).
@@ -111,8 +111,10 @@ fill in the folders of the apps that need one - see
 
 ### First run
 
-Open `http://<host>:8990` and create the admin account on the setup screen.
-Then, on the **Settings** tab:
+Open `http://<host>:8990` and create the admin account on the setup screen
+(or [restore Backuparr](https://rsaturns.github.io/backuparr/restoring/#restoring-backuparr-itself) from its own
+backup). Save the encryption key Backuparr then shows - you need it to restore
+Backuparr. Then, on the **Settings** tab:
 
 1. Switch on each app to back up, enter its URL (e.g. `http://radarr:7878` on
    the same Compose network, or `IP:port` for apps on host networking) and its
@@ -121,19 +123,21 @@ Then, on the **Settings** tab:
 2. Enable at least one [destination](https://rsaturns.github.io/backuparr/destinations/).
 3. Set retention and a schedule. Retention deletes each app's backups older
    than the number of days you set, but always keeps its newest one.
-4. Click **Save settings**. Schedule changes apply without a restart.
+4. Click **Save settings**.
 
 **Run & Status** runs a backup now - of every app, or just one - and shows it
 live, **History** lists, downloads and deletes backups, and **Restore** restores them.
 
 ## Documentation
 
+- [Features](https://rsaturns.github.io/backuparr/features/) - everything Backuparr does, in one list
 - [Getting started](https://rsaturns.github.io/backuparr/getting-started/)
 - [Apps](https://rsaturns.github.io/backuparr/apps/) - how each app is backed up and restored
 - [Destinations](https://rsaturns.github.io/backuparr/destinations/) - Local storage, Google Drive, OneDrive, Dropbox
 - [Settings](https://rsaturns.github.io/backuparr/settings/) - Prowlarr discovery, multiple instances of an app, reverse-proxy headers
+- [Backups and history](https://rsaturns.github.io/backuparr/backups/) - schedule, retention, run logs, History
+- [Restoring](https://rsaturns.github.io/backuparr/restoring/) - apps, the version check, and Backuparr itself
 - [Login and security](https://rsaturns.github.io/backuparr/security/)
-- [Restoring after a disaster](https://rsaturns.github.io/backuparr/restoring/)
 - [Notifications](https://rsaturns.github.io/backuparr/notifications/)
 - [Environment variables](https://rsaturns.github.io/backuparr/environment-variables/) and the [configuration reference](https://rsaturns.github.io/backuparr/configuration/)
 

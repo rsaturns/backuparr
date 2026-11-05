@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body data-auth-disabled="{{ 'true' if auth_disabled else 'false' }}">
+<body data-auth-disabled="{{ 'true' if auth_disabled else 'false' }}" data-ui-meta='{{ ui_meta | tojson }}'>
 <header class="topbar">
   <div class="brand">
     <img class="brand-mark" src="{{ url_for('static', filename='logo.png') }}" alt="">
@@ -27,7 +27,20 @@
     <button class="tab-btn" data-tab="restore" type="button">Restore</button>
   </nav>
   {% if not auth_disabled %}
-  <button type="button" class="btn btn-ghost btn-sm" id="logout-btn">Log out</button>
+  <div class="user-menu" id="user-menu">
+    <button type="button" class="btn btn-ghost btn-sm user-menu-btn" id="user-menu-btn"
+            aria-haspopup="menu" aria-expanded="false" aria-controls="user-menu-list">
+      <svg class="user-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <circle cx="12" cy="8" r="4"></circle>
+        <path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"></path>
+      </svg>
+      <span class="user-name">{{ username }}</span>
+    </button>
+    <div class="user-menu-list hidden" id="user-menu-list" role="menu" aria-label="Account">
+      <button type="button" class="user-menu-item" role="menuitem" id="change-password-btn">Change password</button>
+      <button type="button" class="user-menu-item" role="menuitem" id="logout-btn">Log out</button>
+    </div>
+  </div>
   {% endif %}
   <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle light/dark theme">&#9789;</button>
 </header>
@@ -62,19 +75,17 @@
           <h3 id="apps-enabled-heading" class="app-group-heading hidden">Enabled</h3>
           <h3 id="apps-disabled-heading" class="app-group-heading hidden">Not enabled</h3>
           {% for m in app_meta %}
-          <div class="app-card{% if m.status != 'available' %} card-soon{% endif %}" data-app="{{ m.id }}">
+          <div class="app-card" data-app="{{ m.id }}">
             <div class="app-card-head">
               <label class="switch">
-                <input type="checkbox" class="f-enabled"{% if m.status != 'available' %} disabled{% endif %}>
+                <input type="checkbox" class="f-enabled">
                 <span class="slider"></span>
               </label>
               <img class="app-icon" src="{{ url_for('static', filename='icons/' ~ m.icon) }}" alt="" width="22" height="22">
               <h3>{{ m.label }}</h3>
               {% if m.discoverable %}<span class="discovery-badge discovery-origin hidden">From Prowlarr</span>{% endif %}
-              {% if m.status != 'available' %}<span class="badge-soon">Coming soon</span>{% endif %}
               <span class="status-dot" data-state="idle"></span>
             </div>
-            {% if m.status == 'available' %}
             <div class="app-card-body hidden">
               {% if m.discoverable %}<div class="app-discovery hidden"></div>{% endif %}
               <label class="field">
@@ -127,7 +138,6 @@
               <div id="discovery-results"></div>
               {% endif %}
             </div>
-            {% endif %}
           </div>
           {% if m.multi_instance %}
           {# Extra instances' cards (app.js copies this app's card) go above this row. #}
@@ -157,18 +167,16 @@
           <p class="hint">Choose where backups go - enable as many as you like, every enabled destination gets a copy of every backup.</p>
           <div id="destination-list">
             {% for m in destination_meta %}
-            <div class="app-card dest-card{% if m.status != 'available' %} card-soon{% endif %}" data-dest="{{ m.id }}">
+            <div class="app-card dest-card" data-dest="{{ m.id }}">
               <div class="app-card-head">
                 <label class="switch">
-                  <input type="checkbox" class="d-enabled"{% if m.status != 'available' %} disabled{% endif %}>
+                  <input type="checkbox" class="d-enabled">
                   <span class="slider"></span>
                 </label>
                 {% if m.icon %}<img class="app-icon" src="{{ url_for('static', filename='icons/' ~ m.icon) }}" alt="" width="22" height="22">{% endif %}
                 <h3>{{ m.label }}</h3>
-                {% if m.status != 'available' %}<span class="badge-soon">Coming soon</span>{% endif %}
                 <span class="status-dot" data-state="idle"></span>
               </div>
-              {% if m.status == 'available' %}
               <p class="hint dest-description">{{ m.description }}</p>
               <div class="app-card-body hidden">
                 {% if m.id == 'local' %}
@@ -226,52 +234,9 @@
                 </div>
                 {% endif %}
               </div>
-              {% else %}
-              <p class="hint dest-description">{{ m.description }}</p>
-              {% endif %}
             </div>
             {% endfor %}
           </div>
-        </div>
-
-        <div class="card" id="request-headers-card">
-          <h2>Service authentication</h2>
-          <p class="hint">Optional HTTP headers for apps behind an authenticating reverse proxy, used for connection tests, discovery, backups and restores. Each header goes to all apps or only the ones you pick. Values are stored encrypted.</p>
-          <div id="request-headers-list"></div>
-          <div class="request-headers-actions">
-            <button type="button" class="btn btn-ghost btn-sm" id="add-request-header">Add header</button>
-            <label><input type="checkbox" id="show-request-headers"> Show values</label>
-          </div>
-          <details class="request-headers-help" id="basic-auth-helper">
-            <summary>Generate Basic authentication</summary>
-            <p class="hint">Generate a Basic authentication value from a username and password, then apply it to a new or existing header.</p>
-            <form id="basic-auth-form" class="basic-auth-form">
-              <label class="field">
-                <span class="field-label">Target header</span>
-                <input id="basic-auth-header" type="text" value="Authorization" list="basic-auth-header-options" autocomplete="off" spellcheck="false" required aria-describedby="basic-auth-header-hint">
-              </label>
-              <datalist id="basic-auth-header-options">
-                <option value="Authorization"></option>
-                <option value="Proxy-Authorization"></option>
-              </datalist>
-              <p class="hint" id="basic-auth-header-hint">Use the header your server expects: Authorization for HTTP Basic, Proxy-Authorization for a proxy that accepts it, or a custom name. Applying replaces the value of the row with that name; to add another row with the same name for different apps, add it with an empty value first.</p>
-              <label class="field">
-                <span class="field-label">Username</span>
-                <input id="basic-auth-username" type="text" autocomplete="off" spellcheck="false" required>
-              </label>
-              <label class="field">
-                <span class="field-label">Password</span>
-                <input id="basic-auth-password" type="password" autocomplete="new-password">
-              </label>
-              <button type="submit" class="btn btn-ghost btn-sm">Apply to header</button>
-              <p id="basic-auth-status" class="test-result" role="status" aria-live="polite"></p>
-            </form>
-          </details>
-          <details class="request-headers-help">
-            <summary>Where headers are used</summary>
-            <p class="hint">App API keys are still required. Each app's own authentication takes priority when it uses the same header name; use a separate header if your proxy supports one.</p>
-            <p class="hint">Each header goes to the URLs of the apps it applies to, including a restore target entered for one of them. The same name can be used for different apps, with a different value for each. Headers are not sent to backup storage or notification services. Redirects to another scheme, host or port are blocked.</p>
-          </details>
         </div>
 
         <div class="card">
@@ -280,6 +245,10 @@
             <span class="field-label">Retention (days)</span>
             <input type="number" id="s-retention_days" min="1" step="1">
           </div>
+          <label class="field checkbox-field">
+            <input type="checkbox" id="s-self_backup">
+            <span>Back up Backuparr's own configuration, encrypted with your encryption key, at the end of each full run</span>
+          </label>
           <div class="field">
             <span class="field-label">Backup schedule</span>
             <div class="schedule-picker">
@@ -326,6 +295,71 @@
               <button type="button" class="btn btn-ghost btn-sm" id="notify-test-btn">Test</button>
               <span class="test-result" id="notify-test-result"></span>
             </div>
+          </div>
+        </div>
+
+        <div class="card" id="request-headers-card">
+          <h2>Service authentication</h2>
+          <p class="hint">Optional HTTP headers for apps behind an authenticating reverse proxy, used for connection tests, discovery, backups and restores. Each header goes to all apps or only the ones you pick. Values are stored encrypted.</p>
+          <div id="request-headers-list"></div>
+          <div class="request-headers-actions">
+            <button type="button" class="btn btn-ghost btn-sm" id="add-request-header">Add header</button>
+            <label><input type="checkbox" id="show-request-headers"> Show values</label>
+          </div>
+          <details class="request-headers-help" id="basic-auth-helper">
+            <summary>Generate Basic authentication</summary>
+            <p class="hint">Generate a Basic authentication value from a username and password, then apply it to a new or existing header.</p>
+            <form id="basic-auth-form" class="basic-auth-form">
+              <label class="field">
+                <span class="field-label">Target header</span>
+                <input id="basic-auth-header" type="text" value="Authorization" list="basic-auth-header-options" autocomplete="off" spellcheck="false" required aria-describedby="basic-auth-header-hint">
+              </label>
+              <datalist id="basic-auth-header-options">
+                <option value="Authorization"></option>
+                <option value="Proxy-Authorization"></option>
+              </datalist>
+              <p class="hint" id="basic-auth-header-hint">Use the header your server expects: Authorization for HTTP Basic, Proxy-Authorization for a proxy that accepts it, or a custom name. Applying replaces the value of the row with that name; to add another row with the same name for different apps, add it with an empty value first.</p>
+              <label class="field">
+                <span class="field-label">Username</span>
+                <input id="basic-auth-username" type="text" autocomplete="off" spellcheck="false" required>
+              </label>
+              <label class="field">
+                <span class="field-label">Password</span>
+                <input id="basic-auth-password" type="password" autocomplete="new-password">
+              </label>
+              <button type="submit" class="btn btn-ghost btn-sm">Apply to header</button>
+              <p id="basic-auth-status" class="test-result" role="status" aria-live="polite"></p>
+            </form>
+          </details>
+          <details class="request-headers-help">
+            <summary>Where headers are used</summary>
+            <p class="hint">App API keys are still required. Each app's own authentication takes priority when it uses the same header name; use a separate header if your proxy supports one.</p>
+            <p class="hint">Each header goes to the URLs of the apps it applies to, including a restore target entered for one of them. The same name can be used for different apps, with a different value for each. Headers are not sent to backup storage or notification services. Redirects to another scheme, host or port are blocked.</p>
+          </details>
+        </div>
+
+        <div class="card">
+          <h2>Restore Backuparr</h2>
+          <p class="hint">Select your Backuparr backup and enter your saved encryption key.</p>
+          <label class="field">
+            <span class="field-label">Backup file</span>
+            <input type="file" id="br-file" accept=".enc">
+          </label>
+          <label class="field">
+            <span class="field-label">Encryption key</span>
+            <input type="text" id="br-key" autocomplete="off" spellcheck="false">
+          </label>
+          <label class="field" id="br-password-field">
+            <span class="field-label">Admin password</span>
+            <input type="password" id="br-password" autocomplete="current-password">
+          </label>
+          <label class="field checkbox-field">
+            <input type="checkbox" id="br-confirm">
+            <span>I understand this replaces Backuparr's settings and login, and signs everyone out.</span>
+          </label>
+          <div class="save-row">
+            <button type="button" class="btn btn-danger" id="br-submit-btn">Restore Backuparr</button>
+            <span id="br-result" class="save-result"></span>
           </div>
         </div>
       </div>
@@ -453,12 +487,79 @@
     </div>
     <div class="modal-body">
       <div id="whats-changed-body"></div>
+      <p class="whats-changed-all"><a href="https://github.com/rsaturns/backuparr/releases" target="_blank" rel="noopener noreferrer">View all changes</a></p>
     </div>
   </div>
 </div>
 
+<div id="key-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="key-modal-title">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="key-modal-title">Save your encryption key</h3>
+    </div>
+    <div class="modal-body">
+    <p class="hint">This key encrypts the passwords, API keys and cloud logins Backuparr stores, and Backuparr's own backup. You need it to restore Backuparr.</p>
+      <div class="key-box">
+        <code id="key-value" class="key-value"></code>
+        <button type="button" class="btn btn-ghost btn-sm" id="key-copy-btn">Copy</button>
+      </div>
+      <p id="key-env-note" class="hint hidden">It's the key set with <code>BACKUPARR_SECRETS_KEY</code>.</p>
+      <p class="key-warning key-warning-centered"><strong>Save it in a password manager, or Backuparr can't be restored.</strong> It will never be shown again.</p>
+      <div class="save-row">
+        <button type="button" class="btn btn-primary" id="key-ack-btn">Yes, I have saved my encryption key</button>
+        <span id="key-result" class="save-result"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if not auth_disabled %}
+<div id="password-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="password-modal-title">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="password-modal-title">Change password</h3>
+      <button type="button" class="icon-btn modal-close" id="password-modal-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form id="password-form">
+        <input type="text" class="hidden" autocomplete="username" value="{{ username }}" aria-hidden="true" tabindex="-1">
+        <label class="field">
+          <span class="field-label">Current password</span>
+          <input type="password" id="pw-current" autocomplete="current-password" required>
+        </label>
+        <label class="field">
+          <span class="field-label">New password <span class="muted">(at least 8 characters)</span></span>
+          <input type="password" id="pw-new" autocomplete="new-password" minlength="8" required>
+        </label>
+        <label class="field">
+          <span class="field-label">Confirm new password</span>
+          <input type="password" id="pw-confirm" autocomplete="new-password" minlength="8" required>
+        </label>
+        <p class="hint">Every other signed-in browser is signed out; this one stays signed in.</p>
+        <div class="save-row">
+          <button type="submit" class="btn btn-primary" id="pw-submit-btn">Change password</button>
+          <button type="button" class="btn btn-ghost" id="pw-cancel-btn">Cancel</button>
+          <span id="pw-result" class="save-result" role="status" aria-live="polite"></span>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div id="log-panel" class="log-panel hidden" role="dialog" aria-labelledby="log-panel-title">
+  <div class="log-panel-head">
+    <h3 id="log-panel-title">Run log</h3>
+    <button type="button" class="icon-btn" id="log-panel-close" aria-label="Close">&times;</button>
+  </div>
+  <div id="log-panel-meta" class="log-panel-meta"></div>
+  <ol id="log-panel-lines" class="log-panel-lines"></ol>
+</div>
+
 <div id="toast-root" class="toast-root"></div>
 <script src="https://apis.google.com/js/api.js"></script>
+<script src="{{ url_for('static', filename='key-prompt.js') }}"></script>
+<script src="{{ url_for('static', filename='self-restore.js') }}"></script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

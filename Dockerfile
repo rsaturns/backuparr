@@ -5,12 +5,10 @@ FROM python:3.15-alpine
 ARG RCLONE_VERSION=1.75.0
 ARG TARGETARCH
 
-# Make sure the community repo (bash, su-exec live there) is enabled.
-# su-exec drops from root to the PUID/PGID entrypoint.sh resolves at
-# startup. rclone's zip is checksum-verified against its own SHA256SUMS.
-RUN sed -i 's/^#\(.*community.*\)/\1/' /etc/apk/repositories \
-    && apk update \
-    && apk add --no-cache bash tzdata su-exec \
+# su-exec (from the community repo, enabled in python:alpine) drops from root
+# to the PUID/PGID entrypoint.sh resolves at startup. rclone's zip is
+# checksum-verified against its own SHA256SUMS.
+RUN apk add --no-cache bash tzdata su-exec \
     && cd /tmp \
     && wget -q "https://downloads.rclone.org/v${RCLONE_VERSION}/rclone-v${RCLONE_VERSION}-linux-${TARGETARCH}.zip" \
     && wget -q "https://downloads.rclone.org/v${RCLONE_VERSION}/SHA256SUMS" \
@@ -25,7 +23,7 @@ WORKDIR /app
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY backup.py restore_actions.py rclone_util.py config_store.py destination_util.py discovery.py gdrive_oauth.py onedrive_oauth.py dropbox_oauth.py rclone_token.py auth_store.py secrets_crypto.py healthcheck.py entrypoint.sh VERSION /app/
+COPY *.py entrypoint.sh VERSION /app/
 COPY apps /app/apps
 COPY webui /app/webui
 RUN chmod +x /app/entrypoint.sh

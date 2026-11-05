@@ -1,48 +1,22 @@
-"""Backup/restore driver for Tautulli via its API v2.
+"""Backup/restore driver for Tautulli via its API v2 (/api/v2?apikey=...).
 
-Tautulli has no "create then download a backup archive" flow like the
-Servarr apps or Profilarr - instead its API exposes two commands that
-generate and stream a live, sanitized copy on every call:
+Backup: `download_database` and `download_config` each stream a fresh copy,
+so there's no trigger-then-poll step. The database comes with Plex/server
+tokens nulled; the config only has PMS_TOKEN/JWT_SECRET stripped, so the API
+key and notification credentials are in it (see docs/apps/tautulli.md).
 
-- `cmd=download_database` - a fresh copy of tautulli.db with Plex/server
-  tokens nulled server-side before it's streamed back.
-- `cmd=download_config` - a fresh copy of config.ini, but only
-  `PMS_TOKEN`/`JWT_SECRET` are stripped (Tautulli's own
-  `_DO_NOT_DOWNLOAD_KEYS`) - the Tautulli API key itself and any
-  notification agent credentials come through in plain text. See
-  docs/apps/tautulli.md.
+Restore: `import_config` takes a multipart upload but only stages it; the
+web route /restart_import_config, outside the API, applies it and restarts
+Tautulli. With no Tautulli login that call answers 200 and the import runs;
+with a login it redirects, and the config stays staged for the user to
+finish (the API key only bypasses its CSRF check). This confirms the config
+was accepted, not that Tautulli has finished restarting.
 
-Both are ordinary `@addtoapi()` commands, reachable through the same
-apikey-authenticated `/api/v2?apikey=...&cmd=...` route as every other
-call here - no separate session/cookie auth, and no trigger-then-poll
-step since each call already returns the finished file.
-
-Restore is two-part: `cmd=import_database` and `cmd=import_config` each
-accept a multipart file upload (`database_file`/`config_file`).
-
-`import_config` only STAGES the file, though: it saves it to Tautulli's
-cache and creates an import thread that nothing starts. Tautulli's own UI
-starts it by calling the web route `/restart_import_config`, which applies
-the config and restarts Tautulli. That route is not part of the API and
-uses Tautulli's login session; the API key only bypasses its CSRF check.
-So restore() calls it after the upload: with no login set up Tautulli
-answers 200 and the import runs, with a login it redirects to the login
-page and the config stays staged for the user to finish (see restore()).
-Like Radarr/Sonarr/Prowlarr/Bazarr's restore here, this confirms the
-config was accepted, not that Tautulli has finished restarting.
-
-DATABASE RESTORE IS NOT ACTUALLY REACHABLE OVER THE API: `import_database`
-requires `app=` ("tautulli"/"plexwatch"/"plexivity") to know what it's
-importing, but Tautulli's own `/api/v2` dispatcher (`api2.py`'s
-`_api_validate`) unconditionally strips any `app` parameter first - it
-reserves that name globally for an unrelated mobile-app-auth flag, before
-the specific command ever runs. So `import_database` always sees `app=None`
-and fails with "No app specified for import", regardless of what we send.
-Confirmed by reading api2.py directly; this is an upstream bug, not
-something fixable from the request side. restore() treats it as best-effort
-(logs a warning, still restores config.ini) rather than failing outright -
-restore tautulli.db by hand via Settings > Import & Backup > Import Database
-until Tautulli fixes this.
+`import_database` can't work over the API: it needs `app=tautulli`, but
+api2.py's _api_validate strips every `app` parameter before any command runs
+(it reserves the name for a mobile-app flag), so it always fails with "No app
+specified for import". An upstream bug; restore() skips it with a warning, and
+tautulli.db is restored by hand (Settings > Import & Backup > Import Database).
 """
 import json
 import logging
@@ -50,10 +24,15 @@ import os
 
 import requests
 
+from apps.base import AppError, save_stream
+
 logger = logging.getLogger(f"backuparr.{__name__}")
 
+# Enough of a download to tell a file from an API error's JSON body.
+_ERROR_BODY_MAX = 64 * 1024
 
-class TautulliError(RuntimeError):
+
+class TautulliError(AppError):
     pass
 
 
@@ -77,9 +56,9 @@ class TautulliApp:
         except requests.exceptions.RequestException as exc:
             raise type(exc)(f"tautulli: {type(exc).__name__} calling {cmd}") from None
 
-    def _call(self, cmd, timeout=None, **params):
+    def _call(self, cmd, timeout=None, stream=False, **params):
         payload = {"apikey": self.api_key, "cmd": cmd, **params}
-        res = self._send("GET", cmd, params=payload, timeout=timeout or self.timeout)
+        res = self._send("GET", cmd, params=payload, timeout=timeout or self.timeout, stream=stream)
         if res.status_code == 401:
             raise TautulliError("tautulli: unauthorized - check the API key")
         try:
@@ -97,10 +76,16 @@ class TautulliApp:
             raise TautulliError(f"tautulli: {data.get('message') or 'unexpected response'}")
         return "tautulli reachable"
 
+    def app_version(self):
+        res = self._call("get_tautulli_info", timeout=10)
+        return ((res.json().get("response") or {}).get("data") or {}).get("tautulli_version")
+
     @staticmethod
-    def _check_download(cmd, content):
+    def _check_download(cmd, path):
         """An API error comes back as a JSON body, not an HTTP error: refuse
         to keep it as a "backup" of the database or config."""
+        with open(path, "rb") as f:
+            content = f.read(_ERROR_BODY_MAX)
         if cmd == "download_database":
             if content.startswith(b"SQLite format 3\x00"):
                 return
@@ -115,10 +100,11 @@ class TautulliApp:
     def backup(self, dest_dir):
         os.makedirs(dest_dir, exist_ok=True)
         for cmd, filename in (("download_database", "tautulli.db"), ("download_config", "config.ini")):
-            res = self._call(cmd, timeout=120)
-            self._check_download(cmd, res.content)
-            with open(os.path.join(dest_dir, filename), "wb") as f:
-                f.write(res.content)
+            path = os.path.join(dest_dir, filename)
+            # Streamed: tautulli.db can be gigabytes.
+            with self._call(cmd, timeout=120, stream=True) as res:
+                save_stream(res, path)
+            self._check_download(cmd, path)
         return dest_dir
 
     def _import(self, cmd, field_name, file_path, extra):
@@ -181,8 +167,8 @@ class TautulliApp:
             except TautulliError as exc:
                 if "No app specified for import" in str(exc):
                     logger.warning(
-                        "tautulli: database import skipped - see module docstring "
-                        "(upstream api2.py bug). Restore tautulli.db by hand: Settings > "
+                        "tautulli: database import skipped - Tautulli's API can't import a database "
+                        "(an upstream bug). Restore tautulli.db by hand: Settings > "
                         "Import & Backup > Import Database."
                     )
                     summary["database_skipped"] = "not restorable via API - see the Tautulli page in the docs"

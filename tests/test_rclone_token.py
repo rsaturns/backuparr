@@ -4,7 +4,6 @@ import time
 
 import pytest
 
-import onedrive_oauth
 import rclone_token
 
 TOKEN = {"access_token": "acc", "token_type": "bearer", "refresh_token": "ref", "expiry": "2026-10-06T12:00:00Z"}
@@ -69,9 +68,3 @@ def test_empty_paste_names_the_backend_command(pasted):
 def test_rejects_anything_that_is_not_a_usable_token(pasted):
     with pytest.raises(rclone_token.TokenError, match="rclone authorize onedrive"):
         rclone_token.parse_token_blob(pasted, "onedrive")
-
-
-def test_onedrive_keeps_raising_its_own_error():
-    assert onedrive_oauth.parse_token_blob(B64)[1] == "acc"
-    with pytest.raises(onedrive_oauth.OneDriveOAuthError, match="rclone authorize onedrive"):
-        onedrive_oauth.parse_token_blob("nope")

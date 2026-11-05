@@ -171,3 +171,12 @@ def test_a_replaced_header_row_doesnt_inherit_an_unreadable_value(monkeypatch):
     config_store.save_config(cfg)
     _set_key(monkeypatch, None)
     assert config_store.load_config()["request_headers"] == [{"name": "X-New", "value": ""}]
+
+
+def test_every_app_has_a_driver_built_from_its_meta():
+    import backup
+    assert set(backup.DRIVERS) == set(config_store.APP_NAMES)
+    for meta in config_store.APP_META:
+        cfg = {"url": "http://app.example", "api_key": "key", **{f["name"]: "x" for f in meta["extra_fields"]}}
+        driver = backup.build_app(meta["id"], cfg)
+        assert isinstance(driver, backup.DRIVERS[meta["id"]])

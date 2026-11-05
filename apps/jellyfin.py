@@ -30,10 +30,11 @@ import logging
 import os
 import re
 import shutil
-import time
-import zipfile
 
 import requests
+
+from apps import mounted
+from apps.base import AppError, poll_until
 
 logger = logging.getLogger(f"backuparr.{__name__}")
 
@@ -43,7 +44,7 @@ BACKUP_OPTIONS = {"Database": True, "Metadata": False, "Trickplay": False, "Subt
 _SAFE_NAME = re.compile(r"^(?!\.)[A-Za-z0-9._-]+\Z")
 
 
-class JellyfinError(RuntimeError):
+class JellyfinError(AppError):
     pass
 
 
@@ -63,11 +64,7 @@ def _server_folder(path):
 
 
 def is_jellyfin_backup(path):
-    try:
-        with zipfile.ZipFile(path) as zf:
-            return "manifest.json" in zf.namelist() and zf.testzip() is None
-    except zipfile.BadZipFile:
-        return False
+    return mounted.is_backup_zip(path, {"manifest.json"})
 
 
 class JellyfinApp:
@@ -91,6 +88,9 @@ class JellyfinApp:
     def server_version(self):
         return self._check(self.session.get(f"{self.url}/System/Info", timeout=10)).json().get("Version", "?")
 
+    def app_version(self):
+        return self.server_version()
+
     def list_backups(self):
         res = self.session.get(f"{self.url}/Backup", timeout=self.timeout)
         if res.status_code == 404:
@@ -98,14 +98,9 @@ class JellyfinApp:
         return self._check(res).json()
 
     def _require_folder(self, writable=False):
-        if not self.backup_dir:
-            raise JellyfinError("jellyfin: set the backups folder - Jellyfin's backups folder, mounted into this container")
-        if not os.path.isdir(self.backup_dir):
-            raise JellyfinError(
-                f"jellyfin: backups folder {self.backup_dir} doesn't exist in this container - "
-                "mount Jellyfin's backups folder there (/config/data/backups in the official image, "
-                "/config/data/data/backups in linuxserver's)"
-            )
+        mounted.require_dir(self.backup_dir, JellyfinError, "jellyfin", "backups folder", "Jellyfin's backups folder",
+                            "mount Jellyfin's backups folder there (/config/data/backups in the official image, "
+                            "/config/data/data/backups in linuxserver's)")
         if writable and not os.access(self.backup_dir, os.W_OK):
             raise JellyfinError(
                 f"jellyfin: backups folder {self.backup_dir} isn't writable - a restore copies the archive "
@@ -128,10 +123,7 @@ class JellyfinApp:
 
     def _wait_for_file(self, path, wait_s=10):
         # A network share can show a new file a moment after Jellyfin wrote it.
-        deadline = time.time() + wait_s
-        while not os.path.isfile(path) and time.time() < deadline:
-            time.sleep(1)
-        return os.path.isfile(path)
+        return bool(poll_until(lambda: os.path.isfile(path) or None, wait_s, 1))
 
     def backup(self, dest_dir):
         self._require_folder()

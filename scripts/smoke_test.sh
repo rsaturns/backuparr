@@ -26,7 +26,7 @@ echo "1/6 every module is in the image"
 MODULES="$(cd "$ROOT" && for f in *.py; do printf '%s ' "${f%.py}"; done)webui.app"
 docker run --rm --entrypoint python "$IMAGE" -c \
     "import importlib, sys; [importlib.import_module(m) for m in sys.argv[1:]]" $MODULES \
-    || fail "an application module is missing from the image (check the Dockerfile COPY list)"
+    || fail "an application module is missing from the image (check the Dockerfile COPY lines)"
 
 echo "2/6 container starts and turns healthy"
 docker run -d --name "$NAME" -p 127.0.0.1::8990 -e PUID="$(id -u)" -e PGID="$(id -g)" \
@@ -54,7 +54,13 @@ CRED='{"username":"smoke","password":"smoke-test-password","confirm":"smoke-test
 curl -fsS -X POST -H 'Content-Type: application/json' -d "$CRED" -c "$JAR" "$BASE/api/setup" >/dev/null || fail "setup failed"
 curl -fsS -X POST -H 'Content-Type: application/json' -d "$CRED" -c "$JAR" "$BASE/api/login" >/dev/null || fail "login failed"
 
-echo "5/6 the API works, is not cacheable, and the UI shows the release version"
+echo "5/6 the API waits for the encryption key to be saved, then works, is not cacheable, and the UI shows the release version"
+[ "$(curl -sS -o /dev/null -w '%{http_code}' -b "$JAR" "$BASE/api/config")" = 403 ] || fail "/api/config answered before the encryption key was saved"
+KEY_HEADERS="$(curl -fsS -D - -b "$JAR" "$BASE/api/secrets-key")" || fail "/api/secrets-key failed"
+grep -q '"key"' <<<"$KEY_HEADERS" || fail "/api/secrets-key didn't return the key"
+grep -qi "^Cache-Control: no-store" <<<"$KEY_HEADERS" || fail "the encryption key response is cacheable"
+curl -fsS -X POST -H 'Content-Type: application/json' -d '{"confirm":true}' -b "$JAR" "$BASE/api/secrets-key/acknowledge" >/dev/null || fail "saving the encryption key failed"
+curl -fsS -b "$JAR" "$BASE/api/secrets-key" | grep -q '"acknowledged":true' || fail "the encryption key is still shown after it was saved"
 API_HEADERS="$(curl -fsS -D - -o /dev/null -b "$JAR" "$BASE/api/config")" || fail "/api/config failed after login"
 grep -qi "^Cache-Control: no-store" <<<"$API_HEADERS" || fail "API response is cacheable"
 VERSION="$(tr -d '[:space:]' <"$ROOT/VERSION")"

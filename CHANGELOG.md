@@ -3,9 +3,37 @@
 All notable changes to this project are documented in this file. The
 format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [2.5.0] - 2026-11-04
 
-_Nothing yet._
+**"I heard you like backups, so I put another backup in your backups..."** 2.5.0 backs up Backuparr itself, checks every backup before it's uploaded, and only restores onto the exact app version a backup came from.
+
+### Added
+
+- Backuparr keeps a record of every backup: the app version it came from, its checksum and which destinations hold it. History shows each backup's app version, and existing backups are added in the background after the update (#106).
+- Each backup is checked before upload: it must read back intact, its SQLite databases must pass a quick check, and the files its restore needs must be in it. A backup that fails isn't uploaded, and the app shows as failed with the reason (#107).
+- Restores only go onto the exact app version the backup came from. The Restore tab checks it when you pick a backup, before Emby, Plex, Seerr or LazyLibrarian need stopping, and names the version to install when they differ; each download is checked against its recorded checksum (#108).
+- Each app's log and result from every run are kept across restarts: **View log** on its Overview tile and on each History row, and History lists runs that left no backup with the reason. The Overview's status is right after a restart (#109).
+- Backuparr backs up its own configuration at the end of each full run, encrypted with your encryption key, to every destination. Your encryption key is shown once, after setup or after updating, until you confirm you've saved it (#110).
+- Restore Backuparr from its own backup with your encryption key: on the setup screen of a new install, or from Settings (#111).
+- The Overview has a Backuparr card with its own latest backup and run log.
+- Change the admin password: click your username at the top right, which replaces the Log out button and also holds Log out (#120).
+- Forgot your password? Delete `auth.json` and create a new login on the setup screen with your encryption key; your settings are kept. Without the key, an install that already holds settings can't be given a new login (#123).
+
+### Changed
+
+- What's Changed shows the last 5 releases, with a link to all of them.
+- The run log also closes when you click outside it, and Settings lists Schedule & notifications above Service authentication.
+- The docs have a Features page, a Backups and history page and an Updating page, cover every 2.5.0 change, and have new screenshots.
+- Backups are zipped at the default compression level instead of the maximum, so large databases (Emby, Plex, Seerr) zip much faster.
+- The container starts faster: it fixes the ownership of only the files that need it, not every local backup.
+- Tautulli and Profilarr backups are streamed to disk instead of held in memory.
+
+### Fixed
+
+- After Reset, settings saved before the next restart were encrypted with the old, deleted key, so they couldn't be read after that restart.
+- A destination that can't be listed (an expired or revoked connection, say) shows its error in History and on the Overview instead of looking empty, and retention skips it with a warning.
+- A LazyLibrarian restore makes the files it creates readable by LazyLibrarian.
+- Failed logins arriving at the same moment all count towards the login lockout.
 
 ## [2.0.0] - 2026-11-03
 

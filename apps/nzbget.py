@@ -35,6 +35,8 @@ import zipfile
 
 import requests
 
+from apps.base import AppError
+
 logger = logging.getLogger(f"backuparr.{__name__}")
 
 CONFIG = "nzbget.conf"
@@ -42,7 +44,7 @@ MANIFEST = "backuparr-nzbget.json"
 _RESTRICTED = "***"
 
 
-class NzbgetError(RuntimeError):
+class NzbgetError(AppError):
     pass
 
 
@@ -127,6 +129,9 @@ class NzbgetApp:
                 "use the Control username and password (Settings > Security)"
             )
         return [{"Name": o["Name"], "Value": o["Value"]} for o in options]
+
+    def app_version(self):
+        return self.version()
 
     def test_connection(self):
         version = self.version()

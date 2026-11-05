@@ -1,6 +1,6 @@
 ---
 title: Environment variables
-nav_order: 9
+nav_order: 11
 ---
 
 # Environment variables
@@ -19,6 +19,7 @@ compose file:
 | `LOG_LEVEL` | `INFO` | Logging level for backup/restore runs, e.g. `DEBUG` |
 | `BACKUPARR_SECRETS_KEY` | *(generated)* | Replaces the generated `secrets.key` (see [Encryption at rest](security.md#encryption-at-rest)), e.g. from a Docker secret |
 | `RCLONE_CONFIG_PASS` | *(generated)* | Replaces the generated password that encrypts `rclone.conf` |
+| `RCLONE_BWLIMIT` | *(none)* | Caps the bandwidth of every upload and download, e.g. `1M` (1 MiB/s) - for a slow or metered connection. Local storage isn't limited. rclone's [`--bwlimit` syntax](https://rclone.org/docs/#bwlimit-bandwidth-spec), including a timetable, works here |
 | `BACKUPARR_DISABLE_AUTH` | `false` | `true` turns off local login behind an authenticating reverse proxy - see [Login](security.md#login) |
 | `BACKUPARR_FORCE_HTTPS` | `false` | Set `true` behind your own TLS reverse proxy: secure session cookie, and trusts `X-Forwarded-Proto` (needed for Google Drive's `https://` redirect URI). Leave unset on plain HTTP, or login fails |
 | `BACKUPARR_TRUSTED_PROXY` | *(none)* | With `BACKUPARR_FORCE_HTTPS`: your proxy's IP address, so the login lockout sees each client's own address from `X-Forwarded-For`. Without it, failed logins all count against the proxy's address |

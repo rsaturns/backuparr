@@ -1,5 +1,6 @@
 """Consistent copies of a SQLite database another program keeps writing to,
-for the drivers that read an app's mounted data folder (Emby, Seerr)."""
+for the drivers that read an app's mounted data folder (Emby, Plex, Seerr,
+LazyLibrarian)."""
 import os
 import sqlite3
 from urllib.parse import quote

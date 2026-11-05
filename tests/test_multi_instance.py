@@ -173,7 +173,7 @@ def test_a_single_app_run_backs_up_and_prunes_only_that_instance(monkeypatch):
     monkeypatch.setattr(backup.destination_util, "remote_root", lambda dest_id, cfg: "/dest")
     monkeypatch.setattr(backup, "build_app", lambda name, app_cfg: built.append(name) or Fake())
     monkeypatch.setattr(backup.rclone_util, "copyto", lambda src, dst: uploaded.append(dst))
-    monkeypatch.setattr(backup, "apply_retention", lambda root, days, only=None: retention.append((root, only)))
+    monkeypatch.setattr(backup, "apply_retention", lambda root, days, only=None, **kw: retention.append((root, only)))
     progress = []
 
     ok, failed = backup.run_backup(cfg, on_progress=lambda *args: progress.append(args), only="radarr-4k")
@@ -285,7 +285,7 @@ def test_an_unsaved_instance_can_be_tested(authed_client, isolated_webui, monkey
         def test_connection(self):
             return "ok"
 
-    monkeypatch.setattr(isolated_webui, "build_app", lambda name, app_cfg: seen.append((name, app_cfg)) or Fake())
+    monkeypatch.setattr(isolated_webui.settings, "build_app", lambda name, app_cfg: seen.append((name, app_cfg)) or Fake())
     header = {"name": "X-Token", "value": "t", "apps": ["radarr-4k"]}
     response = authed_client.post("/api/test/radarr-4k", json={"url": "http://r", "api_key": "k", "request_headers": [header]})
     assert response.get_json() == {"ok": True, "message": "ok"}
@@ -299,7 +299,7 @@ def test_history_lists_instances_including_removed_ones_with_backups_left(authed
     save(authed_client, apps={"sonarr-anime": {"name": "Anime"}})
     entries = [{"Path": p, "Name": p.rsplit("/", 1)[-1], "Size": 1, "ModTime": "2026-01-01T00:00:00Z", "IsDir": False}
                for p in ("radarr-old/radarr-old_20260101_030000.zip", "plex-2/plex-2_20260101_030000.zip")]
-    monkeypatch.setattr(isolated_webui.rclone_util, "lsjson", lambda root, recursive=False: entries)
+    monkeypatch.setattr(isolated_webui.backups.rclone_util, "lsjson", lambda root, recursive=False: entries)
     history = authed_client.get("/api/history/local").get_json()
     assert history["sonarr-anime"] == []
     assert [f["name"] for f in history["radarr-old"]] == ["radarr-old_20260101_030000.zip"]
@@ -309,6 +309,7 @@ def test_history_lists_instances_including_removed_ones_with_backups_left(authed
 def test_an_instance_restores_from_its_own_folder_with_its_own_connection(inline, authed_client, monkeypatch, tmp_path):
     calls, work = [], tmp_path / "work"  # removed after the restore
     work.mkdir()
+    monkeypatch.setattr(restore_actions, "list_backups", lambda root, app: [f"{app}_1.zip"])
     monkeypatch.setattr(restore_actions, "fetch_backup",
                         lambda root, app, filename=None: calls.append(("fetch", app)) or (str(work), str(work / "b.zip"), f"{app}_1.zip"))
     monkeypatch.setattr(restore_actions, "restore_app",
@@ -326,6 +327,13 @@ def test_an_instance_restores_from_its_own_folder_with_its_own_connection(inline
 
 def test_restore_app_uploads_to_an_instance(monkeypatch):
     uploaded = []
-    monkeypatch.setattr(restore_actions, "restore_upload_app", lambda name, app_cfg, local_zip: uploaded.append(name))
+    class Driver:
+        def __init__(self, name):
+            self.name = name
+
+        def restore_upload(self, local_zip):
+            uploaded.append((self.name, local_zip))
+
+    monkeypatch.setattr(restore_actions, "build_app", lambda name, app_cfg: Driver(name))
     assert restore_actions.restore_app("sonarr-anime", {}, "/tmp", "/tmp/b.zip") == {"kind": "upload"}
-    assert uploaded == ["sonarr-anime"]
+    assert uploaded == [("sonarr-anime", "/tmp/b.zip")]

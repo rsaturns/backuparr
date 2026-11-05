@@ -1,0 +1,54 @@
+name: CodeQL
+
+# Advanced setup in place of GitHub's default setup, so the analysis uses
+# .github/codeql/codeql-config.yml (default setup can't) and also runs on
+# pull requests to release branches. The categories match default setup's,
+# so earlier alerts and their dismissals carry over.
+on:
+  pull_request:
+    branches:
+      - main
+      - 'release-*'
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '27 4 * * 1'
+
+# A newer push to the same PR or branch cancels the older run.
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [actions, javascript-typescript, python]
+    # Actions are pinned to a commit, named in the comment; Dependabot
+    # updates both.
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Initialise CodeQL
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Analyse
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: "/language:${{ matrix.language }}"

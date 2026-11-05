@@ -1,6 +1,6 @@
 ---
 title: Notifications
-nav_order: 8
+nav_order: 10
 ---
 
 # Notifications

@@ -27,8 +27,7 @@ is finished.
   `pg_dump` as Seerr's guide describes.
 - **Restore needs Seerr stopped** (`docker stop seerr`); Backuparr refuses while
   it's running. It replaces the database and `settings.json`, then you start
-  Seerr. A backup from a newer Seerr is refused; an older one is upgraded by
-  Seerr. Run Backuparr as `1000:1000` (Seerr's user in the official image).
+  Seerr. The backup must come from the same Seerr version. Run Backuparr as `1000:1000` (Seerr's user in the official image).
 - **Rebuilding:** start the new Seerr once (no need to finish setup), stop it,
   then restore. Its API key comes back too, so keep the original key in
   Settings (unless Seerr's `API_KEY` environment variable sets it).

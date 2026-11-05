@@ -9,10 +9,11 @@ import requests
 import dropbox_oauth
 import gdrive_oauth
 import onedrive_oauth
+import rclone_token
 
 
 def gdrive(webui):
-    return webui.load_config()["destinations"]["gdrive"]
+    return webui.settings.load_config()["destinations"]["gdrive"]
 
 
 def with_google_client(client, secret="client-secret"):
@@ -43,7 +44,7 @@ def test_start_sends_the_user_to_google_with_a_fresh_state(authed_client, isolat
     assert params["redirect_uri"] == ["http://localhost/api/destinations/gdrive/oauth/callback"]
     assert params["scope"] == [gdrive_oauth.SCOPE] and params["response_type"] == ["code"]
     state = params["state"][0]
-    assert len(state) >= 24 and state in isolated_webui._OAUTH_STATE
+    assert len(state) >= 24 and state in isolated_webui.destinations._OAUTH_STATE
     again = query(authed_client.get("/api/destinations/gdrive/oauth/start").headers["Location"])["state"][0]
     assert again != state
 
@@ -75,14 +76,14 @@ def test_a_callback_without_a_valid_state_and_code_is_rejected(authed_client, is
 
 def test_a_successful_callback_stores_the_refresh_token_and_enables_drive(authed_client, isolated_webui, monkeypatch):
     synced = []
-    monkeypatch.setattr(isolated_webui.destination_util, "sync", lambda cfg: synced.append(cfg))
+    monkeypatch.setattr(isolated_webui.destinations.destination_util, "sync", lambda cfg: synced.append(cfg))
     monkeypatch.setattr(gdrive_oauth, "exchange_code", lambda cid, secret, redirect, code: {"refresh_token": f"rt-for-{code}", "client": (cid, secret)})
     state = start_flow(authed_client, isolated_webui)
     synced.clear()
     assert callback(authed_client, state=state, code="auth-code") == "/?gdrive=connected"
     cfg = gdrive(isolated_webui)
     assert cfg["refresh_token"] == "rt-for-auth-code" and cfg["enabled"] is True
-    assert "rt-for-auth-code" not in open(isolated_webui.CONFIG_PATH).read()  # encrypted at rest
+    assert "rt-for-auth-code" not in open(isolated_webui.auth.CONFIG_PATH).read()  # encrypted at rest
     assert len(synced) == 1
 
 
@@ -107,9 +108,9 @@ def test_a_state_can_only_be_used_once(authed_client, isolated_webui, monkeypatc
 def test_an_old_state_expires(authed_client, isolated_webui, monkeypatch):
     monkeypatch.setattr(gdrive_oauth, "exchange_code", lambda *a: pytest.fail("must not exchange"))
     state = start_flow(authed_client, isolated_webui)
-    isolated_webui._OAUTH_STATE[state] = time.time() - isolated_webui._OAUTH_STATE_TTL - 1
+    isolated_webui.destinations._OAUTH_STATE[state] = time.monotonic() - isolated_webui.destinations._OAUTH_STATE_TTL - 1
     assert "invalid or expired" in query(callback(authed_client, state=state, code="c"))["gdrive_error"][0]
-    assert state not in isolated_webui._OAUTH_STATE
+    assert state not in isolated_webui.destinations._OAUTH_STATE
 
 
 def test_a_failed_exchange_is_reported_without_leaking_and_connects_nothing(authed_client, isolated_webui, monkeypatch):
@@ -133,18 +134,18 @@ def test_google_refusing_the_code_shows_googles_reason(authed_client, isolated_w
 
 
 def test_expired_states_are_swept_when_a_new_one_is_made(isolated_webui):
-    isolated_webui._OAUTH_STATE["old"] = time.time() - isolated_webui._OAUTH_STATE_TTL - 5
-    isolated_webui._OAUTH_STATE["recent"] = time.time()
-    fresh = isolated_webui._oauth_state_new()
-    assert set(isolated_webui._OAUTH_STATE) == {"recent", fresh}
+    isolated_webui.destinations._OAUTH_STATE["old"] = time.monotonic() - isolated_webui.destinations._OAUTH_STATE_TTL - 5
+    isolated_webui.destinations._OAUTH_STATE["recent"] = time.monotonic()
+    fresh = isolated_webui.destinations._oauth_state_new()
+    assert set(isolated_webui.destinations._OAUTH_STATE) == {"recent", fresh}
 
 
 # --- Google Drive: token, folder, disconnect -------------------------------------
 
 def connect_drive(webui):
-    cfg = webui.load_config()
+    cfg = webui.settings.load_config()
     cfg["destinations"]["gdrive"].update(client_id="id", client_secret="secret", refresh_token="rt", enabled=True)
-    webui.save_config(cfg)
+    webui.settings.save_config(cfg)
 
 
 def test_the_picker_gets_a_short_lived_token_never_the_refresh_token(authed_client, isolated_webui, monkeypatch):
@@ -190,12 +191,12 @@ APPROOT = {"id": "item-1", "parentReference": {"driveId": "drive-1", "driveType"
 
 
 def onedrive(webui):
-    return webui.load_config()["destinations"]["onedrive"]
+    return webui.settings.load_config()["destinations"]["onedrive"]
 
 
 def test_connecting_onedrive_stores_the_token_and_the_app_folder(authed_client, isolated_webui, monkeypatch):
     synced = []
-    monkeypatch.setattr(onedrive_oauth, "parse_token_blob", lambda blob: ('{"access_token":"a","refresh_token":"r"}', "a"))
+    monkeypatch.setattr(rclone_token, "parse_token_blob", lambda blob, backend: ('{"access_token":"a","refresh_token":"r"}', "a"))
     monkeypatch.setattr(onedrive_oauth, "approot_metadata", lambda access: APPROOT if access == "a" else pytest.fail("wrong token"))
     monkeypatch.setattr(onedrive_oauth, "sync_rclone_remote", lambda cfg, force=False: synced.append((cfg["drive_id"], force)))
     response = authed_client.post("/api/destinations/onedrive/connect", json={"token_blob": "pasted"})
@@ -214,7 +215,7 @@ def test_a_bad_onedrive_token_is_refused_and_changes_nothing(authed_client, isol
 
 
 def test_microsoft_rejecting_the_token_is_reported(authed_client, isolated_webui, monkeypatch):
-    monkeypatch.setattr(onedrive_oauth, "parse_token_blob", lambda blob: ("{}", "a"))
+    monkeypatch.setattr(rclone_token, "parse_token_blob", lambda blob, backend: ("{}", "a"))
 
     def refuse(access):
         raise onedrive_oauth.OneDriveOAuthError("could not read the app folder: 401")
@@ -226,7 +227,7 @@ def test_microsoft_rejecting_the_token_is_reported(authed_client, isolated_webui
 
 
 def test_disconnecting_onedrive_clears_the_connection(authed_client, isolated_webui, monkeypatch):
-    monkeypatch.setattr(onedrive_oauth, "parse_token_blob", lambda blob: ("{}", "a"))
+    monkeypatch.setattr(rclone_token, "parse_token_blob", lambda blob, backend: ("{}", "a"))
     monkeypatch.setattr(onedrive_oauth, "approot_metadata", lambda access: APPROOT)
     monkeypatch.setattr(onedrive_oauth, "sync_rclone_remote", lambda cfg, force=False: None)
     authed_client.post("/api/destinations/onedrive/connect", json={"token_blob": "x"})
@@ -238,12 +239,12 @@ def test_disconnecting_onedrive_clears_the_connection(authed_client, isolated_we
 # --- Dropbox -----------------------------------------------------------------------
 
 def dropbox(webui):
-    return webui.load_config()["destinations"]["dropbox"]
+    return webui.settings.load_config()["destinations"]["dropbox"]
 
 
 def test_connecting_dropbox_verifies_then_stores_the_token(authed_client, isolated_webui, monkeypatch):
     synced, verified = [], []
-    monkeypatch.setattr(dropbox_oauth, "parse_token_blob", lambda blob: ('{"access_token":"a","refresh_token":"r"}', "a"))
+    monkeypatch.setattr(rclone_token, "parse_token_blob", lambda blob, backend: ('{"access_token":"a","refresh_token":"r"}', "a"))
     monkeypatch.setattr(dropbox_oauth, "verify_access_token", verified.append)
     monkeypatch.setattr(dropbox_oauth, "sync_rclone_remote", lambda cfg, force=False: synced.append(force))
     response = authed_client.post("/api/destinations/dropbox/connect", json={"token_blob": "pasted"})
@@ -262,7 +263,7 @@ def test_a_bad_dropbox_token_is_refused_and_changes_nothing(authed_client, isola
 
 
 def test_dropbox_rejecting_the_token_is_reported_and_nothing_is_saved(authed_client, isolated_webui, monkeypatch):
-    monkeypatch.setattr(dropbox_oauth, "parse_token_blob", lambda blob: ("{}", "a"))
+    monkeypatch.setattr(rclone_token, "parse_token_blob", lambda blob, backend: ("{}", "a"))
 
     def refuse(access):
         raise dropbox_oauth.DropboxOAuthError("Dropbox rejected that token: invalid_access_token")
@@ -274,7 +275,7 @@ def test_dropbox_rejecting_the_token_is_reported_and_nothing_is_saved(authed_cli
 
 
 def test_disconnecting_dropbox_clears_the_connection(authed_client, isolated_webui, monkeypatch):
-    monkeypatch.setattr(dropbox_oauth, "parse_token_blob", lambda blob: ("{}", "a"))
+    monkeypatch.setattr(rclone_token, "parse_token_blob", lambda blob, backend: ("{}", "a"))
     monkeypatch.setattr(dropbox_oauth, "verify_access_token", lambda access: None)
     monkeypatch.setattr(dropbox_oauth, "sync_rclone_remote", lambda cfg, force=False: None)
     authed_client.post("/api/destinations/dropbox/connect", json={"token_blob": "x"})
@@ -285,11 +286,29 @@ def test_disconnecting_dropbox_clears_the_connection(authed_client, isolated_web
 
 def test_the_dropbox_token_is_encrypted_in_config_json(authed_client, isolated_webui, monkeypatch):
     secret = '{"access_token":"plain-access","refresh_token":"plain-refresh"}'
-    monkeypatch.setattr(dropbox_oauth, "parse_token_blob", lambda blob: (secret, "a"))
+    monkeypatch.setattr(rclone_token, "parse_token_blob", lambda blob, backend: (secret, "a"))
     monkeypatch.setattr(dropbox_oauth, "verify_access_token", lambda access: None)
     monkeypatch.setattr(dropbox_oauth, "sync_rclone_remote", lambda cfg, force=False: None)
     authed_client.post("/api/destinations/dropbox/connect", json={"token_blob": "x"})
-    with open(isolated_webui.CONFIG_PATH) as f:
+    with open(isolated_webui.auth.CONFIG_PATH) as f:
         on_disk = f.read()
     assert "plain-refresh" not in on_disk and "plain-access" not in on_disk
     assert dropbox(isolated_webui)["token"] == secret
+
+
+@pytest.mark.parametrize("dest_id, connected, kept", [
+    ("onedrive", {"token": "{}", "drive_id": "d", "drive_type": "personal", "item_id": "i"}, {}),
+    ("dropbox", {"token": "{}"}, {}),
+])
+def test_disconnecting_a_pasted_token_destination_forgets_it(authed_client, isolated_webui, monkeypatch, dest_id, connected, kept):
+    monkeypatch.setattr(isolated_webui.destinations.destination_util, "sync", lambda cfg: None)
+    cfg = isolated_webui.settings.load_config()
+    cfg["destinations"][dest_id].update(connected, enabled=True)
+    isolated_webui.settings.save_config(cfg)
+    assert authed_client.post(f"/api/destinations/{dest_id}/disconnect", json={}).get_json() == {"ok": True}
+    assert isolated_webui.settings.load_config()["destinations"][dest_id] == isolated_webui.destinations.DEFAULT_DEST[dest_id] | {"enabled": False}
+
+
+def test_only_connected_destinations_can_be_disconnected(authed_client):
+    assert authed_client.post("/api/destinations/local/disconnect", json={}).status_code == 404
+    assert authed_client.post("/api/destinations/nope/disconnect", json={}).status_code == 404

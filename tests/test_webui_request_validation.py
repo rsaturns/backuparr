@@ -43,7 +43,7 @@ def test_restore_override_must_be_an_object(authed_client):
 def test_restore_backup_list_only_accepts_known_apps(authed_client, isolated_webui, monkeypatch, name):
     listed = []
     authed_client.post("/api/config", json={"destinations": {"local": {"enabled": True}}})
-    monkeypatch.setattr(isolated_webui.ra, "list_backups", lambda root, app: listed.append(app) or [])
+    monkeypatch.setattr(isolated_webui.backups.ra, "list_backups", lambda root, app: listed.append(app) or [])
     response = authed_client.get(f"/api/restore/local/{name}/backups")
     assert response.status_code == 404
     assert listed == []

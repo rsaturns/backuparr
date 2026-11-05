@@ -1,6 +1,6 @@
 ---
 title: Configuration reference
-nav_order: 10
+nav_order: 12
 ---
 
 # Configuration reference
@@ -28,3 +28,11 @@ nav_order: 10
 | `retention_days` | Delete backups older than this, per app and destination, always keeping each app's newest (default 7) |
 | `cron_schedule` | 5-field cron schedule (default `0 3 * * *`) |
 | `notify_url` | Optional summary after every run - see [Notifications](notifications.md) |
+| `self_backup` | Back up Backuparr's own configuration, encrypted, at the end of each full run (default `true`) - see [Backuparr's own backup](security.md#backuparrs-own-backup) |
+| `secrets_key_acknowledged` | Set once you've confirmed saving your encryption key - don't edit |
+
+## Other files
+
+Beside `config.json`, Backuparr keeps `manifest.json`
+([the backup record](backups.md#the-backup-record)) and `run_logs.json`
+([run logs](backups.md#run-logs)). Don't edit them.

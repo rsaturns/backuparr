@@ -1,9 +1,22 @@
 ---
 title: Settings
-nav_order: 5
+nav_order: 8
 ---
 
 # Settings
+
+The **Settings** tab holds, from top to bottom:
+
+- **Apps** - a card per app: switch it on, enter its URL and API key, and
+  click **Test connection**. See [Apps](apps/index.md).
+- **Destinations** - see [Destinations](destinations.md).
+- **Schedule & notifications** - retention, the schedule, the
+  [Notify URL](notifications.md), and whether Backuparr
+  [backs itself up](security.md#backuparrs-own-backup).
+- **Service authentication** - see [below](#service-authentication-headers).
+- **Restore Backuparr** - see [Restoring Backuparr itself](restoring.md#restoring-backuparr-itself).
+
+App, destination and schedule changes apply when you click **Save settings**.
 
 ## Prowlarr discovery
 

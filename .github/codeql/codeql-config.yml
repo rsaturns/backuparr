@@ -1,0 +1,24 @@
+# CodeQL configuration, used by .github/workflows/codeql.yml.
+#
+# Only rules and paths whose every alert was triaged and dismissed for the
+# same reason are left out. A config file can't exclude single lines, so
+# rules that still catch real problems elsewhere stay on and their
+# by-design alerts are dismissed one by one (py/full-ssrf in backup.py:
+# Backuparr calls the URLs the admin configures).
+name: Backuparr CodeQL
+
+# Test fixtures deliberately hold fake secrets, crafted headers and URL
+# strings; they never ship in the image.
+paths-ignore:
+  - tests
+
+query-filters:
+  # Every alert was the web UI returning a readable error message
+  # (str(exc) or backup.humanize_error()) to the signed-in admin as the
+  # operation's result. No traceback reaches a response: unexpected errors
+  # are only traced in the log (backup.log_failure), webui/app.py's error
+  # handler answers OS and config errors with their message, and anything
+  # else gets Flask's plain 500 page (debug is off). Moving any such line
+  # re-raised a dismissed alert.
+  - exclude:
+      id: py/stack-trace-exposure

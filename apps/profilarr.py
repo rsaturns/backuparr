@@ -1,45 +1,33 @@
 """Backup driver for Profilarr's own backup API - backup only, no restore.
 
-Profilarr (https://github.com/Dictionarry-Hub/profilarr) is a config
-management layer in front of Radarr/Sonarr (quality profiles, custom
-formats), not a media manager itself. REST API at /api/v1/openapi.json;
-the parts used here:
+Profilarr manages Radarr/Sonarr quality profiles and custom formats. Its REST
+API (/api/v1/openapi.json): POST /backups starts a `backup.create` job
+(polled at /jobs/{id}), GET /backups lists them newest first, and GET/DELETE
+/backups/{filename} downloads or removes one.
 
-- POST /backups triggers an async `backup.create` job and returns a
-  jobId - trigger-then-poll, like the Servarr apps' /command endpoint.
-- GET /backups lists existing backups, newest first.
-- GET /backups/{filename} downloads one. Per Profilarr's own docs, this
-  is DELIBERATELY SANITIZED: arr instance URLs/API keys, sync configs,
-  drift/rename history, notification webhook URLs and tokens, user
-  accounts and sessions, linked-database access tokens, and AI/TMDB API
-  keys are all stripped before the file reaches the client - a Profilarr
-  design decision, not a Backuparr limitation. A restored instance needs
-  those re-added by hand regardless of how the backup got there.
-- DELETE /backups/{filename} removes a backup, same as with
-  Radarr/Sonarr/Prowlarr/Bazarr, to keep Profilarr's own list clean.
+A download is sanitized by design: arr URLs and API keys, sync configs,
+history, notification webhooks, users and sessions, and linked-database, AI
+and TMDB keys are stripped, so a restored Profilarr needs those re-added.
 
-There is deliberately no restore() here. Profilarr's restore path is a
-SvelteKit form action gated by browser session cookie, not part of the
-/api/v1 REST API, and even then only stages a pending restore in a
-sentinel file - the actual swap happens at the next Profilarr container
-restart, which Backuparr can't trigger. POST /backups/upload exists but
-only stores a file; it doesn't stage or apply anything. See
-docs/apps/profilarr.md for the manual restore steps this leaves you with.
+There's no restore() because Profilarr has no restore API: its restore is a
+SvelteKit form action behind a browser session, which only stages the file
+for the next container restart. POST /backups/upload just stores a file.
+docs/apps/profilarr.md has the manual steps.
 """
 import logging
 import os
 import tarfile
-import time
 import zipfile
 
 import requests
 
-from apps.servarr import ApiKeySession
+from apps.base import AppError, poll_until, save_stream
+from apps.servarr import SameHostSession
 
 logger = logging.getLogger(f"backuparr.{__name__}")
 
 
-class ProfilarrError(RuntimeError):
+class ProfilarrError(AppError):
     pass
 
 
@@ -47,7 +35,7 @@ class ProfilarrApp:
     def __init__(self, url, api_key, timeout=30):
         self.url = url.rstrip("/")
         self.timeout = timeout
-        self.session = ApiKeySession(self.url)
+        self.session = SameHostSession(self.url)
         self.session.headers.update({"X-Api-Key": api_key, "Accept": "application/json"})
 
     def _api(self, path):
@@ -61,27 +49,28 @@ class ProfilarrApp:
         info = res.json()
         return f"profilarr {info.get('version', '?')} reachable"
 
+    def app_version(self):
+        res = self.session.get(self._api("/status"), timeout=10)
+        res.raise_for_status()
+        return res.json().get("version")
+
     def trigger_backup(self, poll_interval=2, timeout_s=300):
         res = self.session.post(self._api("/backups"), timeout=self.timeout)
         res.raise_for_status()
         job_id = res.json()["jobId"]
         logger.info("profilarr: backup job %s started, waiting for it to finish...", job_id)
 
-        deadline = time.time() + timeout_s
-        waited = 0
-        while time.time() < deadline:
+        def finished():
             res = self.session.get(self._api(f"/jobs/{job_id}"), timeout=self.timeout)
             res.raise_for_status()
             status = res.json().get("status")
-            if status == "success":
-                return
             if status in ("failed", "cancelled"):
                 raise ProfilarrError(f"profilarr: backup job {status}")
-            time.sleep(poll_interval)
-            waited += poll_interval
-            if waited % 10 == 0:
-                logger.info("profilarr: still waiting on the backup job (%ds)...", waited)
-        raise ProfilarrError(f"profilarr: backup job timed out after {timeout_s}s")
+            return True if status == "success" else None
+
+        if not poll_until(finished, timeout_s, poll_interval,
+                          lambda waited: logger.info("profilarr: still waiting on the backup job (%ds)...", waited)):
+            raise ProfilarrError(f"profilarr: backup job timed out after {timeout_s}s")
 
     def list_backups(self):
         res = self.session.get(self._api("/backups"), timeout=self.timeout)
@@ -94,12 +83,10 @@ class ProfilarrApp:
             raise ProfilarrError("profilarr: no backup found after trigger")
         filename = os.path.basename(backups[0]["filename"])  # API returns newest first
 
-        res = self.session.get(self._api(f"/backups/{filename}"), timeout=self.timeout)
-        res.raise_for_status()
-
         dest = os.path.join(dest_dir, filename)
-        with open(dest, "wb") as f:
-            f.write(res.content)
+        with self.session.get(self._api(f"/backups/{filename}"), timeout=self.timeout, stream=True) as res:
+            res.raise_for_status()
+            save_stream(res, dest)
         if not (tarfile.is_tarfile(dest) or zipfile.is_zipfile(dest)):
             raise ProfilarrError(f"profilarr: {filename} didn't download as a backup archive - check the URL and API key")
         return dest, filename

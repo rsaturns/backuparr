@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
+<body{% if needs_key %} data-needs-key="1"{% endif %}>
 <main class="auth-page">
   <div class="auth-card card">
     <div class="brand auth-brand">
@@ -20,9 +20,51 @@
         <span class="brand-tagline">Backup your Arrs</span>
       </span>
     </div>
+    <div id="choice-step"{% if needs_key %} class="hidden"{% endif %}>
+    <h2>Welcome to Backuparr</h2>
+    <p class="hint">Do you wish to restore your Backuparr configuration?</p>
+    <div class="save-row">
+      <button type="button" class="btn btn-primary" id="choice-new-btn">No, set up new</button>
+      <button type="button" class="btn btn-ghost" id="choice-restore-btn">Yes, restore</button>
+    </div>
+    </div>
+    <div id="restore-step" class="hidden">
+    <h2>Restore Backuparr</h2>
+    <p class="hint">Select your Backuparr backup and enter your saved encryption key.</p>
+    <label class="field">
+      <span class="field-label">Backup file</span>
+      <input type="file" id="sr-file" accept=".enc">
+    </label>
+    <label class="field">
+      <span class="field-label">Encryption key</span>
+      <input type="text" id="sr-key" autocomplete="off" spellcheck="false">
+    </label>
+    <div class="save-row">
+      <button type="button" class="btn btn-primary" id="sr-submit-btn">Restore</button>
+      <button type="button" class="btn btn-ghost" id="sr-back-btn">Back</button>
+      <span id="sr-result" class="save-result"></span>
+    </div>
+    </div>
+    <div id="restored-step" class="hidden">
+    <h2>Backuparr is restored</h2>
+    <div id="sr-warnings"></div>
+    <p class="hint">Sign in with the restored username and password.</p>
+    <div class="save-row">
+      <a class="btn btn-primary" href="/login">Sign in</a>
+    </div>
+    </div>
+    <div id="account-step"{% if not needs_key %} class="hidden"{% endif %}>
+    {% if needs_key %}
+    <h2>Create a new login</h2>
+    <p class="hint">Backuparr already has settings. Enter your encryption key to keep them.</p>
+    <label class="field">
+      <span class="field-label">Encryption key</span>
+      <input type="text" id="su-key" autocomplete="off" spellcheck="false">
+    </label>
+    {% else %}
     <h2>Create an admin account</h2>
-    <p class="hint">This one-time setup creates the admin account that protects Backuparr's web UI.</p>
-    <p class="hint">There's no email recovery. If you forget the password, click <strong>Reset Backuparr</strong> on the login screen - it wipes all local state (config, connections, backups) and brings you back here.</p>
+    <p class="hint">This one-time setup creates the admin account that protects Backuparr's web UI. If you forget the password, see <a href="https://rsaturns.github.io/backuparr/security/#forgot-your-password" target="_blank" rel="noopener noreferrer">password recovery</a>.</p>
+    {% endif %}
     <label class="field">
       <span class="field-label">Username</span>
       <input type="text" id="su-username" autocomplete="username">
@@ -39,8 +81,25 @@
       <button type="button" class="btn btn-primary" id="setup-submit-btn">Create account</button>
       <span id="setup-result" class="save-result"></span>
     </div>
+    </div>
+    <div id="key-step" class="hidden">
+    <h2>Save your encryption key</h2>
+    <p class="hint">This key encrypts the passwords, API keys and cloud logins Backuparr stores, and Backuparr's own backup. You need it to restore Backuparr.</p>
+    <div class="key-box">
+      <code id="key-value" class="key-value"></code>
+      <button type="button" class="btn btn-ghost btn-sm" id="key-copy-btn">Copy</button>
+    </div>
+    <p id="key-env-note" class="hint hidden">It's the key set with <code>BACKUPARR_SECRETS_KEY</code>.</p>
+    <p class="key-warning key-warning-centered"><strong>Save it in a password manager, or Backuparr can't be restored.</strong></p>
+    <div class="save-row">
+      <button type="button" class="btn btn-primary" id="key-ack-btn">Yes, I have saved my encryption key</button>
+      <span id="key-result" class="save-result"></span>
+    </div>
+    </div>
   </div>
 </main>
+<script src="{{ url_for('static', filename='key-prompt.js') }}"></script>
+<script src="{{ url_for('static', filename='self-restore.js') }}"></script>
 <script src="{{ url_for('static', filename='setup.js') }}"></script>
 </body>
 </html>

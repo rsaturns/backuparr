@@ -27,7 +27,8 @@ import os
 
 import requests
 
-from apps.servarr import ApiKeySession
+from apps.base import AppError
+from apps.servarr import SameHostSession
 
 logger = logging.getLogger(f"backuparr.{__name__}")
 
@@ -64,7 +65,7 @@ def _known_missing(collection, version):
     return major is not None and major < _SINCE_MAJOR.get(collection, 0)
 
 
-class TdarrError(RuntimeError):
+class TdarrError(AppError):
     pass
 
 
@@ -88,7 +89,7 @@ class TdarrApp:
     def __init__(self, url, api_key=None, timeout=60):
         self.url = url.rstrip("/")
         self.timeout = timeout
-        self.session = ApiKeySession(self.url)
+        self.session = SameHostSession(self.url)
         self.session.headers.update({"Accept": "application/json"})
         if api_key:
             self.session.headers.update({"x-api-key": api_key})
@@ -100,6 +101,9 @@ class TdarrApp:
             return res.json().get("version")
         except (ValueError, AttributeError):
             raise TdarrError("tdarr: /api/v2/status didn't return Tdarr's status - check the URL (Tdarr's server port, 8266)") from None
+
+    def app_version(self):
+        return self.version()
 
     def test_connection(self):
         version = self.version()

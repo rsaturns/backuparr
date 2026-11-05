@@ -1,11 +1,12 @@
 ---
 title: Destinations
-nav_order: 4
+nav_order: 5
 ---
 
 # Destinations
 
 Enable one or more on the **Settings** tab; every run uploads to all of them.
+Each backup is [checked before it's uploaded](backups.md#the-check-before-upload).
 
 ## Local storage
 

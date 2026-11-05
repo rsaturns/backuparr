@@ -6,13 +6,75 @@ import threading
 
 import pytest
 
+import archive_check
 import auth_store
+import backup
 import config_store
 import destination_util
+import manifest
 import rclone_util
+import restore_version
+import runlog
+import self_backup
 import secrets_crypto
 
 PASSWORD = "test-password"
+
+
+@pytest.fixture(autouse=True)
+def manifest_in_tmp(tmp_path, monkeypatch):
+    """Every test's manifest.json and run_logs.json live in its own
+    tmp_path, never beside a real config.json."""
+    path = str(tmp_path / "manifest.json")
+    monkeypatch.setattr(manifest, "path", lambda: path)
+    run_logs = str(tmp_path / "run_logs.json")
+    monkeypatch.setattr(runlog, "path", lambda: run_logs)
+    return path
+
+
+@pytest.fixture(autouse=True)
+def skip_archive_check(request, monkeypatch):
+    """Most run_backup tests use fake drivers whose placeholder archives
+    aren't real backups; tests marked archive_check run the real check."""
+    if request.node.get_closest_marker("archive_check") is None:
+        monkeypatch.setattr(archive_check, "check", lambda app, path: None)
+
+
+@pytest.fixture(autouse=True)
+def skip_version_check(request, monkeypatch):
+    """Restore tests use fake apps that can't report a version; tests
+    marked version_check run the real check."""
+    if request.node.get_closest_marker("version_check") is None:
+        monkeypatch.setattr(restore_version, "check", lambda app, file, app_cfg: {
+            "status": "match", "backup_version": "1", "installed_version": "1", "message": "versions match"})
+
+
+@pytest.fixture(autouse=True)
+def skip_self_backup(request, monkeypatch):
+    """run_backup tests are about the apps; tests marked self_backup make
+    Backuparr's own backup for real."""
+    if request.node.get_closest_marker("self_backup") is None:
+        monkeypatch.setattr(self_backup, "run", lambda dest_roots, timestamp: None)
+
+
+@pytest.fixture(autouse=True)
+def key_already_saved(request, monkeypatch):
+    """The encryption key counts as saved, so the web UI isn't held at its
+    prompt; tests marked key_prompt start with it unsaved."""
+    monkeypatch.setattr(config_store, "_key_acknowledged", request.node.get_closest_marker("key_prompt") is None)
+
+
+def load_webui():
+    """webui.app freshly reloaded, so its module-level settings read the
+    environment again, with the session key create_app() would load - but no
+    scheduler thread and no log file."""
+    # Dependencies first, so each module binds the fresh state of the next.
+    for name in ("webui.settings", "webui.services", "webui.auth", "webui.destinations", "webui.runs",
+                 "webui.backups", "webui.app"):
+        module = importlib.reload(sys.modules[name]) if name in sys.modules else importlib.import_module(name)
+    module.app.secret_key = module.auth._load_or_create_secret_key()
+    module.app.config.update(TESTING=True)
+    return module
 
 
 @pytest.fixture
@@ -26,6 +88,7 @@ def isolated_webui(tmp_path, monkeypatch):
     monkeypatch.setenv("RCLONE_CONFIG", str(tmp_path / "rclone.conf"))
     monkeypatch.setenv("RCLONE_CONFIG_PASS_FILE", str(tmp_path / "rclone.pass"))
     monkeypatch.setattr(auth_store, "AUTH_PATH", str(tmp_path / "auth.json"))
+    monkeypatch.setattr(backup, "LOG_FILE", str(tmp_path / "logs" / "backup.log"))
     monkeypatch.setattr(config_store, "CONFIG_PATH", str(tmp_path / "config.json"))
     monkeypatch.setattr(secrets_crypto, "KEY_PATH", str(tmp_path / "secrets.key"))
     monkeypatch.setattr(secrets_crypto, "_fernet", None)
@@ -36,13 +99,7 @@ def isolated_webui(tmp_path, monkeypatch):
         raise AssertionError("this test ran the real rclone; stub the rclone_util function it needs (CI has no rclone binary)")
 
     monkeypatch.setattr(rclone_util, "_run", no_real_rclone)
-    with pytest.MonkeyPatch.context() as startup:
-        startup.setattr("threading.Thread.start", lambda self: None)
-        if "webui.app" in sys.modules:
-            module = importlib.reload(sys.modules["webui.app"])
-        else:
-            module = importlib.import_module("webui.app")
-    module.app.config.update(TESTING=True)
+    module = load_webui()
     yield module
     monkeypatch.setattr(secrets_crypto, "_fernet", None)
 

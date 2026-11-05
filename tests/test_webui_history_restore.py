@@ -15,7 +15,7 @@ from config_store import APP_NAMES
 def rclone(isolated_webui, monkeypatch):
     """Fake rclone_util calls; returns the lists they record into."""
     calls = {"lsjson": [], "delete": [], "copyto": [], "lsf": []}
-    fake = isolated_webui.rclone_util
+    fake = isolated_webui.backups.rclone_util
     monkeypatch.setattr(fake, "lsjson", lambda root, recursive=False: calls["lsjson"].append((root, recursive)) or calls.get("entries", []))
     monkeypatch.setattr(fake, "delete_file", lambda path: calls["delete"].append(path))
     monkeypatch.setattr(fake, "copyto", lambda src, dst: calls["copyto"].append((src, dst)) or open(dst, "wb").write(b"backup bytes"))
@@ -40,11 +40,21 @@ def test_history_groups_files_by_app_newest_first(authed_client, rclone):
     ]
     history = authed_client.get("/api/history/local").get_json()
     assert [f["name"] for f in history["radarr"]] == ["radarr_3.zip", "radarr_1.zip"]
-    assert history["radarr"][0] == {"name": "radarr_3.zip", "size": 7, "mod_time": "2026-01-03T00:00:00Z"}
+    assert history["radarr"][0] == {"name": "radarr_3.zip", "size": 7, "mod_time": "2026-01-03T00:00:00Z",
+                                    "app_version": None, "recorded": False, "run_id": None}
     assert [f["name"] for f in history["sonarr"]] == ["sonarr_2.zip"]
     assert "stranger" not in history and "lonely.zip" not in history
     assert set(history) == set(APP_NAMES)
     assert rclone["lsjson"][0][1] is True
+
+
+def test_history_reports_a_destination_it_cant_list(authed_client, isolated_webui, monkeypatch):
+    def expired(root, recursive=False):
+        raise isolated_webui.backups.rclone_util.RcloneError("rclone lsjson failed", "invalid_grant (reconnect it)", 1)
+
+    monkeypatch.setattr(isolated_webui.backups.rclone_util, "lsjson", expired)
+    response = authed_client.get("/api/history/local")
+    assert response.status_code == 502 and response.get_json() == {"error": "invalid_grant (reconnect it)"}
 
 
 def test_history_for_an_empty_destination_lists_every_app_with_nothing(authed_client, rclone):
@@ -72,7 +82,7 @@ def test_destination_problems_are_explained(authed_client, rclone, path):
 def test_delete_removes_exactly_that_file(authed_client, rclone, isolated_webui):
     response = authed_client.delete("/api/history/local/radarr/radarr_1.zip")
     assert response.get_json() == {"ok": True}
-    assert rclone["delete"] == [os.path.join(isolated_webui.destination_util.DEFAULT_LOCAL_DIR, "radarr", "radarr_1.zip")]
+    assert rclone["delete"] == [os.path.join(isolated_webui.destinations.destination_util.DEFAULT_LOCAL_DIR, "radarr", "radarr_1.zip")]
 
 
 @pytest.mark.parametrize("name", ["a b.zip", "a;b.zip", ".hidden", "a%0A.zip"])
@@ -89,9 +99,9 @@ def test_unknown_apps_are_refused(authed_client, rclone):
 
 def test_delete_reports_an_rclone_failure(authed_client, isolated_webui, monkeypatch):
     def fail(path):
-        raise isolated_webui.rclone_util.RcloneError("permission denied")
+        raise isolated_webui.backups.rclone_util.RcloneError("permission denied")
 
-    monkeypatch.setattr(isolated_webui.rclone_util, "delete_file", fail)
+    monkeypatch.setattr(isolated_webui.backups.rclone_util, "delete_file", fail)
     response = authed_client.delete("/api/history/local/radarr/a.zip")
     assert response.status_code == 500 and "permission denied" in response.get_json()["error"]
 
@@ -109,9 +119,9 @@ def test_a_failed_download_cleans_up_and_explains(authed_client, isolated_webui,
 
     def fail(src, dst):
         seen.append(dst)
-        raise isolated_webui.rclone_util.RcloneError("not found")
+        raise isolated_webui.backups.rclone_util.RcloneError("not found")
 
-    monkeypatch.setattr(isolated_webui.rclone_util, "copyto", fail)
+    monkeypatch.setattr(isolated_webui.backups.rclone_util, "copyto", fail)
     response = authed_client.get("/api/history/local/radarr/a.zip/download")
     assert response.status_code == 500 and "not found" in response.get_json()["error"]
     assert not os.path.exists(os.path.dirname(seen[0]))
@@ -128,7 +138,7 @@ def test_restore_listing_reports_an_rclone_failure(authed_client, isolated_webui
     def fail(path):
         raise requests.exceptions.ConnectionError("boom")
 
-    monkeypatch.setattr(isolated_webui.rclone_util, "lsf", fail)
+    monkeypatch.setattr(isolated_webui.backups.rclone_util, "lsf", fail)
     response = authed_client.get("/api/restore/local/radarr/backups")
     assert response.status_code == 500 and "couldn't connect" in response.get_json()["error"]
 
@@ -198,7 +208,13 @@ def restore(inline, authed_client, monkeypatch, tmp_path):
             recorder["prompts"] = {n: kwargs["sabnzbd_password_prompt"](n, {}) for n in ("news", "free", "unlisted")}
         return recorder["results"].get(app_name, {})
 
+    def list_backups(root, app):
+        if recorder["fetch_fail"]:
+            raise recorder["fetch_fail"]
+        return [f"{app}_latest.zip"]
+
     monkeypatch.setattr(restore_actions, "fetch_backup", fetch)
+    monkeypatch.setattr(restore_actions, "list_backups", list_backups)
     monkeypatch.setattr(restore_actions, "restore_app", restore_app)
     configure(authed_client)
     return recorder
@@ -251,7 +267,7 @@ def test_bazarr_restore_needs_its_backup_folder(restore, authed_client):
 
 
 def test_only_one_restore_runs_at_a_time(restore, authed_client, inline):
-    inline.RESTORE_RUN_STATE["running"] = True
+    inline.runs.RESTORE_RUN_STATE["running"] = True
     response = start(authed_client)
     assert response.status_code == 409 and restore["calls"] == []
 
@@ -432,7 +448,7 @@ def test_override_can_supply_a_target_for_an_unconfigured_app(restore, authed_cl
 
 
 def test_a_restore_waits_for_a_running_backup(restore, authed_client, isolated_webui, monkeypatch):
-    monkeypatch.setitem(isolated_webui.RUN_STATE, "running", True)
+    monkeypatch.setitem(isolated_webui.runs.RUN_STATE, "running", True)
     response = start(authed_client)
     assert response.status_code == 409 and "a backup is running" in response.get_json()["error"]
     assert not [c for c in restore["calls"] if c[0] == "restore"]

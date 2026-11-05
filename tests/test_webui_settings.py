@@ -7,7 +7,7 @@ import pytest
 import requests
 
 import destination_util
-from config_store import APP_NAMES, DEST_NAMES, app_meta
+from config_store import APP_META, APP_NAMES, DEST_NAMES, DESTINATION_META
 
 
 def save(client, body):
@@ -15,7 +15,7 @@ def save(client, body):
 
 
 def stored(webui):
-    with open(webui.CONFIG_PATH) as f:
+    with open(webui.auth.CONFIG_PATH) as f:
         return json.load(f)
 
 
@@ -29,12 +29,10 @@ def test_a_new_install_has_every_app_off_and_local_storage_on(authed_client):
     assert cfg["retention_days"] == 7 and cfg["cron_schedule"] == "0 3 * * *"
 
 
-def test_meta_and_destinations_describe_what_the_ui_can_configure(authed_client):
-    apps = authed_client.get("/api/meta").get_json()
-    assert {a["id"] for a in apps} == set(APP_NAMES)
-    assert all(a["status"] == "available" for a in apps)
-    destinations = authed_client.get("/api/destinations").get_json()
-    assert [d["id"] for d in destinations] == DEST_NAMES
+def test_the_page_describes_what_the_ui_can_configure(authed_client):
+    meta = ui_meta(authed_client)
+    assert {a["id"] for a in meta["apps"]} == set(APP_NAMES)
+    assert [d["id"] for d in meta["destinations"]] == DEST_NAMES
 
 
 def test_the_dashboard_shows_the_release_version(authed_client, isolated_webui):
@@ -188,7 +186,7 @@ def test_secrets_are_encrypted_on_disk_but_the_ui_gets_them_back(authed_client, 
         "apps": {"radarr": {"enabled": True, "url": "http://r", "api_key": "radarr-key"}},
         "destinations": {"gdrive": {"client_secret": "google-secret"}},
     })
-    raw = open(isolated_webui.CONFIG_PATH).read()
+    raw = open(isolated_webui.auth.CONFIG_PATH).read()
     assert "radarr-key" not in raw and "google-secret" not in raw and "enc:v1:" in raw
     cfg = authed_client.get("/api/config").get_json()
     assert cfg["apps"]["radarr"]["api_key"] == "radarr-key"
@@ -214,17 +212,8 @@ class StubApp:
         return self.message
 
 
-def test_testing_an_unknown_or_unavailable_app(authed_client, monkeypatch):
+def test_testing_an_unknown_app(authed_client):
     assert authed_client.post("/api/test/nope", json={}).status_code == 404
-    monkeypatch.setitem(app_meta("tautulli"), "status", "coming_soon")
-    unavailable = authed_client.post("/api/test/tautulli", json={"url": "http://t", "api_key": "k"}).get_json()
-    assert unavailable["ok"] is False and "isn't available yet" in unavailable["message"]
-
-
-def test_a_coming_soon_app_cant_be_enabled(authed_client, monkeypatch):
-    monkeypatch.setitem(app_meta("tautulli"), "status", "coming_soon")
-    response = save(authed_client, {"apps": {"tautulli": {"enabled": True, "url": "http://t", "api_key": "k"}}})
-    assert response.status_code == 400 and "isn't available yet" in response.get_json()["error"]
 
 
 def test_testing_needs_a_url_and_where_required_a_key(authed_client):
@@ -235,7 +224,7 @@ def test_testing_needs_a_url_and_where_required_a_key(authed_client):
 
 def test_a_successful_test_reports_the_apps_own_message(authed_client, isolated_webui, monkeypatch):
     built = []
-    monkeypatch.setattr(isolated_webui, "build_app", lambda name, cfg: built.append((name, cfg)) or StubApp())
+    monkeypatch.setattr(isolated_webui.settings, "build_app", lambda name, cfg: built.append((name, cfg)) or StubApp())
     response = authed_client.post("/api/test/bazarr", json={"url": "http://b", "api_key": "k", "username": "u", "password": "p"})
     assert response.get_json() == {"ok": True, "message": "stub 1.0 reachable"}
     name, cfg = built[0]
@@ -243,7 +232,7 @@ def test_a_successful_test_reports_the_apps_own_message(authed_client, isolated_
 
 
 def test_tdarr_can_be_tested_without_a_key(authed_client, isolated_webui, monkeypatch):
-    monkeypatch.setattr(isolated_webui, "build_app", lambda name, cfg: StubApp("tdarr reachable"))
+    monkeypatch.setattr(isolated_webui.settings, "build_app", lambda name, cfg: StubApp("tdarr reachable"))
     assert authed_client.post("/api/test/tdarr", json={"url": "http://t"}).get_json()["ok"] is True
 
 
@@ -254,7 +243,7 @@ def test_tdarr_can_be_tested_without_a_key(authed_client, isolated_webui, monkey
     (RuntimeError("radarr: unauthorized - check the API key"), "unauthorized"),
 ])
 def test_a_failed_test_explains_itself_without_raw_exceptions(authed_client, isolated_webui, monkeypatch, error, expected):
-    monkeypatch.setattr(isolated_webui, "build_app", lambda name, cfg: StubApp(error=error))
+    monkeypatch.setattr(isolated_webui.settings, "build_app", lambda name, cfg: StubApp(error=error))
     result = authed_client.post("/api/test/radarr", json={"url": "http://r", "api_key": "k"}).get_json()
     assert result["ok"] is False and expected in result["message"]
     assert "HTTPConnectionPool" not in result["message"]
@@ -268,14 +257,14 @@ def test_notification_test_needs_a_url(authed_client):
 
 def test_notification_test_sends_a_message_and_reports_failures(authed_client, isolated_webui, monkeypatch):
     sent = []
-    monkeypatch.setattr(isolated_webui, "notify", lambda url, message, raise_on_error=False: sent.append((url, message, raise_on_error)))
+    monkeypatch.setattr(isolated_webui.settings, "notify", lambda url, message, raise_on_error=False: sent.append((url, message, raise_on_error)))
     ok = authed_client.post("/api/test-notify", json={"notify_url": "https://ntfy.example/t"}).get_json()
     assert ok["ok"] is True and sent[0][0] == "https://ntfy.example/t" and sent[0][2] is True and "test notification" in sent[0][1]
 
     def fail(*args, **kwargs):
         raise requests.exceptions.ConnectionError("https://ntfy.example/t?token=secret refused")
 
-    monkeypatch.setattr(isolated_webui, "notify", fail)
+    monkeypatch.setattr(isolated_webui.settings, "notify", fail)
     bad = authed_client.post("/api/test-notify", json={"notify_url": "https://ntfy.example/t"}).get_json()
     assert bad["ok"] is False and "secret" not in bad["message"]
 
@@ -319,22 +308,22 @@ def test_testing_with_a_pasted_but_unconnected_token_points_at_connect(authed_cl
 
 def test_token_pasted_cannot_make_a_destination_connected(authed_client, isolated_webui):
     authed_client.post("/api/test-destination/dropbox", json={"token_pasted": True, "token": "{}"})
-    assert isolated_webui.load_config()["destinations"]["dropbox"]["token"] == ""
+    assert isolated_webui.settings.load_config()["destinations"]["dropbox"]["token"] == ""
 
 
 def test_cloud_destination_test_checks_the_remote(authed_client, isolated_webui, monkeypatch):
     checked = []
-    monkeypatch.setattr(isolated_webui.rclone_util, "check_remote", checked.append)
+    monkeypatch.setattr(isolated_webui.backups.rclone_util, "check_remote", checked.append)
     drive = {"refresh_token": "rt", "folder_name": "Backups", "client_id": "id"}
     result = authed_client.post("/api/test-destination/gdrive", json=drive).get_json()
     # refresh_token is not an editable field, so the request alone cannot make it "connected"
     assert result["ok"] is False and checked == []
 
-    cfg = isolated_webui.load_config()
+    cfg = isolated_webui.settings.load_config()
     cfg["destinations"]["gdrive"].update(refresh_token="rt", folder_name="Backups")
     cfg["destinations"]["onedrive"].update(token="{}")
     cfg["destinations"]["dropbox"].update(token="{}")
-    isolated_webui.save_config(cfg)
+    isolated_webui.settings.save_config(cfg)
     drive_result = authed_client.post("/api/test-destination/gdrive", json={}).get_json()
     assert drive_result["ok"] is True and '"Backups"' in drive_result["message"]
     one_result = authed_client.post("/api/test-destination/onedrive", json={}).get_json()
@@ -345,14 +334,14 @@ def test_cloud_destination_test_checks_the_remote(authed_client, isolated_webui,
 
 
 def test_cloud_destination_test_reports_a_rejected_remote(authed_client, isolated_webui, monkeypatch):
-    cfg = isolated_webui.load_config()
+    cfg = isolated_webui.settings.load_config()
     cfg["destinations"]["gdrive"].update(refresh_token="rt")
-    isolated_webui.save_config(cfg)
+    isolated_webui.settings.save_config(cfg)
 
     def reject(root):
-        raise isolated_webui.rclone_util.RcloneError("invalid_grant: token expired")
+        raise isolated_webui.backups.rclone_util.RcloneError("invalid_grant: token expired")
 
-    monkeypatch.setattr(isolated_webui.rclone_util, "check_remote", reject)
+    monkeypatch.setattr(isolated_webui.backups.rclone_util, "check_remote", reject)
     result = authed_client.post("/api/test-destination/gdrive", json={}).get_json()
     assert result["ok"] is False and "invalid_grant" in result["message"]
 
@@ -360,7 +349,7 @@ def test_cloud_destination_test_reports_a_rejected_remote(authed_client, isolate
 # --- helpers ---------------------------------------------------------------
 
 def test_restore_override_fields_are_the_url_key_and_the_apps_own_extras(isolated_webui):
-    fields = isolated_webui._restore_override_fields
+    fields = isolated_webui.settings._restore_override_fields
     assert fields("radarr") == {"url", "api_key"}
     assert fields("bazarr") == {"url", "api_key", "username", "password"}
     assert fields("jellyfin") == {"url", "api_key", "backup_dir"}
@@ -374,31 +363,31 @@ def test_restore_override_fields_are_the_url_key_and_the_apps_own_extras(isolate
 
 def test_the_session_key_is_created_once_private_and_reused(isolated_webui, tmp_path, monkeypatch):
     path = tmp_path / "keys" / "secret"
-    monkeypatch.setenv("BACKUPARR_SECRET_KEY_PATH", str(path))
-    first = isolated_webui._load_or_create_secret_key()
+    monkeypatch.setattr(isolated_webui.auth, "SECRET_KEY_PATH", str(path))
+    first = isolated_webui.auth._load_or_create_secret_key()
     assert len(first) == 32 and oct(path.stat().st_mode & 0o777) == "0o600"
-    assert isolated_webui._load_or_create_secret_key() == first
+    assert isolated_webui.auth._load_or_create_secret_key() == first
     assert [p.name for p in path.parent.iterdir()] == ["secret"]
 
 
 def test_a_failed_key_write_leaves_no_temporary_file(isolated_webui, tmp_path, monkeypatch):
     path = tmp_path / "keys2" / "secret"
-    monkeypatch.setenv("BACKUPARR_SECRET_KEY_PATH", str(path))
+    monkeypatch.setattr(isolated_webui.auth, "SECRET_KEY_PATH", str(path))
 
     def explode(*args, **kwargs):
         raise OSError("disk full")
 
-    monkeypatch.setattr(isolated_webui.os, "replace", explode)
+    monkeypatch.setattr(isolated_webui.auth.os, "replace", explode)
     with pytest.raises(OSError):
-        isolated_webui._load_or_create_secret_key()
+        isolated_webui.auth._load_or_create_secret_key()
     assert list(path.parent.iterdir()) == []
 
 
 def test_oauth_tokens_are_reported_as_connected_never_sent(authed_client, isolated_webui):
-    cfg = isolated_webui.load_config()
+    cfg = isolated_webui.settings.load_config()
     cfg["destinations"]["gdrive"].update(client_id="id", refresh_token="gdrive-refresh")
     cfg["destinations"]["onedrive"]["token"] = '{"refresh_token":"onedrive-refresh"}'
-    isolated_webui.save_config(cfg)
+    isolated_webui.settings.save_config(cfg)
     response = authed_client.get("/api/config")
     body = response.get_data(as_text=True)
     assert "gdrive-refresh" not in body and "onedrive-refresh" not in body
@@ -406,6 +395,39 @@ def test_oauth_tokens_are_reported_as_connected_never_sent(authed_client, isolat
     assert (dests["gdrive"]["refresh_token"], dests["onedrive"]["token"], dests["dropbox"]["token"]) == (True, True, False)
     # Saving the settings the UI got back leaves the stored tokens alone.
     assert save(authed_client, {"destinations": dests}).status_code == 200
-    stored_cfg = isolated_webui.load_config()["destinations"]
+    stored_cfg = isolated_webui.settings.load_config()["destinations"]
     assert stored_cfg["gdrive"]["refresh_token"] == "gdrive-refresh"
     assert stored_cfg["onedrive"]["token"] == '{"refresh_token":"onedrive-refresh"}'
+
+
+def test_importing_the_web_app_has_no_side_effects(tmp_path, monkeypatch):
+    import importlib
+    import sys
+    import threading
+    monkeypatch.setenv("BACKUPARR_SECRET_KEY_PATH", str(tmp_path / "secret_key"))
+    started = []
+    monkeypatch.setattr(threading.Thread, "start", lambda self: started.append(self))
+    importlib.reload(sys.modules["webui.app"]) if "webui.app" in sys.modules else importlib.import_module("webui.app")
+    assert started == [] and not (tmp_path / "secret_key").exists()
+
+
+def test_create_app_loads_the_session_key_and_starts_the_scheduler(isolated_webui, monkeypatch):
+    calls = []
+    monkeypatch.setattr(isolated_webui.backup, "configure_logging", lambda: calls.append("logging"))
+    monkeypatch.setattr(isolated_webui.runs, "start_scheduler", lambda: calls.append("scheduler"))
+    isolated_webui.app.secret_key = None
+    assert isolated_webui.create_app() is isolated_webui.app
+    assert calls == ["logging", "scheduler"] and isolated_webui.app.secret_key == isolated_webui.auth._load_or_create_secret_key()
+
+
+def ui_meta(client):
+    """The metadata app.js reads from the dashboard page's data-ui-meta."""
+    import html
+    import json
+    import re
+    page = client.get("/").get_data(as_text=True)
+    return json.loads(html.unescape(re.search(r"data-ui-meta='([^']*)'", page).group(1)))
+
+
+def test_the_page_carries_the_ui_metadata_as_data(authed_client):
+    assert ui_meta(authed_client) == {"apps": APP_META, "destinations": DESTINATION_META}

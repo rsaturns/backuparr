@@ -12,11 +12,12 @@ at all.
 import logging
 import os
 import tempfile
-import time
 from urllib.parse import urljoin, urlsplit
 import zipfile
 
 import requests
+
+from apps.base import AppError, poll_until
 
 logger = logging.getLogger(f"backuparr.{__name__}")
 
@@ -29,7 +30,7 @@ _BACKUP_ACCESS_HINT = (
 )
 
 
-class ServarrError(RuntimeError):
+class ServarrError(AppError):
     pass
 
 
@@ -71,7 +72,7 @@ def _same_origin(source, target):
         return False
 
 
-class ApiKeySession(requests.Session):
+class SameHostSession(requests.Session):
     """A session that won't carry its API key, or a request body, to another
     host: requests drops Authorization on a cross-host redirect but keeps
     custom headers such as X-Api-Key, and resends the body on a 307/308."""
@@ -106,25 +107,30 @@ class ApiKeySession(requests.Session):
 
 
 class ServarrApp:
-    api_version = "v3"
+    api_version = "v3"  # Lidarr and Prowlarr override it with v1
 
     def __init__(self, name, url, api_key, timeout=30, strict_redirects=False):
         self.name = name
         self.url = url.rstrip("/")
         self.timeout = timeout
-        self.session = ApiKeySession(self.url, strict=strict_redirects)
+        self.session = SameHostSession(self.url, strict=strict_redirects)
         self.session.headers.update({"X-Api-Key": api_key, "Accept": "application/json"})
 
     def _api(self, path):
         return f"{self.url}/api/{self.api_version}{path}"
 
-    def test_connection(self):
+    def _status(self):
         res = self.session.get(self._api("/system/status"), timeout=10)
         if res.status_code == 401:
             raise ServarrError(f"{self.name}: unauthorized - check the API key")
         res.raise_for_status()
-        info = res.json()
-        return f"{self.name} {info.get('version', '?')} reachable"
+        return res.json()
+
+    def test_connection(self):
+        return f"{self.name} {self._status().get('version', '?')} reachable"
+
+    def app_version(self):
+        return self._status().get("version")
 
     def trigger_backup(self, poll_interval=2, timeout_s=300, request_headers=None):
         """Run a Backup command and wait for it; returns the finished command."""
@@ -133,18 +139,19 @@ class ServarrApp:
         res.raise_for_status()
         command_id = res.json()["id"]
 
-        deadline = time.time() + timeout_s
-        while time.time() < deadline:
+        def finished():
             res = self.session.get(self._api(f"/command/{command_id}"), timeout=self.timeout)
             res.raise_for_status()
             command = res.json()
             status = command.get("status")
-            if status == "completed":
-                return command
             if status in ("failed", "aborted"):
                 raise ServarrError(f"{self.name}: backup command {status}")
-            time.sleep(poll_interval)
-        raise ServarrError(f"{self.name}: backup command timed out after {timeout_s}s")
+            return command if status == "completed" else None
+
+        command = poll_until(finished, timeout_s, poll_interval)
+        if command is None:
+            raise ServarrError(f"{self.name}: backup command timed out after {timeout_s}s")
+        return command
 
     def list_backups(self):
         res = self.session.get(self._api("/system/backup"), timeout=self.timeout)
@@ -220,8 +227,7 @@ class ServarrApp:
         manual = [b for b in self.list_backups() if b.get("type") == "manual"]
         if not manual:
             raise ServarrError(f"{self.name}: no manual backup found after trigger")
-        manual.sort(key=lambda b: b.get("time", ""), reverse=True)
-        latest = manual[0]
+        latest = max(manual, key=lambda b: b.get("time", ""))
 
         filename = os.path.basename(latest["path"])
         dest = os.path.join(dest_dir, filename)
@@ -243,16 +249,9 @@ class ServarrApp:
         return path
 
     def restore_upload(self, file_path):
-        """Restore via POST /system/backup/restore/upload - a genuine multipart
-        upload endpoint, so no filesystem access to the app's config volume
-        is required at all.
-
-        The upload only stages the db/config for restore and responds
-        {"RestartRequired": true} - it does nothing further on its own. The
-        app's startup routine is what actually swaps the staged files in, so
-        a restart has to be triggered here or the "restore" silently never
-        applies.
-        """
+        """Uploads the zip to /system/backup/restore/upload. That only stages
+        it ({"RestartRequired": true}): the app swaps the staged files in on
+        startup, so it's restarted here, or the restore would never apply."""
         with open(file_path, "rb") as f:
             files = {"file": (os.path.basename(file_path), f, "application/zip")}
             res = self.session.post(self._api("/system/backup/restore/upload"), files=files, timeout=120)

@@ -394,7 +394,7 @@ def test_discovery_includes_headers_on_backup_download(authed_client, isolated_w
         app.session.get(app.url + "/backup/manual/config.zip")
         return {"candidates": [], "warnings": []}
 
-    monkeypatch.setattr(isolated_webui.discovery, "discover_prowlarr", discover)
+    monkeypatch.setattr(isolated_webui.services.discovery, "discover_prowlarr", discover)
     response = authed_client.post("/api/discovery/prowlarr", json={"url": "https://app.example", "api_key": "native-key", "request_headers": HEADERS})
     result = authed_client.get("/api/discovery/prowlarr/" + response.json["job_id"]).json
     assert result["state"] == "completed"
@@ -443,7 +443,7 @@ def test_scheduled_backup_and_web_restore_send_headers_at_every_phase(authed_cli
     assert any(r.url.endswith("/backup/manual/config.zip") for r in sent)
     response = authed_client.post("/api/restore/local/radarr", json={"confirm": True, "file": "backup.zip", "override": {"url": "https://target.example"}})
     assert response.status_code == 200 and response.json["started"]
-    assert isolated_webui.RESTORE_RUN_STATE["ok"]
+    assert isolated_webui.runs.RESTORE_RUN_STATE["ok"]
     assert any(r.url == "https://target.example/api/v3/system/backup/restore/upload" for r in sent)
     assert sent[-1].url.endswith("/system/restart")
     assert "request_headers" not in config_store.load_config()["apps"]["radarr"]
@@ -537,7 +537,7 @@ def test_discovery_sends_only_headers_scoped_to_prowlarr(authed_client, isolated
         app.session.get(app.url + "/api/v1/applications")
         return {"candidates": [], "warnings": []}
 
-    monkeypatch.setattr(isolated_webui.discovery, "discover_prowlarr", discover)
+    monkeypatch.setattr(isolated_webui.services.discovery, "discover_prowlarr", discover)
     rows = [{"name": "Proxy-Authorization", "value": SECRET, "apps": apps}]
     response = authed_client.post("/api/discovery/prowlarr", json={"url": "https://app.example", "api_key": "native-key", "request_headers": rows})
     assert authed_client.get("/api/discovery/prowlarr/" + response.json["job_id"]).json["state"] == "completed"
