@@ -1,7 +1,7 @@
 ---
 title: Tautulli
 parent: Apps
-nav_order: 9
+nav_order: 10
 ---
 
 # Tautulli

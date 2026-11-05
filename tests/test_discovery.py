@@ -317,7 +317,9 @@ def test_backup_download_failure_reports_stage_without_secrets(status):
     instance.download_status = status
     result = discovery.discover_prowlarr(instance)
     assert result["candidates"][0]["api_key"] == ""
-    assert any(f"HTTP {status}" in warning and "/backup/" in warning for warning in result["warnings"])
+    # A 401 is the app's own login (Authentication Required = Enabled): the warning names the setting.
+    hint = "Disabled for Local Addresses" if status == 401 else "/backup/"
+    assert any(f"HTTP {status}" in warning and hint in warning for warning in result["warnings"])
     assert f"HTTP {status}" in result["candidates"][0]["api_key_error"]
     assert "sensitive response data" not in str(result)
     assert instance.deleted == [2]

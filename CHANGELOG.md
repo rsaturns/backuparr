@@ -5,6 +5,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Radarr, Sonarr, Lidarr, Whisparr and Prowlarr backups failed with a confusing reverse-proxy message when the app asks every address to log in. **Test connection** now warns about it, the backup error names the setting to change (Authentication Required: Disabled for Local Addresses), and the docs have a note for these apps. Thanks to u/Neither_Rutabaga_627 for the report: https://www.reddit.com/r/SideProject/comments/1xnc98k/
+
 ## [2.5.0] - 2026-11-04
 
 **"I heard you like backups, so I put another backup in your backups..."** 2.5.0 backs up Backuparr itself, checks every backup before it's uploaded, and only restores onto the exact app version a backup came from.
