@@ -115,7 +115,7 @@
               </label>
               {% endif %}
               {% for f in m.extra_fields %}
-              <label class="field">
+              <label class="field{% if f.login_only %} login-field hidden{% endif %}">
                 <span class="field-label">{{ f.label }} {% if f.help %}<span class="muted">({{ f.help }})</span>{% endif %}</span>
                 <input type="{{ f.type }}" class="f-extra" data-field="{{ f.name }}"{% if f.placeholder %} placeholder="{{ f.placeholder }}"{% endif %} autocomplete="off">
                 {# NZBGet's discovered secret is its password: its note goes here. #}

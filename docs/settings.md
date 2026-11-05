@@ -30,6 +30,8 @@ added with **Add as instance**.
 - Prowlarr masks API keys and NZBGet's password, so Backuparr reads them from a
   temporary Prowlarr backup, which it then deletes. With Prowlarr on
   PostgreSQL, or a login proxy blocking `/backup/`, only the URLs are filled in.
+  If Prowlarr itself asks for a login, the card shows its username and
+  password: fill them in and discover again.
 - The URLs are the ones Prowlarr uses; **Test connection** confirms Backuparr
   can reach them.
 - Other fields, such as LazyLibrarian's data folder, are entered by hand.

@@ -521,6 +521,7 @@ function fillAppCard(appId, cfg) {
   card.querySelectorAll(".f-extra").forEach((input) => {
     input.value = cfg[input.dataset.field] || "";
   });
+  showLoginFields(card, !!(cfg.username || cfg.password));
   const nameInput = card.querySelector(".f-name");
   if (nameInput) {
     nameInput.value = cfg.name || "";
@@ -530,10 +531,26 @@ function fillAppCard(appId, cfg) {
   if (appId === "prowlarr") updateDiscoveryButton();
 }
 
+// Radarr, Sonarr, Lidarr, Whisparr and Prowlarr cards keep their username
+// and password hidden until a test finds the app asks for a login, or they
+// hold a value.
+function showLoginFields(card, show) {
+  card.querySelectorAll(".login-field").forEach((field) => field.classList.toggle("hidden", !show));
+}
+
+function revealLoginFields(card) {
+  const hidden = card.querySelector(".login-field.hidden");
+  showLoginFields(card, true);
+  if (hidden) card.querySelector('.login-field .f-extra[data-field="username"]')?.focus();
+}
+
 function prowlarrCredentials() {
+  const card = appCard("prowlarr");
   return {
-    url: appCard("prowlarr").querySelector(".f-url").value.trim(),
-    api_key: appCard("prowlarr").querySelector(".f-api_key").value.trim(),
+    url: card.querySelector(".f-url").value.trim(),
+    api_key: card.querySelector(".f-api_key").value.trim(),
+    username: card.querySelector('.f-extra[data-field="username"]').value.trim(),
+    password: card.querySelector('.f-extra[data-field="password"]').value,
     request_headers: readRequestHeaders(),
   };
 }
@@ -1108,6 +1125,7 @@ async function discoverServices() {
       return;
     }
     if (state.state === "failed") throw new Error(state.message);
+    if (state.result.needs_login) revealLoginFields(appCard("prowlarr"));
     renderDiscoveryResults(state.result, initial);
   } catch (e) {
     status.textContent = e.message;
@@ -1471,6 +1489,7 @@ async function runTest({ btn, resultEl, dot, pendingText, request }) {
     resultEl.textContent = res.message;
     resultEl.className = `test-result ${res.ok ? "ok" : "fail"}`;
     if (dot) dot.dataset.state = res.ok ? "ok" : "fail";
+    return res;
   } catch (e) {
     resultEl.textContent = e.message;
     resultEl.className = "test-result fail";
@@ -1484,7 +1503,7 @@ async function testApp(appId) {
   const card = appCard(appId);
   const payload = readAppCard(appId);
   payload.request_headers = readRequestHeaders();
-  await runTest({
+  const res = await runTest({
     btn: card.querySelector(".test-btn"),
     resultEl: card.querySelector(".test-result"),
     dot: card.querySelector(".status-dot"),
@@ -1495,6 +1514,7 @@ async function testApp(appId) {
         body: JSON.stringify(payload),
       }),
   });
+  if (res?.needs_login) revealLoginFields(card);
 }
 
 async function testDestination(destId) {
@@ -2314,7 +2334,8 @@ function renderRestoreOverride() {
     const hint = meta.key_required ? meta.key_help : `optional${meta.key_help ? ` \u2014 ${meta.key_help}` : ""}`;
     block.appendChild(overrideField(meta.key_label || "API key", hint, { type: "password", id: "r-ovr-api_key" }));
   }
-  (meta.extra_fields || []).forEach((f) => {
+  // A restore never needs the app's web login (login_only fields).
+  (meta.extra_fields || []).filter((f) => !f.login_only).forEach((f) => {
     const field = overrideField(f.label, f.help, { type: f.type, className: "r-ovr-extra", placeholder: f.placeholder || "" });
     field.querySelector("input").dataset.field = f.name;
     block.appendChild(field);

@@ -1,14 +1,18 @@
-"""Exercise API-key-only downloads, redirects and protected web routes."""
+"""Exercise API-key downloads, redirects, protected web routes and signing
+in to them with the app's own login."""
+import base64
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import io
 import json
 import threading
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 import zipfile
 
 import pytest
 
-from apps.servarr import ServarrApp, ServarrError
+from apps.servarr import LoginRequiredError, ServarrApp, ServarrError
+
+BASIC_OK = "Basic " + base64.b64encode(b"admin:s3cret").decode()
 
 
 @pytest.fixture
@@ -16,7 +20,8 @@ def server():
     archive = io.BytesIO()
     with zipfile.ZipFile(archive, "w") as output:
         output.writestr("config.xml", "<Config />")
-    state = {"mode": "plain", "requests": [], "deleted": [], "archive": archive.getvalue()}
+    # host_method: what config/host reports (None = the call fails).
+    state = {"mode": "plain", "requests": [], "deleted": [], "archive": archive.getvalue(), "host_method": "auto"}
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -32,11 +37,28 @@ def server():
         def record(self, body=b""):
             state["requests"].append((self.command, self.path, dict(self.headers), body))
 
+        def signed_in(self):
+            """Like Servarr: the Forms cookie, or a valid Basic header."""
+            if state["mode"] == "forms":
+                return "RadarrAuth=ok" in self.headers.get("Cookie", "")
+            if state["mode"] == "basic":
+                return self.headers.get("Authorization") == BASIC_OK
+            return False
+
         def do_GET(self):
             self.record()
             path = urlsplit(self.path).path
             if path.endswith("/system/status"):
                 return self.reply(200, b'{"version":"fixture"}')
+            if path.endswith("/config/host"):
+                method = state["mode"] if state["host_method"] == "auto" else state["host_method"]
+                if method is None:
+                    return self.reply(500)
+                return self.reply(200, json.dumps({"authenticationMethod": method, "authenticationRequired": "enabled"}).encode())
+            if self.signed_in():
+                if path == "/arr/":
+                    return self.reply(200, b"<html>app</html>")
+                return self.reply(200, state["archive"])
             if path.endswith("/command/7"):
                 return self.reply(200, b'{"id":7,"status":"completed"}')
             if path.endswith("/system/backup"):
@@ -77,6 +99,11 @@ def server():
         def do_POST(self):
             body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
             self.record(body)
+            if self.path == "/arr/login":  # Servarr's AuthenticationController
+                form = parse_qs(body.decode())
+                if form.get("username") == ["admin"] and form.get("password") == ["s3cret"]:
+                    return self.reply(302, Location="/arr/", Set_Cookie="RadarrAuth=ok; path=/; httponly")
+                return self.reply(302, Location="/arr/login?returnUrl=&loginFailed=true")
             assert self.path.endswith("/command")
             return self.reply(200, b'{"id":7}')
 
@@ -94,8 +121,16 @@ def server():
     thread.join()
 
 
-def driver(server):
-    return ServarrApp("radarr", server[0], "test-api-key")
+def driver(server, **login):
+    return ServarrApp("radarr", server[0], "test-api-key", **login)
+
+
+def logins(state):
+    return [r for r in state["requests"] if r[0] == "POST" and r[1] == "/arr/login"]
+
+
+def sent_credentials(state):
+    return [r for r in state["requests"] if "Authorization" in r[2] or "Cookie" in r[2]]
 
 
 def test_api_key_downloads_zip_and_cleans_up_server_backup(server, tmp_path):
@@ -120,15 +155,17 @@ def test_local_file_redirect_preserves_api_key(server, tmp_path):
     assert all("apikey" not in r[1].lower() for r in server[1]["requests"])
 
 
-@pytest.mark.parametrize("mode,reason", [("forms", "HTTP 302"), ("basic", "HTTP 401")])
-def test_protected_backup_never_logs_in_and_preserves_files(server, tmp_path, mode, reason):
+@pytest.mark.parametrize("mode", ["forms", "basic"])
+def test_protected_backup_without_a_login_asks_for_one_and_preserves_files(server, tmp_path, mode):
     server[1]["mode"] = mode
     instance = driver(server)
     existing = tmp_path / "current.zip"
     existing.write_bytes(b"existing file")
-    with pytest.raises(ServarrError, match=reason) as error:
+    with pytest.raises(LoginRequiredError) as error:
         instance.backup(tmp_path)
-    assert "Authentication Required to Disabled for Local Addresses" in str(error.value)
+    assert str(error.value) == ("radarr: the app asks for a login to download backups. "
+                                "Enter its username and password in Settings.")
+    assert error.value.needs_login
     assert existing.read_bytes() == b"existing file"
     assert not server[1]["deleted"]
     assert not list(tmp_path.glob(".backup-*"))
@@ -161,13 +198,15 @@ def test_size_limit_removes_partial_download(server, tmp_path):
 
 
 @pytest.mark.parametrize("mode", ["forms", "basic"])
-def test_connection_says_when_backups_need_the_apps_login(server, mode):
+def test_connection_asks_for_the_apps_login_when_it_wants_one(server, mode):
     """The API key works, but the app asks every address to log in, so no
-    backup could be downloaded: Test connection says so and how to fix it."""
+    backup could be downloaded: Test connection asks for its username and
+    password (and the card shows those fields)."""
     server[1]["mode"] = mode
-    with pytest.raises(ServarrError, match="radarr fixture is reachable, but backups can't be downloaded") as error:
+    with pytest.raises(LoginRequiredError) as error:
         driver(server).test_connection()
-    assert "Authentication Required to Disabled for Local Addresses" in str(error.value)
+    assert str(error.value) == "radarr fixture asks for a login. Enter its username and password."
+    assert error.value.needs_login
     assert not any(r[1].startswith("/arr/login") for r in server[1]["requests"])
     assert all("Authorization" not in r[2] and "Cookie" not in r[2] for r in server[1]["requests"])
 
@@ -179,3 +218,74 @@ def test_connection_passes_when_the_web_ui_isnt_the_apps_own_login(server, mode)
     server[1]["mode"] = mode
     assert driver(server).test_connection() == "radarr fixture reachable"
 
+
+
+@pytest.mark.parametrize("mode", ["forms", "basic"])
+def test_signs_in_with_the_apps_login_and_backs_up(server, tmp_path, mode):
+    server[1]["mode"] = mode
+    instance = driver(server, username="admin", password="s3cret")
+    assert instance.test_connection() == "radarr fixture reachable, signed in"
+    instance = driver(server, username="admin", password="s3cret")  # a fresh run
+    dest = instance.backup(tmp_path)
+    assert zipfile.is_zipfile(dest)
+    assert len(server[1]["deleted"]) == 1
+    requests_ = server[1]["requests"]
+    if mode == "forms":
+        assert len(logins(server[1])) == 2  # one per run
+        assert parse_qs(logins(server[1])[0][3].decode()) == {"username": ["admin"], "password": ["s3cret"]}
+        assert not any("Authorization" in r[2] for r in requests_)
+    else:
+        assert not logins(server[1])
+        # Basic goes only to the web UI, never to the API.
+        assert all(not r[1].startswith("/arr/api/") for r in requests_ if "Authorization" in r[2])
+        assert any(r[1].startswith("/arr/backup/") and r[2].get("Authorization") == BASIC_OK for r in requests_)
+
+
+@pytest.mark.parametrize("mode", ["forms", "basic"])
+def test_login_method_falls_back_to_the_response_without_config_host(server, tmp_path, mode):
+    server[1]["mode"] = mode
+    server[1]["host_method"] = None
+    assert zipfile.is_zipfile(driver(server, username="admin", password="s3cret").backup(tmp_path))
+
+
+@pytest.mark.parametrize("mode", ["forms", "basic"])
+def test_wrong_login_fails_once_without_retrying(server, tmp_path, mode):
+    server[1]["mode"] = mode
+    with pytest.raises(LoginRequiredError) as error:
+        driver(server, username="admin", password="wrong").backup(tmp_path)
+    assert str(error.value) == "radarr: wrong username or password. Check them in Settings."
+    assert not server[1]["deleted"]
+    assert not list(tmp_path.iterdir())
+    attempts = logins(server[1]) if mode == "forms" else [r for r in server[1]["requests"] if "Authorization" in r[2]]
+    assert len(attempts) == 1  # each refused login is an Auth-Failure in the app's log
+
+
+@pytest.mark.parametrize("mode", ["forms", "basic"])
+def test_connection_reports_a_wrong_login(server, mode):
+    server[1]["mode"] = mode
+    with pytest.raises(LoginRequiredError, match="wrong username or password"):
+        driver(server, username="admin", password="wrong").test_connection()
+
+
+def test_unsupported_login_method_is_never_tried(server, tmp_path):
+    """e.g. Whisparr v2's develop branch adds OIDC, which no password signs in to."""
+    server[1]["mode"] = "forms"
+    server[1]["host_method"] = "oidc"
+    with pytest.raises(ServarrError, match="its oidc login can't be used by Backuparr") as error:
+        driver(server, username="admin", password="s3cret").backup(tmp_path)
+    assert "Disabled for Local Addresses" in str(error.value)
+    assert not logins(server[1]) and not sent_credentials(server[1])
+
+
+@pytest.mark.parametrize("mode", ["plain", "external", "proxy"])
+def test_a_saved_login_is_only_used_when_the_app_itself_asks(server, tmp_path, mode):
+    """Open apps (Disabled for Local Addresses) and other hosts' or a proxy's
+    login pages never get the username and password."""
+    server[1]["mode"] = mode
+    instance = driver(server, username="admin", password="s3cret")
+    try:
+        instance.backup(tmp_path)
+    except ServarrError:
+        assert mode != "plain"
+    assert not logins(server[1]) and not sent_credentials(server[1])
+    assert not instance.signed_in

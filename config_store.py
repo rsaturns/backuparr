@@ -39,14 +39,27 @@ DISCOVERABLE_APPS = ("radarr", "sonarr", "lidarr", "whisparr", "lazylibrarian", 
 # An extra instance also has a display name, e.g. "Radarr 4K".
 DEFAULT_INSTANCE = {**DEFAULT_APP, "name": ""}
 
+# Radarr, Sonarr, Lidarr, Whisparr and Prowlarr: their own login, only for
+# downloading backups when Authentication Required is Enabled (apps/servarr.py).
+# "login_only" fields stay hidden on the card until a test finds a login, or
+# once they hold a value, and aren't asked for by the Restore tab.
+SERVARR_LOGIN_FIELDS = [
+    {"name": "username", "label": "Username", "type": "text", "login_only": True,
+     "help": "the app's own login"},
+    {"name": "password", "label": "Password", "type": "password", "login_only": True,
+     "help": "the app's own login"},
+]
+# Apps whose "password" extra field is encrypted at rest.
+PASSWORD_APPS = ("bazarr", "nzbget", "radarr", "sonarr", "lidarr", "whisparr", "prowlarr")
+
 # Drives the web UI's forms generically. restore_warning is shown on the
 # Restore tab before an app's restore.
 APP_META = [
-    {"id": "radarr", "label": "Radarr", "icon": "radarr.svg", "key_required": True, "url_placeholder": "http://radarr:7878", "extra_fields": [], "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
-    {"id": "sonarr", "label": "Sonarr", "icon": "sonarr.svg", "key_required": True, "url_placeholder": "http://sonarr:8989", "extra_fields": [], "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
-    {"id": "lidarr", "label": "Lidarr", "icon": "lidarr.svg", "key_required": True, "url_placeholder": "http://lidarr:8686", "extra_fields": [], "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
-    {"id": "whisparr", "label": "Whisparr", "icon": "whisparr.svg", "key_required": True, "url_placeholder": "http://whisparr:6969", "extra_fields": [], "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
-    {"id": "prowlarr", "label": "Prowlarr", "icon": "prowlarr.svg", "key_required": True, "url_placeholder": "http://prowlarr:9696", "extra_fields": []},
+    {"id": "radarr", "label": "Radarr", "icon": "radarr.svg", "key_required": True, "url_placeholder": "http://radarr:7878", "extra_fields": SERVARR_LOGIN_FIELDS, "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
+    {"id": "sonarr", "label": "Sonarr", "icon": "sonarr.svg", "key_required": True, "url_placeholder": "http://sonarr:8989", "extra_fields": SERVARR_LOGIN_FIELDS, "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
+    {"id": "lidarr", "label": "Lidarr", "icon": "lidarr.svg", "key_required": True, "url_placeholder": "http://lidarr:8686", "extra_fields": SERVARR_LOGIN_FIELDS, "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
+    {"id": "whisparr", "label": "Whisparr", "icon": "whisparr.svg", "key_required": True, "url_placeholder": "http://whisparr:6969", "extra_fields": SERVARR_LOGIN_FIELDS, "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
+    {"id": "prowlarr", "label": "Prowlarr", "icon": "prowlarr.svg", "key_required": True, "url_placeholder": "http://prowlarr:9696", "extra_fields": SERVARR_LOGIN_FIELDS},
     {
         "id": "profilarr",
         "label": "Profilarr",
@@ -483,7 +496,7 @@ def _secret_fields(cfg):
     for instance_id in instance_ids(cfg):
         app = cfg["apps"][instance_id]
         fields.append((("apps", instance_id, "api_key"), app, "api_key"))
-        if instance_type(instance_id) in ("bazarr", "nzbget"):
+        if instance_type(instance_id) in PASSWORD_APPS:
             fields.append((("apps", instance_id, "password"), app, "password"))
     for dest, key in (("gdrive", "client_secret"), ("gdrive", "developer_key"), ("gdrive", "refresh_token"),
                       ("onedrive", "token"), ("dropbox", "token")):

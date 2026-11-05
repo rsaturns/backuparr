@@ -78,7 +78,7 @@ DISCOVERY_JOBS = OwnedJobs(
     "backuparr_discovery", lambda job: job.get("finished", float("inf")) < time.monotonic() - DISCOVERY_RESULT_TTL)
 
 
-def _discovery_work(job_id, url, api_key, request_headers):
+def _discovery_work(job_id, url, api_key, request_headers, login):
     def update(**fields):
         with DISCOVERY_JOBS.lock:
             job = DISCOVERY_JOBS.current_locked(job_id)
@@ -86,7 +86,7 @@ def _discovery_work(job_id, url, api_key, request_headers):
                 job.update(fields)
 
     try:
-        instance = ProwlarrApp(url, api_key, strict_redirects=True)
+        instance = ProwlarrApp(url, api_key, strict_redirects=True, **login)
         configure_app_headers(instance, request_headers)
         result = discovery.discover_prowlarr(instance, lambda message: update(message=message))
         outcome = {"state": "completed", "message": "Discovery complete.", "result": result}
@@ -115,12 +115,14 @@ def api_discovery_prowlarr():
     except RequestHeadersError as exc:
         return jsonify({"error": str(exc)}), 400
     headers = headers_for_app(headers, "prowlarr")
+    # Prowlarr's own login, for the backup download when it asks for one.
+    login = {field: data[field] for field in ("username", "password") if isinstance(data.get(field), str) and data[field]}
     if not DISCOVERY_RUN_LOCK.acquire(blocking=False):
         return jsonify({"error": "Discovery is already running. Try again when it finishes."}), 409
     owner, new_owner = DISCOVERY_JOBS.owner()
     job_id = DISCOVERY_JOBS.add(owner, {"state": "running", "message": "Connecting to Prowlarr..."})
     try:
-        threading.Thread(target=_discovery_work, args=(job_id, data["url"].strip(), api_key.strip(), headers), daemon=True).start()
+        threading.Thread(target=_discovery_work, args=(job_id, data["url"].strip(), api_key.strip(), headers, login), daemon=True).start()
     except RuntimeError:
         DISCOVERY_JOBS.discard(job_id)
         DISCOVERY_RUN_LOCK.release()
