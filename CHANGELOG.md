@@ -7,7 +7,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- Each destination can keep backups for its own number of days, for example 28 on Local storage and 7 on Google Drive (Retention on its card in Settings; blank uses the default). The Overview then shows each destination's retention (#133).
+- Each destination can keep backups for its own number of days, for example 28 on Local storage and 7 on Google Drive (Retention on its card in Settings; blank uses the default). The Overview then shows each destination's retention (#133). Thanks to @Tharic99 for the request.
 
 ## [2.5.4] - 2026-11-05
 
