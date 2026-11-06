@@ -47,7 +47,8 @@ latest run is always kept.
 
 - **View log** on an app's Overview tile shows its latest run.
 - On the History tab, each backup has its own log. A run that left no backup
-  on that destination is listed greyed out, with the reason.
+  on that destination is listed greyed out as **Backup failed**; its log
+  says why.
 
 ![An app's run log: when it ran, the app version, the file it made and where it was uploaded, then the log lines]({{ '/screenshots/run-log.png' | relative_url }})
 
@@ -58,7 +59,7 @@ the app version each one came from. You can download or delete any of them, or
 open its log. Backuparr's own backups are listed under "Backuparr's own
 configuration".
 
-![History tab: Radarr's backups with their version, size and date, View log, download and delete buttons, and a failed run greyed out with its reason]({{ '/screenshots/history.png' | relative_url }})
+![History tab: Radarr's backups with their version, size and date, View log, download and delete buttons, and a failed run greyed out as Backup failed]({{ '/screenshots/history.png' | relative_url }})
 
 ## The backup record
 

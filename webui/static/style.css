@@ -141,6 +141,34 @@ body {
   color: var(--accent-contrast);
 }
 
+/* Narrow screens: brand and account on one row, the tabs across the full
+   width below, sized to fit (scrolling inside the bar on the narrowest). */
+@media (max-width: 860px) {
+  .topbar { padding: 10px 12px; gap: 10px; }
+  .brand { margin-right: auto; }
+  .tabs {
+    order: 3;
+    width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab-btn { flex: 1 1 auto; padding: 6px 8px; white-space: nowrap; }
+}
+
+@media (max-width: 480px) {
+  .brand-mark { width: 32px; height: 32px; }
+  .brand-name { font-size: 20px; }
+  .brand-tagline { font-size: 13px; }
+  .tabs { gap: 2px; }
+  .tab-btn { font-size: 14px; padding: 6px 4px; }
+}
+
+@media (max-width: 360px) {
+  .user-name { display: none; }
+  .tab-btn { font-size: 13px; padding: 5px 3px; }
+}
+
 .theme-toggle {
   border: 1px solid var(--border);
   background: var(--bg);
@@ -1279,8 +1307,26 @@ code {
 .overview-links { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; font-size: 14.5px; }
 .overview-links .overview-download-link { margin-top: 0; }
 .history-table tr.history-missing td { color: var(--text-muted); }
-.history-table tr.history-missing td.history-reason { color: var(--danger); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.history-table tr.history-missing td.history-reason { color: var(--danger); font-weight: 600; white-space: nowrap; }
 .history-table td.actions-cell .link-btn { font-size: 14px; margin-right: 6px; }
+
+/* Narrow screens: each backup is a block - the file name, then version, size
+   and time on one line with its actions. */
+@media (max-width: 719px) {
+  .history-table thead { display: none; }
+  .history-table, .history-table tbody { display: block; }
+  .history-table tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .history-table td { padding: 0; border: none; font-size: 14px; color: var(--text-muted); }
+  .history-table td:first-child { flex-basis: 100%; color: var(--text); font-size: 15px; overflow-wrap: anywhere; }
+  .history-table td.actions-cell { margin-left: auto; width: auto; }
+}
 
 /* ------------------------------------------------------ encryption key --- */
 .key-box {

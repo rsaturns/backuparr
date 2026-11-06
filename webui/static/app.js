@@ -2200,21 +2200,18 @@ function appLabel(appId) {
   return isExtraInstance(appId) ? `${m.label} (${INSTANCE_NAMES.get(appId) || appId.slice(m.id.length + 1)})` : m.label;
 }
 
-// A run that left no file on this destination: greyed, with the reason in
-// place of a size, and only its log.
+// A run that left no file on this destination: greyed, "Backup failed" in
+// place of a version and size, and its log, which says why.
 function missingHistoryRow(appId, e) {
   const tr = document.createElement("tr");
   tr.className = "history-missing";
-  // The reason spans the Version and Size columns, on one line; the full
-  // text is its tooltip and in the log.
-  const cells = [e.name || "No backup file", e.reason, fmtTime(e.mod_time)].map((text) => {
+  const cells = [e.name || "No backup file", "Backup failed", fmtTime(e.mod_time)].map((text) => {
     const td = document.createElement("td");
     td.textContent = text;
     return td;
   });
   cells[1].className = "history-reason";
   cells[1].colSpan = 2;
-  cells[1].title = e.reason;
   const actionsTd = document.createElement("td");
   actionsTd.className = "actions-cell";
   actionsTd.appendChild(viewLogButton(appId, e.run_id));

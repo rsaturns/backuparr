@@ -215,6 +215,15 @@ def test_history_links_backups_to_their_runs_and_lists_runs_that_left_no_file(au
     ]
 
 
+def test_a_run_whose_file_this_destinations_retention_removed_isnt_listed_as_failed(authed_client, listing):
+    # Uploaded here, pruned here sooner than on a destination that keeps it longer (#133).
+    runlog.save(run("radarr", "20261101_030000", destinations={"local": {"ok": True, "error": None}, "gdrive": {"ok": True, "error": None}}))
+    listing.append("radarr/radarr_20261102_030000.zip")
+    runlog.save(run("radarr", "20261102_030000"))
+    rows = authed_client.get("/api/history/local").get_json()["radarr"]
+    assert [(r["name"], r.get("missing", False)) for r in rows] == [("radarr_20261102_030000.zip", False)]
+
+
 def test_history_links_backuparrs_own_backups_to_their_runs(authed_client, listing):
     listing.append("backuparr/backuparr_20261101_030000.enc")
     own = run("backuparr", "20261101_030000")

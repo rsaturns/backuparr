@@ -9,6 +9,15 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Each destination can keep backups for its own number of days, for example 28 on Local storage and 7 on Google Drive (Retention on its card in Settings; blank uses the default). The Overview then shows each destination's retention (#133). Thanks to @Tharic99 for the request.
 
+### Changed
+
+- History shows a run that left no backup as **Backup failed**; **View log** has the reason.
+
+### Fixed
+
+- The top bar fits on phones instead of pushing the page sideways, and History lists each backup as a block on narrow screens.
+- A backup deleted from one destination, or removed there by its retention, no longer shows there as a failed run.
+
 ## [2.5.4] - 2026-11-05
 
 ### Fixed
