@@ -125,14 +125,14 @@ function daysText(days) {
   return `${days} ${days === 1 ? "day" : "days"}`;
 }
 
-// The Retention tile: one value when every destination keeps the same days,
-// else each destination's icon with its own days, one per line (#133).
+// The Retention tile: the default, as before, while every destination uses
+// it; once one has its own, each destination's icon and days, one per line (#133).
 function retentionStat(cfg, destIds) {
   const div = document.createElement("div");
   div.className = "overview-stat";
   const days = destIds.map((id) => destRetentionDays(cfg, id));
   const value = document.createElement("div");
-  if (new Set(days).size <= 1) {
+  if (!destIds.some((id) => Number.isInteger(((cfg.destinations || {})[id] || {}).retention_days))) {
     value.className = "stat-value";
     value.textContent = daysText(days.length ? days[0] : (cfg.retention_days || 7));
   } else {

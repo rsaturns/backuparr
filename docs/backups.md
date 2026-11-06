@@ -25,8 +25,8 @@ hold other files.
 
 To keep backups longer or shorter on one destination, set **Retention (days)**
 on its card under Settings > Destinations - for example 28 days on Local
-storage and 7 on Google Drive. Left blank, a destination uses the default. The
-Overview shows each destination's retention when they differ.
+storage and 7 on Google Drive. Left blank, a destination uses the default. Once
+a destination has its own, the Overview shows each destination's retention.
 
 ## The check before upload
 
