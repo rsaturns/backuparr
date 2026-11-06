@@ -130,7 +130,7 @@
               {% endif %}
               <div class="app-card-actions">
                 <button type="button" class="btn btn-ghost btn-sm test-btn">Test connection</button>
-                {% if m.id == 'prowlarr' %}<button type="button" class="btn btn-primary btn-sm" id="discover-btn" disabled>Discover services</button><span class="help-tip" tabindex="0" role="img" aria-label="Reads the apps and download clients connected to Prowlarr, through its API, and fills in their URLs and API keys (and NZBGet's username and password)." data-tip="Reads the apps and download clients connected to Prowlarr, through its API, and fills in their URLs and API keys (and NZBGet's username and password).">?</span>{% endif %}
+                {% if m.id == 'prowlarr' %}<button type="button" class="btn btn-primary btn-sm" id="discover-btn" disabled>Discover services</button><span class="help-tip" tabindex="0" role="img" aria-label="Reads the apps and download clients connected to Prowlarr, through its API, and fills in their URLs and API keys." data-tip="Reads the apps and download clients connected to Prowlarr, through its API, and fills in their URLs and API keys.">?</span>{% endif %}
                 <span class="test-result"></span>
               </div>
               {% if m.id == 'prowlarr' %}
