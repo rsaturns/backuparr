@@ -922,6 +922,27 @@ code {
   white-space: nowrap;
 }
 
+/* Retention per destination (#133): icon and days, one destination a line. */
+.overview-retention-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.overview-retention-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.overview-retention-row .app-icon {
+  width: 20px;
+  height: 20px;
+}
+
 .overview-apps {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));

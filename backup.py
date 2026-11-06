@@ -48,7 +48,7 @@ from apps.sonarr import SonarrApp
 from apps.tautulli import TautulliApp
 from apps.tdarr import TdarrApp
 from apps.whisparr import WhisparrApp
-from config_store import ConfigError, app_meta, enabled_apps, enabled_destinations, instance_type
+from config_store import ConfigError, app_meta, enabled_apps, enabled_destinations, instance_type, retention_days
 from webui.version import VERSION
 
 LOG_DIR = os.environ.get("BACKUPARR_LOG_DIR", "/var/log/backuparr")
@@ -433,7 +433,6 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
     if not dest_roots:
         return [], failed
 
-    retention_days = cfg.get("retention_days", 7)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     ok = []
@@ -533,10 +532,12 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
         failed.append("run cancelled")
         return ok, failed
 
-    log.info("Applying retention (%sd) per destination", retention_days)
+    keep = {dest_id: retention_days(cfg, dest_id) for dest_id in dest_roots}
+    log.info("Applying retention: %s", ", ".join(f"{dest_id} {days}d" for dest_id, days in keep.items()))
     for dest_id, root in dest_roots.items():
-        apply_retention(root, retention_days, only=only, dest_id=dest_id)
-    runlog.prune(retention_days)
+        apply_retention(root, keep[dest_id], only=only, dest_id=dest_id)
+    # A run's log stays while any destination still keeps its backup.
+    runlog.prune(max(keep.values()))
 
     # Last, so its manifest and run logs include this run. Only a full run
     # makes one: a single app's run leaves Backuparr's backup as it was.

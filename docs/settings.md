@@ -9,8 +9,9 @@ The **Settings** tab holds, from top to bottom:
 
 - **Apps** - a card per app: switch it on, enter its URL and API key, and
   click **Test connection**. See [Apps](apps/index.md).
-- **Destinations** - see [Destinations](destinations.md).
-- **Schedule & notifications** - retention, the schedule, the
+- **Destinations** - see [Destinations](destinations.md). Each card can set
+  its own [retention](backups.md#retention).
+- **Schedule & notifications** - the default retention, the schedule, the
   [Notify URL](notifications.md), and whether Backuparr
   [backs itself up](security.md#backuparrs-own-backup).
 - **Service authentication** - see [below](#service-authentication-headers).

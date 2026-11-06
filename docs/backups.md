@@ -17,10 +17,16 @@ shows the run live. A backup and a restore never run at the same time.
 
 ## Retention
 
-**Retention (days)** deletes each app's backups older than that, separately on
-each destination. Each app's newest backup is always kept, so a run of failed
-backups never removes the last good one. Backuparr only deletes its own archives
-(`<app>/<app>_<date>_<time>.zip`), so a destination folder can hold other files.
+**Default retention (days)** deletes each app's backups older than that,
+separately on each destination. Each app's newest backup is always kept, so a
+run of failed backups never removes the last good one. Backuparr only deletes
+its own archives (`<app>/<app>_<date>_<time>.zip`), so a destination folder can
+hold other files.
+
+To keep backups longer or shorter on one destination, set **Retention (days)**
+on its card under Settings > Destinations - for example 28 days on Local
+storage and 7 on Google Drive. Left blank, a destination uses the default. The
+Overview shows each destination's retention when they differ.
 
 ## The check before upload
 
@@ -36,7 +42,8 @@ reason.
 ## Run logs
 
 Each app's log from each run is kept for as long as retention keeps that
-run's backups, and its latest run is always kept.
+run's backups (the longest retention, when destinations differ), and its
+latest run is always kept.
 
 - **View log** on an app's Overview tile shows its latest run.
 - On the History tab, each backup has its own log. A run that left no backup

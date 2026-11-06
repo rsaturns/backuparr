@@ -90,7 +90,7 @@ def test_a_config_saved_before_dropbox_existed_loads_with_an_empty_token():
 
     cfg = config_store.load_config()
 
-    assert cfg["destinations"]["dropbox"] == {"enabled": False, "token": ""}
+    assert cfg["destinations"]["dropbox"] == {"enabled": False, "token": "", "retention_days": None}
     assert config_store.enabled_destinations(cfg) == ["local"]
 
 

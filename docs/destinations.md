@@ -7,6 +7,8 @@ nav_order: 5
 
 Enable one or more on the **Settings** tab; every run uploads to all of them.
 Each backup is [checked before it's uploaded](backups.md#the-check-before-upload).
+Each card can keep backups for its own number of days - see
+[Retention](backups.md#retention).
 
 ## Local storage
 
