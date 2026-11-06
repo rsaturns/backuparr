@@ -1,9 +1,23 @@
 """Consistent copies of a SQLite database another program keeps writing to,
 for the drivers that read an app's mounted data folder (Emby, Plex, Seerr,
 LazyLibrarian)."""
+import logging
 import os
+import re
 import sqlite3
 from urllib.parse import quote
+
+logger = logging.getLogger(__name__)
+
+# For an ordinary (non-STRICT) table, quick_check also reports a number kept
+# in a TEXT column ("NUMERIC value in t.c") or number-like text in a numeric
+# one ("TEXT value in t.c"). That's how the app stored the value: it reads
+# back fine and a restore puts back the same, so it isn't damage. Long-running
+# Sonarr databases have them in SceneMappings.
+_TYPE_NOTE = re.compile(r"(NUMERIC|TEXT) value in .+")
+# quick_check stops after this many rows; type notes mustn't use up the
+# rows before any real damage is reported.
+_MAX_ROWS = 1_000_000
 
 
 def open_ro(src):
@@ -19,16 +33,29 @@ def open_ro(src):
     return sqlite3.connect(uri, uri=True, timeout=30)
 
 
+def quick_check(db):
+    """SQLite's quick_check on an open connection: the problems it finds,
+    an empty list when the database is sound. Type notes aren't problems."""
+    rows = [row[0] for row in db.execute(f"PRAGMA quick_check({_MAX_ROWS})")]
+    notes = [row for row in rows if _TYPE_NOTE.fullmatch(row)]
+    if notes:
+        logger.debug("quick_check type notes, not damage: %s", "; ".join(notes[:3]))
+    problems = [row for row in rows if row != "ok" and not _TYPE_NOTE.fullmatch(row)]
+    if not problems and len(rows) >= _MAX_ROWS:
+        problems = [f"over {_MAX_ROWS} type notes, so the rest wasn't checked"]
+    return problems
+
+
 def snapshot(src, dest):
     """Copies src to dest with SQLite's online backup API, which takes a
     consistent snapshot while the app keeps writing. Returns the copy's
-    quick_check result: "ok" when it's sound."""
+    quick_check problems: an empty list when it's sound."""
     source = open_ro(src)
     try:
         target = sqlite3.connect(dest)
         try:
             source.backup(target)
-            return target.execute("PRAGMA quick_check").fetchone()[0]
+            return quick_check(target)
         finally:
             target.close()
     finally:
