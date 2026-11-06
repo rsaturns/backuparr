@@ -5,6 +5,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Community Apps on Unraid shows what changed in the last three releases, with a link to the full changelog.
+
 ## [2.5.4] - 2026-11-05
 
 ### Fixed
