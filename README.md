@@ -20,8 +20,7 @@ notes](https://rsaturns.github.io/backuparr/apps/).
 
 **[Documentation](https://rsaturns.github.io/backuparr/)** · [Changelog](CHANGELOG.md)
 
-If you like Backuparr, give it a star - it helps the project grow.
-[![Star Backuparr on GitHub](https://img.shields.io/github/stars/rsaturns/backuparr?style=social)](https://github.com/rsaturns/backuparr)
+If you like Backuparr, give it a ⭐ star - it helps the project grow.
 
 ## Screenshots
 
@@ -95,7 +94,7 @@ docker run -d --name backuparr --restart unless-stopped \
 ```
 
 Published for `linux/amd64` and `linux/arm64`. `latest` is the newest tagged
-release; pin a version (e.g. `rsaturns/backuparr:2.5.4`) to control
+release; pin a version (e.g. `rsaturns/backuparr:2.5.5`) to control
 upgrades. Tags are on [Docker Hub](https://hub.docker.com/r/rsaturns/backuparr),
 and the same images are on GitHub Container Registry as
 [`ghcr.io/rsaturns/backuparr`](https://github.com/rsaturns/backuparr/pkgs/container/backuparr).

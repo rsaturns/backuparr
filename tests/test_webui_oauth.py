@@ -312,3 +312,13 @@ def test_disconnecting_a_pasted_token_destination_forgets_it(authed_client, isol
 def test_only_connected_destinations_can_be_disconnected(authed_client):
     assert authed_client.post("/api/destinations/local/disconnect", json={}).status_code == 404
     assert authed_client.post("/api/destinations/nope/disconnect", json={}).status_code == 404
+
+
+@pytest.mark.parametrize("dest_id", ["onedrive", "dropbox", "gdrive"])
+def test_disconnecting_keeps_the_destinations_own_retention(authed_client, isolated_webui, monkeypatch, dest_id):
+    monkeypatch.setattr(isolated_webui.destinations.destination_util, "sync", lambda cfg: None)
+    cfg = isolated_webui.settings.load_config()
+    cfg["destinations"][dest_id].update(enabled=True, retention_days=28)
+    isolated_webui.settings.save_config(cfg)
+    assert authed_client.post(f"/api/destinations/{dest_id}/disconnect", json={}).get_json() == {"ok": True}
+    assert isolated_webui.settings.load_config()["destinations"][dest_id]["retention_days"] == 28

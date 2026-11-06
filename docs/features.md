@@ -35,7 +35,8 @@ nav_order: 2
   **Run backup now** for every app or just one.
 - Each backup is checked before it's uploaded. A damaged one isn't uploaded,
   and the app shows as failed with the reason.
-- Retention by age, always keeping each app's newest backup.
+- Retention by age, set once or per destination, always keeping each app's
+  newest backup.
 - A live log while a backup runs, and each app's log from every run, kept with
   its backups.
 - **History** lists, downloads and deletes backups on each destination, with

@@ -130,7 +130,7 @@
               {% endif %}
               <div class="app-card-actions">
                 <button type="button" class="btn btn-ghost btn-sm test-btn">Test connection</button>
-                {% if m.id == 'prowlarr' %}<button type="button" class="btn btn-primary btn-sm" id="discover-btn" disabled>Discover services</button><span class="help-tip" tabindex="0" role="img" aria-label="Reads the apps and download clients connected to Prowlarr, through its API, and fills in their URLs and API keys (and NZBGet's username and password)." data-tip="Reads the apps and download clients connected to Prowlarr, through its API, and fills in their URLs and API keys (and NZBGet's username and password).">?</span>{% endif %}
+                {% if m.id == 'prowlarr' %}<button type="button" class="btn btn-primary btn-sm" id="discover-btn" disabled>Discover services</button><span class="help-tip" tabindex="0" role="img" aria-label="Reads the apps and download clients connected to Prowlarr, through its API, and fills in their URLs and API keys." data-tip="Reads the apps and download clients connected to Prowlarr, through its API, and fills in their URLs and API keys.">?</span>{% endif %}
                 <span class="test-result"></span>
               </div>
               {% if m.id == 'prowlarr' %}
@@ -179,6 +179,10 @@
               </div>
               <p class="hint dest-description">{{ m.description }}</p>
               <div class="app-card-body hidden">
+                <label class="field">
+                  <span class="field-label">Retention (days) <span class="muted">(optional - blank uses the default)</span></span>
+                  <input type="number" class="d-retention" min="1" step="1">
+                </label>
                 {% if m.id == 'local' %}
                 <label class="field">
                   <span class="field-label">Custom path <span class="muted">(optional - defaults to /config/backuparr/backups)</span></span>
@@ -242,7 +246,7 @@
         <div class="card">
           <h2>Schedule &amp; notifications</h2>
           <div class="field">
-            <span class="field-label">Retention (days)</span>
+            <span class="field-label">Default retention (days)</span>
             <input type="number" id="s-retention_days" min="1" step="1">
           </div>
           <label class="field checkbox-field">

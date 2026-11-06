@@ -84,6 +84,16 @@ def _validate_instances(data, cfg):
     return None
 
 
+def _retention_error(value, label):
+    """Why value isn't a usable number of days, or None."""
+    try:
+        if isinstance(value, bool) or int(value) < 1:
+            return f"{label} must be a positive number"
+    except (TypeError, ValueError):
+        return f"{label} must be a number"
+    return None
+
+
 def _validate_config(data, cfg):
     if not isinstance(data, dict):
         return "expected a JSON object"
@@ -109,11 +119,9 @@ def _validate_config(data, cfg):
     except RequestHeadersError as exc:
         return str(exc)
     if "retention_days" in data:
-        try:
-            if isinstance(data["retention_days"], bool) or int(data["retention_days"]) < 1:
-                return "retention_days must be a positive number"
-        except (TypeError, ValueError):
-            return "retention_days must be a number"
+        error = _retention_error(data["retention_days"], "retention_days")
+        if error:
+            return error
     if "self_backup" in data and not isinstance(data["self_backup"], bool):
         return "self_backup must be true or false"
     if "cron_schedule" in data:
@@ -136,6 +144,10 @@ def _validate_config(data, cfg):
     for name, dest_data in data.get("destinations", {}).items():
         if name not in DEST_NAMES:
             return f"unknown destination: {name}"
+        if dest_data.get("retention_days") is not None:
+            error = _retention_error(dest_data["retention_days"], f"{name}: retention_days")
+            if error:
+                return error
         if name == "gdrive" and dest_data.get("enabled") and not dest_data.get("client_id"):
             return "Google Drive: a Client ID is required to enable it (paste it in first, then Connect)"
         if name == "onedrive" and dest_data.get("enabled") and not cfg["destinations"]["onedrive"].get("token"):
@@ -171,6 +183,8 @@ def api_set_config():
         if name in data.get("destinations", {}):
             incoming = data["destinations"][name]
             cfg["destinations"][name].update({k: v for k, v in incoming.items() if k in DEST_EDITABLE_FIELDS[name]})
+            days = cfg["destinations"][name].get("retention_days")
+            cfg["destinations"][name]["retention_days"] = None if days is None else int(days)
 
     save_config(cfg)
     destination_util.sync(cfg)

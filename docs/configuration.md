@@ -26,6 +26,7 @@ nav_order: 12
 | `destinations.gdrive.refresh_token/folder_id/folder_name` | Set by Connect/Choose folder - don't edit |
 | `destinations.onedrive.enabled`, `destinations.dropbox.enabled` | Whether the destination is used |
 | `destinations.onedrive.token/drive_id/drive_type/item_id`, `destinations.dropbox.token` | Set by the Connect buttons - don't edit |
+| `destinations.<id>.retention_days` | This destination's own retention in days; `null` (the default) uses `retention_days` |
 | `retention_days` | Delete backups older than this, per app and destination, always keeping each app's newest (default 7) |
 | `cron_schedule` | 5-field cron schedule (default `0 3 * * *`) |
 | `notify_url` | Optional summary after every run - see [Notifications](notifications.md) |
