@@ -17,6 +17,7 @@ import tempfile
 import zipfile
 
 from apps.base import AppError
+from apps.sqlite_snapshot import quick_check
 from apps.tdarr import COLLECTIONS as TDARR_COLLECTIONS
 from config_store import instance_type
 
@@ -119,16 +120,17 @@ def _drop_virtual_tables(db_path):
 
 
 def _run_quick_check(db_path):
-    """quick_check's problems, or None. A collation the app registers
-    itself (Plex's icu_root) is stood in for: quick_check checks the
-    database's structure, not the order a collation would give."""
+    """quick_check's problems, or None (type notes aren't problems: see
+    apps.sqlite_snapshot). A collation the app registers itself (Plex's
+    icu_root) is stood in for: quick_check checks the database's structure,
+    not the order a collation would give."""
     collations, dropped = set(), False
     for _ in range(20):
         db = sqlite3.connect(f"file:{db_path}?mode=ro&immutable=1", uri=True)
         try:
             for collation in collations:
                 db.create_collation(collation, _binary)
-            rows = db.execute("PRAGMA quick_check").fetchall()
+            problems = quick_check(db)
         except sqlite3.OperationalError as exc:
             missing = _MISSING_COLLATION.search(str(exc))
             if missing and missing.group(1) not in collations:
@@ -144,7 +146,6 @@ def _run_quick_check(db_path):
             return str(exc)
         finally:
             db.close()
-        problems = [row[0] for row in rows if row[0] != "ok"]
         return "; ".join(problems[:3]) or None
     return "its schema couldn't be loaded"
 

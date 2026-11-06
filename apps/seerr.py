@@ -146,9 +146,10 @@ class SeerrApp:
         os.makedirs(os.path.join(dest_dir, "db"), exist_ok=True)
 
         database = os.path.join(dest_dir, *DATABASE.split("/"))
-        status = sqlite_snapshot.snapshot(self._path(*DATABASE.split("/")), database)
-        if status != "ok":
-            raise SeerrError(f"seerr: the copy of {DATABASE} failed SQLite's integrity check ({status})")
+        problems = sqlite_snapshot.snapshot(self._path(*DATABASE.split("/")), database)
+        if problems:
+            raise SeerrError(f"seerr: the copy of {DATABASE} failed SQLite's integrity check "
+                             f"({'; '.join(problems[:3])})")
         settings = os.path.join(dest_dir, SETTINGS)
         shutil.copyfile(self._path(SETTINGS), settings)
         self._settings(settings)

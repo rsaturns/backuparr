@@ -80,9 +80,10 @@ def _read_text(path):
 def snapshot_db(src, dest):
     """Copies a live SQLite database with the online backup API, which
     takes a consistent snapshot while Emby keeps writing to it."""
-    status = sqlite_snapshot.snapshot(src, dest)
-    if status != "ok":
-        raise EmbyError(f"emby: the copy of {os.path.basename(src)} failed SQLite's integrity check ({status})")
+    problems = sqlite_snapshot.snapshot(src, dest)
+    if problems:
+        raise EmbyError(f"emby: the copy of {os.path.basename(src)} failed SQLite's integrity check "
+                        f"({'; '.join(problems[:3])})")
 
 
 def is_emby_backup(path):
