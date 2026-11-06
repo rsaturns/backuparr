@@ -20,14 +20,18 @@
   <Screenshot>https://raw.githubusercontent.com/rsaturns/backuparr/main/docs/screenshots/settings.png</Screenshot>
   <Screenshot>https://raw.githubusercontent.com/rsaturns/backuparr/main/docs/screenshots/run.png</Screenshot>
   <Screenshot>https://raw.githubusercontent.com/rsaturns/backuparr/main/docs/screenshots/history.png</Screenshot>
-  <Changes>### 2.5.4 (2026-11-05)
+  <Changes>### 2.5.5 (2026-11-05)
+- Each destination can keep backups for its own number of days, for example 28 on Local storage and 7 on Google Drive (Retention on its card in Settings; blank uses the default). The Overview then shows each destination's retention (#133). Thanks to @Tharic99 for the request.
+- Community Apps on Unraid shows what changed in the last three releases, with a link to the full changelog.
+- History shows a run that left no backup as Backup failed; View log has the reason.
+- The top bar fits on phones instead of pushing the page sideways, and History lists each backup as a block on narrow screens.
+- A backup deleted from one destination, or removed there by its retention, no longer shows there as a failed run.
+
+### 2.5.4 (2026-11-05)
 - A sound SQLite database no longer fails the check before upload because a column holds a number where its type says text, or the other way round (SQLite reports these as "NUMERIC value in ..."). Long-running Sonarr installs have them in SceneMappings, so their backups weren't uploaded. Emby, Seerr and LazyLibrarian's own database checks skip them too.
 
 ### 2.5.3 (2026-11-05)
 - Radarr, Sonarr, Lidarr, Whisparr and Prowlarr can be backed up with Authentication Required set to Enabled: when Test connection finds the app asks for a login, the card shows Username and Password, and Backuparr signs in (Forms or Basic, detected by itself) only to download the backup. Prowlarr discovery uses Prowlarr's login too. A backup that starts needing a login says so in its error and notification. Thanks to u/Neither_Rutabaga_627 for the request: https://www.reddit.com/r/SideProject/comments/1xnc98k/comment/19s5pnjq9tgbo/
-
-### 2.5.2 (2026-11-04)
-- The encryption key prompt, after setup and after updating, centers its confirm button, with "It will never be shown again." on its own centered line.
 
 View all changes: https://github.com/rsaturns/backuparr/blob/main/CHANGELOG.md</Changes>
   <Date>2026-11-05</Date>
