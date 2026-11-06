@@ -5,6 +5,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A sound SQLite database no longer fails the check before upload because a column holds a number where its type says text, or the other way round (SQLite reports these as "NUMERIC value in ..."). Long-running Sonarr installs have them in SceneMappings, so their backups weren't uploaded. Emby, Seerr and LazyLibrarian's own database checks skip them too.
+
 ## [2.5.3] - 2026-11-05
 
 ### Added

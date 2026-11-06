@@ -197,13 +197,14 @@ class LazyLibrarianApp:
             try:
                 db = sqlite_snapshot.open_ro(os.path.join(work, DATABASE))
                 try:
-                    status = db.execute("PRAGMA quick_check").fetchone()[0]
+                    problems = sqlite_snapshot.quick_check(db)
                 finally:
                     db.close()
             except sqlite3.Error as exc:
                 raise LazyLibrarianError(f"lazylibrarian: the backup's database can't be read ({exc})") from exc
-            if status != "ok":
-                raise LazyLibrarianError(f"lazylibrarian: the backup's database failed SQLite's check ({status})")
+            if problems:
+                raise LazyLibrarianError(
+                    f"lazylibrarian: the backup's database failed SQLite's check ({'; '.join(problems[:3])})")
             self._check_stopped()
             for name, target in zip(names, targets):
                 mounted.copy_in_place(os.path.join(work, name), target)

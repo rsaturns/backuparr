@@ -141,6 +141,20 @@ def test_a_damaged_database_fails_the_quick_check(tmp_path):
         archive_check.check("tautulli", path)
 
 
+def test_a_database_with_type_notes_passes(tmp_path):
+    """A long-running Sonarr keeps whole numbers in SceneMappings' TEXT
+    columns; quick_check notes them, but the database is sound."""
+    def numbers_in_text_columns(db):
+        db.execute("CREATE TABLE SceneMappings (Id INTEGER PRIMARY KEY, SearchTerm, ParseTerm)")
+        db.execute("INSERT INTO SceneMappings (SearchTerm, ParseTerm) VALUES (1883, 1883)")
+        db.commit()
+        db.execute("PRAGMA writable_schema=ON")
+        db.execute("UPDATE sqlite_master SET sql = 'CREATE TABLE SceneMappings (Id INTEGER PRIMARY KEY, "
+                   "SearchTerm TEXT, ParseTerm TEXT)' WHERE name = 'SceneMappings'")
+    db = sqlite_bytes(tmp_path, numbers_in_text_columns)
+    archive_check.check("sonarr", make_zip(tmp_path / "s.zip", {"config.xml": "<Config/>", "sonarr.db": db}))
+
+
 def test_a_file_that_is_not_a_database_fails(tmp_path):
     path = make_zip(tmp_path / "t.zip", {"tautulli.db": b"not a database" * 100, "config.ini": "[General]"})
     with pytest.raises(archive_check.ArchiveCheckError, match="tautulli.db in it failed SQLite's quick check"):
