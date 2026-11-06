@@ -17,10 +17,16 @@ shows the run live. A backup and a restore never run at the same time.
 
 ## Retention
 
-**Retention (days)** deletes each app's backups older than that, separately on
-each destination. Each app's newest backup is always kept, so a run of failed
-backups never removes the last good one. Backuparr only deletes its own archives
-(`<app>/<app>_<date>_<time>.zip`), so a destination folder can hold other files.
+**Default retention (days)** deletes each app's backups older than that,
+separately on each destination. Each app's newest backup is always kept, so a
+run of failed backups never removes the last good one. Backuparr only deletes
+its own archives (`<app>/<app>_<date>_<time>.zip`), so a destination folder can
+hold other files.
+
+To keep backups longer or shorter on one destination, set **Retention (days)**
+on its card under Settings > Destinations - for example 28 days on Local
+storage and 7 on Google Drive. Left blank, a destination uses the default. Once
+a destination has its own, the Overview shows each destination's retention.
 
 ## The check before upload
 
@@ -36,11 +42,13 @@ reason.
 ## Run logs
 
 Each app's log from each run is kept for as long as retention keeps that
-run's backups, and its latest run is always kept.
+run's backups (the longest retention, when destinations differ), and its
+latest run is always kept.
 
 - **View log** on an app's Overview tile shows its latest run.
 - On the History tab, each backup has its own log. A run that left no backup
-  on that destination is listed greyed out, with the reason.
+  on that destination is listed greyed out as **Backup failed**; its log
+  says why.
 
 ![An app's run log: when it ran, the app version, the file it made and where it was uploaded, then the log lines]({{ '/screenshots/run-log.png' | relative_url }})
 
@@ -51,7 +59,7 @@ the app version each one came from. You can download or delete any of them, or
 open its log. Backuparr's own backups are listed under "Backuparr's own
 configuration".
 
-![History tab: Radarr's backups with their version, size and date, View log, download and delete buttons, and a failed run greyed out with its reason]({{ '/screenshots/history.png' | relative_url }})
+![History tab: Radarr's backups with their version, size and date, View log, download and delete buttons, and a failed run greyed out as Backup failed]({{ '/screenshots/history.png' | relative_url }})
 
 ## The backup record
 

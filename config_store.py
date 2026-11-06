@@ -202,8 +202,9 @@ DEST_NAMES = ["local", "gdrive", "onedrive", "dropbox"]
 # Default local-destination backup path - same volume as config.json.
 DEFAULT_LOCAL_DIR = "/config/backuparr/backups"
 
+# retention_days on a destination overrides the global one; None uses it (#133).
 DEFAULT_DEST = {
-    "local": {"enabled": True, "path": ""},
+    "local": {"enabled": True, "path": "", "retention_days": None},
     "gdrive": {
         "enabled": False,
         "client_id": "",
@@ -212,24 +213,26 @@ DEFAULT_DEST = {
         "refresh_token": "",
         "folder_id": "",
         "folder_name": "",
+        "retention_days": None,
     },
-    "dropbox": {"enabled": False, "token": ""},
+    "dropbox": {"enabled": False, "token": "", "retention_days": None},
     "onedrive": {
         "enabled": False,
         "token": "",
         "drive_id": "",
         "drive_type": "",
         "item_id": "",
+        "retention_days": None,
     },
 }
 
 # Fields POST /api/config can write per destination - excludes OAuth
 # state (tokens, folder IDs), which only the dedicated connect routes set.
 DEST_EDITABLE_FIELDS = {
-    "local": {"enabled", "path"},
-    "gdrive": {"enabled", "client_id", "client_secret", "developer_key"},
-    "dropbox": {"enabled"},
-    "onedrive": {"enabled"},
+    "local": {"enabled", "path", "retention_days"},
+    "gdrive": {"enabled", "client_id", "client_secret", "developer_key", "retention_days"},
+    "dropbox": {"enabled", "retention_days"},
+    "onedrive": {"enabled", "retention_days"},
 }
 
 # Drives the Settings > Destinations card generically.
@@ -621,4 +624,14 @@ def app_meta(name):
 
 def enabled_destinations(cfg):
     return [name for name in DEST_NAMES if cfg["destinations"][name].get("enabled")]
+
+
+def retention_days(cfg, dest_id):
+    """How many days a destination keeps backups: its own retention_days,
+    or the global one when it has none (#133) - or a hand-edited one that
+    isn't a positive whole number."""
+    own = cfg["destinations"].get(dest_id, {}).get("retention_days")
+    if isinstance(own, int) and not isinstance(own, bool) and own >= 1:
+        return own
+    return int(cfg.get("retention_days", DEFAULTS["retention_days"]))
 

@@ -56,7 +56,9 @@ def _when(timestamp):
 def _add_runs(history, dest_id):
     """Links each backup to the run log that made it, and lists the runs
     that left no file on this destination - the backup failed, or its
-    upload here did - with the reason."""
+    upload here did - with the reason. A run whose upload here worked but
+    whose file is gone (this destination's retention, or a delete) isn't
+    a failure, so it isn't listed."""
     for app_name, app_runs in runlog.all_runs().items():
         if not destination_util.is_backup_folder(app_name):  # an app, an instance or Backuparr's own
             continue
@@ -69,6 +71,8 @@ def _add_runs(history, dest_id):
             if dest_id not in run.get("destinations", {}):
                 continue  # this destination wasn't on in that run
             result = run["destinations"][dest_id] or {}
+            if result.get("ok"):
+                continue
             entries.append({
                 "name": run.get("file") or "", "size": None, "mod_time": run.get("finished") or run.get("started"),
                 "app_version": run.get("app_version"), "recorded": True, "run_id": run["id"], "missing": True,

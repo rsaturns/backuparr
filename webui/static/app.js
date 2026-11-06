@@ -114,6 +114,54 @@ function enabledDestinationIds(cfg) {
   return ids.filter((id) => (cfg.destinations || {})[id] && cfg.destinations[id].enabled);
 }
 
+// How many days a destination keeps backups - its own, or the global
+// default. Matches config_store.retention_days().
+function destRetentionDays(cfg, destId) {
+  const own = ((cfg.destinations || {})[destId] || {}).retention_days;
+  return Number.isInteger(own) && own >= 1 ? own : (cfg.retention_days || 7);
+}
+
+function daysText(days) {
+  return `${days} ${days === 1 ? "day" : "days"}`;
+}
+
+// The Retention tile: the default, as before, while every destination uses
+// it; once one has its own, each destination's icon and days, one per line (#133).
+function retentionStat(cfg, destIds) {
+  const div = document.createElement("div");
+  div.className = "overview-stat";
+  const days = destIds.map((id) => destRetentionDays(cfg, id));
+  const value = document.createElement("div");
+  if (!destIds.some((id) => Number.isInteger(((cfg.destinations || {})[id] || {}).retention_days))) {
+    value.className = "stat-value";
+    value.textContent = daysText(days.length ? days[0] : (cfg.retention_days || 7));
+  } else {
+    value.className = "overview-retention-list";
+    destIds.forEach((id, i) => {
+      const row = document.createElement("div");
+      row.className = "overview-retention-row";
+      const m = DESTINATION_META.find((d) => d.id === id);
+      if (m && m.icon) {
+        const img = document.createElement("img");
+        img.className = "app-icon";
+        img.src = `/static/icons/${m.icon}`;
+        img.alt = SHORT_DEST_LABEL[id] || destLabel(id);
+        img.title = img.alt;
+        row.appendChild(img);
+      }
+      const span = document.createElement("span");
+      span.textContent = daysText(days[i]);
+      row.appendChild(span);
+      value.appendChild(row);
+    });
+  }
+  const label = document.createElement("div");
+  label.className = "stat-label";
+  label.textContent = "Retention";
+  div.append(value, label);
+  return div;
+}
+
 function destinationsStat(destIds) {
   const div = document.createElement("div");
   div.className = "overview-stat overview-stat-dest";
@@ -243,9 +291,8 @@ async function loadOverview() {
     const textStats = [
       { label: "Enabled services", value: `${enabledIds.length} / ${allIds.length}` },
       { label: "Cron schedule", value: cfg.cron_schedule || "-" },
-      { label: "Retention", value: `${cfg.retention_days || 7} days` },
     ];
-    const [enabledStat, cronStat, retentionStat] = textStats.map((s) => {
+    const [enabledStat, cronStat] = textStats.map((s) => {
       const div = document.createElement("div");
       div.className = "overview-stat";
       const value = document.createElement("div");
@@ -257,7 +304,7 @@ async function loadOverview() {
       div.append(value, label);
       return div;
     });
-    summaryEl.append(enabledStat, destinationsStat(destIds), cronStat, retentionStat);
+    summaryEl.append(enabledStat, destinationsStat(destIds), cronStat, retentionStat(cfg, destIds));
 
     // Backuparr's own backup leads, always there (#110); then each enabled app.
     appsEl.appendChild(overviewCard("backuparr", {
@@ -1148,6 +1195,8 @@ function fillDestCard(destId, cfg) {
   card.querySelectorAll(".d-field").forEach((input) => {
     input.value = cfg[input.dataset.field] || "";
   });
+  const retention = card.querySelector(".d-retention");
+  if (retention) retention.value = cfg.retention_days ?? "";
   const body = card.querySelector(".app-card-body");
   if (body) body.classList.toggle("hidden", !cfg.enabled);
   if (destId === "gdrive") updateGdriveUI(cfg);
@@ -1160,7 +1209,16 @@ function readDestCard(destId) {
   card.querySelectorAll(".d-field").forEach((input) => {
     out[input.dataset.field] = input.value.trim();
   });
+  // Blank (or not a number) leaves it to the default retention.
+  const retention = card.querySelector(".d-retention");
+  if (retention) out.retention_days = retention.value.trim() === "" || Number.isNaN(Number(retention.value)) ? null : Number(retention.value);
   return out;
+}
+
+// Each destination's blank retention field shows the default it falls back to.
+function updateRetentionPlaceholders() {
+  const days = document.getElementById("s-retention_days").value || 7;
+  document.querySelectorAll(".d-retention").forEach((input) => { input.placeholder = `Default (${days})`; });
 }
 
 function updateGdriveUI(gdriveCfg) {
@@ -1337,6 +1395,7 @@ function applyBasicAuthHeader(event) {
 async function loadConfig() {
   const cfg = await apiFetch("/api/config");
   document.getElementById("s-retention_days").value = cfg.retention_days || 7;
+  updateRetentionPlaceholders();
   document.getElementById("s-self_backup").checked = cfg.self_backup !== false;
   document.getElementById("s-cron_schedule").value = cfg.cron_schedule || "";
   initSchedulePicker(cfg.cron_schedule);
@@ -1939,6 +1998,7 @@ function initSettingsEvents() {
   document.querySelectorAll(".test-dest-btn").forEach((btn) => {
     btn.addEventListener("click", () => testDestination(btn.closest(".dest-card").dataset.dest));
   });
+  document.getElementById("s-retention_days").addEventListener("input", updateRetentionPlaceholders);
   document.querySelectorAll(".d-enabled").forEach((checkbox) => {
     checkbox.addEventListener("change", () => {
       const card = checkbox.closest(".dest-card");
@@ -2140,21 +2200,18 @@ function appLabel(appId) {
   return isExtraInstance(appId) ? `${m.label} (${INSTANCE_NAMES.get(appId) || appId.slice(m.id.length + 1)})` : m.label;
 }
 
-// A run that left no file on this destination: greyed, with the reason in
-// place of a size, and only its log.
+// A run that left no file on this destination: greyed, "Backup failed" in
+// place of a version and size, and its log, which says why.
 function missingHistoryRow(appId, e) {
   const tr = document.createElement("tr");
   tr.className = "history-missing";
-  // The reason spans the Version and Size columns, on one line; the full
-  // text is its tooltip and in the log.
-  const cells = [e.name || "No backup file", e.reason, fmtTime(e.mod_time)].map((text) => {
+  const cells = [e.name || "No backup file", "Backup failed", fmtTime(e.mod_time)].map((text) => {
     const td = document.createElement("td");
     td.textContent = text;
     return td;
   });
   cells[1].className = "history-reason";
   cells[1].colSpan = 2;
-  cells[1].title = e.reason;
   const actionsTd = document.createElement("td");
   actionsTd.className = "actions-cell";
   actionsTd.appendChild(viewLogButton(appId, e.run_id));

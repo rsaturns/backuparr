@@ -20,8 +20,7 @@ notes](https://rsaturns.github.io/backuparr/apps/).
 
 **[Documentation](https://rsaturns.github.io/backuparr/)** · [Changelog](CHANGELOG.md)
 
-If you like Backuparr, give it a star - it helps the project grow.
-[![Star Backuparr on GitHub](https://img.shields.io/github/stars/rsaturns/backuparr?style=social)](https://github.com/rsaturns/backuparr)
+If you like Backuparr, give it a ⭐ star - it helps the project grow.
 
 ## Screenshots
 

@@ -72,6 +72,10 @@ def test_google_drive_credentials_use_appropriate_input_types(authed_client, fie
     ({"apps": {"seerr": {"enabled": True, "url": "http://s", "api_key": "k"}}}, "Data folder is required"),
     ({"apps": {"lazylibrarian": {"enabled": True, "url": "http://l", "api_key": "k"}}}, "Data folder is required"),
     ({"destinations": {"nope": {}}}, "unknown destination"),
+    ({"destinations": {"local": {"retention_days": 0}}}, "local: retention_days must be a positive number"),
+    ({"destinations": {"gdrive": {"retention_days": -1}}}, "gdrive: retention_days must be a positive number"),
+    ({"destinations": {"dropbox": {"retention_days": "abc"}}}, "dropbox: retention_days must be a number"),
+    ({"destinations": {"onedrive": {"retention_days": True}}}, "onedrive: retention_days must be a positive number"),
     ({"destinations": {"dropbox": {"enabled": True}}}, "connect it first"),
     ({"destinations": {"gdrive": {"enabled": True}}}, "Client ID is required"),
     ({"destinations": {"onedrive": {"enabled": True}}}, "connect it first"),
@@ -450,3 +454,32 @@ def ui_meta(client):
 
 def test_the_page_carries_the_ui_metadata_as_data(authed_client):
     assert ui_meta(authed_client) == {"apps": APP_META, "destinations": DESTINATION_META}
+
+
+# --- each destination's own retention (#133) -------------------------------
+
+def test_a_destination_starts_with_no_retention_of_its_own(authed_client):
+    cfg = authed_client.get("/api/config").get_json()
+    assert all(cfg["destinations"][d]["retention_days"] is None for d in DEST_NAMES)
+
+
+def test_a_destinations_retention_saves_as_a_number_and_clears_with_null(authed_client, isolated_webui):
+    assert save(authed_client, {"destinations": {"local": {"retention_days": "28"}, "gdrive": {"retention_days": 7}}}).status_code == 200
+    days = {d: stored(isolated_webui)["destinations"][d]["retention_days"] for d in ("local", "gdrive", "dropbox")}
+    assert days == {"local": 28, "gdrive": 7, "dropbox": None}
+    assert save(authed_client, {"destinations": {"local": {"retention_days": None}}}).status_code == 200
+    assert stored(isolated_webui)["destinations"]["local"]["retention_days"] is None
+    assert stored(isolated_webui)["destinations"]["gdrive"]["retention_days"] == 7
+
+
+def test_saving_a_destination_without_retention_keeps_its_days(authed_client, isolated_webui):
+    save(authed_client, {"destinations": {"local": {"retention_days": 28}}})
+    save(authed_client, {"destinations": {"local": {"enabled": True, "path": ""}}})
+    assert stored(isolated_webui)["destinations"]["local"]["retention_days"] == 28
+
+
+def test_every_destination_card_has_a_retention_field(authed_client):
+    html = authed_client.get("/").get_data(as_text=True)
+    for dest_id in DEST_NAMES:
+        card = html.split(f'data-dest="{dest_id}"', 1)[1].split('class="app-card dest-card"', 1)[0]
+        assert 'class="d-retention"' in card

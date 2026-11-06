@@ -109,3 +109,72 @@ def test_a_destination_that_cant_be_listed_is_left_alone(monkeypatch, caplog):
     monkeypatch.setattr(backup.rclone_util, "lsjson", expired)
     backup.apply_retention("dest:", 7, now=NOW)
     assert "retention: couldn't list dest:, nothing removed: token expired" in caplog.text
+
+
+# --- each destination's own retention (#133) -------------------------------
+
+def _cfg(**dest_days):
+    return {"retention_days": 7, "destinations": {d: {"retention_days": days} for d, days in dest_days.items()}}
+
+
+@pytest.mark.parametrize("own, expected", [(28, 28), (1, 1), (None, 7), (0, 7), (-2, 7), ("28", 7), (True, 7), (2.5, 7)])
+def test_a_destination_keeps_its_own_days_or_the_global_ones(own, expected):
+    assert backup.retention_days(_cfg(local=own), "local") == expected
+
+
+def test_a_destination_missing_from_the_config_uses_the_global_days():
+    assert backup.retention_days({"retention_days": 14, "destinations": {}}, "dropbox") == 14
+
+
+class _FakeApp:
+    def backup(self, dest_dir):
+        path = __import__("os").path.join(dest_dir, "out.zip")
+        with open(path, "wb") as f:
+            f.write(b"archive")
+        return path
+
+    def app_version(self):
+        return "5.1.3"
+
+
+@pytest.fixture
+def run(monkeypatch):
+    state = type("Run", (), {})()
+    state.retention, state.pruned = [], []
+    monkeypatch.setattr(backup, "enabled_apps", lambda cfg: ["sabnzbd"])
+    monkeypatch.setattr(backup, "enabled_destinations", lambda cfg: ["local", "gdrive", "dropbox"])
+    monkeypatch.setattr(destination_util, "sync", lambda cfg: None)
+    monkeypatch.setattr(destination_util, "remote_root", lambda dest_id, cfg: f"{dest_id}:")
+    monkeypatch.setattr(backup, "build_app", lambda name, app_cfg: _FakeApp())
+    monkeypatch.setattr(backup.rclone_util, "copyto", lambda src, dst: None)
+    monkeypatch.setattr(backup, "apply_retention",
+                        lambda root, days, only=None, dest_id=None: state.retention.append((dest_id, days, only)))
+    monkeypatch.setattr(backup.runlog, "prune", lambda days: state.pruned.append(days))
+    state.cfg = {"retention_days": 7, "apps": {"sabnzbd": {"url": "http://sabnzbd:8080", "api_key": "k"}},
+                 "destinations": {"local": {"retention_days": 28}, "gdrive": {"retention_days": None}, "dropbox": {"retention_days": 3}}}
+    return state
+
+
+def test_each_destination_is_pruned_with_its_own_days(run, caplog):
+    caplog.set_level("INFO", logger="backuparr")
+    backup.run_backup(run.cfg)
+    assert run.retention == [("local", 28, None), ("gdrive", 7, None), ("dropbox", 3, None)]
+    assert "Applying retention: local 28d, gdrive 7d, dropbox 3d" in caplog.text
+
+
+def test_run_logs_are_kept_as_long_as_the_longest_retention(run):
+    backup.run_backup(run.cfg)
+    assert run.pruned == [28]
+
+
+def test_with_no_destination_days_everything_uses_the_global_retention(run):
+    for dest in run.cfg["destinations"].values():
+        dest["retention_days"] = None
+    backup.run_backup(run.cfg)
+    assert run.retention == [("local", 7, None), ("gdrive", 7, None), ("dropbox", 7, None)]
+    assert run.pruned == [7]
+
+
+def test_a_single_app_run_uses_each_destinations_days_for_that_app_alone(run):
+    backup.run_backup(run.cfg, only="sabnzbd")
+    assert run.retention == [("local", 28, "sabnzbd"), ("gdrive", 7, "sabnzbd"), ("dropbox", 3, "sabnzbd")]
