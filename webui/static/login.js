@@ -69,6 +69,9 @@ async function submitReset() {
   btn.disabled = true;
   resultEl.textContent = "Resetting...";
   resultEl.className = "save-result";
+  // Reset clears Local storage, which may be a sleeping disk: the server
+  // waits up to 60 s for it to wake.
+  const waiting = setTimeout(() => { resultEl.textContent = "Waiting for storage to be ready..."; }, 2000);
   try {
     const res = await fetch("/api/reset", {
       method: "POST",
@@ -82,6 +85,8 @@ async function submitReset() {
     resultEl.textContent = e.message;
     resultEl.className = "save-result fail";
     btn.disabled = false;
+  } finally {
+    clearTimeout(waiting);
   }
 }
 
