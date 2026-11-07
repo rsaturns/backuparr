@@ -125,3 +125,21 @@ def test_restore_step_names_the_instance():
 def test_an_app_without_automated_restore_is_refused():
     with pytest.raises(ValueError, match="no restore action"):
         restore_actions.restore_app("profilarr", {"url": "http://p", "api_key": "k"}, "/tmp", "/tmp/b.tar.gz")
+
+
+# --- listing an app's backups ------------------------------------------
+
+def test_only_backuparrs_archives_are_listed_and_picked_as_latest(monkeypatch):
+    # rclone lsf lists folders with a trailing "/", and anything else kept there.
+    monkeypatch.setattr(restore_actions.rclone_util, "lsf", lambda remote_dir: [
+        "radarr_20261101_030000.zip", "radarr_20261107_030000.zip", "zz-notes.txt", "radarr_old/",
+        "sonarr_20261109_030000.zip",
+    ])
+    assert restore_actions.list_backups("dest:", "radarr") == ["radarr_20261101_030000.zip", "radarr_20261107_030000.zip"]
+    assert restore_actions.latest_backup("dest:", "radarr") == "radarr_20261107_030000.zip"
+
+
+def test_a_folder_with_no_archives_has_no_latest(monkeypatch):
+    monkeypatch.setattr(restore_actions.rclone_util, "lsf", lambda remote_dir: ["notes.txt"])
+    with pytest.raises(FileNotFoundError, match="no backups of radarr on this destination"):
+        restore_actions.latest_backup("dest:", "radarr")

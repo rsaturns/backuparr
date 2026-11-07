@@ -233,3 +233,8 @@ def test_test_connection_waits_for_a_sleeping_disk(authed_client, tmp_path, cloc
     result = authed_client.post("/api/test-destination/local", json={"path": str(tmp_path)}).get_json()
     assert result == {"ok": True, "message": f"{tmp_path} is writable"}
     assert disk.touches == 3
+
+
+def test_a_destination_error_reports_like_an_rclone_error():
+    assert destination_util.DestinationError("the storage at /x didn't respond within 60s").detail == \
+        "the storage at /x didn't respond within 60s"

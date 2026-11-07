@@ -7,7 +7,8 @@ import re
 import sqlite3
 from urllib.parse import quote
 
-logger = logging.getLogger(__name__)
+# Under "backuparr", like every driver, so its lines reach backup.log and the run log.
+logger = logging.getLogger(f"backuparr.{__name__}")
 
 # For an ordinary (non-STRICT) table, quick_check also reports a number kept
 # in a TEXT column ("NUMERIC value in t.c") or number-like text in a numeric

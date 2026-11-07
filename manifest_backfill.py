@@ -206,7 +206,7 @@ def backfill(cfg=None, should_stop=None, should_pause=None):
                 root = destination_util.remote_root(dest_id, cfg["destinations"][dest_id]).rstrip("/")
                 added = backfill_destination(dest_id, root, expected_generation, should_stop, should_pause)
             except (destination_util.DestinationError, rclone_util.RcloneError) as exc:
-                log.warning("manifest: couldn't check the backups on %s: %s", dest_id, getattr(exc, "detail", exc))
+                log.warning("manifest: couldn't check the backups on %s: %s", dest_id, exc.detail)
                 continue
             if added is None:
                 return

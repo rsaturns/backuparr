@@ -20,7 +20,12 @@ log = logging.getLogger("backuparr")
 
 
 class DestinationError(RuntimeError):
-    pass
+    """Its message is written for the user. .detail is that message, as an
+    rclone_util.RcloneError's is its cause, so either reports the same way."""
+
+    @property
+    def detail(self):
+        return str(self)
 
 
 # Backuparr's own backups (#110) live beside the apps' folders.
@@ -54,34 +59,7 @@ def list_backups(root):
     return rclone_util.lsjson(root, recursive=True, include=[backup_folder_pattern()])
 
 
-def remove_local_backups(root, apps):
-    """Deletes Backuparr's own archives under a local destination, each app
-    folder left empty, and its wake file - never other files, nor the folder
-    itself."""
-    marker = os.path.join(root, WAKE_FILE)
-    if os.path.isfile(marker) and not os.path.islink(marker):
-        os.remove(marker)
-    for app in apps:
-        folder = os.path.join(root, app)
-        if not os.path.isdir(folder):
-            continue
-        for name in os.listdir(folder):
-            path = os.path.join(folder, name)
-            if is_backup_name(app, name) and os.path.isfile(path) and not os.path.islink(path):
-                os.remove(path)
-        try:
-            os.rmdir(folder)
-        except OSError:
-            pass  # Not empty: something else lives there.
-
-
-def local_root(dest_cfg):
-    path = (dest_cfg.get("path") or "").strip() or DEFAULT_LOCAL_DIR
-    wait_until_ready(path)
-    os.makedirs(path, exist_ok=True)
-    return path
-
-
+# ------------------------------------------------------- Local storage ----
 # A USB disk that spins down to save power can answer its first access
 # with one of these while it spins back up; the same access works seconds
 # later.
@@ -90,7 +68,6 @@ STORAGE_WAIT_SECONDS = 60
 # Retries come at 1, 2 and 4 s apart, then every 5 s, so a disk that has
 # woken is noticed within seconds.
 _MAX_RETRY_GAP = 5
-
 
 WAKE_FILE = ".backuparr-wake"
 _WAKE_TEXT = b"Backuparr reads this file to wake a disk that has gone to sleep before it writes a backup.\n"
@@ -149,6 +126,34 @@ def wait_for_storage(dest_id, root):
     """Before using a destination: Local storage may be a sleeping disk."""
     if dest_id == "local":
         wait_until_ready(root)
+
+
+def remove_local_backups(root, apps):
+    """Deletes Backuparr's own archives under a local destination, each app
+    folder left empty, and its wake file - never other files, nor the folder
+    itself."""
+    marker = os.path.join(root, WAKE_FILE)
+    if os.path.isfile(marker) and not os.path.islink(marker):
+        os.remove(marker)
+    for app in apps:
+        folder = os.path.join(root, app)
+        if not os.path.isdir(folder):
+            continue
+        for name in os.listdir(folder):
+            path = os.path.join(folder, name)
+            if is_backup_name(app, name) and os.path.isfile(path) and not os.path.islink(path):
+                os.remove(path)
+        try:
+            os.rmdir(folder)
+        except OSError:
+            pass  # Not empty: something else lives there.
+
+
+def local_root(dest_cfg):
+    path = (dest_cfg.get("path") or "").strip() or DEFAULT_LOCAL_DIR
+    wait_until_ready(path)
+    os.makedirs(path, exist_ok=True)
+    return path
 
 
 # The connected destinations, each an rclone remote kept in rclone.conf.

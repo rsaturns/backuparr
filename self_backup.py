@@ -156,7 +156,7 @@ def _run(dest_roots, timestamp, record):
                 uploaded.append(dest_id)
                 record["destinations"][dest_id] = {"ok": True, "error": None}
             except (rclone_util.RcloneError, destination_util.DestinationError) as exc:
-                detail = getattr(exc, "detail", None) or str(exc)
+                detail = exc.detail
                 log.error("backuparr: upload of its own backup to %s failed: %s", dest_id, detail)
                 failures.append(f"{dest_id}: {detail}")
                 record["destinations"][dest_id] = {"ok": False, "error": detail}
