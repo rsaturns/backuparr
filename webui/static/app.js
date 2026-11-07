@@ -1837,17 +1837,6 @@ function openSetupGuide(destId) {
       pre.appendChild(codeEl);
       li.appendChild(pre);
     }
-    const checklist = typeof step === "object" ? step.checklist : null;
-    if (checklist && checklist.length) {
-      const ul = document.createElement("ul");
-      ul.className = "guide-step-checklist";
-      checklist.forEach((item) => {
-        const itemLi = document.createElement("li");
-        itemLi.textContent = item;
-        ul.appendChild(itemLi);
-      });
-      li.appendChild(ul);
-    }
     if (typeof step === "object" && step.redirect_uri) {
       document.getElementById("setup-guide-redirect-input").value = gdriveRedirectUri();
       li.appendChild(redirectBlock);
