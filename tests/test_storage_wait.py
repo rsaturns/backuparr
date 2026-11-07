@@ -33,15 +33,15 @@ def clock(monkeypatch):
 def disk(monkeypatch):
     """A disk whose first `asleep` writes fail with `error`."""
     state = type("Disk", (), {"asleep": 0, "error": errno.EIO, "touches": 0})()
-    real_touch = destination_util._touch
+    real_wake = destination_util._wake
 
-    def touch(path):
+    def wake(path):
         state.touches += 1
         if state.touches <= state.asleep:
-            raise OSError(state.error, os.strerror(state.error), os.path.join(path, ".backuparr-ready-x"))
-        real_touch(path)
+            raise OSError(state.error, os.strerror(state.error), os.path.join(path, destination_util.WAKE_FILE))
+        real_wake(path)
 
-    monkeypatch.setattr(destination_util, "_touch", touch)
+    monkeypatch.setattr(destination_util, "_wake", wake)
     return state
 
 
@@ -51,10 +51,31 @@ def logs(caplog):
     return lambda: [r.getMessage() for r in caplog.records]
 
 
-def test_an_awake_disk_is_written_at_once_and_nothing_is_logged(tmp_path, clock, logs):
+def test_an_awake_disk_is_used_at_once_and_nothing_is_logged(tmp_path, clock, logs):
     destination_util.wait_until_ready(str(tmp_path))
     assert clock.sleeps == [] and logs() == []
-    assert os.listdir(tmp_path) == []  # the probe file is gone
+    assert os.listdir(tmp_path) == [".backuparr-wake"]
+
+
+def test_the_wake_file_is_written_once_then_only_read_from_the_disk(tmp_path, monkeypatch):
+    destination_util.wait_until_ready(str(tmp_path / "backups"))
+    marker = tmp_path / "backups" / ".backuparr-wake"
+    assert marker.read_bytes().startswith(b"Backuparr reads this file")
+    assert oct(marker.stat().st_mode & 0o777) == "0o600"
+
+    # A write that fails while a disk spins up can make ext4 go read-only,
+    # so once the file is there, waking the disk never writes.
+    monkeypatch.setattr(destination_util.atomic_file, "write_private", lambda *a: pytest.fail("wrote while waking"))
+    real_open = os.open
+    flags = []
+    monkeypatch.setattr(destination_util.os, "open", lambda p, f, *a: flags.append(f) or real_open(p, f, *a))
+    dropped = []
+    real_fadvise = os.posix_fadvise
+    monkeypatch.setattr(destination_util.os, "posix_fadvise",
+                        lambda fd, off, n, advice: dropped.append(advice) or real_fadvise(fd, off, n, advice))
+    destination_util.wait_until_ready(str(tmp_path / "backups"))
+    assert flags == [os.O_RDONLY]
+    assert dropped == [os.POSIX_FADV_DONTNEED]  # read from the disk, not the cache
 
 
 def test_a_sleeping_disk_is_waited_for_and_the_wait_logged(tmp_path, clock, disk, logs):
@@ -62,7 +83,6 @@ def test_a_sleeping_disk_is_waited_for_and_the_wait_logged(tmp_path, clock, disk
     destination_util.wait_until_ready(str(tmp_path))
     assert disk.touches == 4 and clock.sleeps == [1, 2, 4]
     assert logs() == ["waiting for storage to be ready...", "storage ready after 7s"]
-    assert os.listdir(tmp_path) == []
 
 
 def test_a_disk_that_never_answers_fails_after_60s_with_a_plain_message(tmp_path, clock, disk):
@@ -73,7 +93,7 @@ def test_a_disk_that_never_answers_fails_after_60s_with_a_plain_message(tmp_path
     message = str(raised.value)
     assert message == (f"the storage at {tmp_path} didn't respond within 60s ({os.strerror(errno.EIO)})"
                        " - check the disk and its connection")
-    assert "Errno" not in message and ".backuparr-ready" not in message
+    assert "Errno" not in message and ".backuparr-wake" not in message
 
 
 @pytest.mark.parametrize("error", [errno.EROFS, errno.ENOSPC, errno.EACCES])
