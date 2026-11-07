@@ -1659,10 +1659,30 @@ async function connectGdrive() {
   }
 }
 
-function loadGooglePickerApi() {
-  return new Promise((resolve, reject) => {
-    if (window.google && window.google.picker) return resolve();
-    if (!window.gapi) return reject(new Error("Google API script did not load"));
+// Google's script is loaded only to choose a Drive folder, not on every page.
+let GOOGLE_API_SCRIPT = null;
+
+function loadGoogleApiScript() {
+  if (!GOOGLE_API_SCRIPT) {
+    GOOGLE_API_SCRIPT = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://apis.google.com/js/api.js";
+      script.onload = resolve;
+      script.onerror = () => {
+        GOOGLE_API_SCRIPT = null; // try again next time
+        script.remove();
+        reject(new Error("Google API script did not load"));
+      };
+      document.head.appendChild(script);
+    });
+  }
+  return GOOGLE_API_SCRIPT;
+}
+
+async function loadGooglePickerApi() {
+  if (window.google && window.google.picker) return;
+  await loadGoogleApiScript();
+  await new Promise((resolve, reject) => {
     window.gapi.load("picker", { callback: resolve, onerror: () => reject(new Error("could not load Google Picker")) });
   });
 }
