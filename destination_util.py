@@ -72,6 +72,9 @@ def local_root(dest_cfg):
 # later.
 _NOT_READY = frozenset({errno.EIO, errno.ETIMEDOUT, errno.EBUSY, errno.EAGAIN})
 STORAGE_WAIT_SECONDS = 60
+# Retries come at 1, 2 and 4 s apart, then every 5 s, so a disk that has
+# woken is noticed within seconds.
+_MAX_RETRY_GAP = 5
 
 
 WAKE_FILE = ".backuparr-wake"
@@ -120,7 +123,7 @@ def wait_until_ready(path, timeout=STORAGE_WAIT_SECONDS):
                 log.info("waiting for storage to be ready...")
                 waited = True
             time.sleep(min(delay, remaining))
-            delay = min(delay * 2, 15)
+            delay = min(delay * 2, _MAX_RETRY_GAP)
             continue
         if waited:
             log.info("storage ready after %ds", round(time.monotonic() - start))

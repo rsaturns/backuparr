@@ -85,6 +85,13 @@ def test_a_sleeping_disk_is_waited_for_and_the_wait_logged(tmp_path, clock, disk
     assert logs() == ["waiting for storage to be ready...", "storage ready after 7s"]
 
 
+def test_retries_are_never_more_than_5s_apart(tmp_path, clock, disk, logs):
+    disk.asleep = 6
+    destination_util.wait_until_ready(str(tmp_path))
+    assert clock.sleeps == [1, 2, 4, 5, 5, 5]
+    assert logs()[-1] == "storage ready after 22s"
+
+
 def test_a_disk_that_never_answers_fails_after_60s_with_a_plain_message(tmp_path, clock, disk):
     disk.asleep = 1000
     with pytest.raises(destination_util.DestinationError) as raised:
