@@ -11,6 +11,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Retention, History and the startup check of existing backups work when Local storage is the root of a disk: they no longer fail on a folder there that Backuparr can't read, such as ext4's lost+found. They now list only Backuparr's own folders (#143).
 - While a sleeping Local disk wakes, the Overview, History and Restore tabs, Test and Reset say "Waiting for storage to be ready..." instead of looking stuck.
 - The Restore tab lists only Backuparr's own backups of the app: another file or a folder kept in that app's folder no longer shows up, or gets picked as the latest backup.
+- A destination's Test shows the reason it failed, not rclone's command line or a raw "[Errno 13]" error.
 
 ## [2.5.5] - 2026-11-05
 

@@ -69,7 +69,7 @@ def api_test_destination(dest_id):
         rclone_util.check_remote(destination_util.remote_root(dest_id, dest_cfg))
         return jsonify({"ok": True, "message": f"connected, backing up to {remote.backup_target(dest_cfg)}"})
     except (rclone_util.RcloneError, destination_util.DestinationError, OSError) as exc:
-        return jsonify({"ok": False, "message": str(exc)})
+        return jsonify({"ok": False, "message": humanize_error(exc)})
 
 
 # ------------------------------------------------------- gdrive oauth ----

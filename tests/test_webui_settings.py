@@ -315,6 +315,19 @@ def test_local_destination_test_reports_an_unusable_path(authed_client, tmp_path
     assert result["ok"] is False and result["message"]
 
 
+def test_local_destination_test_explains_a_folder_it_cant_write(authed_client, tmp_path, monkeypatch):
+    real_open = open
+
+    def denied(path, *args, **kwargs):
+        if str(path).endswith(".backuparr-write-test"):
+            raise PermissionError(13, "Permission denied", str(path))
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.open", denied)
+    message = authed_client.post("/api/test-destination/local", json={"path": str(tmp_path)}).get_json()["message"]
+    assert message.startswith("permission denied - Backuparr runs as PUID:PGID") and "Errno" not in message
+
+
 def test_cloud_destinations_must_be_connected_first(authed_client):
     assert "Connect Google Drive" in authed_client.post("/api/test-destination/gdrive", json={}).get_json()["message"]
     assert "rclone authorize onedrive" in authed_client.post("/api/test-destination/onedrive", json={}).get_json()["message"]
@@ -363,11 +376,13 @@ def test_cloud_destination_test_reports_a_rejected_remote(authed_client, isolate
     isolated_webui.settings.save_config(cfg)
 
     def reject(root):
-        raise isolated_webui.backups.rclone_util.RcloneError("invalid_grant: token expired")
+        raise isolated_webui.backups.rclone_util.RcloneError(
+            "rclone lsd --max-depth 1 backuparr-gdrive: failed: invalid_grant", "invalid_grant (reconnect it in Settings)")
 
     monkeypatch.setattr(isolated_webui.backups.rclone_util, "check_remote", reject)
     result = authed_client.post("/api/test-destination/gdrive", json={}).get_json()
-    assert result["ok"] is False and "invalid_grant" in result["message"]
+    # The cause, not rclone's command line.
+    assert result == {"ok": False, "message": "invalid_grant (reconnect it in Settings)"}
 
 
 # --- helpers ---------------------------------------------------------------
