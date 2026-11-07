@@ -5,6 +5,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Local storage on a USB disk that spins down to save power no longer fails with an I/O error: Backuparr waits up to 60 seconds for the disk to wake before writing to it (#140). Thanks to u/Neither_Rutabaga_627 on Reddit for the report: https://www.reddit.com/r/SideProject/comments/1xnc98k/comment/19s90yr7r7tnp/
+
 ## [2.5.5] - 2026-11-05
 
 ### Added
