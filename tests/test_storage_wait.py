@@ -71,7 +71,7 @@ def test_a_disk_that_never_answers_fails_after_60s_with_a_plain_message(tmp_path
         destination_util.wait_until_ready(str(tmp_path))
     assert clock.now == 60
     message = str(raised.value)
-    assert message == (f"the storage at {tmp_path} didn't respond within 60s (Input/output error)"
+    assert message == (f"the storage at {tmp_path} didn't respond within 60s ({os.strerror(errno.EIO)})"
                        " - check the disk and its connection")
     assert "Errno" not in message and ".backuparr-ready" not in message
 
