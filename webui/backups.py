@@ -19,7 +19,7 @@ import restore_actions as ra
 import restore_version as rv
 from apps.http_headers import app_connection_config
 from backup import humanize_error, log_failure
-from config_store import APP_NAMES, DEST_NAMES, app_meta, instance_ids, instance_type, key_required, load_config, restore_supported
+from config_store import DEST_NAMES, app_meta, instance_ids, instance_type, key_required, load_config, restore_supported
 from webui.runs import _start_tracked_run, RESTORE_RUN_STATE, RUN_LOCK, RUN_STATE
 from webui.settings import _missing_required_field, _restore_override_fields
 
@@ -86,8 +86,8 @@ def api_history(dest_id):
     root, error = _destination_root_or_error(cfg, dest_id)
     if error:
         return error
-    # One recursive listing of the whole destination instead of one rclone
-    # call per app - much faster against remote destinations (Drive/OneDrive).
+    # One recursive listing of Backuparr's folders instead of one rclone call
+    # per app - much faster against remote destinations (Drive/OneDrive).
     # Keyed by instance id; a removed instance's backups are listed while any remain.
     # The app version comes from the manifest; "recorded" is False for a
     # backup the startup backfill hasn't reached yet.
@@ -101,7 +101,7 @@ def api_history(dest_id):
         if entry.get("IsDir"):
             continue
         app_name, _, _ = entry["Path"].partition("/")
-        if app_name in history or (destination_util.is_backup_folder(app_name) and app_name not in APP_NAMES):
+        if destination_util.is_backup_folder(app_name):
             details = recorded.get(manifest.key(app_name, entry["Name"]))
             history.setdefault(app_name, []).append({
                 "name": entry["Name"], "size": entry["Size"], "mod_time": entry["ModTime"],
