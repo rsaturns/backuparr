@@ -93,7 +93,7 @@ def api_history(dest_id):
     # backup the startup backfill hasn't reached yet.
     history = {name: [] for name in instance_ids(cfg)}
     try:
-        entries = rclone_util.lsjson(root, recursive=True)
+        entries = destination_util.list_backups(root)
     except rclone_util.RcloneError as exc:
         return jsonify({"error": humanize_error(exc)}), 502
     recorded = manifest.backups()

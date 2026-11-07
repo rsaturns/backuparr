@@ -9,7 +9,7 @@ import dropbox_oauth
 import gdrive_oauth
 import onedrive_oauth
 import rclone_util
-from config_store import DEFAULT_LOCAL_DIR, instance_type
+from config_store import APP_NAMES, DEFAULT_LOCAL_DIR, MULTI_INSTANCE_APPS, instance_type
 
 
 class DestinationError(RuntimeError):
@@ -30,6 +30,21 @@ def is_backup_name(app, name):
     <app>/ folder. Those are the only files retention and reset may delete:
     a destination folder can hold other files too."""
     return re.fullmatch(rf"{re.escape(app)}_\d{{8}}_\d{{6}}\.[A-Za-z0-9.]+", name) is not None
+
+
+def backup_folder_pattern():
+    """An rclone --include pattern for every folder Backuparr writes at a
+    destination's root: each app, any instance of one (radarr-*) and its own."""
+    names = [*APP_NAMES, *(f"{app}-*" for app in MULTI_INSTANCE_APPS), SELF_BACKUP_FOLDER]
+    return f"/{{{','.join(names)}}}/**"
+
+
+def list_backups(root):
+    """Everything in Backuparr's folders at a destination's root, as rclone
+    lsjson entries ("Path": "<folder>/<name>"). Nothing else there is
+    opened: the root of a disk can hold folders Backuparr can't read, such
+    as ext4's lost+found, and listing one fails the whole listing."""
+    return rclone_util.lsjson(root, recursive=True, include=[backup_folder_pattern()])
 
 
 def remove_local_backups(root, apps):

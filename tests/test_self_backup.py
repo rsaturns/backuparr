@@ -192,7 +192,7 @@ def test_retention_keeps_backuparrs_newest_and_drops_old_ones(monkeypatch):
     from datetime import datetime
     files = ["backuparr/backuparr_20261001_030000.enc", "backuparr/backuparr_20261030_030000.enc", "backuparr/notes.txt"]
     deleted = []
-    monkeypatch.setattr(rclone_util, "lsjson", lambda root, recursive=False: [
+    monkeypatch.setattr(rclone_util, "lsjson", lambda root, recursive=False, include=(): [
         {"Path": p, "Name": p.rsplit("/", 1)[-1], "IsDir": False} for p in files])
     monkeypatch.setattr(rclone_util, "delete_file", deleted.append)
     backup.apply_retention("dest:", 7, now=datetime(2026, 10, 31, 3))
@@ -202,7 +202,7 @@ def test_retention_keeps_backuparrs_newest_and_drops_old_ones(monkeypatch):
 # --------------------------------------------------------------- web UI ----
 
 def test_history_lists_backuparrs_own_backups_for_download_and_delete_only(authed_client, monkeypatch, tmp_path):
-    monkeypatch.setattr(rclone_util, "lsjson", lambda root, recursive=False: [
+    monkeypatch.setattr(rclone_util, "lsjson", lambda root, recursive=False, include=(): [
         {"Path": "backuparr/backuparr_20261104_030000.enc", "Name": "backuparr_20261104_030000.enc", "IsDir": False,
          "Size": 10, "ModTime": "2026-11-04T03:00:00Z"}])
     deleted = []
