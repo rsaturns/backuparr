@@ -12,6 +12,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - While a sleeping Local disk wakes, the Overview, History and Restore tabs, Test and Reset say "Waiting for storage to be ready..." instead of looking stuck.
 - The Restore tab lists only Backuparr's own backups of the app: another file or a folder kept in that app's folder no longer shows up, or gets picked as the latest backup.
 - A destination's Test shows the reason it failed, not rclone's command line or a raw "[Errno 13]" error.
+- A Google Drive connection error containing "%" is shown, instead of stopping the page's startup before it.
 
 ## [2.5.5] - 2026-11-05
 

@@ -2758,7 +2758,7 @@ function handleGdriveRedirect() {
   if (!error && !connected) return;
 
   if (error) {
-    toast(`Google Drive: ${decodeURIComponent(error)}`, "fail");
+    toast(`Google Drive: ${error}`, "fail"); // URLSearchParams has already decoded it
   } else if (connected === "connected") {
     toast("Google Drive connected - choose a folder in Settings", "ok");
   }
