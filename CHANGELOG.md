@@ -8,6 +8,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - Google's script for the Drive folder picker loads only when you choose a folder, not on every page.
+- Downloading a backup from Local storage starts straight away: it's no longer copied inside the container first, which for a large Plex or Emby backup took time and as much disk space again.
 
 ### Fixed
 

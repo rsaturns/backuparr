@@ -148,6 +148,15 @@ def api_history_download(dest_id, app_name, filename):
     if error:
         return error
 
+    if dest_id == "local":
+        # Sent from where it is: a copy first would double a large backup's
+        # disk use and hold up the download. Never a link out of the folder.
+        folder = os.path.realpath(os.path.join(root, app_name))
+        path = os.path.realpath(os.path.join(folder, filename))
+        if os.path.dirname(path) != folder or not os.path.isfile(path):
+            return jsonify({"error": f"{filename} isn't on Local storage any more"}), 404
+        return send_file(path, as_attachment=True, download_name=filename)
+
     tmp_dir = tempfile.mkdtemp(prefix="backuparr-dl-")
     local_path = os.path.join(tmp_dir, filename)
     try:
