@@ -304,7 +304,8 @@ def test_local_destination_test_writes_and_removes_a_probe(authed_client, tmp_pa
     target = tmp_path / "nested" / "backups"
     result = authed_client.post("/api/test-destination/local", json={"path": str(target)}).get_json()
     assert result["ok"] is True and str(target) in result["message"]
-    assert target.is_dir() and list(target.iterdir()) == []
+    # Only the file it reads to wake a sleeping disk (#140) stays.
+    assert target.is_dir() and [p.name for p in target.iterdir()] == [".backuparr-wake"]
 
 
 def test_local_destination_test_reports_an_unusable_path(authed_client, tmp_path):
@@ -312,6 +313,19 @@ def test_local_destination_test_reports_an_unusable_path(authed_client, tmp_path
     blocker.write_text("x")
     result = authed_client.post("/api/test-destination/local", json={"path": str(blocker / "sub")}).get_json()
     assert result["ok"] is False and result["message"]
+
+
+def test_local_destination_test_explains_a_folder_it_cant_write(authed_client, tmp_path, monkeypatch):
+    real_open = open
+
+    def denied(path, *args, **kwargs):
+        if str(path).endswith(".backuparr-write-test"):
+            raise PermissionError(13, "Permission denied", str(path))
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.open", denied)
+    message = authed_client.post("/api/test-destination/local", json={"path": str(tmp_path)}).get_json()["message"]
+    assert message.startswith("permission denied - Backuparr runs as PUID:PGID") and "Errno" not in message
 
 
 def test_cloud_destinations_must_be_connected_first(authed_client):
@@ -362,11 +376,13 @@ def test_cloud_destination_test_reports_a_rejected_remote(authed_client, isolate
     isolated_webui.settings.save_config(cfg)
 
     def reject(root):
-        raise isolated_webui.backups.rclone_util.RcloneError("invalid_grant: token expired")
+        raise isolated_webui.backups.rclone_util.RcloneError(
+            "rclone lsd --max-depth 1 backuparr-gdrive: failed: invalid_grant", "invalid_grant (reconnect it in Settings)")
 
     monkeypatch.setattr(isolated_webui.backups.rclone_util, "check_remote", reject)
     result = authed_client.post("/api/test-destination/gdrive", json={}).get_json()
-    assert result["ok"] is False and "invalid_grant" in result["message"]
+    # The cause, not rclone's command line.
+    assert result == {"ok": False, "message": "invalid_grant (reconnect it in Settings)"}
 
 
 # --- helpers ---------------------------------------------------------------

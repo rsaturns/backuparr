@@ -64,6 +64,17 @@ def test_type_notes_are_not_problems(tmp_path):
         db.close()
 
 
+def test_type_notes_are_logged_where_backuparrs_logs_go(tmp_path, caplog):
+    # A run's log and backup.log hang off the "backuparr" logger.
+    caplog.set_level("DEBUG", logger="backuparr")
+    db = with_type_notes(tmp_path / "sonarr.db")
+    try:
+        sqlite_snapshot.quick_check(db)
+    finally:
+        db.close()
+    assert any(r.name.startswith("backuparr.") and "type notes" in r.getMessage() for r in caplog.records)
+
+
 def test_a_snapshot_of_a_database_with_type_notes_is_sound(tmp_path):
     with_type_notes(tmp_path / "sonarr.db").close()
     assert sqlite_snapshot.snapshot(str(tmp_path / "sonarr.db"), str(tmp_path / "copy.db")) == []

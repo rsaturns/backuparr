@@ -15,6 +15,7 @@ import rclone_util
 from apps.sabnzbd import MASKED
 from backup import build_app
 from config_store import instance_type
+from destination_util import is_backup_name
 
 # Restored by uploading the archive to the app, which then restarts.
 UPLOAD_RESTORE_APPS = {"radarr", "sonarr", "lidarr", "whisparr", "prowlarr"}
@@ -28,17 +29,23 @@ SAFE_FILENAME = re.compile(r"^(?!\.)[A-Za-z0-9._-]+\Z")  # no leading dot: "." a
 
 
 def list_backups(rclone_remote, app_name):
+    """Backuparr's archives in app_name's folder, oldest first: never a
+    subfolder or another file kept there."""
     remote_dir = f"{rclone_remote.rstrip('/')}/{app_name}/"
-    return sorted(rclone_util.lsf(remote_dir))
+    return sorted(name for name in rclone_util.lsf(remote_dir) if is_backup_name(app_name, name))
+
+
+def latest_backup(rclone_remote, app_name):
+    files = list_backups(rclone_remote, app_name)
+    if not files:
+        raise FileNotFoundError(f"no backups of {app_name} on this destination")
+    return files[-1]
 
 
 def fetch_backup(rclone_remote, app_name, filename=None):
     remote_dir = f"{rclone_remote.rstrip('/')}/{app_name}/"
     if not filename:
-        files = list_backups(rclone_remote, app_name)
-        if not files:
-            raise FileNotFoundError(f"No backups found at {remote_dir}")
-        filename = files[-1]
+        filename = latest_backup(rclone_remote, app_name)
     elif not SAFE_FILENAME.match(filename):
         raise ValueError(f"invalid backup filename: {filename!r}")
 

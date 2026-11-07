@@ -16,7 +16,7 @@ def rclone(isolated_webui, monkeypatch):
     """Fake rclone_util calls; returns the lists they record into."""
     calls = {"lsjson": [], "delete": [], "copyto": [], "lsf": []}
     fake = isolated_webui.backups.rclone_util
-    monkeypatch.setattr(fake, "lsjson", lambda root, recursive=False: calls["lsjson"].append((root, recursive)) or calls.get("entries", []))
+    monkeypatch.setattr(fake, "lsjson", lambda root, recursive=False, include=(): calls["lsjson"].append((root, recursive)) or calls.get("entries", []))
     monkeypatch.setattr(fake, "delete_file", lambda path: calls["delete"].append(path))
     monkeypatch.setattr(fake, "copyto", lambda src, dst: calls["copyto"].append((src, dst)) or open(dst, "wb").write(b"backup bytes"))
     monkeypatch.setattr(fake, "lsf", lambda path: calls["lsf"].append(path) or list(calls.get("names", [])))
@@ -49,7 +49,7 @@ def test_history_groups_files_by_app_newest_first(authed_client, rclone):
 
 
 def test_history_reports_a_destination_it_cant_list(authed_client, isolated_webui, monkeypatch):
-    def expired(root, recursive=False):
+    def expired(root, recursive=False, include=()):
         raise isolated_webui.backups.rclone_util.RcloneError("rclone lsjson failed", "invalid_grant (reconnect it)", 1)
 
     monkeypatch.setattr(isolated_webui.backups.rclone_util, "lsjson", expired)
@@ -106,15 +106,49 @@ def test_delete_reports_an_rclone_failure(authed_client, isolated_webui, monkeyp
     assert response.status_code == 500 and "permission denied" in response.get_json()["error"]
 
 
-def test_download_streams_the_file_and_removes_its_temporary_copy(authed_client, rclone):
+@pytest.fixture
+def dropbox(isolated_webui, monkeypatch):
+    """Dropbox connected and enabled, with rclone.conf left alone."""
+    cfg = isolated_webui.backups.load_config()
+    cfg["destinations"]["dropbox"].update(enabled=True, token="{}")
+    isolated_webui.settings.save_config(cfg)
+    monkeypatch.setattr(isolated_webui.backups.destination_util, "sync", lambda cfg: None)
+
+
+def local_backup(isolated_webui, name, data=b"backup bytes"):
+    folder = os.path.join(isolated_webui.backups.destination_util.DEFAULT_LOCAL_DIR, "radarr")
+    os.makedirs(folder, exist_ok=True)
+    with open(os.path.join(folder, name), "wb") as f:
+        f.write(data)
+    return folder
+
+
+def test_a_local_backup_is_sent_from_its_folder_without_a_copy(authed_client, rclone, isolated_webui):
+    local_backup(isolated_webui, "radarr_1.zip")
     response = authed_client.get("/api/history/local/radarr/radarr_1.zip/download")
+    assert response.status_code == 200 and response.data == b"backup bytes"
+    assert "attachment" in response.headers["Content-Disposition"] and "radarr_1.zip" in response.headers["Content-Disposition"]
+    assert rclone["copyto"] == []
+
+
+def test_a_local_download_never_follows_a_link_out_of_the_folder(authed_client, rclone, isolated_webui, tmp_path):
+    folder = local_backup(isolated_webui, "radarr_1.zip")
+    (tmp_path / "secret.txt").write_text("not a backup")
+    os.symlink(tmp_path / "secret.txt", os.path.join(folder, "radarr_2.zip"))
+    for name in ("radarr_2.zip", "radarr_3.zip"):  # a link out, and a file that's gone
+        response = authed_client.get(f"/api/history/local/radarr/{name}/download")
+        assert response.status_code == 404 and "isn't on Local storage" in response.get_json()["error"]
+
+
+def test_download_streams_the_file_and_removes_its_temporary_copy(authed_client, rclone, dropbox):
+    response = authed_client.get("/api/history/dropbox/radarr/radarr_1.zip/download")
     assert response.status_code == 200 and response.data == b"backup bytes"
     assert "attachment" in response.headers["Content-Disposition"] and "radarr_1.zip" in response.headers["Content-Disposition"]
     _src, temp_path = rclone["copyto"][0]
     assert not os.path.exists(os.path.dirname(temp_path))
 
 
-def test_a_failed_download_cleans_up_and_explains(authed_client, isolated_webui, monkeypatch):
+def test_a_failed_download_cleans_up_and_explains(authed_client, isolated_webui, monkeypatch, dropbox):
     seen = []
 
     def fail(src, dst):
@@ -122,7 +156,7 @@ def test_a_failed_download_cleans_up_and_explains(authed_client, isolated_webui,
         raise isolated_webui.backups.rclone_util.RcloneError("not found")
 
     monkeypatch.setattr(isolated_webui.backups.rclone_util, "copyto", fail)
-    response = authed_client.get("/api/history/local/radarr/a.zip/download")
+    response = authed_client.get("/api/history/dropbox/radarr/a.zip/download")
     assert response.status_code == 500 and "not found" in response.get_json()["error"]
     assert not os.path.exists(os.path.dirname(seen[0]))
 
@@ -130,8 +164,9 @@ def test_a_failed_download_cleans_up_and_explains(authed_client, isolated_webui,
 # --- restore: listing and preview -------------------------------------------
 
 def test_restore_listing_is_newest_first(authed_client, rclone):
-    rclone["names"] = ["radarr_1.zip", "radarr_2.zip"]
-    assert authed_client.get("/api/restore/local/radarr/backups").get_json() == {"files": ["radarr_2.zip", "radarr_1.zip"]}
+    rclone["names"] = ["radarr_20261101_030000.zip", "radarr_20261102_030000.zip", "notes.txt"]
+    assert authed_client.get("/api/restore/local/radarr/backups").get_json() == {
+        "files": ["radarr_20261102_030000.zip", "radarr_20261101_030000.zip"]}
 
 
 def test_restore_listing_reports_an_rclone_failure(authed_client, isolated_webui, monkeypatch):

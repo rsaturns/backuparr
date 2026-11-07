@@ -150,14 +150,16 @@ def _run(dest_roots, timestamp, record):
             f.write(data)
         for dest_id, root in dest_roots.items():
             try:
+                destination_util.wait_for_storage(dest_id, root)
                 rclone_util.copyto(path, f"{root}/{FOLDER}/{name}")
                 log.info("backuparr: uploaded its own backup to %s (%d bytes)", dest_id, len(data))
                 uploaded.append(dest_id)
                 record["destinations"][dest_id] = {"ok": True, "error": None}
-            except rclone_util.RcloneError as exc:
-                log.error("backuparr: upload of its own backup to %s failed: %s", dest_id, exc.detail)
-                failures.append(f"{dest_id}: {exc.detail}")
-                record["destinations"][dest_id] = {"ok": False, "error": exc.detail}
+            except (rclone_util.RcloneError, destination_util.DestinationError) as exc:
+                detail = exc.detail
+                log.error("backuparr: upload of its own backup to %s failed: %s", dest_id, detail)
+                failures.append(f"{dest_id}: {detail}")
+                record["destinations"][dest_id] = {"ok": False, "error": detail}
         if uploaded:
             try:
                 manifest.record(FOLDER, name, uploaded, app_version=VERSION, sha256=manifest.file_sha256(path),

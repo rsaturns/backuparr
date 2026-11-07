@@ -15,7 +15,7 @@ def remote(monkeypatch):
     state = type("Remote", (), {})()
     state.files, state.deleted, state.fail = [], [], set()
 
-    def lsjson(root, recursive=False):
+    def lsjson(root, recursive=False, include=()):
         assert recursive and root == "dest:"
         return [{"Path": p, "Name": p.rsplit("/", 1)[-1], "IsDir": False} for p in state.files]
 
@@ -91,7 +91,7 @@ def test_a_real_local_folder_with_other_files(tmp_path, monkeypatch):
         (tmp_path / rel).write_text("x")
     root = str(tmp_path)
 
-    def lsjson(r, recursive=False):
+    def lsjson(r, recursive=False, include=()):
         return [{"Path": p.relative_to(tmp_path).as_posix(), "Name": p.name, "IsDir": p.is_dir()} for p in tmp_path.rglob("*")]
 
     monkeypatch.setattr(backup.rclone_util, "lsjson", lsjson)
@@ -103,7 +103,7 @@ def test_a_real_local_folder_with_other_files(tmp_path, monkeypatch):
 
 
 def test_a_destination_that_cant_be_listed_is_left_alone(monkeypatch, caplog):
-    def expired(root, recursive=False):
+    def expired(root, recursive=False, include=()):
         raise backup.rclone_util.RcloneError("rclone lsjson failed", "token expired", 1)
 
     monkeypatch.setattr(backup.rclone_util, "lsjson", expired)

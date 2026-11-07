@@ -182,7 +182,7 @@ def test_a_manifest_that_cannot_be_written_does_not_fail_the_backup(run, monkeyp
 
 def test_retention_drops_what_it_deletes_and_entries_for_missing_files(monkeypatch):
     files = ["radarr/radarr_20261001_030000.zip", "radarr/radarr_20261029_030000.zip"]
-    monkeypatch.setattr(rclone_util, "lsjson", lambda root, recursive=False: [
+    monkeypatch.setattr(rclone_util, "lsjson", lambda root, recursive=False, include=(): [
         {"Path": p, "Name": p.rsplit("/", 1)[-1], "IsDir": False} for p in files])
     monkeypatch.setattr(rclone_util, "delete_file", lambda path: None)
     for name in ("radarr_20261001_030000.zip", "radarr_20261029_030000.zip", "radarr_20261015_030000.zip"):
@@ -266,7 +266,7 @@ def destinations(tmp_path, monkeypatch):
     remote = {}
     downloads = []
 
-    def lsjson(root, recursive=False):
+    def lsjson(root, recursive=False, include=()):
         if root == "gdrive:":
             return [{"Path": p, "Name": p.rsplit("/", 1)[-1], "IsDir": False, "Size": len(d)} for p, d in remote.items()]
         out = []
@@ -363,10 +363,10 @@ def test_a_destination_that_cannot_be_listed_does_not_stop_the_others(destinatio
     destinations.remote["radarr/radarr_20261101_030000.zip"] = radarr_zip("6.4")
     real_lsjson = rclone_util.lsjson
 
-    def lsjson(root, recursive=False):
+    def lsjson(root, recursive=False, include=()):
         if root != "gdrive:":
             raise rclone_util.RcloneError("lsjson failed", "permission denied")
-        return real_lsjson(root, recursive)
+        return real_lsjson(root, recursive, include)
 
     monkeypatch.setattr(rclone_util, "lsjson", lsjson)
     manifest_backfill.backfill(destinations.cfg)
@@ -428,7 +428,7 @@ def test_every_driver_can_report_its_version():
 
 def test_history_shows_each_backups_version_and_delete_updates_the_manifest(authed_client, isolated_webui, monkeypatch):
     files = ["radarr/radarr_20261101_030000.zip", "radarr/radarr_20261102_030000.zip", "sonarr/sonarr_20261101_030000.zip"]
-    monkeypatch.setattr(rclone_util, "lsjson", lambda root, recursive=False: [
+    monkeypatch.setattr(rclone_util, "lsjson", lambda root, recursive=False, include=(): [
         {"Path": p, "Name": p.rsplit("/", 1)[-1], "IsDir": False, "Size": 1, "ModTime": p[-19:-4]} for p in files])
     deleted = []
     monkeypatch.setattr(rclone_util, "delete_file", deleted.append)

@@ -130,7 +130,7 @@ def read_version(app_type, archive):
 def _backups_on(root):
     """[(app, file, size)] for each of Backuparr's archives under root."""
     found = []
-    for entry in rclone_util.lsjson(root, recursive=True):
+    for entry in destination_util.list_backups(root):
         app, sep, name = entry.get("Path", "").partition("/")
         if entry.get("IsDir") or not sep or not instance_type(app) or not destination_util.is_backup_name(app, name):
             continue
@@ -206,7 +206,7 @@ def backfill(cfg=None, should_stop=None, should_pause=None):
                 root = destination_util.remote_root(dest_id, cfg["destinations"][dest_id]).rstrip("/")
                 added = backfill_destination(dest_id, root, expected_generation, should_stop, should_pause)
             except (destination_util.DestinationError, rclone_util.RcloneError) as exc:
-                log.warning("manifest: couldn't check the backups on %s: %s", dest_id, getattr(exc, "detail", exc))
+                log.warning("manifest: couldn't check the backups on %s: %s", dest_id, exc.detail)
                 continue
             if added is None:
                 return

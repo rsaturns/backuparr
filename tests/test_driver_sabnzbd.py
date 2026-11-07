@@ -122,8 +122,10 @@ def test_servers_without_a_masked_password_are_never_prompted_for(app, api):
 
 
 def test_nameless_servers_are_skipped_and_none_values_dropped(app, api, caplog):
-    summary = app.restore(config(servers=[{"host": "orphan"}, {"name": "ok", "host": "h", "priority": None, "enable": False}]), never)
+    summary = app.restore(config(servers=[{"host": "orphan.example", "username": "me"},
+                                          {"name": "ok", "host": "h", "priority": None, "enable": False}]), never)
     assert summary["servers_restored"] == ["ok"] and "no name" in caplog.text
+    assert "orphan.example" not in caplog.text and "me'" not in caplog.text  # the entry isn't logged
     sent = calls(api)
     assert len(sent) == 1 and "priority" not in sent[0] and sent[0]["enable"] is False  # False is a real value
 

@@ -35,7 +35,7 @@ def test_pages_carry_a_policy_that_blocks_inline_and_foreign_scripts(webui):
 
 @pytest.mark.parametrize("path", ["/api/config", "/api/history/local", "/api/restore/status"])
 def test_api_responses_are_never_cached(webui, monkeypatch, path):
-    monkeypatch.setattr(webui.backups.rclone_util, "lsjson", lambda root, recursive=False: [])
+    monkeypatch.setattr(webui.backups.rclone_util, "lsjson", lambda root, recursive=False, include=(): [])
     assert authed(webui).get(path).headers["Cache-Control"] == "no-store"
 
 
@@ -49,6 +49,13 @@ def test_templates_have_no_inline_scripts_or_event_handlers(template):
     assert not re.search(r"<script(?![^>]*\bsrc=)[^>]*>", html, re.IGNORECASE), "inline <script> would be blocked by the policy"
     assert not re.search(r"\son[a-z]+\s*=", html, re.IGNORECASE), "inline event handler would be blocked by the policy"
     assert not re.search(r"javascript:", html)
+
+
+@pytest.mark.parametrize("template", sorted(p.name for p in (WEBUI / "templates").glob("*.html")))
+def test_pages_load_only_their_own_scripts(template):
+    # Google's script is added only when a Drive folder is chosen (app.js).
+    html = (WEBUI / "templates" / template).read_text()
+    assert not re.search(r"<script[^>]*\bsrc=[\"']https?:", html, re.IGNORECASE)
 
 
 # --- cross-site request forgery ------------------------------------------------

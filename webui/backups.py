@@ -19,7 +19,7 @@ import restore_actions as ra
 import restore_version as rv
 from apps.http_headers import app_connection_config
 from backup import humanize_error, log_failure
-from config_store import APP_NAMES, DEST_NAMES, app_meta, instance_ids, instance_type, key_required, load_config, restore_supported
+from config_store import DEST_NAMES, app_meta, instance_ids, instance_type, key_required, load_config, restore_supported
 from webui.runs import _start_tracked_run, RESTORE_RUN_STATE, RUN_LOCK, RUN_STATE
 from webui.settings import _missing_required_field, _restore_override_fields
 
@@ -86,14 +86,14 @@ def api_history(dest_id):
     root, error = _destination_root_or_error(cfg, dest_id)
     if error:
         return error
-    # One recursive listing of the whole destination instead of one rclone
-    # call per app - much faster against remote destinations (Drive/OneDrive).
+    # One recursive listing of Backuparr's folders instead of one rclone call
+    # per app - much faster against remote destinations (Drive/OneDrive).
     # Keyed by instance id; a removed instance's backups are listed while any remain.
     # The app version comes from the manifest; "recorded" is False for a
     # backup the startup backfill hasn't reached yet.
     history = {name: [] for name in instance_ids(cfg)}
     try:
-        entries = rclone_util.lsjson(root, recursive=True)
+        entries = destination_util.list_backups(root)
     except rclone_util.RcloneError as exc:
         return jsonify({"error": humanize_error(exc)}), 502
     recorded = manifest.backups()
@@ -101,7 +101,7 @@ def api_history(dest_id):
         if entry.get("IsDir"):
             continue
         app_name, _, _ = entry["Path"].partition("/")
-        if app_name in history or (destination_util.is_backup_folder(app_name) and app_name not in APP_NAMES):
+        if destination_util.is_backup_folder(app_name):
             details = recorded.get(manifest.key(app_name, entry["Name"]))
             history.setdefault(app_name, []).append({
                 "name": entry["Name"], "size": entry["Size"], "mod_time": entry["ModTime"],
@@ -147,6 +147,15 @@ def api_history_download(dest_id, app_name, filename):
     root, error = _destination_root_or_error(cfg, dest_id)
     if error:
         return error
+
+    if dest_id == "local":
+        # Sent from where it is: a copy first would double a large backup's
+        # disk use and hold up the download. Never a link out of the folder.
+        folder = os.path.realpath(os.path.join(root, app_name))
+        path = os.path.realpath(os.path.join(folder, filename))
+        if os.path.dirname(path) != folder or not os.path.isfile(path):
+            return jsonify({"error": f"{filename} isn't on Local storage any more"}), 404
+        return send_file(path, as_attachment=True, download_name=filename)
 
     tmp_dir = tempfile.mkdtemp(prefix="backuparr-dl-")
     local_path = os.path.join(tmp_dir, filename)
@@ -225,12 +234,7 @@ def _version_gate(app_name, file, app_cfg):
 def _restore_work(app_name, root, app_cfg, data, bazarr_backup_dir):
     tmp_dir = None
     try:
-        filename = data.get("file")
-        if not filename:
-            files = ra.list_backups(root, app_name)
-            if not files:
-                raise FileNotFoundError(f"no backups of {app_name} on this destination")
-            filename = files[-1]
+        filename = data.get("file") or ra.latest_backup(root, app_name)
         RESTORE_RUN_STATE["file"] = filename
         _version_gate(app_name, filename, app_cfg)
         log.info("restore: fetching %s backup...", app_name)
@@ -328,8 +332,6 @@ def api_restore_sabnzbd_preview(dest_id):
 def api_restore(dest_id, app_name):
     if not instance_type(app_name):
         return jsonify({"error": "unknown app"}), 404
-    if not restore_supported(app_name):
-        return jsonify({"error": f"{app_name} does not support automated restore - see its page in the docs"}), 400
 
     data = request.get_json(force=True, silent=True) or {}
     if not data.get("confirm"):

@@ -196,7 +196,7 @@ def test_retention_covers_instances_and_keeps_a_removed_ones_newest(monkeypatch)
              "radarr/radarr-4k_20260101_030000.zip", "radarr-4k/radarr_20260101_030000.zip",
              "plex-2/plex-2_20260101_030000.zip", "plex-2/plex-2_20260102_030000.zip"]
     deleted = []
-    monkeypatch.setattr(backup.rclone_util, "lsjson", lambda root, recursive=False: [
+    monkeypatch.setattr(backup.rclone_util, "lsjson", lambda root, recursive=False, include=(): [
         {"Path": p, "Name": p.rsplit("/", 1)[-1], "IsDir": False} for p in files])
     monkeypatch.setattr(backup.rclone_util, "delete_file", deleted.append)
     backup.apply_retention("dest:", 7, now=datetime(2026, 10, 29))
@@ -299,7 +299,7 @@ def test_history_lists_instances_including_removed_ones_with_backups_left(authed
     save(authed_client, apps={"sonarr-anime": {"name": "Anime"}})
     entries = [{"Path": p, "Name": p.rsplit("/", 1)[-1], "Size": 1, "ModTime": "2026-01-01T00:00:00Z", "IsDir": False}
                for p in ("radarr-old/radarr-old_20260101_030000.zip", "plex-2/plex-2_20260101_030000.zip")]
-    monkeypatch.setattr(isolated_webui.backups.rclone_util, "lsjson", lambda root, recursive=False: entries)
+    monkeypatch.setattr(isolated_webui.backups.rclone_util, "lsjson", lambda root, recursive=False, include=(): entries)
     history = authed_client.get("/api/history/local").get_json()
     assert history["sonarr-anime"] == []
     assert [f["name"] for f in history["radarr-old"]] == ["radarr-old_20260101_030000.zip"]

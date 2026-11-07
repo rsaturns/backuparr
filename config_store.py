@@ -610,16 +610,16 @@ def enabled_apps(cfg):
 
 
 # These take an app or an instance id: an instance shares its app's metadata.
+def app_meta(name):
+    return next((m for m in APP_META if m["id"] == instance_type(name)), None)
+
+
 def key_required(name):
-    return next((m["key_required"] for m in APP_META if m["id"] == instance_type(name)), True)
+    return (app_meta(name) or {}).get("key_required", True)
 
 
 def restore_supported(name):
-    return next((m.get("restore_supported", True) for m in APP_META if m["id"] == instance_type(name)), True)
-
-
-def app_meta(name):
-    return next((m for m in APP_META if m["id"] == instance_type(name)), None)
+    return (app_meta(name) or {}).get("restore_supported", True)
 
 
 def enabled_destinations(cfg):
