@@ -2,14 +2,21 @@
 backup.py, restore_actions.py and the web UI don't need destination-specific
 branching beyond "which id is this".
 """
+import errno
+import logging
 import os
 import re
+import time
 
+import atomic_file
 import dropbox_oauth
 import gdrive_oauth
 import onedrive_oauth
 import rclone_util
 from config_store import APP_NAMES, DEFAULT_LOCAL_DIR, MULTI_INSTANCE_APPS, instance_type
+
+
+log = logging.getLogger("backuparr")
 
 
 class DestinationError(RuntimeError):
@@ -48,8 +55,12 @@ def list_backups(root):
 
 
 def remove_local_backups(root, apps):
-    """Deletes Backuparr's own archives under a local destination, and each
-    app folder left empty - never other files, nor the folder itself."""
+    """Deletes Backuparr's own archives under a local destination, each app
+    folder left empty, and its wake file - never other files, nor the folder
+    itself."""
+    marker = os.path.join(root, WAKE_FILE)
+    if os.path.isfile(marker) and not os.path.islink(marker):
+        os.remove(marker)
     for app in apps:
         folder = os.path.join(root, app)
         if not os.path.isdir(folder):
@@ -66,8 +77,78 @@ def remove_local_backups(root, apps):
 
 def local_root(dest_cfg):
     path = (dest_cfg.get("path") or "").strip() or DEFAULT_LOCAL_DIR
+    wait_until_ready(path)
     os.makedirs(path, exist_ok=True)
     return path
+
+
+# A USB disk that spins down to save power can answer its first access
+# with one of these while it spins back up; the same access works seconds
+# later.
+_NOT_READY = frozenset({errno.EIO, errno.ETIMEDOUT, errno.EBUSY, errno.EAGAIN})
+STORAGE_WAIT_SECONDS = 60
+# Retries come at 1, 2 and 4 s apart, then every 5 s, so a disk that has
+# woken is noticed within seconds.
+_MAX_RETRY_GAP = 5
+
+
+WAKE_FILE = ".backuparr-wake"
+_WAKE_TEXT = b"Backuparr reads this file to wake a disk that has gone to sleep before it writes a backup.\n"
+
+
+def _wake(path):
+    """Reads Backuparr's small wake file in `path` from the disk itself: its
+    cached copy is dropped first, so the read can't be answered from memory
+    (as a listing can). Only a read: a write that fails while a disk spins
+    up can make a filesystem such as ext4 turn itself read-only. The file
+    is written once, the first time the folder is reachable."""
+    marker = os.path.join(path, WAKE_FILE)
+    try:
+        fd = os.open(marker, os.O_RDONLY)
+    except FileNotFoundError:
+        atomic_file.write_private(marker, _WAKE_TEXT)
+        return
+    try:
+        os.posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
+        os.pread(fd, len(_WAKE_TEXT), 0)
+    finally:
+        os.close(fd)
+
+
+def wait_until_ready(path, timeout=STORAGE_WAIT_SECONDS):
+    """Waits up to `timeout` seconds for a local folder's disk to answer,
+    logging only when it has to wait; raises DestinationError if it never
+    does. Any other error means the disk did answer; it's left for the real
+    operation to report, so a full or read-only destination fails, or
+    lists, exactly as before."""
+    start = time.monotonic()
+    delay = 1
+    waited = False
+    while True:
+        try:
+            _wake(path)
+        except OSError as exc:
+            if exc.errno not in _NOT_READY:
+                return
+            remaining = timeout - (time.monotonic() - start)
+            if remaining <= 0:
+                raise DestinationError(f"the storage at {path} didn't respond within {timeout}s "
+                                       f"({os.strerror(exc.errno)}) - check the disk and its connection") from exc
+            if not waited:
+                log.info("waiting for storage to be ready...")
+                waited = True
+            time.sleep(min(delay, remaining))
+            delay = min(delay * 2, _MAX_RETRY_GAP)
+            continue
+        if waited:
+            log.info("storage ready after %ds", round(time.monotonic() - start))
+        return
+
+
+def wait_for_storage(dest_id, root):
+    """Before using a destination: Local storage may be a sleeping disk."""
+    if dest_id == "local":
+        wait_until_ready(root)
 
 
 # The connected destinations, each an rclone remote kept in rclone.conf.

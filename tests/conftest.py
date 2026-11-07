@@ -58,6 +58,15 @@ def skip_self_backup(request, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def skip_storage_wait(request, monkeypatch):
+    """run_backup tests use made-up destination roots ("local:"), so the
+    wait before each write would create them; tests marked storage_wait
+    run the real one."""
+    if request.node.get_closest_marker("storage_wait") is None:
+        monkeypatch.setattr(destination_util, "wait_for_storage", lambda dest_id, root: None)
+
+
+@pytest.fixture(autouse=True)
 def key_already_saved(request, monkeypatch):
     """The encryption key counts as saved, so the web UI isn't held at its
     prompt; tests marked key_prompt start with it unsaved."""

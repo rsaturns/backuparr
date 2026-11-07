@@ -332,9 +332,13 @@ def apply_retention(root, retention_days, now=None, only=None, dest_id=None):
     retention deletes, and any entry for a file the listing didn't find."""
     cutoff = (now or datetime.now()) - timedelta(days=int(retention_days))
     try:
+        destination_util.wait_for_storage(dest_id, root)
         entries = destination_util.list_backups(root)
     except rclone_util.RcloneError as exc:
         log.warning("retention: couldn't list %s, nothing removed: %s", root, exc.detail)
+        return
+    except destination_util.DestinationError as exc:
+        log.warning("retention: couldn't list %s, nothing removed: %s", root, exc)
         return
     per_app = {}
     present = set()
@@ -426,9 +430,10 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
     for dest_id in destinations:
         try:
             dest_roots[dest_id] = destination_util.remote_root(dest_id, cfg["destinations"][dest_id]).rstrip("/")
-        except destination_util.DestinationError as exc:
-            log.error("destination %s: %s", dest_id, exc)
-            failed.append(f"destination {dest_id}: {exc}")
+        except (destination_util.DestinationError, OSError) as exc:
+            message = humanize_error(exc)
+            log.error("destination %s: %s", dest_id, message)
+            failed.append(f"destination {dest_id}: {message}")
 
     if not dest_roots:
         return [], failed
@@ -485,14 +490,16 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
                     remote_dest = f"{root}/{name}/{archive_name}"
                     log.info("%s: uploading to %s...", name, dest_id)
                     try:
+                        destination_util.wait_for_storage(dest_id, root)
                         rclone_util.copyto(archive_path, remote_dest)
                         log.info("%s: uploaded -> %s (%d bytes)", name, remote_dest, size)
                         uploaded.append(dest_id)
                         run["destinations"][dest_id] = {"ok": True, "error": None}
-                    except rclone_util.RcloneError as exc:
-                        log.error("%s: upload to %s failed: %s", name, dest_id, exc.detail)
-                        dest_failures.append(f"{dest_id}: {exc.detail}")
-                        run["destinations"][dest_id] = {"ok": False, "error": exc.detail}
+                    except (rclone_util.RcloneError, destination_util.DestinationError) as exc:
+                        detail = getattr(exc, "detail", None) or str(exc)
+                        log.error("%s: upload to %s failed: %s", name, dest_id, detail)
+                        dest_failures.append(f"{dest_id}: {detail}")
+                        run["destinations"][dest_id] = {"ok": False, "error": detail}
 
                 if uploaded:
                     try:
