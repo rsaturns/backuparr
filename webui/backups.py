@@ -225,12 +225,7 @@ def _version_gate(app_name, file, app_cfg):
 def _restore_work(app_name, root, app_cfg, data, bazarr_backup_dir):
     tmp_dir = None
     try:
-        filename = data.get("file")
-        if not filename:
-            files = ra.list_backups(root, app_name)
-            if not files:
-                raise FileNotFoundError(f"no backups of {app_name} on this destination")
-            filename = files[-1]
+        filename = data.get("file") or ra.latest_backup(root, app_name)
         RESTORE_RUN_STATE["file"] = filename
         _version_gate(app_name, filename, app_cfg)
         log.info("restore: fetching %s backup...", app_name)

@@ -130,8 +130,9 @@ def test_a_failed_download_cleans_up_and_explains(authed_client, isolated_webui,
 # --- restore: listing and preview -------------------------------------------
 
 def test_restore_listing_is_newest_first(authed_client, rclone):
-    rclone["names"] = ["radarr_1.zip", "radarr_2.zip"]
-    assert authed_client.get("/api/restore/local/radarr/backups").get_json() == {"files": ["radarr_2.zip", "radarr_1.zip"]}
+    rclone["names"] = ["radarr_20261101_030000.zip", "radarr_20261102_030000.zip", "notes.txt"]
+    assert authed_client.get("/api/restore/local/radarr/backups").get_json() == {
+        "files": ["radarr_20261102_030000.zip", "radarr_20261101_030000.zip"]}
 
 
 def test_restore_listing_reports_an_rclone_failure(authed_client, isolated_webui, monkeypatch):
