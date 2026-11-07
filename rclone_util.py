@@ -1,10 +1,7 @@
 import json
-import logging
 import os
 import re
 import subprocess
-
-logger = logging.getLogger(__name__)
 
 
 class RcloneError(RuntimeError):
