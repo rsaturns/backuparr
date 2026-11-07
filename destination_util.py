@@ -2,14 +2,21 @@
 backup.py, restore_actions.py and the web UI don't need destination-specific
 branching beyond "which id is this".
 """
+import errno
+import logging
 import os
 import re
+import tempfile
+import time
 
 import dropbox_oauth
 import gdrive_oauth
 import onedrive_oauth
 import rclone_util
 from config_store import DEFAULT_LOCAL_DIR, instance_type
+
+
+log = logging.getLogger("backuparr")
 
 
 class DestinationError(RuntimeError):
@@ -51,8 +58,68 @@ def remove_local_backups(root, apps):
 
 def local_root(dest_cfg):
     path = (dest_cfg.get("path") or "").strip() or DEFAULT_LOCAL_DIR
+    wait_until_ready(path)
     os.makedirs(path, exist_ok=True)
     return path
+
+
+# A USB disk that spins down to save power can answer its first access
+# with one of these while it spins back up; the same access works seconds
+# later.
+_NOT_READY = frozenset({errno.EIO, errno.ETIMEDOUT, errno.EBUSY, errno.EAGAIN})
+STORAGE_WAIT_SECONDS = 60
+
+
+def _touch(path):
+    """One small write flushed to the disk itself. A listing won't do: the
+    kernel can answer it from its cache without waking a sleeping disk."""
+    os.makedirs(path, exist_ok=True)
+    fd, probe = tempfile.mkstemp(prefix=".backuparr-ready-", dir=path)
+    try:
+        os.write(fd, b"ok")
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+        try:
+            os.remove(probe)
+        except OSError:
+            pass
+
+
+def wait_until_ready(path, timeout=STORAGE_WAIT_SECONDS):
+    """Waits up to `timeout` seconds for a local folder's disk to answer,
+    logging only when it has to wait; raises DestinationError if it never
+    does. Any other error means the disk did
+    answer; it's left for the real operation to report, so a full or
+    read-only destination fails, or lists, exactly as before."""
+    start = time.monotonic()
+    delay = 1
+    waited = False
+    while True:
+        try:
+            _touch(path)
+        except OSError as exc:
+            if exc.errno not in _NOT_READY:
+                return
+            remaining = timeout - (time.monotonic() - start)
+            if remaining <= 0:
+                raise DestinationError(f"the storage at {path} didn't respond within {timeout}s "
+                                       f"({os.strerror(exc.errno)}) - check the disk and its connection") from exc
+            if not waited:
+                log.info("waiting for storage to be ready...")
+                waited = True
+            time.sleep(min(delay, remaining))
+            delay = min(delay * 2, 15)
+            continue
+        if waited:
+            log.info("storage ready after %ds", round(time.monotonic() - start))
+        return
+
+
+def wait_for_storage(dest_id, root):
+    """Before writing to a destination: Local storage may be a sleeping disk."""
+    if dest_id == "local":
+        wait_until_ready(root)
 
 
 # The connected destinations, each an rclone remote kept in rclone.conf.
