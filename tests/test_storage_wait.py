@@ -141,7 +141,7 @@ def run(monkeypatch, tmp_path):
     monkeypatch.setattr(destination_util, "sync", lambda cfg: None)
     monkeypatch.setattr(destination_util, "remote_root", lambda dest_id, cfg: local if dest_id == "local" else "gdrive:")
     monkeypatch.setattr(backup, "build_app", lambda name, app_cfg: FakeApp())
-    monkeypatch.setattr(rclone_util, "lsjson", lambda root, recursive=False: [])
+    monkeypatch.setattr(rclone_util, "lsjson", lambda root, recursive=False, include=(): [])
 
     def wait(path):
         state.waits.append(path)
