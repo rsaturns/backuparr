@@ -304,7 +304,8 @@ def test_local_destination_test_writes_and_removes_a_probe(authed_client, tmp_pa
     target = tmp_path / "nested" / "backups"
     result = authed_client.post("/api/test-destination/local", json={"path": str(target)}).get_json()
     assert result["ok"] is True and str(target) in result["message"]
-    assert target.is_dir() and list(target.iterdir()) == []
+    # Only the file it reads to wake a sleeping disk (#140) stays.
+    assert target.is_dir() and [p.name for p in target.iterdir()] == [".backuparr-wake"]
 
 
 def test_local_destination_test_reports_an_unusable_path(authed_client, tmp_path):

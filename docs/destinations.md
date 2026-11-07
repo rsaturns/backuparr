@@ -17,6 +17,12 @@ No setup. Backups go to `/config/backuparr/backups`, on the same volume as
 volume, such as a NAS share. Backuparr only ever deletes its own archives
 there (`<app>/<app>_<date>_<time>.zip`), so the folder can hold other files.
 
+A USB disk that spins down to save power is fine: before using it, Backuparr
+reads a small `.backuparr-wake` file it keeps there and waits up to 60 seconds
+for the disk to wake, and the log shows "waiting for storage to be ready...".
+If it still fails, check `dmesg` on the host: a USB disk that resets or
+disconnects as it wakes is a cable, power or enclosure problem.
+
 ## Google Drive
 
 Set up from the Google Drive card, with no rclone config:
