@@ -18,6 +18,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A destination's Test shows the reason it failed, not rclone's command line or a raw "[Errno 13]" error.
 - A Google Drive connection error containing "%" is shown, instead of stopping the page's startup before it.
 - The Reset dialog says backups on Dropbox are kept too, as on Google Drive and OneDrive.
+- A SABnzbd restore no longer writes a nameless server's host and username to the log.
 
 ## [2.5.5] - 2026-11-05
 

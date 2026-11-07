@@ -123,7 +123,8 @@ class SabnzbdApp:
         for server in cfg.get("servers", []):
             name = server.get("name")
             if not name:
-                logger.warning("sabnzbd: server entry with no name, skipping: %s", server)
+                # Not the entry itself: it holds the server's host and username.
+                logger.warning("sabnzbd: skipped a server with no name in the backup")
                 continue
             fields = {k: v for k, v in server.items() if k not in ("name", "password") and v is not None}
             if server.get("password") == MASKED:
