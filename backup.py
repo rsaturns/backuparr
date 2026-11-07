@@ -332,7 +332,7 @@ def apply_retention(root, retention_days, now=None, only=None, dest_id=None):
     retention deletes, and any entry for a file the listing didn't find."""
     cutoff = (now or datetime.now()) - timedelta(days=int(retention_days))
     try:
-        entries = rclone_util.lsjson(root, recursive=True)
+        entries = destination_util.list_backups(root)
     except rclone_util.RcloneError as exc:
         log.warning("retention: couldn't list %s, nothing removed: %s", root, exc.detail)
         return
