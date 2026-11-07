@@ -7,7 +7,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- Retention and History work when Local storage is the root of a disk: they no longer fail on a folder there that Backuparr can't read, such as ext4's lost+found. They now list only Backuparr's own folders (#143).
+- Retention, History and the startup check of existing backups work when Local storage is the root of a disk: they no longer fail on a folder there that Backuparr can't read, such as ext4's lost+found. They now list only Backuparr's own folders (#143).
 
 ## [2.5.5] - 2026-11-05
 

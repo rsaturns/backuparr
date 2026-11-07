@@ -1,4 +1,4 @@
-"""Retention and History list only Backuparr's own folders at a
+"""Retention, History and the manifest backfill list only Backuparr's own folders at a
 destination's root, so a folder Backuparr can't read there (ext4's
 lost+found at the root of a disk) doesn't fail the listing."""
 import fnmatch
@@ -6,6 +6,7 @@ import re
 
 import backup
 import destination_util
+import manifest_backfill
 import rclone_util
 
 
@@ -29,11 +30,13 @@ def test_every_app_is_in_the_pattern():
     assert _folders_matched(destination_util.backup_folder_pattern(), APP_NAMES) == APP_NAMES
 
 
-def test_retention_and_history_list_with_the_pattern(monkeypatch, authed_client, isolated_webui):
+def test_retention_history_and_the_backfill_list_with_the_pattern(monkeypatch, authed_client, isolated_webui):
     calls = []
     monkeypatch.setattr(rclone_util, "lsjson", lambda root, recursive=False, include=(): calls.append((root, recursive, include)) or [])
     backup.apply_retention("dest:", 7)
     assert authed_client.get("/api/history/local").status_code == 200
+    manifest_backfill.backfill_destination("local", "/backups", expected_generation=0)
     pattern = [destination_util.backup_folder_pattern()]
     assert calls[0] == ("dest:", True, pattern)
     assert calls[1][1:] == (True, pattern)
+    assert calls[2] == ("/backups", True, pattern)
