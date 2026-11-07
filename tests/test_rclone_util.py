@@ -177,3 +177,11 @@ def test_the_bandwidth_limit_applies_to_remotes_but_not_local_storage(monkeypatc
     assert "RCLONE_BWLIMIT" not in local and local.get("PATH") == os.environ.get("PATH")
     monkeypatch.delenv("RCLONE_BWLIMIT")
     assert rclone_util._env(["copyto", "/tmp/a", "/tmp/b"]) is None
+
+
+def test_a_listing_passes_its_include_patterns(monkeypatch):
+    calls = []
+    monkeypatch.setattr(rclone_util, "_run", lambda args, redact=(): calls.append(args) or "[]")
+    rclone_util.lsjson("remote:", recursive=True, include=["/{a,b-*}/**"])
+    rclone_util.lsjson("remote:")
+    assert calls == [["lsjson", "--recursive", "--include", "/{a,b-*}/**", "remote:"], ["lsjson", "remote:"]]

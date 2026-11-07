@@ -16,7 +16,7 @@ def rclone(isolated_webui, monkeypatch):
     """Fake rclone_util calls; returns the lists they record into."""
     calls = {"lsjson": [], "delete": [], "copyto": [], "lsf": []}
     fake = isolated_webui.backups.rclone_util
-    monkeypatch.setattr(fake, "lsjson", lambda root, recursive=False: calls["lsjson"].append((root, recursive)) or calls.get("entries", []))
+    monkeypatch.setattr(fake, "lsjson", lambda root, recursive=False, include=(): calls["lsjson"].append((root, recursive)) or calls.get("entries", []))
     monkeypatch.setattr(fake, "delete_file", lambda path: calls["delete"].append(path))
     monkeypatch.setattr(fake, "copyto", lambda src, dst: calls["copyto"].append((src, dst)) or open(dst, "wb").write(b"backup bytes"))
     monkeypatch.setattr(fake, "lsf", lambda path: calls["lsf"].append(path) or list(calls.get("names", [])))
@@ -49,7 +49,7 @@ def test_history_groups_files_by_app_newest_first(authed_client, rclone):
 
 
 def test_history_reports_a_destination_it_cant_list(authed_client, isolated_webui, monkeypatch):
-    def expired(root, recursive=False):
+    def expired(root, recursive=False, include=()):
         raise isolated_webui.backups.rclone_util.RcloneError("rclone lsjson failed", "invalid_grant (reconnect it)", 1)
 
     monkeypatch.setattr(isolated_webui.backups.rclone_util, "lsjson", expired)

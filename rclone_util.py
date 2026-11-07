@@ -154,8 +154,13 @@ def lsf(remote_dir):
     return [line.strip() for line in out.splitlines() if line.strip()]
 
 
-def lsjson(remote_dir, recursive=False):
-    out = _list(["lsjson", "--recursive", remote_dir] if recursive else ["lsjson", remote_dir])
+def lsjson(remote_dir, recursive=False, include=()):
+    """include: rclone --include patterns; a recursive listing with them
+    never opens a folder they can't match."""
+    args = ["lsjson", *(["--recursive"] if recursive else [])]
+    for pattern in include:
+        args += ["--include", pattern]
+    out = _list([*args, remote_dir])
     return json.loads(out) if out.strip() else []
 
 

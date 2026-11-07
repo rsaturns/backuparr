@@ -176,7 +176,7 @@ def test_a_cancelled_app_saves_what_it_did(backup_run, monkeypatch):
 @pytest.fixture
 def listing(authed_client, monkeypatch):
     files = []
-    monkeypatch.setattr(rclone_util, "lsjson", lambda root, recursive=False: [
+    monkeypatch.setattr(rclone_util, "lsjson", lambda root, recursive=False, include=(): [
         {"Path": p, "Name": p.rsplit("/", 1)[-1], "IsDir": False, "Size": 1, "ModTime": "2026-11-0%sT03:00:30.123456789Z" % p[-12]}
         for p in files])
     monkeypatch.setattr(rclone_util, "delete_file", lambda path: None)
