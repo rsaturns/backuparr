@@ -20,7 +20,19 @@
   <Screenshot>https://raw.githubusercontent.com/rsaturns/backuparr/main/docs/screenshots/settings.png</Screenshot>
   <Screenshot>https://raw.githubusercontent.com/rsaturns/backuparr/main/docs/screenshots/run.png</Screenshot>
   <Screenshot>https://raw.githubusercontent.com/rsaturns/backuparr/main/docs/screenshots/history.png</Screenshot>
-  <Changes>### 2.5.5 (2026-11-05)
+  <Changes>### 2.5.6 (2026-11-07)
+- Google's script for the Drive folder picker loads only when you choose a folder, not on every page.
+- Downloading a backup from Local storage starts straight away: it's no longer copied inside the container first, which for a large Plex or Emby backup took time and as much disk space again.
+- Local storage on a USB disk that spins down to save power no longer fails with an I/O error: Backuparr waits up to 60 seconds for the disk to wake before writing to it (#140). Thanks to u/Neither_Rutabaga_627 on Reddit for the report: https://www.reddit.com/r/SideProject/comments/1xnc98k/comment/19s90yr7r7tnp/
+- Retention, History and the startup check of existing backups work when Local storage is the root of a disk: they no longer fail on a folder there that Backuparr can't read, such as ext4's lost+found. They now list only Backuparr's own folders (#143).
+- While a sleeping Local disk wakes, the Overview, History and Restore tabs, Test and Reset say "Waiting for storage to be ready..." instead of looking stuck.
+- The Restore tab lists only Backuparr's own backups of the app: another file or a folder kept in that app's folder no longer shows up, or gets picked as the latest backup.
+- A destination's Test shows the reason it failed, not rclone's command line or a raw "[Errno 13]" error.
+- A Google Drive connection error containing "%" is shown, instead of stopping the page's startup before it.
+- The Reset dialog says backups on Dropbox are kept too, as on Google Drive and OneDrive.
+- A SABnzbd restore no longer writes a nameless server's host and username to the log.
+
+### 2.5.5 (2026-11-05)
 - Each destination can keep backups for its own number of days, for example 28 on Local storage and 7 on Google Drive (Retention on its card in Settings; blank uses the default). The Overview then shows each destination's retention (#133). Thanks to @Tharic99 for the request.
 - Community Apps on Unraid shows what changed in the last three releases, with a link to the full changelog.
 - History shows a run that left no backup as Backup failed; View log has the reason.
@@ -30,11 +42,8 @@
 ### 2.5.4 (2026-11-05)
 - A sound SQLite database no longer fails the check before upload because a column holds a number where its type says text, or the other way round (SQLite reports these as "NUMERIC value in ..."). Long-running Sonarr installs have them in SceneMappings, so their backups weren't uploaded. Emby, Seerr and LazyLibrarian's own database checks skip them too.
 
-### 2.5.3 (2026-11-05)
-- Radarr, Sonarr, Lidarr, Whisparr and Prowlarr can be backed up with Authentication Required set to Enabled: when Test connection finds the app asks for a login, the card shows Username and Password, and Backuparr signs in (Forms or Basic, detected by itself) only to download the backup. Prowlarr discovery uses Prowlarr's login too. A backup that starts needing a login says so in its error and notification. Thanks to u/Neither_Rutabaga_627 for the request: https://www.reddit.com/r/SideProject/comments/1xnc98k/comment/19s5pnjq9tgbo/
-
 View all changes: https://github.com/rsaturns/backuparr/blob/main/CHANGELOG.md</Changes>
-  <Date>2026-11-05</Date>
+  <Date>2026-11-07</Date>
   <Config Name="WebUI" Target="8990" Default="8990" Mode="tcp" Description="Port of the Backuparr web UI." Type="Port" Display="always" Required="true" Mask="false">8990</Config>
   <Config Name="Appdata" Target="/config/backuparr" Default="/mnt/user/appdata/backuparr" Mode="rw" Description="Backuparr's settings, encrypted credentials and, with the Local destination, the backups themselves. Back this folder up or keep a cloud destination enabled." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/backuparr</Config>
   <Config Name="Jellyfin backups folder" Target="/mnt/jellyfin-backups" Default="" Mode="rw" Description="Needed to back up Jellyfin: the folder Jellyfin writes its backups to, e.g. /mnt/user/appdata/jellyfin/data/data/backups for the linuxserver image. See https://rsaturns.github.io/backuparr/apps/jellyfin/" Type="Path" Display="always" Required="false" Mask="false"/>
