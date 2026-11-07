@@ -332,8 +332,6 @@ def api_restore_sabnzbd_preview(dest_id):
 def api_restore(dest_id, app_name):
     if not instance_type(app_name):
         return jsonify({"error": "unknown app"}), 404
-    if not restore_supported(app_name):
-        return jsonify({"error": f"{app_name} does not support automated restore - see its page in the docs"}), 400
 
     data = request.get_json(force=True, silent=True) or {}
     if not data.get("confirm"):
