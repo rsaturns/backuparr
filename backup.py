@@ -334,11 +334,8 @@ def apply_retention(root, retention_days, now=None, only=None, dest_id=None):
     try:
         destination_util.wait_for_storage(dest_id, root)
         entries = destination_util.list_backups(root)
-    except rclone_util.RcloneError as exc:
+    except (rclone_util.RcloneError, destination_util.DestinationError) as exc:
         log.warning("retention: couldn't list %s, nothing removed: %s", root, exc.detail)
-        return
-    except destination_util.DestinationError as exc:
-        log.warning("retention: couldn't list %s, nothing removed: %s", root, exc)
         return
     per_app = {}
     present = set()
@@ -496,7 +493,7 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
                         uploaded.append(dest_id)
                         run["destinations"][dest_id] = {"ok": True, "error": None}
                     except (rclone_util.RcloneError, destination_util.DestinationError) as exc:
-                        detail = getattr(exc, "detail", None) or str(exc)
+                        detail = exc.detail
                         log.error("%s: upload to %s failed: %s", name, dest_id, detail)
                         dest_failures.append(f"{dest_id}: {detail}")
                         run["destinations"][dest_id] = {"ok": False, "error": detail}

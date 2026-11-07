@@ -20,7 +20,12 @@ log = logging.getLogger("backuparr")
 
 
 class DestinationError(RuntimeError):
-    pass
+    """Its message is written for the user. .detail is that message, as an
+    rclone_util.RcloneError's is its cause, so either reports the same way."""
+
+    @property
+    def detail(self):
+        return str(self)
 
 
 # Backuparr's own backups (#110) live beside the apps' folders.
