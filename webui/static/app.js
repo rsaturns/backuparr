@@ -76,6 +76,21 @@ function fmtTime(iso) {
   }
 }
 
+// Local storage can be a USB disk that spins down to save power: the server
+// waits up to 60 s for it to wake before it answers. A Local request still
+// unanswered after 2 s says so, as the backup log does.
+const STORAGE_WAIT_TEXT = "Waiting for storage to be ready...";
+
+async function whileStorageWakes(destId, request, show) {
+  if (destId !== "local") return request;
+  const timer = setTimeout(show, 2000);
+  try {
+    return await request;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ---------------------------------------------------------------- tabs ----
 function initTabs() {
   document.querySelectorAll(".tab-btn").forEach((btn) => {
@@ -260,7 +275,9 @@ async function loadOverview() {
     const destIds = enabledDestinationIds(cfg);
 
     const [histories, latestRuns] = await Promise.all([
-      Promise.all(destIds.map((id) => apiFetch(`/api/history/${id}`).catch((e) => {
+      Promise.all(destIds.map((id) => whileStorageWakes(id, apiFetch(`/api/history/${id}`), () => {
+        summaryEl.textContent = STORAGE_WAIT_TEXT;
+      }).catch((e) => {
         toast(`${destLabel(id)}: ${e.message}`, "fail");
         return {};
       }))),
@@ -1588,9 +1605,11 @@ async function testDestination(destId) {
     dot: card.querySelector(".status-dot"),
     pendingText: "Testing...",
     request: () =>
-      apiFetch(`/api/test-destination/${destId}`, {
+      whileStorageWakes(destId, apiFetch(`/api/test-destination/${destId}`, {
         method: "POST",
         body: JSON.stringify(payload),
+      }), () => {
+        card.querySelector(".test-result").textContent = STORAGE_WAIT_TEXT;
       }),
   });
 }
@@ -2222,7 +2241,8 @@ function missingHistoryRow(appId, e) {
 async function deleteBackup(destId, appId, filename, row) {
   if (!confirm(`Delete ${filename}? This can't be undone.`)) return;
   try {
-    await apiFetch(`/api/history/${destId}/${appId}/${encodeURIComponent(filename)}`, { method: "DELETE" });
+    await whileStorageWakes(destId, apiFetch(`/api/history/${destId}/${appId}/${encodeURIComponent(filename)}`, { method: "DELETE" }),
+      () => toast(STORAGE_WAIT_TEXT));
     row.remove();
     toast(`Deleted ${filename}`, "ok");
   } catch (e) {
@@ -2274,7 +2294,9 @@ async function loadHistory() {
     return;
   }
   try {
-    const history = await apiFetch(`/api/history/${destId}`);
+    const history = await whileStorageWakes(destId, apiFetch(`/api/history/${destId}`), () => {
+      root.textContent = STORAGE_WAIT_TEXT;
+    });
     root.innerHTML = "";
     const appIds = Object.keys(history).filter((appId) => (history[appId] || []).length > 0);
     if (!appIds.length) {
@@ -2430,7 +2452,9 @@ async function loadRestoreFiles() {
     return;
   }
   try {
-    const res = await apiFetch(`/api/restore/${destId}/${appId}/backups`);
+    const res = await whileStorageWakes(destId, apiFetch(`/api/restore/${destId}/${appId}/backups`), () => {
+      fileSelect.options[0].textContent = STORAGE_WAIT_TEXT;
+    });
     fileSelect.innerHTML = "";
     if (!res.files.length) {
       fileSelect.innerHTML = '<option value="">No backups found</option>';
@@ -2485,7 +2509,11 @@ async function renderRestoreExtra() {
   if (override) body.override = override;
   let result;
   try {
-    result = await apiFetch(`/api/restore/${destId}/${appId}/check`, { method: "POST", body: JSON.stringify(body) });
+    result = await whileStorageWakes(destId, apiFetch(`/api/restore/${destId}/${appId}/check`, {
+      method: "POST", body: JSON.stringify(body),
+    }), () => {
+      if (seq === restoreCheckSeq) block.textContent = STORAGE_WAIT_TEXT;
+    });
   } catch (e) {
     if (seq !== restoreCheckSeq) return;
     showRestoreCheckFailure(block, e.message);
@@ -2548,9 +2576,11 @@ async function loadSabnzbdPreview() {
   const container = document.getElementById("r-sabnzbd-servers");
   container.textContent = "Loading...";
   try {
-    const res = await apiFetch(`/api/restore/${destId}/sabnzbd/preview`, {
+    const res = await whileStorageWakes(destId, apiFetch(`/api/restore/${destId}/sabnzbd/preview`, {
       method: "POST",
       body: JSON.stringify({ file: fileSelect.value }),
+    }), () => {
+      container.textContent = STORAGE_WAIT_TEXT;
     });
     RESTORE_STATE.servers = res.servers;
     container.innerHTML = "";
@@ -2625,9 +2655,11 @@ async function doRestore() {
   document.getElementById("restore-log").textContent = "";
   document.getElementById("restore-log").classList.add("hidden");
   try {
-    await apiFetch(`/api/restore/${destId}/${appId}`, {
+    await whileStorageWakes(destId, apiFetch(`/api/restore/${destId}/${appId}`, {
       method: "POST",
       body: JSON.stringify(payload),
+    }), () => {
+      resultEl.textContent = STORAGE_WAIT_TEXT;
     });
     refreshRestoreStatus();
   } catch (e) {

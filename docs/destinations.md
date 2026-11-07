@@ -19,7 +19,8 @@ there (`<app>/<app>_<date>_<time>.zip`), so the folder can hold other files.
 
 A USB disk that spins down to save power is fine: before using it, Backuparr
 reads a small `.backuparr-wake` file it keeps there and waits up to 60 seconds
-for the disk to wake, and the log shows "waiting for storage to be ready...".
+for the disk to wake. The log shows "waiting for storage to be ready...", and
+so do the Overview, History and Restore tabs, Test and Reset while they wait.
 If it still fails, check `dmesg` on the host: a USB disk that resets or
 disconnects as it wakes is a cable, power or enclosure problem.
 
