@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 
 from flask import after_this_request, Blueprint, jsonify, request, send_file
 
+import archive_crypto
 import destination_util
 import manifest
 import rclone_util
@@ -76,6 +77,7 @@ def _add_runs(history, dest_id):
             entries.append({
                 "name": run.get("file") or "", "size": None, "mod_time": run.get("finished") or run.get("started"),
                 "app_version": run.get("app_version"), "recorded": True, "run_id": run["id"], "missing": True,
+                "encrypted": archive_crypto.is_encrypted_name(run.get("file") or ""),
                 "reason": result.get("error") or run.get("error") or "not uploaded",
             })
 
@@ -106,7 +108,7 @@ def api_history(dest_id):
             history.setdefault(app_name, []).append({
                 "name": entry["Name"], "size": entry["Size"], "mod_time": entry["ModTime"],
                 "app_version": details.get("app_version") if details else None, "recorded": details is not None,
-                "run_id": None,
+                "run_id": None, "encrypted": archive_crypto.is_encrypted_name(entry["Name"]),
             })
     _add_runs(history, dest_id)
     for entries in history.values():
@@ -147,7 +149,23 @@ def api_history_download(dest_id, app_name, filename):
     root, error = _destination_root_or_error(cfg, dest_id)
     if error:
         return error
+    return send_backup(dest_id, root, app_name, filename)
 
+
+def _decrypts_on_download(app_name, filename):
+    """An app's encrypted backup is decrypted for the signed-in user who asks
+    for it (#147). Backuparr's own stays encrypted: the setup screen restores
+    it as it is."""
+    return archive_crypto.is_encrypted_name(filename) and app_name != destination_util.SELF_BACKUP_FOLDER
+
+
+def send_backup(dest_id, root, app_name, filename):
+    """The download response for one backup: the file itself, or for an
+    app's encrypted backup its decrypted copy under the plain name. History
+    and the Overview download through it, and so should anything else that
+    hands a backup to the browser. app_name and filename must already be
+    checked."""
+    decrypt = _decrypts_on_download(app_name, filename)
     if dest_id == "local":
         # Sent from where it is: a copy first would double a large backup's
         # disk use and hold up the download. Never a link out of the folder.
@@ -155,22 +173,35 @@ def api_history_download(dest_id, app_name, filename):
         path = os.path.realpath(os.path.join(folder, filename))
         if os.path.dirname(path) != folder or not os.path.isfile(path):
             return jsonify({"error": f"{filename} isn't on Local storage any more"}), 404
-        return send_file(path, as_attachment=True, download_name=filename)
+        if not decrypt:
+            return send_file(path, as_attachment=True, download_name=filename)
 
     tmp_dir = tempfile.mkdtemp(prefix="backuparr-dl-")
-    local_path = os.path.join(tmp_dir, filename)
-    try:
-        rclone_util.copyto(f"{root}/{app_name}/{filename}", local_path)
-    except rclone_util.RcloneError as exc:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
-        return jsonify({"error": humanize_error(exc)}), 500
 
     @after_this_request
     def _cleanup(response):
         shutil.rmtree(tmp_dir, ignore_errors=True)
         return response
 
-    return send_file(local_path, as_attachment=True, download_name=filename)
+    if dest_id != "local":
+        path = os.path.join(tmp_dir, filename)
+        try:
+            rclone_util.copyto(f"{root}/{app_name}/{filename}", path)
+        except rclone_util.RcloneError as exc:
+            return jsonify({"error": humanize_error(exc)}), 500
+    if not decrypt:
+        return send_file(path, as_attachment=True, download_name=filename)
+    plain = archive_crypto.plain_name(filename)
+    try:
+        archive_crypto.decrypt_file(path, os.path.join(tmp_dir, f"plain-{plain}"))
+    except archive_crypto.WrongKeyError:
+        return jsonify({"error": f"{filename} was encrypted with a different encryption key. Decrypt it with that "
+                                 "key using Backuparr's decrypt command."}), 409
+    except archive_crypto.ArchiveCryptoError as exc:
+        return jsonify({"error": f"{filename}: {exc}"}), 409
+    if dest_id != "local":
+        os.remove(path)  # only the decrypted copy needs the space now
+    return send_file(os.path.join(tmp_dir, f"plain-{plain}"), as_attachment=True, download_name=plain)
 
 
 # ------------------------------------------------------------- restore ----
@@ -243,6 +274,9 @@ def _restore_work(app_name, root, app_cfg, data, bazarr_backup_dir):
             log.info("restore: the download matches the backup's checksum")
         else:
             log.warning("restore: no checksum is recorded for this backup, so the download couldn't be verified")
+        if archive_crypto.is_encrypted(local_zip):
+            log.info("restore: decrypting the backup...")
+        local_zip = ra.decrypted(tmp_dir, local_zip, _key(data))
 
         passwords = data.get("passwords", {})
 
@@ -258,9 +292,18 @@ def _restore_work(app_name, root, app_cfg, data, bazarr_backup_dir):
     except Exception as exc:
         log_failure(log, f"restore failed for {app_name}", exc, app_cfg.get("url"), app=app_name)
         RESTORE_RUN_STATE["error"] = humanize_error(exc, app_cfg.get("url"))
+        # The Restore tab then asks for the key the backup was made with.
+        RESTORE_RUN_STATE["key_needed"] = isinstance(exc, archive_crypto.WrongKeyError)
     finally:
         if tmp_dir:
             shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+def _key(data):
+    """The key a restore request gives for a backup made with another key
+    (#147), or None for this install's. Never logged."""
+    key = data.get("key")
+    return key.strip() if isinstance(key, str) and key.strip() else None
 
 
 def _start_restore_run(app_name, root, app_cfg, data, bazarr_backup_dir):
@@ -276,6 +319,7 @@ def _start_restore_run(app_name, root, app_cfg, data, bazarr_backup_dir):
             "message": None,
             "summary": None,
             "error": None,
+            "key_needed": False,
             "log": [],
         },
         _restore_work,
@@ -318,9 +362,11 @@ def api_restore_sabnzbd_preview(dest_id):
     tmp_dir = None
     try:
         tmp_dir, local_zip, filename = ra.fetch_backup(root, "sabnzbd", data.get("file"))
-        config = ra.load_sabnzbd_config(tmp_dir, local_zip)
+        config = ra.load_sabnzbd_config(tmp_dir, ra.decrypted(tmp_dir, local_zip, _key(data)))
         servers = ra.sabnzbd_server_summary(config)
         return jsonify({"file": filename, "servers": servers})
+    except archive_crypto.WrongKeyError as exc:
+        return jsonify({"error": humanize_error(exc), "key_needed": True}), 409
     except Exception as exc:
         return jsonify({"error": humanize_error(exc)}), 500
     finally:

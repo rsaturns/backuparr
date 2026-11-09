@@ -129,8 +129,9 @@ def run(monkeypatch):
         state.uploads.append(dst)
 
     monkeypatch.setattr(rclone_util, "copyto", copyto)
-    cfg = {"apps": {"radarr": {"url": "http://radarr:7878", "api_key": "k"}}, "destinations": {"local": {}, "gdrive": {}}}
-    state.go = lambda: backup.run_backup(cfg)
+    state.cfg = {"apps": {"radarr": {"url": "http://radarr:7878", "api_key": "k", "encrypt": False}},
+                 "destinations": {"local": {}, "gdrive": {}}}
+    state.go = lambda: backup.run_backup(state.cfg)
     return state
 
 
@@ -143,6 +144,18 @@ def test_a_run_records_version_checksum_and_destinations(run):
     assert entry["app_version"] == "6.4.4.10685"
     assert entry["sha256"] == sha(b"archive") and entry["size"] == len(b"archive")
     assert entry["backuparr_version"] == backup.VERSION
+    assert entry["encrypted"] is False
+
+
+def test_an_encrypted_backup_is_recorded_as_encrypted_with_the_stored_files_checksum(run, monkeypatch):
+    stored = {}
+    monkeypatch.setattr(rclone_util, "copyto", lambda src, dst: stored.setdefault("data", open(src, "rb").read()))
+    run.cfg["apps"]["radarr"]["encrypt"] = True
+    ok, failed = run.go()
+    assert ok == ["radarr"] and failed == []
+    [entry] = manifest.backups().values()
+    assert entry["file"].endswith(".zip.enc") and entry["encrypted"] is True
+    assert entry["sha256"] == sha(stored["data"]) and entry["size"] == len(stored["data"])
 
 
 def test_only_destinations_that_got_the_upload_are_recorded(run):

@@ -128,6 +128,14 @@
                 <input type="text" id="s-bazarr_backup_dir" placeholder="/mnt/bazarr-backup">
               </label>
               {% endif %}
+              {% if m.always_encrypted %}
+              <p class="hint encrypt-note">Always encrypted for safety.</p>
+              {% else %}
+              <label class="field toggle-field">
+                <span class="switch"><input type="checkbox" class="f-encrypt" checked><span class="slider"></span></span>
+                <span>Encrypt backup</span>
+              </label>
+              {% endif %}
               <div class="app-card-actions">
                 <button type="button" class="btn btn-ghost btn-sm test-btn">Test connection</button>
                 {% if m.id == 'prowlarr' %}<button type="button" class="btn btn-primary btn-sm" id="discover-btn" disabled>Discover services</button><span class="help-tip" tabindex="0" role="img" aria-label="Reads the apps and download clients connected to Prowlarr, through its API, and fills in their URLs and API keys." data-tip="Reads the apps and download clients connected to Prowlarr, through its API, and fills in their URLs and API keys.">?</span>{% endif %}
@@ -423,6 +431,10 @@
         <span>Restore to a different target (override the URL / API key configured in Settings, for this restore only)</span>
       </label>
       <div id="r-override" class="hidden"></div>
+      <label class="field hidden" id="r-key-field">
+        <span class="field-label">Encryption key <span class="muted">(the key this backup was made with)</span></span>
+        <input type="password" id="r-key" autocomplete="off">
+      </label>
       <div id="r-extra"></div>
       <label class="field checkbox-field">
         <input type="checkbox" id="r-confirm">
@@ -502,7 +514,7 @@
       <h3 id="key-modal-title">Save your encryption key</h3>
     </div>
     <div class="modal-body">
-    <p class="hint">This key encrypts the passwords, API keys and cloud logins Backuparr stores, and Backuparr's own backup. You need it to restore Backuparr.</p>
+    <p class="hint">This key encrypts the passwords, API keys and cloud logins Backuparr stores, and your backups. You need it to restore Backuparr or an encrypted backup.</p>
       <div class="key-box">
         <code id="key-value" class="key-value"></code>
         <button type="button" class="btn btn-ghost btn-sm" id="key-copy-btn">Copy</button>
@@ -512,6 +524,20 @@
       <div class="save-row key-ack-row">
         <button type="button" class="btn btn-primary" id="key-ack-btn">Yes, I have saved my encryption key</button>
         <span id="key-result" class="save-result"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="encryption-notice-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="encryption-notice-title">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="encryption-notice-title">Backups are now encrypted</h3>
+    </div>
+    <div class="modal-body">
+      <p>You can turn this off for each app in Settings.</p>
+      <div class="save-row key-ack-row">
+        <button type="button" class="btn btn-primary" id="encryption-notice-ok">OK</button>
       </div>
     </div>
   </div>
@@ -561,6 +587,7 @@
 </div>
 
 <div id="toast-root" class="toast-root"></div>
+<script src="{{ url_for('static', filename='messages.js') }}"></script>
 <script src="{{ url_for('static', filename='key-prompt.js') }}"></script>
 <script src="{{ url_for('static', filename='self-restore.js') }}"></script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>

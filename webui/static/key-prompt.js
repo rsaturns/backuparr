@@ -45,7 +45,7 @@ async function showKeyPrompt(container, done) {
       if (!ack.ok) throw new Error((ackBody && ackBody.error) || `HTTP ${ack.status}`);
       done();
     } catch (e) {
-      result.textContent = e.message;
+      result.textContent = sentence(e.message);
       result.className = "save-result fail";
       ackBtn.disabled = false;
     }

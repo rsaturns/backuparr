@@ -153,8 +153,8 @@ def test_each_instance_gets_its_own_folder_and_archive_names(monkeypatch):
 
     assert not failed and ok == apps
     assert built == [("radarr", "http://r1"), ("radarr-4k", "http://r2")]
-    assert re.fullmatch(r"/dest/radarr/radarr_\d{8}_\d{6}\.zip", uploaded[0])
-    assert re.fullmatch(r"/dest/radarr-4k/radarr-4k_\d{8}_\d{6}\.zip", uploaded[1])
+    assert re.fullmatch(r"/dest/radarr/radarr_\d{8}_\d{6}\.zip\.enc", uploaded[0])
+    assert re.fullmatch(r"/dest/radarr-4k/radarr-4k_\d{8}_\d{6}\.zip\.enc", uploaded[1])
 
 
 def test_a_single_app_run_backs_up_and_prunes_only_that_instance(monkeypatch):

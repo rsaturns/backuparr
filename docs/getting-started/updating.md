@@ -19,6 +19,14 @@ Updating keeps your settings, login and backups. A backup Backuparr makes of
 itself can only be restored on the same or a newer version, so don't downgrade
 and then restore one.
 
+## Updating to 3.0.0
+
+- **Backups are encrypted** with your encryption key from the next run,
+  including apps you set up before; Backuparr says so once. Turn it off for
+  an app on its card in Settings. See
+  [Encrypted backups](../security.md#encrypted-backups).
+- **Backups made before stay as they are** and still restore.
+
 ## Updating to 2.5.0
 
 - **Your encryption key** is shown once, and Backuparr waits until you confirm

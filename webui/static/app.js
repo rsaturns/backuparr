@@ -41,6 +41,7 @@ async function apiFetch(url, opts) {
     const message = (body && (body.error || body.message)) || `HTTP ${res.status}`;
     const error = new Error(message);
     error.status = res.status;
+    error.body = body;
     throw error;
   }
   return body;
@@ -209,6 +210,66 @@ function destinationsStat(destIds) {
   return div;
 }
 
+// ---------------------------------------------------------- encryption ----
+// Whether a backup is encrypted (#147): a padlock and a word, so it reads at
+// a glance, at small sizes and to screen readers. Used wherever a backup is
+// listed - History, the Overview, and the Restore tab.
+const LOCK_SHACKLE = {
+  closed: "M8 11V7a4 4 0 0 1 8 0v4",
+  open: "M8 11V7a4 4 0 0 1 7.75-1.4",
+};
+
+function lockIcon(closed) {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("class", "enc-icon");
+  const body = document.createElementNS(ns, "rect");
+  Object.entries({ x: 5, y: 11, width: 14, height: 10, rx: 2 }).forEach(([k, v]) => body.setAttribute(k, v));
+  if (closed) body.setAttribute("class", "enc-icon-fill");
+  const shackle = document.createElementNS(ns, "path");
+  shackle.setAttribute("d", closed ? LOCK_SHACKLE.closed : LOCK_SHACKLE.open);
+  svg.append(body, shackle);
+  return svg;
+}
+
+function encryptionBadge(encrypted) {
+  const badge = document.createElement("span");
+  badge.className = `enc-badge ${encrypted ? "enc-on" : "enc-off"}`;
+  badge.append(lockIcon(encrypted), document.createTextNode(encrypted ? "Encrypted" : "Not encrypted"));
+  return badge;
+}
+
+const DECRYPTED_DOWNLOAD_TEXT = "This download is decrypted. Anyone with access to this computer can read it.";
+
+// An app's encrypted backup downloads decrypted; Backuparr's own stays as it
+// is, for the setup screen's restore.
+function warnWhenDownloadIsDecrypted(link, appId, entry) {
+  if (entry.encrypted && appId !== "backuparr") link.addEventListener("click", () => toast(DECRYPTED_DOWNLOAD_TEXT, "warn"));
+}
+
+// The one-time notice for an install updated to 3.0, when backups became
+// encrypted by default. A new install never sees it.
+async function showEncryptionNotice() {
+  const { show } = await apiFetch("/api/encryption-notice");
+  if (!show) return;
+  const modal = document.getElementById("encryption-notice-modal");
+  const ok = document.getElementById("encryption-notice-ok");
+  modal.classList.remove("hidden");
+  ok.focus();
+  ok.addEventListener("click", async () => {
+    ok.disabled = true;
+    try {
+      await apiFetch("/api/encryption-notice/acknowledge", { method: "POST" });
+      modal.classList.add("hidden");
+    } catch (e) {
+      toast(sentence(e.message), "fail");
+      ok.disabled = false;
+    }
+  }, { once: true });
+}
+
 // One Overview tile: an app's (or Backuparr's own) latest backup, or why its
 // last run failed, with download and log links.
 function overviewCard(appId, { label, icon, latest, failure, latestRun, idleText }) {
@@ -237,7 +298,7 @@ function overviewCard(appId, { label, icon, latest, failure, latestRun, idleText
   last.className = "overview-app-last";
   if (failure) {
     const failLine = document.createElement("span");
-    failLine.textContent = `Last run failed: ${failure}`;
+    failLine.textContent = `Last run failed: ${clause(failure)}`;
     last.appendChild(failLine);
   } else if (latest) {
     const summaryLine = document.createElement("span");
@@ -245,7 +306,7 @@ function overviewCard(appId, { label, icon, latest, failure, latestRun, idleText
     const fn = document.createElement("span");
     fn.className = "filename";
     fn.textContent = latest.name;
-    last.append(summaryLine, fn);
+    last.append(summaryLine, fn, encryptionBadge(latest.encrypted));
   } else {
     last.textContent = idleText;
   }
@@ -258,6 +319,7 @@ function overviewCard(appId, { label, icon, latest, failure, latestRun, idleText
     dlLink.className = "overview-download-link";
     dlLink.textContent = "Download latest backup";
     dlLink.href = `/api/history/${latest.destId}/${appId}/${encodeURIComponent(latest.name)}/download`;
+    warnWhenDownloadIsDecrypted(dlLink, appId, latest);
     links.appendChild(dlLink);
   }
   if (latestRun) links.appendChild(viewLogButton(appId, latestRun.id));
@@ -278,7 +340,7 @@ async function loadOverview() {
       Promise.all(destIds.map((id) => whileStorageWakes(id, apiFetch(`/api/history/${id}`), () => {
         summaryEl.textContent = STORAGE_WAIT_TEXT;
       }).catch((e) => {
-        toast(`${destLabel(id)}: ${e.message}`, "fail");
+        toast(`${destLabel(id)}: ${clause(e.message)}`, "fail");
         return {};
       }))),
       apiFetch("/api/runlogs"),
@@ -347,7 +409,7 @@ async function loadOverview() {
     summaryEl.innerHTML = "";
     const error = document.createElement("p");
     error.className = "overview-empty";
-    error.textContent = `Error loading overview: ${e.message}`;
+    error.textContent = `Error loading overview: ${clause(e.message)}`;
     appsEl.replaceChildren(error);
   }
 }
@@ -374,7 +436,7 @@ async function openRunLog(appId, runId) {
   try {
     run = await apiFetch(`/api/runlogs/${encodeURIComponent(appId)}/${encodeURIComponent(runId)}`);
   } catch (e) {
-    if (seq === logPanelSeq) meta.textContent = e.message;
+    if (seq === logPanelSeq) meta.textContent = sentence(e.message);
     return;
   }
   if (seq !== logPanelSeq) return;
@@ -384,7 +446,7 @@ async function openRunLog(appId, runId) {
   when.textContent = `Run: ${fmtTime(run.started)}${run.app_version ? ` - ${appId === "backuparr" ? "Backuparr" : appMeta(appId)?.label || appId} ${run.app_version}` : ""}`;
   const result = document.createElement("p");
   result.className = run.ok ? "ok" : "fail";
-  result.textContent = run.ok ? `Backed up: ${run.file}` : `Failed: ${run.error || "unknown error"}`;
+  result.textContent = run.ok ? `Backed up: ${run.file}` : `Failed: ${clause(run.error || "unknown error")}`;
   meta.append(when, result);
   const destIds = Object.keys(run.destinations || {});
   if (destIds.length) {
@@ -539,7 +601,7 @@ function initChangePassword() {
       close();
       toast("Password changed - other browsers were signed out", "ok");
     } catch (err) {
-      result.textContent = err.message;
+      result.textContent = sentence(err.message);
       result.className = "save-result fail";
     } finally {
       submit.disabled = false;
@@ -585,6 +647,8 @@ function fillAppCard(appId, cfg) {
   card.querySelectorAll(".f-extra").forEach((input) => {
     input.value = cfg[input.dataset.field] || "";
   });
+  const encryptInput = card.querySelector(".f-encrypt");
+  if (encryptInput) encryptInput.checked = cfg.encrypt !== false; // absent on always-encrypted apps
   showLoginFields(card, !!(cfg.username || cfg.password));
   const nameInput = card.querySelector(".f-name");
   if (nameInput) {
@@ -638,6 +702,8 @@ function readAppCard(appId) {
   card.querySelectorAll(".f-extra").forEach((input) => {
     out[input.dataset.field] = input.value;
   });
+  const encryptInput = card.querySelector(".f-encrypt");
+  if (encryptInput) out.encrypt = encryptInput.checked;
   const nameInput = card.querySelector(".f-name");
   if (nameInput) out.name = nameInput.value.trim();
   return out;
@@ -804,7 +870,7 @@ function stopPlexLogin(message) {
   document.getElementById("plex-server-field").classList.add("hidden");
   document.getElementById("plex-server-select").onchange = null;
   document.getElementById("plex-server-select").replaceChildren();
-  document.getElementById("plex-auth-status").textContent = message;
+  document.getElementById("plex-auth-status").textContent = sentence(message);
 }
 
 function applyPlexToken(flow, server) {
@@ -1148,7 +1214,7 @@ async function pollDiscovery(jobId, status) {
     try {
       const state = await apiFetch(`/api/discovery/prowlarr/${jobId}`);
       failures = 0;
-      status.textContent = state.message;
+      status.textContent = sentence(state.message);
       if (state.state !== "running") return state;
     } catch (e) {
       // Tolerate a few transient failures; a 4xx (other than 429) is final.
@@ -1192,7 +1258,7 @@ async function discoverServices() {
     if (state.result.needs_login) revealLoginFields(appCard("prowlarr"));
     renderDiscoveryResults(state.result, initial);
   } catch (e) {
-    status.textContent = e.message;
+    status.textContent = sentence(e.message);
   } finally {
     if (jobId && finished) await apiFetch(`/api/discovery/prowlarr/${jobId}`, { method: "DELETE" }).catch(() => {});
     DISCOVERY_RUNNING = false;
@@ -1372,7 +1438,7 @@ function applyBasicAuthHeader(event) {
   const name = document.getElementById("basic-auth-header").value.trim();
   const fail = (message) => {
     status.className = "test-result fail";
-    status.textContent = message;
+    status.textContent = sentence(message);
   };
   if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name)) return fail("Enter a valid HTTP header name.");
   if (["host", "content-length", "transfer-encoding", "connection", "trailer", "te", "upgrade", "proxy-connection", "expect"].includes(name.toLowerCase())) {
@@ -1546,9 +1612,9 @@ async function saveSettings() {
     snapshotSettingsState();
     toast("Settings saved", "ok");
   } catch (e) {
-    resultEl.textContent = e.message;
+    resultEl.textContent = sentence(e.message);
     resultEl.className = "save-result fail";
-    toast(`Save failed: ${e.message}`, "fail");
+    toast(`Save failed: ${clause(e.message)}`, "fail");
   }
 }
 
@@ -1562,12 +1628,12 @@ async function runTest({ btn, resultEl, dot, pendingText, request }) {
   if (dot) dot.dataset.state = "idle";
   try {
     const res = await request();
-    resultEl.textContent = res.message;
+    resultEl.textContent = sentence(res.message);
     resultEl.className = `test-result ${res.ok ? "ok" : "fail"}`;
     if (dot) dot.dataset.state = res.ok ? "ok" : "fail";
     return res;
   } catch (e) {
-    resultEl.textContent = e.message;
+    resultEl.textContent = sentence(e.message);
     resultEl.className = "test-result fail";
     if (dot) dot.dataset.state = "fail";
   } finally {
@@ -1619,7 +1685,7 @@ async function testNotifyUrl() {
   const resultEl = document.getElementById("notify-test-result");
   const notifyUrl = document.getElementById("s-notify_url").value.trim();
   if (!notifyUrl) {
-    resultEl.textContent = "Enter a Notify URL first";
+    resultEl.textContent = "Enter a Notify URL first.";
     resultEl.className = "test-result fail";
     return;
   }
@@ -1653,9 +1719,9 @@ async function connectGdrive() {
     snapshotSettingsState();
     window.location.href = "/api/destinations/gdrive/oauth/start";
   } catch (e) {
-    resultEl.textContent = e.message;
+    resultEl.textContent = sentence(e.message);
     resultEl.className = "save-result fail";
-    toast(`Could not save before connecting: ${e.message}`, "fail");
+    toast(`Could not save before connecting: ${clause(e.message)}`, "fail");
   }
 }
 
@@ -1720,7 +1786,7 @@ async function openGooglePicker() {
     if (appId) builder.setAppId(appId);
     builder.build().setVisible(true);
   } catch (e) {
-    toast(`Could not open the folder picker: ${e.message}`, "fail");
+    toast(`Could not open the folder picker: ${clause(e.message)}`, "fail");
   } finally {
     btn.disabled = false;
   }
@@ -1737,7 +1803,7 @@ async function gdrivePickerCallback(data) {
     toast(`Backing up to "${folder.name}"`, "ok");
     await loadConfig();
   } catch (e) {
-    toast(`Could not save the selected folder: ${e.message}`, "fail");
+    toast(`Could not save the selected folder: ${clause(e.message)}`, "fail");
   }
 }
 
@@ -1748,7 +1814,7 @@ async function disconnectGdrive() {
     toast("Google Drive disconnected", "ok");
     await loadConfig();
   } catch (e) {
-    toast(`Could not disconnect: ${e.message}`, "fail");
+    toast(`Could not disconnect: ${clause(e.message)}`, "fail");
   }
 }
 
@@ -1779,7 +1845,7 @@ async function connectTokenDest(destId) {
   const btn = document.getElementById(`${destId}-connect-btn`);
   const tokenBlob = input.value.trim();
   if (!tokenBlob) {
-    toast(`Paste the token \`rclone authorize ${destId}\` printed first`, "fail");
+    toast(`Paste the token \`rclone authorize ${destId}\` printed first.`, "fail");
     return;
   }
   btn.disabled = true;
@@ -1792,7 +1858,7 @@ async function connectTokenDest(destId) {
     toast(`${label} connected`, "ok");
     await loadConfig();
   } catch (e) {
-    toast(`Could not connect: ${e.message}`, "fail");
+    toast(`Could not connect: ${clause(e.message)}`, "fail");
   } finally {
     btn.disabled = false;
   }
@@ -1806,7 +1872,7 @@ async function disconnectTokenDest(destId) {
     toast(`${label} disconnected`, "ok");
     await loadConfig();
   } catch (e) {
-    toast(`Could not disconnect: ${e.message}`, "fail");
+    toast(`Could not disconnect: ${clause(e.message)}`, "fail");
   }
 }
 
@@ -1888,7 +1954,7 @@ function initSetupGuideEvents() {
       toast("Copied", "ok");
     } catch (e) {
       input.select();
-      toast("Couldn't copy automatically - text is selected, copy manually", "fail");
+      toast("Couldn't copy automatically - the text is selected, so copy it by hand.", "fail");
     }
   });
 }
@@ -2155,7 +2221,7 @@ async function refreshRunStatus() {
     render: renderRunState,
     intervalMs: 1500,
     onError: (e) => {
-      document.getElementById("run-log").textContent = `Error loading status: ${e.message}`;
+      document.getElementById("run-log").textContent = `Error loading status: ${clause(e.message)}`;
     },
   });
 }
@@ -2180,7 +2246,7 @@ async function runBackupNow() {
     toast(appId ? `Backup of ${appLabel(appId)} started` : "Backup started", "ok");
     refreshRunStatus();
   } catch (e) {
-    toast(`Could not start backup: ${e.message}`, "fail");
+    toast(`Could not start backup: ${clause(e.message)}`, "fail");
   }
 }
 
@@ -2193,7 +2259,7 @@ async function cancelBackupRun() {
     toast("Cancelling after the current step finishes...", "ok");
     refreshRunStatus();
   } catch (e) {
-    toast(`Could not cancel: ${e.message}`, "fail");
+    toast(`Could not cancel: ${clause(e.message)}`, "fail");
   }
 }
 
@@ -2255,7 +2321,7 @@ async function deleteBackup(destId, appId, filename, row) {
     row.remove();
     toast(`Deleted ${filename}`, "ok");
   } catch (e) {
-    toast(`Delete failed: ${e.message}`, "fail");
+    toast(`Delete failed: ${clause(e.message)}`, "fail");
   }
 }
 
@@ -2331,7 +2397,10 @@ async function loadHistory() {
           return;
         }
         const nameTd = document.createElement("td");
-        nameTd.textContent = e.name;
+        const nameText = document.createElement("span");
+        nameText.className = "history-file";
+        nameText.textContent = e.name;
+        nameTd.append(nameText, encryptionBadge(e.encrypted));
         const versionTd = document.createElement("td");
         versionTd.textContent = e.app_version || "-";
         if (!e.app_version) {
@@ -2348,6 +2417,7 @@ async function loadHistory() {
         dlLink.title = "Download this backup";
         dlLink.textContent = "↓";
         dlLink.href = `/api/history/${encodeURIComponent(destId)}/${encodeURIComponent(appId)}/${encodeURIComponent(e.name)}/download`;
+        warnWhenDownloadIsDecrypted(dlLink, appId, e);
         const delBtn = document.createElement("button");
         delBtn.type = "button";
         delBtn.className = "icon-btn";
@@ -2367,7 +2437,7 @@ async function loadHistory() {
     root.innerHTML = "";
     const p = document.createElement("p");
     p.className = "empty-note";
-    p.textContent = `Error loading history: ${e.message}`;
+    p.textContent = `Error loading history: ${clause(e.message)}`;
     root.appendChild(p);
   }
 }
@@ -2456,6 +2526,7 @@ async function loadRestoreFiles() {
   const fileSelect = document.getElementById("r-file");
   fileSelect.innerHTML = "<option>Loading...</option>";
   document.getElementById("r-extra").innerHTML = "";
+  showRestoreKeyField(false);
   if (!destId) {
     fileSelect.innerHTML = "<option>No destinations enabled</option>";
     return;
@@ -2482,7 +2553,7 @@ async function loadRestoreFiles() {
     const opt = document.createElement("option");
     opt.textContent = "Error loading backups";
     fileSelect.appendChild(opt);
-    toast(e.message, "fail");
+    toast(sentence(e.message), "fail");
   }
 }
 
@@ -2495,8 +2566,15 @@ function setRestoreReady(ready) {
   document.getElementById("restore-btn").disabled = !ready;
 }
 
-function sentence(text) {
-  return text.charAt(0).toUpperCase() + text.slice(1);
+// Asked for only when a backup turns out to be made with another key (#147).
+function showRestoreKeyField(show) {
+  const field = document.getElementById("r-key-field");
+  field.classList.toggle("hidden", !show);
+  if (!show) document.getElementById("r-key").value = "";
+}
+
+function restoreKey() {
+  return document.getElementById("r-key").value.trim();
 }
 
 async function renderRestoreExtra() {
@@ -2533,7 +2611,7 @@ async function renderRestoreExtra() {
     showRestoreCheckFailure(block, result.message);
     return;
   }
-  block.textContent = result.message;
+  block.textContent = sentence(result.message);
   block.classList.add(result.status === "match" ? "ok" : "warn");
   renderRestoreDetails(appId, extraRoot);
   setRestoreReady(true);
@@ -2585,9 +2663,11 @@ async function loadSabnzbdPreview() {
   const container = document.getElementById("r-sabnzbd-servers");
   container.textContent = "Loading...";
   try {
+    const body = { file: fileSelect.value };
+    if (restoreKey()) body.key = restoreKey();
     const res = await whileStorageWakes(destId, apiFetch(`/api/restore/${destId}/sabnzbd/preview`, {
       method: "POST",
-      body: JSON.stringify({ file: fileSelect.value }),
+      body: JSON.stringify(body),
     }), () => {
       container.textContent = STORAGE_WAIT_TEXT;
     });
@@ -2619,8 +2699,17 @@ async function loadSabnzbdPreview() {
     container.innerHTML = "";
     const p = document.createElement("p");
     p.className = "empty-note";
-    p.textContent = e.message;
+    p.textContent = sentence(e.message);
     container.appendChild(p);
+    if (e.body && e.body.key_needed) {
+      showRestoreKeyField(true);
+      const again = document.createElement("button");
+      again.type = "button";
+      again.className = "btn btn-ghost btn-sm";
+      again.textContent = "Try again";
+      again.addEventListener("click", loadSabnzbdPreview);
+      p.append(" ", again);
+    }
   }
 }
 
@@ -2638,6 +2727,7 @@ async function doRestore() {
   }
 
   const payload = { file, confirm: true };
+  if (restoreKey()) payload.key = restoreKey();
   const override = readRestoreOverride();
   if (override) {
     if (!override.url) {
@@ -2672,9 +2762,9 @@ async function doRestore() {
     });
     refreshRestoreStatus();
   } catch (e) {
-    resultEl.textContent = e.message;
+    resultEl.textContent = sentence(e.message);
     resultEl.className = "save-result fail";
-    toast(`Restore failed: ${e.message}`, "fail");
+    toast(`Restore failed: ${clause(e.message)}`, "fail");
   }
 }
 
@@ -2703,8 +2793,9 @@ function renderRestoreState(state) {
   }
 
   if (!state.running && state.finished_at) {
+    if (state.key_needed) showRestoreKeyField(true);
     if (state.error) {
-      resultEl.textContent = state.error;
+      resultEl.textContent = sentence(state.error);
       resultEl.className = "save-result fail";
     } else {
       const s = state.summary;
@@ -2720,7 +2811,7 @@ function renderRestoreState(state) {
         resultEl.textContent = parts.length ? parts.join(", ") + "." : "";
         if (s.config_staged) resultEl.textContent += `${parts.length ? " " : ""}Config not applied yet: ${s.config_staged}`;
       } else {
-        resultEl.textContent = state.message || "Restore complete.";
+        resultEl.textContent = sentence(state.message || "Restore complete.");
       }
       resultEl.className = `save-result ${s && s.config_staged ? "warn" : "ok"}`;
     }
@@ -2736,7 +2827,7 @@ async function refreshRestoreStatus() {
     fetchStatus: () => apiFetch("/api/restore/status"),
     render: renderRestoreState,
     intervalMs: 1000,
-    onStopped: (s) => toast(s.error ? `Restore failed: ${s.error}` : "Restore complete", s.error ? "fail" : "ok"),
+    onStopped: (s) => toast(s.error ? `Restore failed: ${clause(s.error)}` : "Restore complete", s.error ? "fail" : "ok"),
     // no onError - a transient poll error just waits for the next tick (or tab visit) to retry
   });
 }
@@ -2767,7 +2858,7 @@ function handleGdriveRedirect() {
   if (!error && !connected) return;
 
   if (error) {
-    toast(`Google Drive: ${error}`, "fail"); // URLSearchParams has already decoded it
+    toast(`Google Drive: ${clause(error)}`, "fail"); // URLSearchParams has already decoded it
   } else if (connected === "connected") {
     toast("Google Drive connected - choose a folder in Settings", "ok");
   }
@@ -2919,7 +3010,7 @@ async function openWhatsChanged() {
     body.innerHTML = "";
     const err = document.createElement("p");
     err.className = "whats-changed-error";
-    err.textContent = `Could not load release notes: ${e.message}`;
+    err.textContent = `Could not load release notes: ${clause(e.message)}`;
     body.appendChild(err);
   }
 }
@@ -2988,7 +3079,7 @@ function initBackuparrRestore() {
       next.textContent = AUTH_DISABLED ? "Reload" : "Sign in again";
       btn.replaceWith(next);
     } catch (e) {
-      resultEl.textContent = e.message;
+      resultEl.textContent = sentence(e.message);
       resultEl.className = "save-result fail";
       btn.disabled = false;
     }
@@ -3000,7 +3091,7 @@ async function init() {
   try {
     if (await showKeyPrompt(document.getElementById("key-modal"), () => window.location.reload())) return;
   } catch (e) {
-    toast(`Could not check the encryption key: ${e.message}`, "fail");
+    toast(`Could not check the encryption key: ${clause(e.message)}`, "fail");
   }
   initTabs();
   initFeedbackMenu();
@@ -3025,8 +3116,9 @@ async function init() {
   try {
     await loadConfig();
   } catch (e) {
-    toast(`Could not load config: ${e.message}`, "fail");
+    toast(`Could not load config: ${clause(e.message)}`, "fail");
   }
+  showEncryptionNotice().catch(() => {}); // shown again next time if it couldn't be checked
   refreshRunStatus();
   loadOverview();
   handleGdriveRedirect();

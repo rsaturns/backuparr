@@ -39,6 +39,9 @@ restore never leaves an app half-migrated.
   6 hours.
 - Each download is also checked against the checksum recorded when the backup
   was made.
+- An [encrypted backup](security.md#encrypted-backups) is decrypted after
+  that check. One made with another encryption key asks for that key on the
+  Restore tab: enter it and restore again.
 
 ## What each restore does
 

@@ -7,7 +7,7 @@ from flask import Blueprint, jsonify, request
 import destination_util
 from apps.http_headers import headers_for_app, RequestHeadersError, validate_request_headers
 from backup import build_app, humanize_error, notify
-from config_store import app_meta, APP_NAMES, DEFAULT_APP, DEFAULT_INSTANCE, DEST_EDITABLE_FIELDS, DEST_NAMES, instance_ids, instance_type, key_required, load_config, MAX_EXTRA_INSTANCES, MULTI_INSTANCE_APPS, save_config
+from config_store import acknowledge_encryption_notice, app_meta, APP_NAMES, DEFAULT_APP, DEFAULT_INSTANCE, DEST_EDITABLE_FIELDS, DEST_NAMES, instance_ids, instance_type, key_required, load_config, MAX_EXTRA_INSTANCES, MULTI_INSTANCE_APPS, save_config
 
 
 bp = Blueprint("settings", __name__)
@@ -134,6 +134,8 @@ def _validate_config(data, cfg):
         if app_data is None:
             continue
         meta = app_meta(name)
+        if "encrypt" in app_data and not isinstance(app_data["encrypt"], bool):
+            return f"{name}: encrypt must be true or false"
         if app_data.get("enabled") and not app_data.get("url"):
             return f"{name}: a URL is required to enable it"
         if app_data.get("enabled") and key_required(name) and not app_data.get("api_key"):
@@ -188,6 +190,19 @@ def api_set_config():
 
     save_config(cfg)
     destination_util.sync(cfg)
+    return jsonify({"ok": True})
+
+
+# The one-time "Backups are now encrypted" notice for an install that
+# updated to 3.0 (#147). A new install never sees it.
+@bp.get("/api/encryption-notice")
+def api_encryption_notice():
+    return jsonify({"show": load_config().get("encryption_notice_acknowledged") is not True})
+
+
+@bp.post("/api/encryption-notice/acknowledge")
+def api_encryption_notice_acknowledge():
+    acknowledge_encryption_notice()
     return jsonify({"ok": True})
 
 

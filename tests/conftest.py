@@ -33,6 +33,17 @@ def manifest_in_tmp(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def secrets_key_in_tmp(tmp_path, monkeypatch):
+    """Every test has its own encryption key in tmp_path - backups are
+    encrypted by default (#147), so run_backup needs one - and never the
+    real /config one."""
+    monkeypatch.delenv("BACKUPARR_SECRETS_KEY", raising=False)
+    monkeypatch.setattr(secrets_crypto, "KEY_PATH", str(tmp_path / "secrets.key"))
+    monkeypatch.setattr(secrets_crypto, "_fernet", None)
+    monkeypatch.setattr(secrets_crypto, "_key", None)
+
+
+@pytest.fixture(autouse=True)
 def skip_archive_check(request, monkeypatch):
     """Most run_backup tests use fake drivers whose placeholder archives
     aren't real backups; tests marked archive_check run the real check."""

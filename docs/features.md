@@ -76,6 +76,9 @@ See [Restoring Backuparr itself](restoring.md#restoring-backuparr-itself).
   change from the user menu.
 - A forgotten password can be replaced with your encryption key, keeping your
   settings. See [Forgot your password?](security.md#forgot-your-password).
+- Backups are encrypted with your encryption key before upload; turn it off
+  per app, except for apps that are always encrypted. See
+  [Encrypted backups](security.md#encrypted-backups).
 - API keys, passwords and cloud tokens are encrypted at rest.
 - Local login can be turned off behind an authenticating reverse proxy.
 

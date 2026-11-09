@@ -31,7 +31,7 @@ If you like Backuparr, give it a ⭐ star - it helps the project grow.
   </tr>
   <tr>
     <td><img src="docs/screenshots/run.png" alt="Run and Status tab: a backup in progress with its live log"><br><b>Run &amp; Status</b></td>
-    <td><img src="docs/screenshots/history.png" alt="History tab: an app's backups with their version, size and date, View log, download and delete buttons"><br><b>History</b></td>
+    <td><img src="docs/screenshots/history.png" alt="History tab: an app's backups with their version, size, date and whether each is encrypted, View log, download and delete buttons"><br><b>History</b></td>
   </tr>
 </table>
 

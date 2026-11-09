@@ -22,7 +22,9 @@ class ConfigError(RuntimeError):
 
 APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr", "lazylibrarian"]
 
-DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "password": ""}
+# encrypt: whether its backups are encrypted (#147) - on unless turned off,
+# and ignored for an app whose APP_META sets always_encrypted.
+DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "password": "", "encrypt": True}
 
 # Apps that can run more than once - e.g. a 4K Radarr beside the HD one. The
 # first instance keeps the bare app id, so its config, remote folder and
@@ -53,7 +55,9 @@ SERVARR_LOGIN_FIELDS = [
 PASSWORD_APPS = ("bazarr", "nzbget", "radarr", "sonarr", "lidarr", "whisparr", "prowlarr")
 
 # Drives the web UI's forms generically. restore_warning is shown on the
-# Restore tab before an app's restore.
+# Restore tab before an app's restore. always_encrypted: True for an app
+# whose backups hold secrets that must never sit readable on a destination
+# (#147) - its card has no "Encrypt backup" toggle.
 APP_META = [
     {"id": "radarr", "label": "Radarr", "icon": "radarr.svg", "key_required": True, "url_placeholder": "http://radarr:7878", "extra_fields": SERVARR_LOGIN_FIELDS, "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
     {"id": "sonarr", "label": "Sonarr", "icon": "sonarr.svg", "key_required": True, "url_placeholder": "http://sonarr:8989", "extra_fields": SERVARR_LOGIN_FIELDS, "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
@@ -414,6 +418,10 @@ DEFAULTS = {
     # Whether the user has confirmed saving the encryption key; until then
     # the web UI shows it and allows nothing else. Set by Backuparr only.
     "secrets_key_acknowledged": False,
+    # Whether the "Backups are now encrypted" notice has been seen (#147). A
+    # config from before 3.0 has no value, so it shows once; a new install
+    # starts with it seen.
+    "encryption_notice_acknowledged": False,
     "apps": {name: dict(DEFAULT_APP) for name in APP_NAMES},
     "destinations": {name: dict(DEFAULT_DEST[name]) for name in DEST_NAMES},
 }
@@ -545,6 +553,7 @@ def _stored_secret_fields():
 def load_config():
     if not os.path.exists(CONFIG_PATH):
         cfg = copy.deepcopy(DEFAULTS)
+        cfg["encryption_notice_acknowledged"] = True  # new: there's no change to tell about
         save_config(cfg)
         return cfg
 
@@ -620,6 +629,22 @@ def key_required(name):
 
 def restore_supported(name):
     return (app_meta(name) or {}).get("restore_supported", True)
+
+
+def always_encrypted(name):
+    return bool((app_meta(name) or {}).get("always_encrypted"))
+
+
+def encrypts(cfg, name):
+    """Whether an app or instance's backups are encrypted (#147): always for an
+    always_encrypted app, otherwise unless its card turned it off."""
+    return always_encrypted(name) or cfg["apps"].get(name, {}).get("encrypt", True) is not False
+
+
+def acknowledge_encryption_notice():
+    cfg = load_config()
+    cfg["encryption_notice_acknowledged"] = True
+    save_config(cfg)
 
 
 def enabled_destinations(cfg):
