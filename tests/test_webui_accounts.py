@@ -153,6 +153,7 @@ PROTECTED = [
     ("GET", "/api/restore/status"), ("GET", "/api/restore/local/radarr/backups"),
     ("POST", "/api/restore/local/sabnzbd/preview"), ("POST", "/api/restore/local/radarr"), ("POST", "/api/restore/local/radarr/check"),
     ("GET", "/api/runlogs"), ("GET", "/api/secrets-key"), ("POST", "/api/backuparr/restore"), ("POST", "/api/password"), ("POST", "/api/secrets-key/acknowledge"), ("GET", "/api/runlogs/radarr/radarr_20261101_030000"),
+    ("GET", "/api/encryption-notice"), ("POST", "/api/encryption-notice/acknowledge"),
     ("GET", "/api/destinations/gdrive/oauth/start"), ("GET", "/api/destinations/gdrive/oauth/callback"),
     ("POST", "/api/destinations/gdrive/access-token"), ("POST", "/api/destinations/gdrive/folder"),
     ("POST", "/api/destinations/gdrive/disconnect"), ("POST", "/api/destinations/onedrive/connect"),

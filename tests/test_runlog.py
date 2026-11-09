@@ -135,7 +135,7 @@ def test_a_run_saves_each_apps_log_and_result(backup_run):
     saved = runlog.latest()["sabnzbd"]
     full = runlog.get("sabnzbd", saved["id"])
     assert saved["ok"] is True and saved["error"] is None and saved["app_version"] == "5.1.3"
-    assert saved["file"] == saved["id"] + ".zip"
+    assert saved["file"] == saved["id"] + ".zip.enc"
     assert saved["destinations"] == {"local": {"ok": True, "error": None}, "gdrive": {"ok": True, "error": None}}
     messages = [line["message"] for line in full["lines"]]
     assert "sabnzbd: server passwords are masked" in messages

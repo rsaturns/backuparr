@@ -10,6 +10,7 @@ nav_order: 12
 | Field | Purpose |
 |---|---|
 | `apps.<name>.enabled/url/api_key` | Per app, as on the Settings tab |
+| `apps.<name>.encrypt` | Encrypt its backups (default `true`); ignored for an app that's always encrypted - see [Encrypted backups](security.md#encrypted-backups) |
 | `apps.<radarr\|sonarr\|lidarr\|whisparr>-<suffix>` | An extra instance (e.g. `radarr-4k`): the same fields plus `name` |
 | `apps.<radarr\|sonarr\|lidarr\|whisparr\|prowlarr>.username/password` | The app's own login, only if it asks every address to log in ([note](apps/servarr.md)) |
 | `apps.bazarr.username/password` | Only if Bazarr's web auth is `Basic` |
@@ -32,6 +33,7 @@ nav_order: 12
 | `notify_url` | Optional summary after every run - see [Notifications](notifications.md) |
 | `self_backup` | Back up Backuparr's own configuration, encrypted, at the end of each full run (default `true`) - see [Backuparr's own backup](security.md#backuparrs-own-backup) |
 | `secrets_key_acknowledged` | Set once you've confirmed saving your encryption key - don't edit |
+| `encryption_notice_acknowledged` | Set once the "Backups are now encrypted" notice has been seen - don't edit |
 
 ## Other files
 

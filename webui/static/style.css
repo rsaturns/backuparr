@@ -885,6 +885,7 @@ input:focus, select:focus, textarea:focus {
 
 .toast.ok { border-color: var(--ok); }
 .toast.fail { border-color: var(--danger); }
+.toast.warn { border-color: var(--warn); }
 
 code {
   background: var(--bg);
@@ -1327,6 +1328,30 @@ code {
   .history-table td:first-child { flex-basis: 100%; color: var(--text); font-size: 15px; overflow-wrap: anywhere; }
   .history-table td.actions-cell { margin-left: auto; width: auto; }
 }
+
+/* ---------------------------------------------------- encrypted backups --- */
+/* A padlock and a word (#147): closed and filled in green, open and outlined
+   in amber, so the two never look alike. */
+.enc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 1px 8px 1px 6px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.enc-badge.enc-on { color: var(--ok); }
+.enc-badge.enc-off { color: var(--warn); }
+.enc-icon { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.enc-icon .enc-icon-fill { fill: currentColor; }
+.overview-app-last .enc-badge { margin: 6px 0 0; }
+.encrypt-note { margin: 4px 0 10px; }
 
 /* ------------------------------------------------------ encryption key --- */
 .key-box {

@@ -1,7 +1,8 @@
 """Backuparr's record of the backups it made: manifest.json beside
 config.json. For each archive it keeps the destinations holding it, the
-version of the app that made it, Backuparr's version, its size and its
-SHA-256.
+version of the app that made it, Backuparr's version, its size, its
+SHA-256 (of the file as stored, so of the encrypted file when it's
+encrypted) and whether it's encrypted (#147).
 
 The destinations stay the truth for which backups exist: History and
 retention list them, and read only those details from here. An entry for
@@ -102,7 +103,7 @@ def generation():
     return _generation
 
 
-def record(app, file, destinations, *, app_version, sha256, size, backuparr_version):
+def record(app, file, destinations, *, app_version, sha256, size, backuparr_version, encrypted=False):
     """A backup this run made, on the destinations it reached."""
     with _lock:
         entries = _read()
@@ -116,11 +117,12 @@ def record(app, file, destinations, *, app_version, sha256, size, backuparr_vers
             "backuparr_version": backuparr_version,
             "sha256": sha256,
             "size": size,
+            "encrypted": bool(encrypted),
         }
         _write(entries)
 
 
-def add_found(app, file, dest_id, *, app_version, sha256, size, expected_generation):
+def add_found(app, file, dest_id, *, app_version, sha256, size, expected_generation, encrypted=False):
     """A backup the backfill found on dest_id. One already recorded only
     gains the destination. Returns False, recording nothing, once clear()
     has run since the backfill started."""
@@ -139,6 +141,7 @@ def add_found(app, file, dest_id, *, app_version, sha256, size, expected_generat
                 "backuparr_version": None,  # Not known for a backup made before the manifest.
                 "sha256": sha256,
                 "size": size,
+                "encrypted": bool(encrypted),
             }
         entry["destinations"] = sorted(set(entry.get("destinations", [])) | {dest_id})
         _write(entries)

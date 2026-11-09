@@ -5,6 +5,15 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Backups are encrypted with your encryption key before upload, on by default for every app and switchable per app on its card; History and the Overview show which backups are encrypted, downloads come back decrypted with a warning, and a restore from another install asks for that install's key (#147).
+- A `decrypt` command in the image opens an encrypted backup without a running Backuparr (#147).
+
+### Changed
+
+- Backuparr's own backup uses the same encryption format; backups made before 3.0 still restore (#147).
+
 ## [2.5.6] - 2026-11-07
 
 ### Changed

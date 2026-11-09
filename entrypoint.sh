@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# `decrypt <file.enc>` decrypts a backup and exits, before any setup: it
+# runs as whoever started it and touches nothing but the files named.
+if [ "${1:-}" = "decrypt" ]; then
+    shift
+    exec python /app/decrypt.py "$@"
+fi
+
 WEBUI_HOST="${WEBUI_HOST:-0.0.0.0}"
 WEBUI_PORT="${WEBUI_PORT:-8990}"
 RCLONE_CONFIG_PASS_FILE="${RCLONE_CONFIG_PASS_FILE:-/config/backuparr/rclone.pass}"

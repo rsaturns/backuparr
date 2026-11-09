@@ -1,8 +1,10 @@
 """Backuparr's own backup (#110): everything needed to bring Backuparr back
 after losing the server, encrypted with its existing secrets key.
 
-The archive is a zip made in memory, encrypted whole with Fernet
-(authenticated, so a wrong key or a damaged or altered file is refused):
+The archive is a zip made in memory, encrypted with archive_crypto like
+an encrypted app backup (authenticated, so a wrong key or a damaged or
+altered file is refused). Backups made before 3.0 were encrypted whole with
+Fernet; those still open:
 
 - config.json as stored (its secret fields stay encrypted with the same key)
 - auth.json: the admin username and password hash
@@ -26,6 +28,7 @@ from datetime import datetime, timezone
 
 from cryptography.fernet import InvalidToken
 
+import archive_crypto
 import auth_store
 import config_store
 import destination_util
@@ -77,15 +80,18 @@ def build():
         for name, data in files.items():
             if data is not None:
                 z.writestr(name, data)
-    return secrets_crypto.encrypt_bytes(buffer.getvalue())
+    return archive_crypto.encrypt_bytes(buffer.getvalue())
 
 
 def open_archive(data, key=None):
     """{name: bytes} from an encrypted archive, with this install's key or
     the one given. Raises SelfBackupError, saying why, if it can't be."""
     try:
-        plain = secrets_crypto.decrypt_bytes(data, key)
-    except (InvalidToken, ValueError, TypeError):
+        if archive_crypto.is_encrypted_bytes(data):
+            plain = archive_crypto.decrypt_bytes(data, key)
+        else:
+            plain = secrets_crypto.decrypt_bytes(data, key)  # made before 3.0
+    except (archive_crypto.ArchiveCryptoError, InvalidToken, ValueError, TypeError):
         raise SelfBackupError("backuparr: this isn't a Backuparr backup made with this key, or it's damaged") from None
     try:
         with zipfile.ZipFile(io.BytesIO(plain)) as z:

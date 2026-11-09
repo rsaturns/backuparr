@@ -24,6 +24,7 @@ from urllib.parse import parse_qs, urlparse
 import requests
 
 import archive_check
+import archive_crypto
 import destination_util
 import manifest
 import rclone_util
@@ -48,7 +49,7 @@ from apps.sonarr import SonarrApp
 from apps.tautulli import TautulliApp
 from apps.tdarr import TdarrApp
 from apps.whisparr import WhisparrApp
-from config_store import ConfigError, app_meta, enabled_apps, enabled_destinations, instance_type, retention_days
+from config_store import ConfigError, app_meta, enabled_apps, enabled_destinations, encrypts, instance_type, retention_days
 from webui.version import VERSION
 
 LOG_DIR = os.environ.get("BACKUPARR_LOG_DIR", "/var/log/backuparr")
@@ -385,6 +386,22 @@ def _app_version(app, name, url):
         return None
 
 
+def encrypt_archive(name, archive_path):
+    """Encrypts a checked archive with the install's key (#147), checks the
+    encrypted file decrypts back to it, and removes the plain one. Returns
+    the encrypted file's path."""
+    log.info("%s: encrypting the backup...", name)
+    encrypted_path = archive_crypto.encrypted_name(archive_path)
+    plain_sha256 = archive_crypto.encrypt_file(archive_path, encrypted_path)
+    try:
+        archive_crypto.check_file(encrypted_path, plain_sha256)
+    except BaseException:
+        os.remove(encrypted_path)
+        raise
+    os.remove(archive_path)
+    return encrypted_path
+
+
 def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
     """Run one backup pass for every enabled app instance, uploading to
     every enabled destination. Returns (ok, failed) - failed entries are
@@ -477,6 +494,10 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
                 # app's newest, so its last good backup stays.
                 log.info("%s: checking the backup...", name)
                 archive_check.check(name, archive_path)
+                encrypted = encrypts(cfg, name)
+                if encrypted:
+                    archive_path = encrypt_archive(name, archive_path)
+                    archive_name = run["file"] = os.path.basename(archive_path)
                 size = os.path.getsize(archive_path)
                 sha256 = manifest.file_sha256(archive_path)
                 app_version = run["app_version"] = _app_version(app, name, app_cfg.get("url"))
@@ -501,7 +522,7 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
                 if uploaded:
                     try:
                         manifest.record(name, archive_name, uploaded, app_version=app_version, sha256=sha256,
-                                        size=size, backuparr_version=VERSION)
+                                        size=size, backuparr_version=VERSION, encrypted=encrypted)
                     except OSError as exc:
                         # The backup itself is uploaded; only its record is missing.
                         log.warning("%s: couldn't write the backup record: %s", name, exc.strerror or type(exc).__name__)

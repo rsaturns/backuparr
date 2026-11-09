@@ -161,7 +161,8 @@ def test_settings_round_trip(authed_client):
     assert save(authed_client, body).status_code == 200
     cfg = authed_client.get("/api/config").get_json()
     assert (cfg["retention_days"], cfg["cron_schedule"], cfg["notify_url"], cfg["bazarr_backup_dir"]) == (14, "30 2 * * 1", "https://ntfy.example/topic", "/mnt/bazarr")
-    assert cfg["apps"]["radarr"] == {"enabled": True, "url": "http://radarr:7878", "api_key": "radarr-key", "username": "", "password": ""}
+    assert cfg["apps"]["radarr"] == {"enabled": True, "url": "http://radarr:7878", "api_key": "radarr-key", "username": "", "password": "",
+                                     "encrypt": True}
     assert cfg["destinations"]["local"]["path"] == "/data/backups"
 
 

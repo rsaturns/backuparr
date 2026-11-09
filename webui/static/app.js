@@ -41,6 +41,7 @@ async function apiFetch(url, opts) {
     const message = (body && (body.error || body.message)) || `HTTP ${res.status}`;
     const error = new Error(message);
     error.status = res.status;
+    error.body = body;
     throw error;
   }
   return body;
@@ -209,6 +210,66 @@ function destinationsStat(destIds) {
   return div;
 }
 
+// ---------------------------------------------------------- encryption ----
+// Whether a backup is encrypted (#147): a padlock and a word, so it reads at
+// a glance, at small sizes and to screen readers. Used wherever a backup is
+// listed - History, the Overview, and the Restore tab.
+const LOCK_SHACKLE = {
+  closed: "M8 11V7a4 4 0 0 1 8 0v4",
+  open: "M8 11V7a4 4 0 0 1 7.75-1.4",
+};
+
+function lockIcon(closed) {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("class", "enc-icon");
+  const body = document.createElementNS(ns, "rect");
+  Object.entries({ x: 5, y: 11, width: 14, height: 10, rx: 2 }).forEach(([k, v]) => body.setAttribute(k, v));
+  if (closed) body.setAttribute("class", "enc-icon-fill");
+  const shackle = document.createElementNS(ns, "path");
+  shackle.setAttribute("d", closed ? LOCK_SHACKLE.closed : LOCK_SHACKLE.open);
+  svg.append(body, shackle);
+  return svg;
+}
+
+function encryptionBadge(encrypted) {
+  const badge = document.createElement("span");
+  badge.className = `enc-badge ${encrypted ? "enc-on" : "enc-off"}`;
+  badge.append(lockIcon(encrypted), document.createTextNode(encrypted ? "Encrypted" : "Not encrypted"));
+  return badge;
+}
+
+const DECRYPTED_DOWNLOAD_TEXT = "This download is decrypted. Anyone with access to this computer can read it.";
+
+// An app's encrypted backup downloads decrypted; Backuparr's own stays as it
+// is, for the setup screen's restore.
+function warnWhenDownloadIsDecrypted(link, appId, entry) {
+  if (entry.encrypted && appId !== "backuparr") link.addEventListener("click", () => toast(DECRYPTED_DOWNLOAD_TEXT, "warn"));
+}
+
+// The one-time notice for an install updated to 3.0, when backups became
+// encrypted by default. A new install never sees it.
+async function showEncryptionNotice() {
+  const { show } = await apiFetch("/api/encryption-notice");
+  if (!show) return;
+  const modal = document.getElementById("encryption-notice-modal");
+  const ok = document.getElementById("encryption-notice-ok");
+  modal.classList.remove("hidden");
+  ok.focus();
+  ok.addEventListener("click", async () => {
+    ok.disabled = true;
+    try {
+      await apiFetch("/api/encryption-notice/acknowledge", { method: "POST" });
+      modal.classList.add("hidden");
+    } catch (e) {
+      toast(e.message, "fail");
+      ok.disabled = false;
+    }
+  }, { once: true });
+}
+
 // One Overview tile: an app's (or Backuparr's own) latest backup, or why its
 // last run failed, with download and log links.
 function overviewCard(appId, { label, icon, latest, failure, latestRun, idleText }) {
@@ -245,7 +306,7 @@ function overviewCard(appId, { label, icon, latest, failure, latestRun, idleText
     const fn = document.createElement("span");
     fn.className = "filename";
     fn.textContent = latest.name;
-    last.append(summaryLine, fn);
+    last.append(summaryLine, fn, encryptionBadge(latest.encrypted));
   } else {
     last.textContent = idleText;
   }
@@ -258,6 +319,7 @@ function overviewCard(appId, { label, icon, latest, failure, latestRun, idleText
     dlLink.className = "overview-download-link";
     dlLink.textContent = "Download latest backup";
     dlLink.href = `/api/history/${latest.destId}/${appId}/${encodeURIComponent(latest.name)}/download`;
+    warnWhenDownloadIsDecrypted(dlLink, appId, latest);
     links.appendChild(dlLink);
   }
   if (latestRun) links.appendChild(viewLogButton(appId, latestRun.id));
@@ -585,6 +647,8 @@ function fillAppCard(appId, cfg) {
   card.querySelectorAll(".f-extra").forEach((input) => {
     input.value = cfg[input.dataset.field] || "";
   });
+  const encryptInput = card.querySelector(".f-encrypt");
+  if (encryptInput) encryptInput.checked = cfg.encrypt !== false; // absent on always-encrypted apps
   showLoginFields(card, !!(cfg.username || cfg.password));
   const nameInput = card.querySelector(".f-name");
   if (nameInput) {
@@ -638,6 +702,8 @@ function readAppCard(appId) {
   card.querySelectorAll(".f-extra").forEach((input) => {
     out[input.dataset.field] = input.value;
   });
+  const encryptInput = card.querySelector(".f-encrypt");
+  if (encryptInput) out.encrypt = encryptInput.checked;
   const nameInput = card.querySelector(".f-name");
   if (nameInput) out.name = nameInput.value.trim();
   return out;
@@ -2331,7 +2397,10 @@ async function loadHistory() {
           return;
         }
         const nameTd = document.createElement("td");
-        nameTd.textContent = e.name;
+        const nameText = document.createElement("span");
+        nameText.className = "history-file";
+        nameText.textContent = e.name;
+        nameTd.append(nameText, encryptionBadge(e.encrypted));
         const versionTd = document.createElement("td");
         versionTd.textContent = e.app_version || "-";
         if (!e.app_version) {
@@ -2348,6 +2417,7 @@ async function loadHistory() {
         dlLink.title = "Download this backup";
         dlLink.textContent = "↓";
         dlLink.href = `/api/history/${encodeURIComponent(destId)}/${encodeURIComponent(appId)}/${encodeURIComponent(e.name)}/download`;
+        warnWhenDownloadIsDecrypted(dlLink, appId, e);
         const delBtn = document.createElement("button");
         delBtn.type = "button";
         delBtn.className = "icon-btn";
@@ -2456,6 +2526,7 @@ async function loadRestoreFiles() {
   const fileSelect = document.getElementById("r-file");
   fileSelect.innerHTML = "<option>Loading...</option>";
   document.getElementById("r-extra").innerHTML = "";
+  showRestoreKeyField(false);
   if (!destId) {
     fileSelect.innerHTML = "<option>No destinations enabled</option>";
     return;
@@ -2493,6 +2564,17 @@ let restoreCheckSeq = 0;
 
 function setRestoreReady(ready) {
   document.getElementById("restore-btn").disabled = !ready;
+}
+
+// Asked for only when a backup turns out to be made with another key (#147).
+function showRestoreKeyField(show) {
+  const field = document.getElementById("r-key-field");
+  field.classList.toggle("hidden", !show);
+  if (!show) document.getElementById("r-key").value = "";
+}
+
+function restoreKey() {
+  return document.getElementById("r-key").value.trim();
 }
 
 function sentence(text) {
@@ -2585,9 +2667,11 @@ async function loadSabnzbdPreview() {
   const container = document.getElementById("r-sabnzbd-servers");
   container.textContent = "Loading...";
   try {
+    const body = { file: fileSelect.value };
+    if (restoreKey()) body.key = restoreKey();
     const res = await whileStorageWakes(destId, apiFetch(`/api/restore/${destId}/sabnzbd/preview`, {
       method: "POST",
-      body: JSON.stringify({ file: fileSelect.value }),
+      body: JSON.stringify(body),
     }), () => {
       container.textContent = STORAGE_WAIT_TEXT;
     });
@@ -2621,6 +2705,15 @@ async function loadSabnzbdPreview() {
     p.className = "empty-note";
     p.textContent = e.message;
     container.appendChild(p);
+    if (e.body && e.body.key_needed) {
+      showRestoreKeyField(true);
+      const again = document.createElement("button");
+      again.type = "button";
+      again.className = "btn btn-ghost btn-sm";
+      again.textContent = "Try again";
+      again.addEventListener("click", loadSabnzbdPreview);
+      p.append(" ", again);
+    }
   }
 }
 
@@ -2638,6 +2731,7 @@ async function doRestore() {
   }
 
   const payload = { file, confirm: true };
+  if (restoreKey()) payload.key = restoreKey();
   const override = readRestoreOverride();
   if (override) {
     if (!override.url) {
@@ -2703,6 +2797,7 @@ function renderRestoreState(state) {
   }
 
   if (!state.running && state.finished_at) {
+    if (state.key_needed) showRestoreKeyField(true);
     if (state.error) {
       resultEl.textContent = state.error;
       resultEl.className = "save-result fail";
@@ -3027,6 +3122,7 @@ async function init() {
   } catch (e) {
     toast(`Could not load config: ${e.message}`, "fail");
   }
+  showEncryptionNotice().catch(() => {}); // shown again next time if it couldn't be checked
   refreshRunStatus();
   loadOverview();
   handleGdriveRedirect();

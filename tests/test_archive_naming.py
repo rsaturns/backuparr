@@ -59,7 +59,17 @@ def test_run_backup_names_each_archive_by_its_real_format(tmp_path, monkeypatch)
     monkeypatch.setattr(backup.rclone_util, "copyto", lambda src, dst: uploaded.append(dst))
     monkeypatch.setattr(backup, "apply_retention", lambda *args, **kwargs: None)
 
+    # Encrypted by default (#147): the format's extension stays, .enc after it.
     ok, failed = backup.run_backup({"apps": {n: {} for n in kinds}, "destinations": {"local": {}}})
+
+    assert not failed and sorted(ok) == sorted(kinds)
+    names = {dst.split("/")[2]: dst.rsplit("/", 1)[1] for dst in uploaded}
+    assert re.fullmatch(r"profilarr_\d{8}_\d{6}\.tar\.gz\.enc", names["profilarr"])
+    assert re.fullmatch(r"radarr_\d{8}_\d{6}\.zip\.enc", names["radarr"])
+    assert re.fullmatch(r"tdarr_\d{8}_\d{6}\.zip\.enc", names["tdarr"])
+
+    uploaded.clear()
+    ok, failed = backup.run_backup({"apps": {n: {"encrypt": False} for n in kinds}, "destinations": {"local": {}}})
 
     assert not failed and sorted(ok) == sorted(kinds)
     names = {dst.split("/")[2]: dst.rsplit("/", 1)[1] for dst in uploaded}

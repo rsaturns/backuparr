@@ -11,6 +11,7 @@ import zipfile
 from dataclasses import dataclass
 from typing import Callable
 
+import archive_crypto
 import rclone_util
 from apps.sabnzbd import MASKED
 from backup import build_app
@@ -53,6 +54,22 @@ def fetch_backup(rclone_remote, app_name, filename=None):
     local_zip = os.path.join(tmp_dir, filename)
     rclone_util.copyto(f"{remote_dir}{filename}", local_zip)
     return tmp_dir, local_zip, filename
+
+
+def decrypted(tmp_dir, local_path, key=None):
+    """The plain archive to restore from: local_path itself, or for an
+    encrypted backup (#147) its decrypted copy in tmp_dir, the encrypted one
+    removed. key is the key's text for a backup made with another key; None
+    uses this install's. Raises archive_crypto.WrongKeyError for a key that
+    doesn't open it."""
+    if not archive_crypto.is_encrypted(local_path):
+        return local_path
+    plain_path = os.path.join(tmp_dir, archive_crypto.plain_name(os.path.basename(local_path)))
+    if plain_path == local_path:
+        plain_path += ".plain"
+    archive_crypto.decrypt_file(local_path, plain_path, key)
+    os.remove(local_path)
+    return plain_path
 
 
 def extract_zip(local_zip, dest_dir):

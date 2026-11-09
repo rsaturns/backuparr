@@ -20,8 +20,9 @@ shows the run live. A backup and a restore never run at the same time.
 **Default retention (days)** deletes each app's backups older than that,
 separately on each destination. Each app's newest backup is always kept, so a
 run of failed backups never removes the last good one. Backuparr only deletes
-its own archives (`<app>/<app>_<date>_<time>.zip`), so a destination folder can
-hold other files.
+its own archives (`<app>/<app>_<date>_<time>.zip`, or `.zip.enc` when
+[encrypted](security.md#encrypted-backups)), so a destination folder can hold
+other files.
 
 To keep backups longer or shorter on one destination, set **Retention (days)**
 on its card under Settings > Destinations - for example 28 days on Local
@@ -37,7 +38,8 @@ Each backup is checked before it's uploaded:
 - The files the app's restore needs are in it.
 
 A backup that fails isn't uploaded, and the app shows as failed with the
-reason.
+reason. An [encrypted backup](security.md#encrypted-backups) is checked again
+after encryption: it must decrypt back to the archive that passed.
 
 ## Run logs
 
@@ -54,12 +56,13 @@ latest run is always kept.
 
 ## History
 
-Pick a destination to list each app's backups there, with their size, date and
-the app version each one came from. You can download or delete any of them, or
-open its log. Backuparr's own backups are listed under "Backuparr's own
+Pick a destination to list each app's backups there, with their size, date,
+the app version each one came from, and whether it's encrypted. You can
+download or delete any of them, or open its log. An encrypted backup downloads
+decrypted - see [Encrypted backups](security.md#encrypted-backups). Backuparr's own backups are listed under "Backuparr's own
 configuration".
 
-![History tab: Radarr's backups with their version, size and date, View log, download and delete buttons, and a failed run greyed out as Backup failed]({{ '/screenshots/history.png' | relative_url }})
+![History tab: Sonarr's backups with their version, size and date, each marked Encrypted or Not encrypted, with View log, download and delete buttons]({{ '/screenshots/history.png' | relative_url }})
 
 ## The backup record
 
@@ -67,7 +70,8 @@ configuration".
 
 - the destinations holding it
 - the app version it came from, and Backuparr's version
-- its size and SHA-256 checksum
+- its size and SHA-256 checksum (of the file as stored, so of the encrypted
+  file when it's encrypted), and whether it's encrypted
 
 Restores use it to check the app version and the download. Backuparr keeps it
 up to date; don't edit it.
