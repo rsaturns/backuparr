@@ -7,6 +7,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- History can download or delete several backups at once: Select, tick them, and use the bar at the bottom of the window; several downloads come as one zip (#148).
 - Backups are encrypted with your encryption key before upload, on by default for every app and switched per app with Encrypt backup on its card; History and the Overview show which backups are encrypted, downloads come back decrypted with a warning, and a restore from another install asks for that install's key (#147).
 - A `decrypt` command in the image opens an encrypted backup without a running Backuparr (#147).
 
@@ -14,6 +15,9 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Backuparr's own backup uses the same encryption format; backups made before 3.0 still restore (#147).
 - Error and result messages in the web UI start with a capital letter and end with a full stop.
+- Settings groups the apps by category, each folding away under a header with its enabled count and last-run status; categories open once an app in them is set up and are remembered per browser. Destinations folds too, its header showing the destinations' icons; History (where Backuparr's own backups are now listed as Backuparr) and the Run & Status and Restore app lists use the same categories (#148).
+- Headings in title case, e.g. Run & Status, Schedule & Notifications, Media Management, Local Storage (#148).
+- New tagline: "Everything you host, backed up.", as Backuparr covers more than media apps.
 
 ### Fixed
 

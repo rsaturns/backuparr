@@ -54,6 +54,28 @@ SERVARR_LOGIN_FIELDS = [
 # Apps whose "password" extra field is encrypted at rest.
 PASSWORD_APPS = ("bazarr", "nzbget", "radarr", "sonarr", "lidarr", "whisparr", "prowlarr")
 
+# Settings, History and the Restore and Run & Status pickers group the apps
+# under these, in this order (#148). A category with no apps isn't shown, so
+# the later ones wait for their apps.
+APP_CATEGORIES = [
+    {"id": "media-management", "label": "Media Management", "emoji": "🎬"},
+    {"id": "downloaders", "label": "Downloaders", "emoji": "⬇️"},
+    {"id": "media-servers", "label": "Media Servers", "emoji": "▶️"},
+    {"id": "network", "label": "Network", "emoji": "🌐"},
+    {"id": "security", "label": "Security", "emoji": "🛡️"},
+    {"id": "home-automation", "label": "Home Automation", "emoji": "🏠"},
+    {"id": "server", "label": "Server", "emoji": "🗄️"},
+]
+# Each app's category: a new app adds one line here.
+_APP_CATEGORY = {
+    "prowlarr": "media-management", "radarr": "media-management", "sonarr": "media-management",
+    "lidarr": "media-management", "whisparr": "media-management", "profilarr": "media-management",
+    "bazarr": "media-management", "tdarr": "media-management", "lazylibrarian": "media-management",
+    "sabnzbd": "downloaders", "nzbget": "downloaders",
+    "plex": "media-servers", "jellyfin": "media-servers", "emby": "media-servers", "tautulli": "media-servers",
+    "seerr": "media-servers",
+}
+
 # Drives the web UI's forms generically. restore_warning is shown on the
 # Restore tab before an app's restore. always_encrypted: True for an app
 # whose backups hold secrets that must never sit readable on a destination
@@ -200,6 +222,7 @@ APP_META = [
 ]
 for _meta in APP_META:
     _meta["discoverable"] = _meta["id"] in DISCOVERABLE_APPS
+    _meta["category"] = _APP_CATEGORY[_meta["id"]]
 
 DEST_NAMES = ["local", "gdrive", "onedrive", "dropbox"]
 
@@ -243,11 +266,11 @@ DEST_EDITABLE_FIELDS = {
 DESTINATION_META = [
     {
         "id": "local",
-        "label": "Local storage",
+        "label": "Local Storage",
         "icon": "local.svg",
         "description": "Written straight to this container's own volume - nothing to connect. Download any backup from the History tab.",
         "setup_help": {
-            "title": "Local storage",
+            "title": "Local Storage",
             "intro": "No setup needed - this works out of the box.",
             "steps": [
                 {

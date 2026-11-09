@@ -2,7 +2,7 @@
 
 # Backuparr
 
-**Backup your Arrs.**
+**Everything you host, backed up.**
 
 > **AI disclosure:** This project was built with substantial assistance
 > from Claude (Anthropic) - code, documentation, and commit history
@@ -27,11 +27,11 @@ If you like Backuparr, give it a ⭐ star - it helps the project grow.
 <table>
   <tr>
     <td><img src="docs/screenshots/overview.png" alt="Overview tab: enabled services, destinations, schedule and retention, and each app's last backup"><br><b>Overview</b></td>
-    <td><img src="docs/screenshots/settings.png" alt="Settings tab: app cards with URL and API key on the left, destinations on the right"><br><b>Settings</b></td>
+    <td><img src="docs/screenshots/settings.png" alt="Settings tab: apps grouped by category on the left, each category folding away under a header with its enabled count, and destinations on the right"><br><b>Settings</b></td>
   </tr>
   <tr>
     <td><img src="docs/screenshots/run.png" alt="Run and Status tab: a backup in progress with its live log"><br><b>Run &amp; Status</b></td>
-    <td><img src="docs/screenshots/history.png" alt="History tab: an app's backups with their version, size, date and whether each is encrypted, View log, download and delete buttons"><br><b>History</b></td>
+    <td><img src="docs/screenshots/history.png" alt="History tab: Backuparr's own backups, then each category's apps, with each backup's version, size, date and whether it's encrypted"><br><b>History</b></td>
   </tr>
 </table>
 
@@ -135,7 +135,7 @@ live, **History** lists, downloads and deletes backups, and **Restore** restores
 - [Features](https://rsaturns.github.io/backuparr/features/) - everything Backuparr does, in one list
 - [Getting started](https://rsaturns.github.io/backuparr/getting-started/)
 - [Apps](https://rsaturns.github.io/backuparr/apps/) - how each app is backed up and restored
-- [Destinations](https://rsaturns.github.io/backuparr/destinations/) - Local storage, Google Drive, OneDrive, Dropbox
+- [Destinations](https://rsaturns.github.io/backuparr/destinations/) - Local Storage, Google Drive, OneDrive, Dropbox
 - [Settings](https://rsaturns.github.io/backuparr/settings/) - Prowlarr discovery, multiple instances of an app, reverse-proxy headers
 - [Backups and history](https://rsaturns.github.io/backuparr/backups/) - schedule, retention, run logs, History
 - [Restoring](https://rsaturns.github.io/backuparr/restoring/) - apps, the version check, and Backuparr itself

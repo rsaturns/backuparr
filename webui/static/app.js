@@ -1,7 +1,7 @@
 "use strict";
 
 const AUTH_DISABLED = document.body.dataset.authDisabled === "true";
-const { apps: APP_META, destinations: DESTINATION_META } = JSON.parse(document.body.dataset.uiMeta);
+const { apps: APP_META, categories: APP_CATEGORIES, destinations: DESTINATION_META } = JSON.parse(document.body.dataset.uiMeta);
 let RUN_POLL_TIMER = null;
 let RESTORE_POLL_TIMER = null;
 let SETTINGS_SNAPSHOT = null;
@@ -427,7 +427,7 @@ async function openRunLog(appId, runId) {
   const panel = document.getElementById("log-panel");
   const meta = document.getElementById("log-panel-meta");
   const lines = document.getElementById("log-panel-lines");
-  document.getElementById("log-panel-title").textContent = `${appId === "backuparr" ? "Backuparr" : appLabel(appId)} - run log`;
+  document.getElementById("log-panel-title").textContent = `${appLabel(appId)} - Run Log`;
   meta.textContent = "Loading...";
   lines.innerHTML = "";
   panel.classList.remove("hidden");
@@ -991,6 +991,7 @@ function secretUnavailable(candidate) {
 function markDiscovered(appId) {
   const card = appCard(appId);
   card.dataset.discovered = "true";
+  revealAppCard(card);
   card.querySelector(".discovery-origin").classList.remove("hidden");
   setAppCardExpanded(card, true);
 }
@@ -1507,48 +1508,164 @@ function rememberSavedInstances(apps) {
   });
 }
 
-// The order the page lists the apps in on a fresh install (Prowlarr and the
-// apps it discovers first), kept to go back to if every app is disabled.
-let FRESH_APP_ORDER = null;
+// ---------------------------------------------------------- categories ----
+// The apps are grouped by category (#148). Which sections are open is kept in
+// this browser, per tab, so a page comes back the way it was left.
+const LAYOUT_KEY = { settings: "backuparr.layout.settings", history: "backuparr.layout.history" };
 
-// Once an app is enabled in the saved settings, list Prowlarr first if it's
-// enabled, then the enabled apps and then the rest, each A-Z under its own
-// heading. Runs on load and after Save only, so ticking Enabled never moves a
-// card mid-edit. An app moves with its extra instances and "Add another" row,
-// and counts as enabled if any of its cards is.
-function sortAppCards() {
-  const list = document.getElementById("app-list");
-  const enabledHeading = document.getElementById("apps-enabled-heading");
-  const disabledHeading = document.getElementById("apps-disabled-heading");
-  const blocks = new Map();
-  let block = null;
-  Array.from(list.children).forEach((el) => {
-    if (el.classList.contains("app-group-heading")) return;
-    if (el.matches(".app-card[data-app]:not(.instance-card)")) {
-      block = [];
-      blocks.set(el.dataset.app, block);
-    }
-    if (block) block.push(el);
-  });
-  if (!FRESH_APP_ORDER) FRESH_APP_ORDER = Array.from(blocks.keys());
-
-  const enabledTypes = new Set(Array.from(ENABLED_APPS, (appId) => instanceType(appId) || appId));
-  const label = (type) => blocks.get(type)[0].querySelector("h3").textContent.trim();
-  const byLabel = (a, b) => label(a).localeCompare(label(b), undefined, { sensitivity: "base" });
-  const types = FRESH_APP_ORDER.filter((type) => blocks.has(type));
-  const grouped = types.some((type) => enabledTypes.has(type));
-  const pinned = grouped && enabledTypes.has("prowlarr") ? ["prowlarr"] : [];
-  const enabled = types.filter((type) => enabledTypes.has(type) && !pinned.includes(type)).sort(byLabel);
-  const disabled = types.filter((type) => !enabledTypes.has(type)).sort(byLabel);
-  const els = (group) => group.flatMap((type) => blocks.get(type));
-
-  enabledHeading.classList.toggle("hidden", !grouped || !enabled.length);
-  disabledHeading.classList.toggle("hidden", !grouped || !disabled.length);
-  if (grouped) {
-    list.append(...els(pinned), enabledHeading, ...els(enabled), disabledHeading, ...els(disabled));
-  } else {
-    list.append(...els(types));
+function savedLayout(page) {
+  try {
+    const value = JSON.parse(localStorage.getItem(LAYOUT_KEY[page]) || "{}");
+    return value && typeof value === "object" ? value : {};
+  } catch (e) {
+    return {}; // storage blocked or garbled: every section takes its default
   }
+}
+
+function rememberOpen(page, id, open) {
+  const layout = savedLayout(page);
+  layout[id] = open;
+  try {
+    localStorage.setItem(LAYOUT_KEY[page], JSON.stringify(layout));
+  } catch (e) {
+    // Private window or storage turned off: the layout just isn't kept.
+  }
+}
+
+function setOpen(button, body, open) {
+  button.setAttribute("aria-expanded", String(open));
+  body.classList.toggle("hidden", !open);
+}
+
+function isOpen(button) {
+  return button.getAttribute("aria-expanded") === "true";
+}
+
+function openCategory(section, open) {
+  setOpen(section.querySelector(".category-head"), section.querySelector(".category-body"), open);
+  rememberOpen("settings", section.dataset.category, open);
+}
+
+// A card filled in by discovery, or otherwise brought up, opens its category.
+function revealAppCard(card) {
+  const section = card.closest(".app-category");
+  if (section && !isOpen(section.querySelector(".category-head"))) openCategory(section, true);
+}
+
+// Each category's apps in the order the page first lists them (Prowlarr and
+// the apps it discovers first), kept to go back to if every app is disabled.
+let FRESH_APP_ORDER = null;
+// Whether each category had an enabled app at the last sort: the first one
+// set up in a category opens it.
+let CATEGORY_HAD_ENABLED = null;
+
+// Once an app is enabled in the saved settings, each category lists Prowlarr
+// first if it's there and enabled, then its enabled apps and then the rest,
+// each A-Z. Runs on load and after Save only, so switching an app on never
+// moves a card mid-edit. An app moves with its extra instances and "Add
+// another" row, and counts as enabled if any of its cards is.
+function sortAppCards() {
+  const enabledTypes = new Set(Array.from(ENABLED_APPS, (appId) => instanceType(appId) || appId));
+  const firstSort = !FRESH_APP_ORDER;
+  if (firstSort) FRESH_APP_ORDER = {};
+  const layout = savedLayout("settings");
+  const hadEnabled = CATEGORY_HAD_ENABLED;
+  CATEGORY_HAD_ENABLED = {};
+  document.querySelectorAll(".app-category").forEach((section) => {
+    const id = section.dataset.category;
+    const body = section.querySelector(".category-body");
+    const blocks = new Map();
+    let block = null;
+    Array.from(body.children).forEach((el) => {
+      if (el.matches(".app-card[data-app]:not(.instance-card)")) {
+        block = [];
+        blocks.set(el.dataset.app, block);
+      }
+      if (block) block.push(el);
+    });
+    if (firstSort) FRESH_APP_ORDER[id] = Array.from(blocks.keys());
+
+    const label = (type) => blocks.get(type)[0].querySelector("h3").textContent.trim();
+    const byLabel = (a, b) => label(a).localeCompare(label(b), undefined, { sensitivity: "base" });
+    const types = FRESH_APP_ORDER[id].filter((type) => blocks.has(type));
+    const enabled = types.filter((type) => enabledTypes.has(type));
+    let order = types;
+    if (enabledTypes.size) {
+      const pinned = enabled.includes("prowlarr") ? ["prowlarr"] : [];
+      order = [...pinned, ...enabled.filter((type) => !pinned.includes(type)).sort(byLabel),
+        ...types.filter((type) => !enabledTypes.has(type)).sort(byLabel)];
+    }
+    body.append(...order.flatMap((type) => blocks.get(type)));
+    section.querySelector(".category-count").textContent = `${enabled.length} of ${types.length} enabled`;
+
+    // Closed on a fresh install; open once one of its apps is set up; after
+    // that, as the user left it.
+    const has = enabled.length > 0;
+    CATEGORY_HAD_ENABLED[id] = has;
+    if (hadEnabled && has && !hadEnabled[id]) {
+      openCategory(section, true);
+    } else {
+      setOpen(section.querySelector(".category-head"), body, id in layout ? layout[id] === true : has);
+    }
+  });
+  refreshCategoryStatus();
+}
+
+const CATEGORY_STATUS_TEXT = {
+  fail: "An app here failed its last backup",
+  ok: "Every app here backed up on its last run",
+  idle: "No backups yet",
+};
+
+// The header's dot: the worst last run of the category's enabled apps, so a
+// failure shows while the category is closed.
+async function refreshCategoryStatus() {
+  let runs;
+  try {
+    runs = await apiFetch("/api/runlogs");
+  } catch (e) {
+    return; // the dots stay as they were; the Overview has the detail
+  }
+  document.querySelectorAll(".app-category").forEach((section) => {
+    const results = Array.from(ENABLED_APPS)
+      .filter((appId) => appMeta(appId)?.category === section.dataset.category)
+      .map((appId) => runs[appId])
+      .filter(Boolean);
+    const state = results.some((run) => !run.ok) ? "fail" : results.length ? "ok" : "idle";
+    const dot = section.querySelector(".category-status");
+    dot.dataset.state = state;
+    dot.title = CATEGORY_STATUS_TEXT[state];
+    dot.setAttribute("role", "img");
+    dot.setAttribute("aria-label", CATEGORY_STATUS_TEXT[state]);
+  });
+}
+
+function initCategoryEvents() {
+  document.querySelectorAll(".app-category").forEach((section) => {
+    const head = section.querySelector(".category-head");
+    head.addEventListener("click", () => openCategory(section, !isOpen(head)));
+  });
+  const toggle = document.getElementById("destinations-toggle");
+  const body = document.getElementById("destinations-body");
+  setOpen(toggle, body, savedLayout("settings").destinations !== false);
+  toggle.addEventListener("click", () => {
+    const open = !isOpen(toggle);
+    setOpen(toggle, body, open);
+    rememberOpen("settings", "destinations", open);
+  });
+}
+
+// A <select>'s apps under one labelled group per category (the Run & Status
+// and Restore pickers).
+function addCategoryOptions(select, appIds) {
+  APP_CATEGORIES.forEach((category) => {
+    const ids = appIds.filter((appId) => appMeta(appId)?.category === category.id);
+    if (!ids.length) return;
+    const group = document.createElement("optgroup");
+    group.label = `${category.emoji} ${category.label}`;
+    ids.forEach((appId) => group.appendChild(new Option(appLabel(appId), appId)));
+    select.appendChild(group);
+  });
 }
 
 function rememberEnabledApps(apps) {
@@ -2068,6 +2185,7 @@ function bindAppCard(card) {
 
 function initSettingsEvents() {
   document.getElementById("save-btn").addEventListener("click", saveSettings);
+  initCategoryEvents();
   document.getElementById("plex-token-btn").addEventListener("click", startPlexLogin);
   document.getElementById("plex-auth-cancel").addEventListener("click", () => stopPlexLogin("Plex sign-in cancelled."));
   document.getElementById("basic-auth-form").addEventListener("submit", applyBasicAuthHeader);
@@ -2231,11 +2349,9 @@ function initRunAppOptions() {
   const select = document.getElementById("run-app");
   const previous = select.value;
   select.replaceChildren(new Option("All apps", ""));
-  APP_META.forEach((m) => {
-    [m.id, ...Array.from(INSTANCE_NAMES.keys()).filter((appId) => instanceType(appId) === m.id)]
-      .filter((appId) => ENABLED_APPS.has(appId))
-      .forEach((appId) => select.add(new Option(appLabel(appId), appId)));
-  });
+  addCategoryOptions(select, APP_META.flatMap((m) =>
+    [m.id, ...Array.from(INSTANCE_NAMES.keys()).filter((appId) => instanceType(appId) === m.id)])
+    .filter((appId) => ENABLED_APPS.has(appId)));
   if (Array.from(select.options).some((opt) => opt.value === previous)) select.value = previous;
 }
 
@@ -2288,7 +2404,7 @@ function appMeta(appId) {
 
 // "Radarr (4K)" for an extra instance; a removed one's id stands in for its name.
 function appLabel(appId) {
-  if (appId === "backuparr") return "Backuparr's own configuration";
+  if (appId === "backuparr") return "Backuparr";
   const m = appMeta(appId);
   if (!m) return appId;
   return isExtraInstance(appId) ? `${m.label} (${INSTANCE_NAMES.get(appId) || appId.slice(m.id.length + 1)})` : m.label;
@@ -2358,11 +2474,17 @@ async function initHistoryTab() {
 function initHistoryEvents() {
   document.getElementById("history-refresh-btn").addEventListener("click", loadHistory);
   document.getElementById("h-destination").addEventListener("change", loadHistory);
+  document.getElementById("history-select-btn").addEventListener("click", () =>
+    setHistorySelecting(!document.getElementById("history-root").classList.contains("selecting")));
+  document.getElementById("history-bulk-download").addEventListener("click", downloadPicked);
+  document.getElementById("history-bulk-delete").addEventListener("click", deletePicked);
+  document.getElementById("history-bulk-cancel").addEventListener("click", () => setHistorySelecting(false));
 }
 
 async function loadHistory() {
   const root = document.getElementById("history-root");
   const destId = document.getElementById("h-destination").value;
+  clearHistorySelection();
   root.textContent = "Loading...";
   if (!destId) {
     root.innerHTML = '<p class="empty-note">No destinations enabled - turn one on in Settings first.</p>';
@@ -2372,73 +2494,240 @@ async function loadHistory() {
     const history = await whileStorageWakes(destId, apiFetch(`/api/history/${destId}`), () => {
       root.textContent = STORAGE_WAIT_TEXT;
     });
-    root.innerHTML = "";
-    const appIds = Object.keys(history).filter((appId) => (history[appId] || []).length > 0);
-    if (!appIds.length) {
-      root.innerHTML = '<p class="empty-note">No backups yet on this destination - run a backup first.</p>';
-      return;
-    }
-    appIds.forEach((appId) => {
-      const entries = history[appId];
-      const section = document.createElement("div");
-      section.className = "history-app";
-      const heading = document.createElement("h3");
-      heading.textContent = appLabel(appId);
-      section.appendChild(heading);
-
-      const table = document.createElement("table");
-      table.className = "history-table";
-      table.innerHTML = "<thead><tr><th>File</th><th>Version</th><th>Size</th><th>Modified</th><th></th></tr></thead>";
-      const tbody = document.createElement("tbody");
-      entries.forEach((e) => {
-        const tr = document.createElement("tr");
-        if (e.missing) {
-          tbody.appendChild(missingHistoryRow(appId, e));
-          return;
-        }
-        const nameTd = document.createElement("td");
-        const nameText = document.createElement("span");
-        nameText.className = "history-file";
-        nameText.textContent = e.name;
-        nameTd.append(nameText, encryptionBadge(e.encrypted));
-        const versionTd = document.createElement("td");
-        versionTd.textContent = e.app_version || "-";
-        if (!e.app_version) {
-          versionTd.title = e.recorded ? "This backup doesn't record the app's version" : "Not checked yet";
-        }
-        const sizeTd = document.createElement("td");
-        sizeTd.textContent = fmtBytes(e.size);
-        const timeTd = document.createElement("td");
-        timeTd.textContent = fmtTime(e.mod_time);
-        const actionsTd = document.createElement("td");
-        actionsTd.className = "actions-cell";
-        const dlLink = document.createElement("a");
-        dlLink.className = "icon-btn";
-        dlLink.title = "Download this backup";
-        dlLink.textContent = "↓";
-        dlLink.href = `/api/history/${encodeURIComponent(destId)}/${encodeURIComponent(appId)}/${encodeURIComponent(e.name)}/download`;
-        warnWhenDownloadIsDecrypted(dlLink, appId, e);
-        const delBtn = document.createElement("button");
-        delBtn.type = "button";
-        delBtn.className = "icon-btn";
-        delBtn.title = "Delete this backup";
-        delBtn.textContent = "×";
-        delBtn.addEventListener("click", () => deleteBackup(destId, appId, e.name, tr));
-        if (e.run_id) actionsTd.append(viewLogButton(appId, e.run_id));
-        actionsTd.append(dlLink, delBtn);
-        tr.append(nameTd, versionTd, sizeTd, timeTd, actionsTd);
-        tbody.appendChild(tr);
-      });
-      table.appendChild(tbody);
-      section.appendChild(table);
-      root.appendChild(section);
-    });
+    renderHistory(root, destId, history);
   } catch (e) {
     root.innerHTML = "";
     const p = document.createElement("p");
     p.className = "empty-note";
     p.textContent = `Error loading history: ${clause(e.message)}`;
     root.appendChild(p);
+  }
+}
+
+// Backuparr's own backups first, then each category's apps under its own
+// collapsible header (#148), open unless closed here before.
+function renderHistory(root, destId, history) {
+  root.innerHTML = "";
+  const appIds = Object.keys(history).filter((appId) => (history[appId] || []).length > 0);
+  if (!appIds.length) {
+    root.innerHTML = '<p class="empty-note">No backups yet on this destination - run a backup first.</p>';
+    return;
+  }
+  if (appIds.includes("backuparr")) root.appendChild(historyAppSection(destId, "backuparr", history.backuparr));
+  const layout = savedLayout("history");
+  APP_CATEGORIES.forEach((category) => {
+    const ids = appIds.filter((appId) => appMeta(appId)?.category === category.id);
+    if (!ids.length) return;
+    const group = document.createElement("section");
+    group.className = "history-category";
+    const head = categoryHead(category, `history-category-${category.id}`);
+    const body = document.createElement("div");
+    body.className = "category-body";
+    body.id = `history-category-${category.id}`;
+    ids.forEach((appId) => body.appendChild(historyAppSection(destId, appId, history[appId])));
+    setOpen(head, body, layout[category.id] !== false);
+    head.addEventListener("click", () => {
+      const open = !isOpen(head);
+      setOpen(head, body, open);
+      rememberOpen("history", category.id, open);
+    });
+    group.append(head, body);
+    root.appendChild(group);
+  });
+}
+
+function categoryHead(category, controls) {
+  const head = document.createElement("button");
+  head.type = "button";
+  head.className = "category-head";
+  head.setAttribute("aria-controls", controls);
+  const emoji = document.createElement("span");
+  emoji.className = "category-emoji";
+  emoji.setAttribute("aria-hidden", "true");
+  emoji.textContent = category.emoji;
+  const name = document.createElement("span");
+  name.className = "category-name";
+  name.textContent = category.label;
+  const chevron = document.createElement("span");
+  chevron.className = "category-chevron";
+  chevron.setAttribute("aria-hidden", "true");
+  head.append(emoji, name, chevron);
+  return head;
+}
+
+function historyAppSection(destId, appId, entries) {
+  const section = document.createElement("div");
+  section.className = "history-app";
+  const heading = document.createElement("h3");
+  const all = document.createElement("input");
+  all.type = "checkbox";
+  all.className = "history-select history-select-all";
+  all.setAttribute("aria-label", `Select every ${appLabel(appId)} backup`);
+  all.addEventListener("change", () => {
+    section.querySelectorAll("tbody .history-select").forEach((box) => {
+      box.checked = all.checked;
+      setHistoryPicked(box, all.checked);
+    });
+    updateHistoryBulkBar();
+  });
+  heading.append(all, appLabel(appId));
+  section.appendChild(heading);
+
+  const table = document.createElement("table");
+  table.className = "history-table";
+  table.innerHTML = "<thead><tr><th>File</th><th>Version</th><th>Size</th><th>Modified</th><th></th></tr></thead>";
+  const tbody = document.createElement("tbody");
+  entries.forEach((e) => {
+    if (e.missing) {
+      const row = missingHistoryRow(appId, e);
+      if (e.run_id) row.cells[0].prepend(historyCheckbox({ kind: "run", app: appId, run_id: e.run_id }, e.name || "this failed run"));
+      tbody.appendChild(row);
+      return;
+    }
+    const tr = document.createElement("tr");
+    const nameTd = document.createElement("td");
+    const nameText = document.createElement("span");
+    nameText.className = "history-file";
+    nameText.textContent = e.name;
+    nameTd.append(historyCheckbox({ kind: "backup", app: appId, file: e.name, encrypted: e.encrypted }, e.name),
+      nameText, encryptionBadge(e.encrypted));
+    const versionTd = document.createElement("td");
+    versionTd.textContent = e.app_version || "-";
+    if (!e.app_version) {
+      versionTd.title = e.recorded ? "This backup doesn't record the app's version" : "Not checked yet";
+    }
+    const sizeTd = document.createElement("td");
+    sizeTd.textContent = fmtBytes(e.size);
+    const timeTd = document.createElement("td");
+    timeTd.textContent = fmtTime(e.mod_time);
+    const actionsTd = document.createElement("td");
+    actionsTd.className = "actions-cell";
+    const dlLink = document.createElement("a");
+    dlLink.className = "icon-btn";
+    dlLink.title = "Download this backup";
+    dlLink.textContent = "↓";
+    dlLink.href = `/api/history/${encodeURIComponent(destId)}/${encodeURIComponent(appId)}/${encodeURIComponent(e.name)}/download`;
+    warnWhenDownloadIsDecrypted(dlLink, appId, e);
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.className = "icon-btn";
+    delBtn.title = "Delete this backup";
+    delBtn.textContent = "×";
+    delBtn.addEventListener("click", () => deleteBackup(destId, appId, e.name, tr));
+    if (e.run_id) actionsTd.append(viewLogButton(appId, e.run_id));
+    actionsTd.append(dlLink, delBtn);
+    tr.append(nameTd, versionTd, sizeTd, timeTd, actionsTd);
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  section.appendChild(table);
+  return section;
+}
+
+// ------------------------------------------------- picking several (#148) ----
+// Select shows a box on every row; the bar at the bottom downloads or deletes
+// what's picked. Keyed so a row picked stays picked until it's gone.
+const HISTORY_PICKED = new Map();
+
+function historyKey(item) {
+  return item.kind === "run" ? `run|${item.app}|${item.run_id}` : `backup|${item.app}|${item.file}`;
+}
+
+function historyCheckbox(item, name) {
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.className = "history-select";
+  box.setAttribute("aria-label", `Select ${name}`);
+  box.dataset.item = JSON.stringify(item);
+  box.addEventListener("change", () => {
+    setHistoryPicked(box, box.checked);
+    updateHistoryBulkBar();
+  });
+  return box;
+}
+
+function setHistoryPicked(box, picked) {
+  const item = JSON.parse(box.dataset.item);
+  if (picked) HISTORY_PICKED.set(historyKey(item), item);
+  else HISTORY_PICKED.delete(historyKey(item));
+}
+
+function setHistorySelecting(on) {
+  document.getElementById("history-root").classList.toggle("selecting", on);
+  document.getElementById("history-bulk-bar").classList.toggle("hidden", !on);
+  document.getElementById("history-select-btn").setAttribute("aria-pressed", String(on));
+  if (!on) clearHistorySelection();
+  updateHistoryBulkBar();
+}
+
+function clearHistorySelection() {
+  HISTORY_PICKED.clear();
+  document.querySelectorAll("#history-root .history-select").forEach((box) => {
+    box.checked = false;
+    box.indeterminate = false;
+  });
+  updateHistoryBulkBar();
+}
+
+function updateHistoryBulkBar() {
+  const items = Array.from(HISTORY_PICKED.values());
+  const backups = items.filter((item) => item.kind === "backup");
+  document.getElementById("history-bulk-count").textContent = `${items.length} selected`;
+  document.getElementById("history-bulk-download").disabled = !backups.length;
+  document.getElementById("history-bulk-delete").disabled = !items.length;
+  // Each app's "every backup" box: ticked, empty or in between.
+  document.querySelectorAll("#history-root .history-app").forEach((section) => {
+    const boxes = Array.from(section.querySelectorAll("tbody .history-select"));
+    const all = section.querySelector(".history-select-all");
+    const ticked = boxes.filter((box) => box.checked).length;
+    all.checked = boxes.length > 0 && ticked === boxes.length;
+    all.indeterminate = ticked > 0 && ticked < boxes.length;
+  });
+}
+
+function downloadPicked() {
+  const destId = document.getElementById("h-destination").value;
+  const backups = Array.from(HISTORY_PICKED.values()).filter((item) => item.kind === "backup");
+  if (!backups.length) return;
+  const url = backups.length === 1
+    ? `/api/history/${encodeURIComponent(destId)}/${encodeURIComponent(backups[0].app)}/${encodeURIComponent(backups[0].file)}/download`
+    : `/api/history/${encodeURIComponent(destId)}/download?${backups.map((b) => `b=${encodeURIComponent(`${b.app}/${b.file}`)}`).join("&")}`;
+  if (backups.some((b) => b.encrypted && b.app !== "backuparr")) toast(DECRYPTED_DOWNLOAD_TEXT, "warn");
+  const link = document.createElement("a");
+  link.href = url;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+function countText(n, one, many) {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+async function deletePicked() {
+  const destId = document.getElementById("h-destination").value;
+  const items = Array.from(HISTORY_PICKED.values());
+  const backups = items.filter((item) => item.kind === "backup").map(({ app, file }) => ({ app, file }));
+  const runs = items.filter((item) => item.kind === "run").map(({ app, run_id }) => ({ app, run_id }));
+  const what = [backups.length && countText(backups.length, "backup", "backups"),
+    runs.length && countText(runs.length, "failed run", "failed runs")].filter(Boolean).join(" and ");
+  if (!what || !confirm(`Delete ${what} from ${destLabel(destId)}? This can't be undone.`)) return;
+  const btn = document.getElementById("history-bulk-delete");
+  btn.disabled = true;
+  try {
+    const result = await whileStorageWakes(destId, apiFetch(`/api/history/${destId}/delete`, {
+      method: "POST", body: JSON.stringify({ backups, runs }),
+    }), () => toast(STORAGE_WAIT_TEXT));
+    if (result.failed.length) {
+      toast(`Deleted ${result.deleted.length}; ${result.failed.length} couldn't be: ${clause(result.failed[0].error)}`, "fail");
+    } else {
+      toast(`Deleted ${countText(result.deleted.length, "item", "items")}.`, "ok");
+    }
+    setHistorySelecting(false);
+    loadHistory();
+  } catch (e) {
+    toast(`Delete failed: ${clause(e.message)}`, "fail");
+    updateHistoryBulkBar();
   }
 }
 
@@ -2451,10 +2740,8 @@ function initRestoreAppOptions() {
   select.replaceChildren();
   // restore_supported defaults to true; only explicit opt-outs (e.g. Profilarr) are excluded.
   // Saved extra instances follow their app.
-  APP_META.filter((m) => m.restore_supported !== false).forEach((m) => {
-    [m.id, ...Array.from(INSTANCE_NAMES.keys()).filter((appId) => instanceType(appId) === m.id)]
-      .forEach((appId) => select.add(new Option(appLabel(appId), appId)));
-  });
+  addCategoryOptions(select, APP_META.filter((m) => m.restore_supported !== false).flatMap((m) =>
+    [m.id, ...Array.from(INSTANCE_NAMES.keys()).filter((appId) => instanceType(appId) === m.id)]));
   if (Array.from(select.options).some((opt) => opt.value === previous)) select.value = previous;
 }
 

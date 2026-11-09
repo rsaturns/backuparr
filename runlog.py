@@ -141,6 +141,30 @@ def forget_file(app, file):
             _write(runs)
 
 
+def forget_run(app, run_id, dest_id):
+    """A failed run deleted from one destination's History: it's no longer
+    listed there. The run goes once no destination lists it, unless its
+    backup reached one (that backup keeps its log). Returns whether the run
+    was found."""
+    with _lock:
+        runs = _read()
+        app_runs = runs.get(app, [])
+        record = next((r for r in app_runs if r.get("id") == run_id), None)
+        if record is None:
+            return False
+        destinations = dict(record.get("destinations") or {})
+        destinations.pop(dest_id, None)
+        uploaded = any((result or {}).get("ok") for result in destinations.values())
+        if destinations or uploaded:
+            record["destinations"] = destinations
+        else:
+            app_runs.remove(record)
+            if not app_runs:
+                del runs[app]
+        _write(runs)
+        return True
+
+
 def prune(retention_days, now=None):
     """Drops each app's runs older than retention_days, keeping its latest.
     Age comes from the run's timestamp, in this container's local time, as

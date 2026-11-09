@@ -24,7 +24,7 @@ nav_order: 2
 
 ## Destinations
 
-- Local storage, Google Drive, OneDrive and Dropbox. Every run uploads to each
+- Local Storage, Google Drive, OneDrive and Dropbox. Every run uploads to each
   one you enable. See [Destinations](destinations.md).
 - Cloud connections are made in the web UI, with no rclone config.
 - An optional bandwidth cap for uploads and downloads (`RCLONE_BWLIMIT`).

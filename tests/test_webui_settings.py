@@ -7,7 +7,7 @@ import pytest
 import requests
 
 import destination_util
-from config_store import APP_META, APP_NAMES, DEST_NAMES, DESTINATION_META
+from config_store import APP_CATEGORIES, APP_META, APP_NAMES, DEST_NAMES, DESTINATION_META
 
 
 def save(client, body):
@@ -470,7 +470,7 @@ def ui_meta(client):
 
 
 def test_the_page_carries_the_ui_metadata_as_data(authed_client):
-    assert ui_meta(authed_client) == {"apps": APP_META, "destinations": DESTINATION_META}
+    assert ui_meta(authed_client) == {"apps": APP_META, "categories": APP_CATEGORIES, "destinations": DESTINATION_META}
 
 
 # --- each destination's own retention (#133) -------------------------------

@@ -7,7 +7,7 @@ nav_order: 6
 
 ## Schedule and Run now
 
-Set the schedule under **Settings → Schedule & notifications**: daily, weekly,
+Set the schedule under **Settings → Schedule & Notifications**: daily, weekly,
 every few hours, or a 5-field cron schedule. Changes apply without a restart.
 
 **Run & Status → Run backup now** backs up every app, or the one you pick, and
@@ -59,10 +59,22 @@ latest run is always kept.
 Pick a destination to list each app's backups there, with their size, date,
 the app version each one came from, and whether it's encrypted. You can
 download or delete any of them, or open its log. An encrypted backup downloads
-decrypted - see [Encrypted backups](security.md#encrypted-backups). Backuparr's own backups are listed under "Backuparr's own
-configuration".
+decrypted - see [Encrypted backups](security.md#encrypted-backups).
 
-![History tab: Sonarr's backups with their version, size and date, each marked Encrypted or Not encrypted, with View log, download and delete buttons]({{ '/screenshots/history.png' | relative_url }})
+The apps are grouped under the same categories as on Settings, each with a
+header that folds it away; Backuparr's own backups come first. Which
+categories are folded is remembered in your browser.
+
+![History tab: Backuparr's own backups, then the Media Management category, each backup with its version, size, date and Encrypted badge, and Select and Refresh buttons]({{ '/screenshots/history.png' | relative_url }})
+
+**Several at once:** click **Select**, tick the backups (or a whole app with
+the box beside its name), then use the bar at the bottom of the window:
+**Download** gets one backup as usual, or several in one zip, each as a single
+download would give it; **Delete** removes them after one confirmation. A
+failed run's row can be ticked and deleted too, which removes it from this
+destination's History. **Cancel** leaves the selection.
+
+![Picking several backups: two of Sonarr's ticked, and the bar at the bottom with 2 selected, Download, Delete and Cancel]({{ '/screenshots/history-select.png' | relative_url }})
 
 ## The backup record
 
@@ -79,7 +91,7 @@ up to date; don't edit it.
 **Backups made before 2.5.0** are added in the background after updating, each
 read once:
 
-- Local storage is read first. A cloud copy of a backup already read there
+- Local Storage is read first. A cloud copy of a backup already read there
   isn't downloaded.
 - Any other backup on Google Drive, OneDrive or Dropbox is downloaded once.
 - This pauses while a backup or restore runs. Later startups only read backups

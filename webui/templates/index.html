@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Backuparr - backup your Arrs">
+<meta name="description" content="Backuparr - Everything you host, backed up.">
 <title>Backuparr</title>
 <script src="{{ url_for('static', filename='theme-init.js') }}"></script>
 <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
@@ -16,7 +16,7 @@
     <img class="brand-mark" src="{{ url_for('static', filename='logo.png') }}" alt="">
     <span class="brand-text">
       <span class="brand-name">Backuparr</span>
-      <span class="brand-tagline">Backup your Arrs</span>
+      <span class="brand-tagline">Everything you host, backed up.</span>
     </span>
   </div>
   <nav class="tabs" id="tabs">
@@ -28,7 +28,7 @@
   </nav>
   {% if not auth_disabled %}
   <div class="user-menu" id="user-menu">
-    <button type="button" class="btn btn-ghost btn-sm user-menu-btn" id="user-menu-btn"
+    <button type="button" class="btn btn-ghost btn-sm user-menu-btn" id="user-menu-btn" aria-label="Account ({{ username }})"
             aria-haspopup="menu" aria-expanded="false" aria-controls="user-menu-list">
       <svg class="user-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <circle cx="12" cy="8" r="4"></circle>
@@ -49,7 +49,7 @@
 
   <section id="tab-overview" class="tab-panel active">
     <div class="card">
-      <h2>At a glance</h2>
+      <h2>At a Glance</h2>
       <div id="overview-summary" class="overview-summary"></div>
     </div>
     <div id="overview-apps" class="overview-apps"></div>
@@ -71,107 +71,126 @@
         <h2>Apps</h2>
         <p class="hint">Check the apps you want backed up - each one expands for its URL and API key (find the key in that app's Settings &gt; General).</p>
         <div id="app-list">
-          {# app.js groups the cards under these once an app is enabled and saved. #}
-          <h3 id="apps-enabled-heading" class="app-group-heading hidden">Enabled</h3>
-          <h3 id="apps-disabled-heading" class="app-group-heading hidden">Not enabled</h3>
-          {% for m in app_meta %}
-          <div class="app-card" data-app="{{ m.id }}">
-            <div class="app-card-head">
-              <label class="switch">
-                <input type="checkbox" class="f-enabled">
-                <span class="slider"></span>
-              </label>
-              <img class="app-icon" src="{{ url_for('static', filename='icons/' ~ m.icon) }}" alt="" width="22" height="22">
-              <h3>{{ m.label }}</h3>
-              {% if m.discoverable %}<span class="discovery-badge discovery-origin hidden">From Prowlarr</span>{% endif %}
-              <span class="status-dot" data-state="idle"></span>
+          {# One collapsible section per category (#148); app.js opens them, counts the
+             enabled apps and puts those first. #}
+          {% for c in app_categories %}
+          <section class="app-category" data-category="{{ c.id }}">
+            <button type="button" class="category-head" aria-expanded="false" aria-controls="category-{{ c.id }}">
+              <span class="category-emoji" aria-hidden="true">{{ c.emoji }}</span>
+              <span class="category-name">{{ c.label }}</span>
+              <span class="category-count"></span>
+              <span class="status-dot category-status" data-state="idle"></span>
+              <span class="category-chevron" aria-hidden="true"></span>
+            </button>
+            <div class="category-body hidden" id="category-{{ c.id }}">
+            {% for m in c.apps %}
+              <div class="app-card" data-app="{{ m.id }}">
+                <div class="app-card-head">
+                  <label class="switch">
+                    <input type="checkbox" class="f-enabled">
+                    <span class="slider"></span>
+                  </label>
+                  <img class="app-icon" src="{{ url_for('static', filename='icons/' ~ m.icon) }}" alt="" width="22" height="22">
+                  <h3>{{ m.label }}</h3>
+                  {% if m.discoverable %}<span class="discovery-badge discovery-origin hidden">From Prowlarr</span>{% endif %}
+                  <span class="status-dot" data-state="idle"></span>
+                </div>
+                <div class="app-card-body hidden">
+                  {% if m.discoverable %}<div class="app-discovery hidden"></div>{% endif %}
+                  <label class="field">
+                    <span class="field-label">URL</span>
+                    <input type="text" class="f-url" placeholder="{{ m.url_placeholder }}" autocomplete="off">
+                  </label>
+                  {% if not m.no_api_key %}
+                  <label class="field">
+                    <span class="field-label">
+                      {{ m.key_label | default("API key") }}
+                      {% if not m.key_required %}<span class="muted">(optional{% if m.key_help %} &mdash; {{ m.key_help }}{% endif %})</span>{% elif m.key_help %}<span class="muted">({{ m.key_help }})</span>{% endif %}
+                    </span>
+                    <input type="password" class="f-api_key" autocomplete="off">
+                    {% if m.discoverable %}<span class="discovery-key-status hidden" role="status"></span>{% endif %}
+                  </label>
+                  {% endif %}
+                  {% if m.id == 'plex' %}
+                  <div class="plex-auth-actions">
+                    <button type="button" class="btn btn-ghost btn-sm" id="plex-token-btn">Get Plex token</button>
+                    <a id="plex-auth-link" class="hidden" target="_blank" rel="noopener noreferrer">Open Plex sign-in</a>
+                    <button type="button" class="btn btn-ghost btn-sm hidden" id="plex-auth-cancel">Cancel</button>
+                  </div>
+                  <p class="hint" id="plex-auth-status" role="status" aria-live="polite">Sign in on Plex with the server owner's account to fill the token automatically.</p>
+                  <label class="field hidden" id="plex-server-field">
+                    <span class="field-label">Your Plex server</span>
+                    <select id="plex-server-select"></select>
+                  </label>
+                  {% endif %}
+                  {% for f in m.extra_fields %}
+                  <label class="field{% if f.login_only %} login-field hidden{% endif %}">
+                    <span class="field-label">{{ f.label }} {% if f.help %}<span class="muted">({{ f.help }})</span>{% endif %}</span>
+                    <input type="{{ f.type }}" class="f-extra" data-field="{{ f.name }}"{% if f.placeholder %} placeholder="{{ f.placeholder }}"{% endif %} autocomplete="off">
+                    {# NZBGet's discovered secret is its password: its note goes here. #}
+                    {% if m.discoverable and m.no_api_key and f.name == 'password' %}<span class="discovery-key-status hidden" role="status"></span>{% endif %}
+                  </label>
+                  {% endfor %}
+                  {% if m.id == 'bazarr' %}
+                  <label class="field">
+                    <span class="field-label">Backup folder <span class="muted">(local path, only needed to restore Bazarr)</span></span>
+                    <input type="text" id="s-bazarr_backup_dir" placeholder="/mnt/bazarr-backup">
+                  </label>
+                  {% endif %}
+                  {% if m.always_encrypted %}
+                  <p class="hint encrypt-note">Always encrypted for safety.</p>
+                  {% else %}
+                  <label class="field toggle-field">
+                    <span class="switch"><input type="checkbox" class="f-encrypt" checked><span class="slider"></span></span>
+                    <span>Encrypt backup</span>
+                  </label>
+                  {% endif %}
+                  <div class="app-card-actions">
+                    <button type="button" class="btn btn-ghost btn-sm test-btn">Test connection</button>
+                    {% if m.id == 'prowlarr' %}<button type="button" class="btn btn-primary btn-sm" id="discover-btn" disabled>Discover services</button><span class="help-tip" tabindex="0" role="img" aria-label="Reads the apps and download clients connected to Prowlarr, through its API, and fills in their URLs and API keys." data-tip="Reads the apps and download clients connected to Prowlarr, through its API, and fills in their URLs and API keys.">?</span>{% endif %}
+                    <span class="test-result"></span>
+                  </div>
+                  {% if m.id == 'prowlarr' %}
+                  <p id="discovery-status" class="discovery-status" role="status" aria-live="polite"></p>
+                  <div id="discovery-results"></div>
+                  {% endif %}
+                </div>
+              </div>
+              {% if m.multi_instance %}
+              {# Extra instances' cards (app.js copies this app's card) go above this row. #}
+              <div class="instance-add" data-instance-of="{{ m.id }}">
+                <div class="instance-discovered hidden"></div>
+                <button type="button" class="btn btn-ghost btn-sm instance-add-btn">Add another {{ m.label }}</button>
+                <form class="instance-add-form hidden">
+                  <label class="field">
+                    <span class="field-label">Name <span class="muted">(e.g. 4K or Anime - also names its backup folder)</span></span>
+                    <input type="text" class="instance-add-name" maxlength="64" autocomplete="off">
+                  </label>
+                  <div class="app-card-actions">
+                    <button type="submit" class="btn btn-primary btn-sm">Add</button>
+                    <button type="button" class="btn btn-ghost btn-sm instance-add-cancel">Cancel</button>
+                    <span class="test-result instance-add-error" role="status"></span>
+                  </div>
+                </form>
+              </div>
+              {% endif %}
+            {% endfor %}
             </div>
-            <div class="app-card-body hidden">
-              {% if m.discoverable %}<div class="app-discovery hidden"></div>{% endif %}
-              <label class="field">
-                <span class="field-label">URL</span>
-                <input type="text" class="f-url" placeholder="{{ m.url_placeholder }}" autocomplete="off">
-              </label>
-              {% if not m.no_api_key %}
-              <label class="field">
-                <span class="field-label">
-                  {{ m.key_label | default("API key") }}
-                  {% if not m.key_required %}<span class="muted">(optional{% if m.key_help %} &mdash; {{ m.key_help }}{% endif %})</span>{% elif m.key_help %}<span class="muted">({{ m.key_help }})</span>{% endif %}
-                </span>
-                <input type="password" class="f-api_key" autocomplete="off">
-                {% if m.discoverable %}<span class="discovery-key-status hidden" role="status"></span>{% endif %}
-              </label>
-              {% endif %}
-              {% if m.id == 'plex' %}
-              <div class="plex-auth-actions">
-                <button type="button" class="btn btn-ghost btn-sm" id="plex-token-btn">Get Plex token</button>
-                <a id="plex-auth-link" class="hidden" target="_blank" rel="noopener noreferrer">Open Plex sign-in</a>
-                <button type="button" class="btn btn-ghost btn-sm hidden" id="plex-auth-cancel">Cancel</button>
-              </div>
-              <p class="hint" id="plex-auth-status" role="status" aria-live="polite">Sign in on Plex with the server owner's account to fill the token automatically.</p>
-              <label class="field hidden" id="plex-server-field">
-                <span class="field-label">Your Plex server</span>
-                <select id="plex-server-select"></select>
-              </label>
-              {% endif %}
-              {% for f in m.extra_fields %}
-              <label class="field{% if f.login_only %} login-field hidden{% endif %}">
-                <span class="field-label">{{ f.label }} {% if f.help %}<span class="muted">({{ f.help }})</span>{% endif %}</span>
-                <input type="{{ f.type }}" class="f-extra" data-field="{{ f.name }}"{% if f.placeholder %} placeholder="{{ f.placeholder }}"{% endif %} autocomplete="off">
-                {# NZBGet's discovered secret is its password: its note goes here. #}
-                {% if m.discoverable and m.no_api_key and f.name == 'password' %}<span class="discovery-key-status hidden" role="status"></span>{% endif %}
-              </label>
-              {% endfor %}
-              {% if m.id == 'bazarr' %}
-              <label class="field">
-                <span class="field-label">Backup folder <span class="muted">(local path, only needed to restore Bazarr)</span></span>
-                <input type="text" id="s-bazarr_backup_dir" placeholder="/mnt/bazarr-backup">
-              </label>
-              {% endif %}
-              {% if m.always_encrypted %}
-              <p class="hint encrypt-note">Always encrypted for safety.</p>
-              {% else %}
-              <label class="field toggle-field">
-                <span class="switch"><input type="checkbox" class="f-encrypt" checked><span class="slider"></span></span>
-                <span>Encrypt backup</span>
-              </label>
-              {% endif %}
-              <div class="app-card-actions">
-                <button type="button" class="btn btn-ghost btn-sm test-btn">Test connection</button>
-                {% if m.id == 'prowlarr' %}<button type="button" class="btn btn-primary btn-sm" id="discover-btn" disabled>Discover services</button><span class="help-tip" tabindex="0" role="img" aria-label="Reads the apps and download clients connected to Prowlarr, through its API, and fills in their URLs and API keys." data-tip="Reads the apps and download clients connected to Prowlarr, through its API, and fills in their URLs and API keys.">?</span>{% endif %}
-                <span class="test-result"></span>
-              </div>
-              {% if m.id == 'prowlarr' %}
-              <p id="discovery-status" class="discovery-status" role="status" aria-live="polite"></p>
-              <div id="discovery-results"></div>
-              {% endif %}
-            </div>
-          </div>
-          {% if m.multi_instance %}
-          {# Extra instances' cards (app.js copies this app's card) go above this row. #}
-          <div class="instance-add" data-instance-of="{{ m.id }}">
-            <div class="instance-discovered hidden"></div>
-            <button type="button" class="btn btn-ghost btn-sm instance-add-btn">Add another {{ m.label }}</button>
-            <form class="instance-add-form hidden">
-              <label class="field">
-                <span class="field-label">Name <span class="muted">(e.g. 4K or Anime - also names its backup folder)</span></span>
-                <input type="text" class="instance-add-name" maxlength="64" autocomplete="off">
-              </label>
-              <div class="app-card-actions">
-                <button type="submit" class="btn btn-primary btn-sm">Add</button>
-                <button type="button" class="btn btn-ghost btn-sm instance-add-cancel">Cancel</button>
-                <span class="test-result instance-add-error" role="status"></span>
-              </div>
-            </form>
-          </div>
-          {% endif %}
+          </section>
           {% endfor %}
         </div>
       </div>
 
       <div class="right-col">
         <div class="card destinations-card">
-          <h2>Destinations</h2>
+          <h2 class="section-toggle-heading">
+            <button type="button" class="section-toggle" id="destinations-toggle" aria-expanded="true" aria-controls="destinations-body">
+              <span>Destinations</span>
+              <span class="dest-head-icons" aria-hidden="true">{% for m in destination_meta %}{% if m.icon %}<img class="app-icon" src="{{ url_for('static', filename='icons/' ~ m.icon) }}" alt="" width="18" height="18">{% endif %}{% endfor %}</span>
+              <span class="category-chevron" aria-hidden="true"></span>
+            </button>
+          </h2>
+          <div id="destinations-body">
           <p class="hint">Choose where backups go - enable as many as you like, every enabled destination gets a copy of every backup.</p>
           <div id="destination-list">
             {% for m in destination_meta %}
@@ -249,10 +268,11 @@
             </div>
             {% endfor %}
           </div>
+          </div>
         </div>
 
         <div class="card">
-          <h2>Schedule &amp; notifications</h2>
+          <h2>Schedule &amp; Notifications</h2>
           <div class="field">
             <span class="field-label">Default retention (days)</span>
             <input type="number" id="s-retention_days" min="1" step="1">
@@ -311,7 +331,7 @@
         </div>
 
         <div class="card" id="request-headers-card">
-          <h2>Service authentication</h2>
+          <h2>Service Authentication</h2>
           <p class="hint">Optional HTTP headers for apps behind an authenticating reverse proxy, used for connection tests, discovery, backups and restores. Each header goes to all apps or only the ones you pick. Values are stored encrypted.</p>
           <div id="request-headers-list"></div>
           <div class="request-headers-actions">
@@ -381,7 +401,7 @@
   <section id="tab-run" class="tab-panel">
     <div class="card">
       <div class="run-head">
-        <h2>Run &amp; status</h2>
+        <h2>Run &amp; Status</h2>
         <div class="run-head-actions">
           <button type="button" class="btn btn-ghost hidden" id="cancel-run-btn">Cancel</button>
           <select id="run-app" aria-label="App to back up"><option value="">All apps</option></select>
@@ -399,14 +419,27 @@
   <section id="tab-history" class="tab-panel">
     <div class="card">
       <div class="run-head">
-        <h2>Backup history</h2>
-        <button type="button" class="btn btn-ghost btn-sm" id="history-refresh-btn">Refresh</button>
+        <h2>Backup History</h2>
+        <div class="run-head-actions">
+          <button type="button" class="btn btn-ghost btn-sm btn-icon-text" id="history-select-btn" aria-pressed="false">
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="2" width="9" height="9" rx="2"/><path d="M4.2 6.6l2 2 3-3.6"/><rect x="2" y="13" width="9" height="9" rx="2"/><path d="M4.2 17.6l2 2 3-3.6"/><path d="M14.5 6.5h7.5M14.5 17.5h7.5"/></svg>
+            <span>Select</span>
+          </button>
+          <button type="button" class="btn btn-ghost btn-sm" id="history-refresh-btn">Refresh</button>
+        </div>
       </div>
       <div class="field">
         <span class="field-label">Destination</span>
         <select id="h-destination"></select>
       </div>
       <div id="history-root"></div>
+      {# Shown while picking backups: what's picked and what to do with it. #}
+      <div id="history-bulk-bar" class="bulk-bar hidden" role="region" aria-label="Selected backups">
+        <span id="history-bulk-count" class="bulk-count" aria-live="polite">0 selected</span>
+        <button type="button" class="btn btn-ghost btn-sm" id="history-bulk-download" disabled>Download</button>
+        <button type="button" class="btn btn-danger btn-sm" id="history-bulk-delete" disabled>Delete</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="history-bulk-cancel">Cancel</button>
+      </div>
     </div>
   </section>
 
@@ -511,7 +544,7 @@
 <div id="key-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="key-modal-title">
   <div class="modal">
     <div class="modal-head">
-      <h3 id="key-modal-title">Save your encryption key</h3>
+      <h3 id="key-modal-title">Save Your Encryption Key</h3>
     </div>
     <div class="modal-body">
     <p class="hint">This key encrypts the passwords, API keys and cloud logins Backuparr stores, and your backups. You need it to restore Backuparr or an encrypted backup.</p>
@@ -532,7 +565,7 @@
 <div id="encryption-notice-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="encryption-notice-title">
   <div class="modal">
     <div class="modal-head">
-      <h3 id="encryption-notice-title">Backups are now encrypted</h3>
+      <h3 id="encryption-notice-title">Backups Are Now Encrypted</h3>
     </div>
     <div class="modal-body">
       <p>You can turn this off for each app in Settings.</p>
@@ -547,7 +580,7 @@
 <div id="password-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="password-modal-title">
   <div class="modal">
     <div class="modal-head">
-      <h3 id="password-modal-title">Change password</h3>
+      <h3 id="password-modal-title">Change Password</h3>
       <button type="button" class="icon-btn modal-close" id="password-modal-close" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body">
@@ -579,7 +612,7 @@
 
 <div id="log-panel" class="log-panel hidden" role="dialog" aria-labelledby="log-panel-title">
   <div class="log-panel-head">
-    <h3 id="log-panel-title">Run log</h3>
+    <h3 id="log-panel-title">Run Log</h3>
     <button type="button" class="icon-btn" id="log-panel-close" aria-label="Close">&times;</button>
   </div>
   <div id="log-panel-meta" class="log-panel-meta"></div>
