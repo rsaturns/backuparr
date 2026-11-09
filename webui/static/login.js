@@ -7,7 +7,7 @@ async function submitLogin() {
   const btn = document.getElementById("login-submit-btn");
 
   if (!username || !password) {
-    resultEl.textContent = "Username and password are required";
+    resultEl.textContent = "Username and password are required.";
     resultEl.className = "save-result fail";
     return;
   }
@@ -25,7 +25,7 @@ async function submitLogin() {
     if (!res.ok) throw new Error((body && body.error) || `HTTP ${res.status}`);
     window.location.href = "/";
   } catch (e) {
-    resultEl.textContent = e.message;
+    resultEl.textContent = sentence(e.message);
     resultEl.className = "save-result fail";
     btn.disabled = false;
   }
@@ -82,7 +82,7 @@ async function submitReset() {
     if (!res.ok) throw new Error((body && body.error) || `HTTP ${res.status}`);
     window.location.href = "/setup";
   } catch (e) {
-    resultEl.textContent = e.message;
+    resultEl.textContent = sentence(e.message);
     resultEl.className = "save-result fail";
     btn.disabled = false;
   } finally {

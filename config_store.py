@@ -57,7 +57,7 @@ PASSWORD_APPS = ("bazarr", "nzbget", "radarr", "sonarr", "lidarr", "whisparr", "
 # Drives the web UI's forms generically. restore_warning is shown on the
 # Restore tab before an app's restore. always_encrypted: True for an app
 # whose backups hold secrets that must never sit readable on a destination
-# (#147) - its card has no "Encrypt backups" option.
+# (#147) - its card has no "Encrypt backup" toggle.
 APP_META = [
     {"id": "radarr", "label": "Radarr", "icon": "radarr.svg", "key_required": True, "url_placeholder": "http://radarr:7878", "extra_fields": SERVARR_LOGIN_FIELDS, "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
     {"id": "sonarr", "label": "Sonarr", "icon": "sonarr.svg", "key_required": True, "url_placeholder": "http://sonarr:8989", "extra_fields": SERVARR_LOGIN_FIELDS, "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},

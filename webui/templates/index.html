@@ -131,9 +131,9 @@
               {% if m.always_encrypted %}
               <p class="hint encrypt-note">Always encrypted for safety.</p>
               {% else %}
-              <label class="field checkbox-field">
-                <input type="checkbox" class="f-encrypt" checked>
-                <span>Encrypt backups</span>
+              <label class="field toggle-field">
+                <span class="switch"><input type="checkbox" class="f-encrypt" checked><span class="slider"></span></span>
+                <span>Encrypt backup</span>
               </label>
               {% endif %}
               <div class="app-card-actions">
@@ -587,6 +587,7 @@
 </div>
 
 <div id="toast-root" class="toast-root"></div>
+<script src="{{ url_for('static', filename='messages.js') }}"></script>
 <script src="{{ url_for('static', filename='key-prompt.js') }}"></script>
 <script src="{{ url_for('static', filename='self-restore.js') }}"></script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>

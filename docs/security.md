@@ -78,7 +78,7 @@ An encrypted backup is named `<app>_<date>_<time>.<ext>.enc` (for example
 `radarr_20261108_030000.zip.enc`), and History and the Overview mark each
 backup **Encrypted** or **Not encrypted**.
 
-- **Encrypt backups** on each app's card under Settings turns it off for that
+- **Encrypt backup** on each app's card under Settings turns it off for that
   app. It's on for every app unless you turn it off, including apps set up
   before 3.0 (Backuparr says so once after the update).
 - Apps whose backups hold secrets that must never sit readable anywhere have

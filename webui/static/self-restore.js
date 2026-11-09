@@ -9,7 +9,7 @@ function readFileBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result).replace(/^data:[^,]*,/, ""));
-    reader.onerror = () => reject(new Error("The file couldn't be read"));
+    reader.onerror = () => reject(new Error("The file couldn't be read."));
     reader.readAsDataURL(file);
   });
 }
@@ -17,8 +17,8 @@ function readFileBase64(file) {
 // Returns the server's warnings; throws with its error.
 async function restoreBackuparr(url, file, key, extra) {
   if (!file) throw new Error("Choose Backuparr's backup file");
-  if (!key.trim()) throw new Error("Enter the encryption key");
-  if (file.size > SELF_RESTORE_MAX_BYTES) throw new Error("That file is too large to be Backuparr's own backup");
+  if (!key.trim()) throw new Error("Enter the encryption key.");
+  if (file.size > SELF_RESTORE_MAX_BYTES) throw new Error("That file is too large to be Backuparr's own backup.");
   const archive = await readFileBase64(file);
   const res = await fetch(url, {
     method: "POST",
@@ -35,7 +35,7 @@ function renderRestoreWarnings(container, warnings) {
   warnings.forEach((text) => {
     const p = document.createElement("p");
     p.className = "key-warning";
-    p.textContent = text;
+    p.textContent = sentence(text);
     container.appendChild(p);
   });
 }

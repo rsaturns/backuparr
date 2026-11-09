@@ -594,6 +594,11 @@ input:focus, select:focus, textarea:focus {
 
 /* A long test result wraps beside the buttons; the buttons never do. */
 .app-card-actions .btn { flex: none; white-space: nowrap; }
+/* On a phone a row of buttons (Prowlarr's three) is wider than the card:
+   the row wraps instead, each button still on one line. */
+@media (max-width: 480px) {
+  .app-card-actions { flex-wrap: wrap; }
+}
 
 .field-actions-spaced { margin-top: 10px; }
 
@@ -692,6 +697,15 @@ input:focus, select:focus, textarea:focus {
 
 .switch input:checked + .slider { background: var(--accent); }
 .switch input:checked + .slider::before { transform: translateX(15px); }
+.switch input:focus-visible + .slider { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* A setting switched like the app itself: the same toggle, then its label. */
+.toggle-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
 
 .save-row {
   display: flex;

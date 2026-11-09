@@ -8,7 +8,7 @@ nav_order: 8
 The **Settings** tab holds, from top to bottom:
 
 - **Apps** - a card per app: switch it on, enter its URL and API key, and
-  click **Test connection**. **Encrypt backups** is on unless you turn it off
+  click **Test connection**. **Encrypt backup** is on unless you turn it off
   (see [Encrypted backups](security.md#encrypted-backups)). See
   [Apps](apps/index.md).
 - **Destinations** - see [Destinations](destinations.md). Each card can set
