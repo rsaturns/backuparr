@@ -10,7 +10,7 @@ Each backup is [checked before it's uploaded](backups.md#the-check-before-upload
 Each card can keep backups for its own number of days - see
 [Retention](backups.md#retention).
 
-## Local storage
+## Local Storage
 
 No setup. Backups go to `/config/backuparr/backups`, on the same volume as
 `config.json`. Set a custom path on the Local card to use another mounted

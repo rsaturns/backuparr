@@ -22,7 +22,7 @@ nav_order: 12
 | `apps.lazylibrarian.data_dir` | LazyLibrarian's mounted data folder (its `/config`) - required |
 | `bazarr_backup_dir` | Bazarr's mounted config/backup folder, for restores |
 | `request_headers` | [Service authentication headers](settings.md#service-authentication-headers): `[{"name": "Proxy-Authorization", "value": "Basic …", "apps": ["radarr"]}]`; omit `apps` for every app |
-| `destinations.local.enabled/path` | Local storage; the path defaults to `/config/backuparr/backups` |
+| `destinations.local.enabled/path` | Local Storage; the path defaults to `/config/backuparr/backups` |
 | `destinations.gdrive.enabled/client_id/client_secret/developer_key` | Google Drive OAuth client and API key, from the Setup guide |
 | `destinations.gdrive.refresh_token/folder_id/folder_name` | Set by Connect/Choose folder - don't edit |
 | `destinations.onedrive.enabled`, `destinations.dropbox.enabled` | Whether the destination is used |
@@ -33,7 +33,7 @@ nav_order: 12
 | `notify_url` | Optional summary after every run - see [Notifications](notifications.md) |
 | `self_backup` | Back up Backuparr's own configuration, encrypted, at the end of each full run (default `true`) - see [Backuparr's own backup](security.md#backuparrs-own-backup) |
 | `secrets_key_acknowledged` | Set once you've confirmed saving your encryption key - don't edit |
-| `encryption_notice_acknowledged` | Set once the "Backups are now encrypted" notice has been seen - don't edit |
+| `encryption_notice_acknowledged` | Set once the "Backups Are Now Encrypted" notice has been seen - don't edit |
 
 ## Other files
 

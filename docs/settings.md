@@ -7,8 +7,8 @@ nav_order: 8
 
 The **Settings** tab holds, from top to bottom:
 
-- **Apps** - grouped by category (Media management, Downloaders, Media
-  servers, ...); click a category to open or close it. Its header counts the
+- **Apps** - grouped by category (Media Management, Downloaders, Media
+  Servers, ...); click a category to open or close it. Its header counts the
   enabled apps and shows a dot that turns red when one of them failed its last
   backup. A category starts closed and opens once one of its apps is set up;
   after that it stays as you left it, in this browser. Within a category,

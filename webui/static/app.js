@@ -427,7 +427,7 @@ async function openRunLog(appId, runId) {
   const panel = document.getElementById("log-panel");
   const meta = document.getElementById("log-panel-meta");
   const lines = document.getElementById("log-panel-lines");
-  document.getElementById("log-panel-title").textContent = `${appId === "backuparr" ? "Backuparr" : appLabel(appId)} - run log`;
+  document.getElementById("log-panel-title").textContent = `${appLabel(appId)} - Run Log`;
   meta.textContent = "Loading...";
   lines.innerHTML = "";
   panel.classList.remove("hidden");
@@ -2404,7 +2404,7 @@ function appMeta(appId) {
 
 // "Radarr (4K)" for an extra instance; a removed one's id stands in for its name.
 function appLabel(appId) {
-  if (appId === "backuparr") return "Backuparr's own configuration";
+  if (appId === "backuparr") return "Backuparr";
   const m = appMeta(appId);
   if (!m) return appId;
   return isExtraInstance(appId) ? `${m.label} (${INSTANCE_NAMES.get(appId) || appId.slice(m.id.length + 1)})` : m.label;

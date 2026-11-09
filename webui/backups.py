@@ -175,7 +175,7 @@ def _plain_copy(dest_id, root, app_name, filename, tmp_dir):
         folder = os.path.realpath(os.path.join(root, app_name))
         path = os.path.realpath(os.path.join(folder, filename))
         if os.path.dirname(path) != folder or not os.path.isfile(path):
-            raise _NotThere({"error": f"{filename} isn't on Local storage any more"}, 404)
+            raise _NotThere({"error": f"{filename} isn't on Local Storage any more"}, 404)
     else:
         path = os.path.join(tmp_dir, filename)
         try:

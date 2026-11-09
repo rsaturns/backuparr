@@ -7,7 +7,7 @@ permalink: /
 
 # Backuparr
 
-**Backup your Arrs.**
+**Everything you host, backed up.**
 
 Scheduled config/database backups for Radarr, Sonarr, Lidarr, Whisparr,
 Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, NZBGet, Tautulli, Jellyfin, Emby,
@@ -32,7 +32,7 @@ LazyLibrarian also need a folder mounted into Backuparr - see [Apps](apps/index.
   [first run](getting-started/first-run.md) and [updating](getting-started/updating.md).
 - [Apps](apps/index.md) - how each app is backed up and restored, with notes
   for the apps that need extra setup.
-- [Destinations](destinations.md) - Local storage, Google Drive, OneDrive and
+- [Destinations](destinations.md) - Local Storage, Google Drive, OneDrive and
   Dropbox.
 - [Backups and history](backups.md) - the schedule, retention, the check
   before upload, run logs and the History tab.

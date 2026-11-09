@@ -160,12 +160,29 @@ body {
   .brand-mark { width: 32px; height: 32px; }
   .brand-name { font-size: 20px; }
   .brand-tagline { font-size: 13px; }
+  /* The account button is just its icon, so brand, account and theme keep
+     one row beside the tagline. */
+  .user-name { display: none; }
   .tabs { gap: 2px; }
   .tab-btn { font-size: 14px; padding: 6px 4px; }
 }
 
 @media (max-width: 360px) {
-  .user-name { display: none; }
+  .topbar { gap: 8px; }
+  .brand-tagline { font-size: 12px; }
+}
+
+/* Phones under 360px: a little smaller still, so the header keeps one row. */
+@media (max-width: 359px) {
+  .topbar { padding: 10px 8px; gap: 6px; }
+  .brand { gap: 8px; }
+  .brand-mark { width: 28px; height: 28px; }
+  .brand-name { font-size: 18px; }
+  .brand-tagline { font-size: 11px; letter-spacing: 0; }
+  .theme-toggle { width: 30px; height: 30px; font-size: 16px; }
+}
+
+@media (max-width: 360px) {
   .tab-btn { font-size: 13px; padding: 5px 3px; }
 }
 
@@ -429,6 +446,8 @@ body {
   cursor: pointer;
 }
 .section-toggle > span:first-child { flex: 1; }
+.dest-head-icons { display: flex; align-items: center; gap: 6px; }
+.dest-head-icons .app-icon { width: 18px; height: 18px; }
 .section-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
 
 /* -------------------------------------------- picking several backups --- */
@@ -436,6 +455,8 @@ body {
 #history-root.selecting .history-select { display: inline-block; }
 #history-root.selecting .history-app h3 { display: flex; align-items: center; }
 #history-select-btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.btn-icon-text { display: inline-flex; align-items: center; gap: 6px; }
+.btn-icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
 /* Room below the last row so the bar never covers it. */
 #history-root.selecting { padding-bottom: 72px; }
 .bulk-bar {
@@ -460,7 +481,8 @@ body {
    count on one line, the three buttons on the next. */
 @media (max-width: 560px) {
   .bulk-bar { left: 12px; right: 76px; transform: none; flex-wrap: wrap; gap: 8px; }
-  .bulk-count { flex-basis: 100%; }
+  .bulk-count { flex-basis: 100%; text-align: center; margin-right: 0; }
+  .bulk-bar { justify-content: center; }
 }
 
 .discovery-badge {

@@ -65,6 +65,8 @@ The apps are grouped under the same categories as on Settings, each with a
 header that folds it away; Backuparr's own backups come first. Which
 categories are folded is remembered in your browser.
 
+![History tab: Backuparr's own backups, then the Media Management category, each backup with its version, size, date and Encrypted badge, and Select and Refresh buttons]({{ '/screenshots/history.png' | relative_url }})
+
 **Several at once:** click **Select**, tick the backups (or a whole app with
 the box beside its name), then use the bar at the bottom of the window:
 **Download** gets one backup as usual, or several in one zip, each as a single
@@ -72,10 +74,7 @@ download would give it; **Delete** removes them after one confirmation. A
 failed run's row can be ticked and deleted too, which removes it from this
 destination's History. **Cancel** leaves the selection.
 
-![Picking several backups: two of Sonarr's ticked, and the bar at the bottom with 2 selected, Download, Delete and Cancel]({{ '/screenshots/history-select.png' | relative_url }}) Backuparr's own backups are listed under "Backuparr's own
-configuration".
-
-![History tab: Backuparr's own backups, then the Media management category, each backup with its version, size, date and Encrypted badge, and Select and Refresh buttons]({{ '/screenshots/history.png' | relative_url }})
+![Picking several backups: two of Sonarr's ticked, and the bar at the bottom with 2 selected, Download, Delete and Cancel]({{ '/screenshots/history-select.png' | relative_url }})
 
 ## The backup record
 
@@ -92,7 +91,7 @@ up to date; don't edit it.
 **Backups made before 2.5.0** are added in the background after updating, each
 read once:
 
-- Local storage is read first. A cloud copy of a backup already read there
+- Local Storage is read first. A cloud copy of a backup already read there
   isn't downloaded.
 - Any other backup on Google Drive, OneDrive or Dropbox is downloaded once.
 - This pauses while a backup or restore runs. Later startups only read backups

@@ -137,7 +137,7 @@ def test_a_local_download_never_follows_a_link_out_of_the_folder(authed_client, 
     os.symlink(tmp_path / "secret.txt", os.path.join(folder, "radarr_2.zip"))
     for name in ("radarr_2.zip", "radarr_3.zip"):  # a link out, and a file that's gone
         response = authed_client.get(f"/api/history/local/radarr/{name}/download")
-        assert response.status_code == 404 and "isn't on Local storage" in response.get_json()["error"]
+        assert response.status_code == 404 and "isn't on Local Storage" in response.get_json()["error"]
 
 
 def test_download_streams_the_file_and_removes_its_temporary_copy(authed_client, rclone, dropbox):

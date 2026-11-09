@@ -58,12 +58,12 @@ PASSWORD_APPS = ("bazarr", "nzbget", "radarr", "sonarr", "lidarr", "whisparr", "
 # under these, in this order (#148). A category with no apps isn't shown, so
 # the later ones wait for their apps.
 APP_CATEGORIES = [
-    {"id": "media-management", "label": "Media management", "emoji": "🎬"},
+    {"id": "media-management", "label": "Media Management", "emoji": "🎬"},
     {"id": "downloaders", "label": "Downloaders", "emoji": "⬇️"},
-    {"id": "media-servers", "label": "Media servers", "emoji": "▶️"},
+    {"id": "media-servers", "label": "Media Servers", "emoji": "▶️"},
     {"id": "network", "label": "Network", "emoji": "🌐"},
     {"id": "security", "label": "Security", "emoji": "🛡️"},
-    {"id": "home-automation", "label": "Home automation", "emoji": "🏠"},
+    {"id": "home-automation", "label": "Home Automation", "emoji": "🏠"},
     {"id": "server", "label": "Server", "emoji": "🗄️"},
 ]
 # Each app's category: a new app adds one line here.
@@ -266,11 +266,11 @@ DEST_EDITABLE_FIELDS = {
 DESTINATION_META = [
     {
         "id": "local",
-        "label": "Local storage",
+        "label": "Local Storage",
         "icon": "local.svg",
         "description": "Written straight to this container's own volume - nothing to connect. Download any backup from the History tab.",
         "setup_help": {
-            "title": "Local storage",
+            "title": "Local Storage",
             "intro": "No setup needed - this works out of the box.",
             "steps": [
                 {

@@ -39,7 +39,7 @@ install:
 
 - every app's settings and API key, and every cloud connection
 - the admin account
-- Backuparr's backups in Local storage, its own backups included (other files
+- Backuparr's backups in Local Storage, its own backups included (other files
   in that folder are left alone)
 - the backup record and run logs
 
@@ -144,7 +144,7 @@ encrypted backups and Backuparr's own backup can't be opened, and its stored
 secrets can't be read.
 If you set `BACKUPARR_SECRETS_KEY`, that's the key shown.
 
-![Save your encryption key: the key with a Copy button, and "Yes, I have saved my encryption key"]({{ '/screenshots/encryption-key.png' | relative_url }})
+![Save Your Encryption Key: the key with a Copy button, and "Yes, I have saved my encryption key"]({{ '/screenshots/encryption-key.png' | relative_url }})
 
 ## Backuparr's own backup
 
@@ -154,8 +154,8 @@ kept like the app backups: its settings and destinations, the cloud
 connections, the admin login, the backup record and the run logs. It's
 encrypted with your encryption key and can't be read or changed without it.
 The key itself, the session key and `rclone.pass` aren't in it. Turn it off on
-the Settings tab. History lists these backups under "Backuparr's own
-configuration" for download and delete, and the Overview shows the latest
-one on its Backuparr card. See
+the Settings tab. History lists these backups first, under "Backuparr", for
+download and delete, and the Overview shows the latest one on its Backuparr
+card. See
 [Restoring Backuparr itself](restoring.md#restoring-backuparr-itself).
 

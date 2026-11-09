@@ -2,7 +2,7 @@
 
 # Backuparr
 
-**Backup your Arrs.**
+**Everything you host, backed up.**
 
 > **AI disclosure:** This project was built with substantial assistance
 > from Claude (Anthropic) - code, documentation, and commit history
@@ -135,7 +135,7 @@ live, **History** lists, downloads and deletes backups, and **Restore** restores
 - [Features](https://rsaturns.github.io/backuparr/features/) - everything Backuparr does, in one list
 - [Getting started](https://rsaturns.github.io/backuparr/getting-started/)
 - [Apps](https://rsaturns.github.io/backuparr/apps/) - how each app is backed up and restored
-- [Destinations](https://rsaturns.github.io/backuparr/destinations/) - Local storage, Google Drive, OneDrive, Dropbox
+- [Destinations](https://rsaturns.github.io/backuparr/destinations/) - Local Storage, Google Drive, OneDrive, Dropbox
 - [Settings](https://rsaturns.github.io/backuparr/settings/) - Prowlarr discovery, multiple instances of an app, reverse-proxy headers
 - [Backups and history](https://rsaturns.github.io/backuparr/backups/) - schedule, retention, run logs, History
 - [Restoring](https://rsaturns.github.io/backuparr/restoring/) - apps, the version check, and Backuparr itself
