@@ -378,19 +378,90 @@ body {
 .app-card:last-child { margin-bottom: 0; }
 
 /* "Enabled" / "Not enabled" dividers between the grouped app cards. */
-.app-group-heading {
+/* ---------------------------------------------------- app categories --- */
+/* A collapsible group of app cards (#148), on Settings and History. */
+.app-category + .app-category, .history-category + .history-category { margin-top: 10px; }
+.category-head {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 20px 0 10px;
-  font-size: 12.5px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
-.app-group-heading::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
-#app-list > .app-group-heading:first-child { margin-top: 0; }
+.category-head:hover, .category-head:focus-visible { border-color: var(--accent); }
+.category-emoji { font-size: 18px; line-height: 1; }
+.category-name { font-size: 15.5px; font-weight: 600; flex: 1; }
+.category-count { color: var(--text-muted); font-size: 13.5px; white-space: nowrap; }
+.category-chevron {
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  transform: rotate(45deg);
+  margin: 0 4px 4px 2px;
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+[aria-expanded="false"] > .category-chevron { transform: rotate(-45deg); margin: 0 4px 0 0; }
+.category-body { padding-top: 10px; }
+.history-category > .category-body { padding: 12px 4px 0; }
+
+/* Destinations folds the same way, its h2 the button. */
+/* Spaced like any card's h2 (.card h2); folded, the card is just its title. */
+.section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.section-toggle > span:first-child { flex: 1; }
+.section-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
+
+/* -------------------------------------------- picking several backups --- */
+.history-select { display: none; width: auto; margin: 0 8px 0 0; vertical-align: middle; cursor: pointer; }
+#history-root.selecting .history-select { display: inline-block; }
+#history-root.selecting .history-app h3 { display: flex; align-items: center; }
+#history-select-btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+/* Room below the last row so the bar never covers it. */
+#history-root.selecting { padding-bottom: 72px; }
+.bulk-bar {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+}
+.bulk-bar.hidden { display: none; }
+.bulk-count { font-weight: 600; font-size: 14.5px; margin-right: 4px; white-space: nowrap; }
+.bulk-bar .btn { white-space: nowrap; }
+/* On a phone the bar spans the width, clear of the feedback button: the
+   count on one line, the three buttons on the next. */
+@media (max-width: 560px) {
+  .bulk-bar { left: 12px; right: 76px; transform: none; flex-wrap: wrap; gap: 8px; }
+  .bulk-count { flex-basis: 100%; }
+}
 
 .discovery-badge {
   color: var(--accent);

@@ -498,3 +498,81 @@ def test_a_restore_waits_for_a_running_backup(restore, authed_client, isolated_w
     response = start(authed_client)
     assert response.status_code == 409 and "a backup is running" in response.get_json()["error"]
     assert not [c for c in restore["calls"] if c[0] == "restore"]
+
+
+# --- several backups at once (#148) -------------------------------------------
+
+def test_bulk_delete_removes_the_picked_backups_and_failed_runs(authed_client, rclone, isolated_webui):
+    runlog = isolated_webui.backups.runlog
+    runlog.save({"id": "radarr_20260101_030000", "app": "radarr", "file": None, "ok": False, "error": "refused",
+                 "destinations": {"local": None, "dropbox": None}, "lines": []})
+    response = authed_client.post("/api/history/local/delete", json={
+        "backups": [{"app": "radarr", "file": "radarr_1.zip"}, {"app": "sonarr", "file": "sonarr_2.zip.enc"}],
+        "runs": [{"app": "radarr", "run_id": "radarr_20260101_030000"}]})
+    body = response.get_json()
+    assert response.status_code == 200 and body["failed"] == []
+    assert len(body["deleted"]) == 3
+    assert [p.rsplit("/", 2)[-2:] for p in rclone["delete"]] == [["radarr", "radarr_1.zip"], ["sonarr", "sonarr_2.zip.enc"]]
+    # The failed run is gone from this destination's History, still listed on the other one.
+    assert runlog.get("radarr", "radarr_20260101_030000")["destinations"] == {"dropbox": None}
+
+
+def test_bulk_delete_reports_what_it_couldnt_delete(authed_client, isolated_webui, monkeypatch):
+    def refuse(path):
+        raise isolated_webui.backups.rclone_util.RcloneError("delete failed", "permission denied")
+
+    monkeypatch.setattr(isolated_webui.backups.rclone_util, "delete_file", refuse)
+    body = authed_client.post("/api/history/local/delete", json={
+        "backups": [{"app": "radarr", "file": "radarr_1.zip"}], "runs": [{"app": "radarr", "run_id": "radarr_9"}]}).get_json()
+    assert body["deleted"] == []
+    assert [f.get("file") or f.get("run_id") for f in body["failed"]] == ["radarr_1.zip", "radarr_9"]
+    assert "permission denied" in body["failed"][0]["error"]
+
+
+@pytest.mark.parametrize("body", [
+    {"backups": [{"app": "radarr", "file": "../x.zip"}]},
+    {"backups": [{"app": "stranger", "file": "a.zip"}]},
+    {"backups": "radarr/a.zip"},
+    {"runs": [{"app": "radarr", "run_id": "a/b"}]},
+    {},
+])
+def test_bulk_delete_refuses_anything_that_isnt_a_listed_backup(authed_client, rclone, body):
+    assert authed_client.post("/api/history/local/delete", json=body).status_code == 400
+    assert rclone["delete"] == []
+
+
+def test_a_bulk_download_is_one_zip_of_the_backups_as_single_downloads_give_them(authed_client, isolated_webui):
+    import io
+    import zipfile as zf
+    import archive_crypto
+    local_backup(isolated_webui, "radarr_1.zip", b"PK radarr")
+    local_backup(isolated_webui, "radarr_2.zip.enc", archive_crypto.encrypt_bytes(b"PK secret"))
+    own = os.path.join(isolated_webui.backups.destination_util.DEFAULT_LOCAL_DIR, "backuparr")
+    os.makedirs(own, exist_ok=True)
+    sealed = archive_crypto.encrypt_bytes(b"PK self")
+    with open(os.path.join(own, "backuparr_1.enc"), "wb") as f:
+        f.write(sealed)
+    response = authed_client.get("/api/history/local/download?b=radarr/radarr_1.zip&b=radarr/radarr_2.zip.enc"
+                                 "&b=backuparr/backuparr_1.enc")
+    assert response.status_code == 200 and "backuparr-local-" in response.headers["Content-Disposition"]
+    with zf.ZipFile(io.BytesIO(response.data)) as z:
+        assert sorted(z.namelist()) == ["backuparr/backuparr_1.enc", "radarr/radarr_1.zip", "radarr/radarr_2.zip"]
+        assert z.read("radarr/radarr_2.zip") == b"PK secret" and z.read("backuparr/backuparr_1.enc") == sealed
+
+
+def test_a_bulk_download_names_a_backup_that_isnt_there(authed_client, isolated_webui):
+    local_backup(isolated_webui, "radarr_1.zip")
+    response = authed_client.get("/api/history/local/download?b=radarr/radarr_1.zip&b=radarr/radarr_9.zip")
+    assert response.status_code == 404 and "radarr_9.zip" in response.get_json()["error"]
+
+
+def test_a_bulk_download_from_the_cloud_leaves_no_copies(authed_client, rclone, dropbox):
+    response = authed_client.get("/api/history/dropbox/download?b=radarr/radarr_1.zip&b=sonarr/sonarr_1.zip")
+    assert response.status_code == 200
+    response.close()
+    assert not os.path.exists(os.path.dirname(rclone["copyto"][0][1]))
+
+
+def test_a_bulk_download_needs_backups_picked(authed_client, rclone):
+    assert authed_client.get("/api/history/local/download").status_code == 400
+    assert authed_client.get("/api/history/local/download?b=stranger/a.zip").status_code == 400

@@ -13,7 +13,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 import backup
 import manifest_backfill
 from backup import describe_failure
-from config_store import APP_META, ConfigError, DESTINATION_META, DISCOVERABLE_APPS
+from config_store import APP_CATEGORIES, APP_META, ConfigError, DESTINATION_META, DISCOVERABLE_APPS
 from webui import auth, backups, destinations, runs, services, settings
 from webui.version import VERSION
 
@@ -91,13 +91,16 @@ def _operational_error(exc):
 # --------------------------------------------------------------- pages ----
 @app.get("/")
 def index():
-    # Prowlarr and the apps it discovers lead the Settings list, side by side.
-    # Once an app is enabled and saved, app.js groups the cards by Enabled.
+    # Settings lists the apps by category (#148). Within one, Prowlarr and the
+    # apps it discovers lead, side by side, until an app is enabled and saved;
+    # app.js then puts the enabled ones first.
     lead = ("prowlarr", *DISCOVERABLE_APPS)
     apps = sorted(APP_META, key=lambda m: lead.index(m["id"]) if m["id"] in lead else len(lead))
-    return render_template("index.html", app_meta=apps, destination_meta=DESTINATION_META, version=VERSION,
+    categories = [{**c, "apps": [m for m in apps if m["category"] == c["id"]]} for c in APP_CATEGORIES]
+    return render_template("index.html", app_categories=[c for c in categories if c["apps"]],
+                           destination_meta=DESTINATION_META, version=VERSION,
                            auth_disabled=auth._AUTH_DISABLED, username=auth.auth_store.username() or "",
-                           ui_meta={"apps": APP_META, "destinations": DESTINATION_META})
+                           ui_meta={"apps": APP_META, "categories": APP_CATEGORIES, "destinations": DESTINATION_META})
 
 
 # ------------------------------------------------------------- startup ----

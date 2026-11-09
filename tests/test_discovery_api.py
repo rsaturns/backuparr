@@ -1,4 +1,5 @@
 import re
+import re
 import threading
 import copy
 
@@ -173,23 +174,37 @@ def test_running_jobs_are_never_purged(webui):
     assert "job" in webui.services.DISCOVERY_JOBS.jobs
 
 
-def test_prowlarr_and_discovered_apps_lead_the_app_list(webui):
+def test_prowlarr_and_discovered_apps_lead_their_category(webui):
     html = client_for(webui).get("/").get_data(as_text=True)
     cards = [line for line in html.splitlines() if 'class="app-card' in line and "data-app=" in line]
-    assert [c.split('data-app="')[1].split('"')[0] for c in cards[:9]] == [
-        "prowlarr", "radarr", "sonarr", "lidarr", "whisparr", "lazylibrarian", "sabnzbd", "nzbget", "profilarr"]
+    assert [c.split('data-app="')[1].split('"')[0] for c in cards] == [
+        "prowlarr", "radarr", "sonarr", "lidarr", "whisparr", "lazylibrarian", "profilarr", "bazarr", "tdarr",
+        "sabnzbd", "nzbget",
+        "tautulli", "jellyfin", "emby", "plex", "seerr"]
     assert html.count('id="discover-btn"') == 1
     assert html.index('data-app="prowlarr"') < html.index('id="discover-btn"') < html.index('class="help-tip"') < html.index('data-app="profilarr"')
     assert html.count('class="help-tip"') == 1
 
 
-def test_app_list_has_hidden_group_headings_before_the_cards(webui):
-    # app.js shows them and moves the cards under them once an app is saved enabled.
+def test_each_app_card_sits_in_its_categorys_collapsed_section(webui):
+    """#148: a section per category that has apps, in APP_CATEGORIES order,
+    collapsed until app.js opens it."""
+    from config_store import APP_CATEGORIES, APP_META
     html = client_for(webui).get("/").get_data(as_text=True)
-    for heading in ('id="apps-enabled-heading" class="app-group-heading hidden"',
-                    'id="apps-disabled-heading" class="app-group-heading hidden"'):
-        assert html.count(heading) == 1
-        assert html.index('id="app-list"') < html.index(heading) < html.index('data-app="prowlarr"')
+    sections = re.findall(r'<section class="app-category" data-category="([a-z-]+)">', html)
+    assert sections == ["media-management", "downloaders", "media-servers"]
+    assert [c["id"] for c in APP_CATEGORIES][:3] == sections
+    for meta in APP_META:
+        section = html.split(f'data-category="{meta["category"]}"', 1)[1].split("</section>", 1)[0]
+        assert f'data-app="{meta["id"]}"' in section
+        assert f'class="category-body hidden" id="category-{meta["category"]}"' in section
+    assert 'apps-enabled-heading' not in html
+
+
+def test_every_app_has_a_known_category():
+    from config_store import APP_CATEGORIES, APP_META
+    known = {c["id"] for c in APP_CATEGORIES}
+    assert all(meta["category"] in known for meta in APP_META)
 
 
 def test_every_discoverable_card_can_show_what_prowlarr_found(webui):

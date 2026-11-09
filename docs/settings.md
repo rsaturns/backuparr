@@ -7,16 +7,21 @@ nav_order: 8
 
 The **Settings** tab holds, from top to bottom:
 
-- **Apps** - a card per app: switch it on, enter its URL and API key, and
-  click **Test connection**. **Encrypt backup** is on unless you turn it off
+- **Apps** - grouped by category (Media management, Downloaders, Media
+  servers, ...); click a category to open or close it. Its header counts the
+  enabled apps and shows a dot that turns red when one of them failed its last
+  backup. A category starts closed and opens once one of its apps is set up;
+  after that it stays as you left it, in this browser. Within a category,
+  enabled apps come first. A card per app: switch it on, enter its URL and API
+  key, and click **Test connection**. **Encrypt backup** is on unless you turn it off
   (see [Encrypted backups](security.md#encrypted-backups)). See
   [Apps](apps/index.md).
 - **Destinations** - see [Destinations](destinations.md). Each card can set
-  its own [retention](backups.md#retention).
-- **Schedule & notifications** - the default retention, the schedule, the
+  its own [retention](backups.md#retention). Click its heading to fold it.
+- **Schedule & Notifications** - the default retention, the schedule, the
   [Notify URL](notifications.md), and whether Backuparr
   [backs itself up](security.md#backuparrs-own-backup).
-- **Service authentication** - see [below](#service-authentication-headers).
+- **Service Authentication** - see [below](#service-authentication-headers).
 - **Restore Backuparr** - see [Restoring Backuparr itself](restoring.md#restoring-backuparr-itself).
 
 App, destination and schedule changes apply when you click **Save settings**.
@@ -56,7 +61,7 @@ get its own [authentication headers](#service-authentication-headers).
 ## Service authentication headers
 
 For apps behind an authenticating reverse proxy, add headers under **Settings
-→ Service authentication**. They're sent with every request to the apps -
+→ Service Authentication**. They're sent with every request to the apps -
 tests, discovery, backups and restores - but never to cloud destinations,
 OAuth providers or notification webhooks. Values are encrypted like API keys.
 

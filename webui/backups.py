@@ -6,6 +6,7 @@ import shutil
 import tempfile
 import threading
 import time
+import zipfile
 
 from datetime import datetime, timezone
 
@@ -159,22 +160,59 @@ def _decrypts_on_download(app_name, filename):
     return archive_crypto.is_encrypted_name(filename) and app_name != destination_util.SELF_BACKUP_FOLDER
 
 
+class _NotThere(Exception):
+    """A backup a download asked for that can't be had, and why, as
+    (response body, status)."""
+
+
+def _plain_copy(dest_id, root, app_name, filename, tmp_dir):
+    """(path, name) of one backup ready to hand to the browser: the file
+    where it is on Local storage, else a copy in tmp_dir; for an app's
+    encrypted backup its decrypted copy in tmp_dir under the plain name.
+    Raises _NotThere."""
+    if dest_id == "local":
+        # Never a link out of the folder.
+        folder = os.path.realpath(os.path.join(root, app_name))
+        path = os.path.realpath(os.path.join(folder, filename))
+        if os.path.dirname(path) != folder or not os.path.isfile(path):
+            raise _NotThere({"error": f"{filename} isn't on Local storage any more"}, 404)
+    else:
+        path = os.path.join(tmp_dir, filename)
+        try:
+            rclone_util.copyto(f"{root}/{app_name}/{filename}", path)
+        except rclone_util.RcloneError as exc:
+            raise _NotThere({"error": humanize_error(exc)}, 500) from None
+    if not _decrypts_on_download(app_name, filename):
+        return path, filename
+    plain = archive_crypto.plain_name(filename)
+    plain_path = os.path.join(tmp_dir, f"plain-{app_name}-{plain}")
+    try:
+        archive_crypto.decrypt_file(path, plain_path)
+    except archive_crypto.WrongKeyError:
+        raise _NotThere({"error": f"{filename} was encrypted with a different encryption key. Decrypt it with that "
+                                  "key using Backuparr's decrypt command."}, 409) from None
+    except archive_crypto.ArchiveCryptoError as exc:
+        raise _NotThere({"error": f"{filename}: {exc}"}, 409) from None
+    finally:
+        if dest_id != "local" and os.path.exists(path):
+            os.remove(path)  # only the decrypted copy needs the space now
+    return plain_path, plain
+
+
 def send_backup(dest_id, root, app_name, filename):
     """The download response for one backup: the file itself, or for an
     app's encrypted backup its decrypted copy under the plain name. History
     and the Overview download through it, and so should anything else that
     hands a backup to the browser. app_name and filename must already be
     checked."""
-    decrypt = _decrypts_on_download(app_name, filename)
-    if dest_id == "local":
+    if dest_id == "local" and not _decrypts_on_download(app_name, filename):
         # Sent from where it is: a copy first would double a large backup's
-        # disk use and hold up the download. Never a link out of the folder.
-        folder = os.path.realpath(os.path.join(root, app_name))
-        path = os.path.realpath(os.path.join(folder, filename))
-        if os.path.dirname(path) != folder or not os.path.isfile(path):
-            return jsonify({"error": f"{filename} isn't on Local storage any more"}), 404
-        if not decrypt:
-            return send_file(path, as_attachment=True, download_name=filename)
+        # disk use and hold up the download.
+        try:
+            path, name = _plain_copy(dest_id, root, app_name, filename, None)
+        except _NotThere as exc:
+            return jsonify(exc.args[0]), exc.args[1]
+        return send_file(path, as_attachment=True, download_name=name)
 
     tmp_dir = tempfile.mkdtemp(prefix="backuparr-dl-")
 
@@ -183,25 +221,109 @@ def send_backup(dest_id, root, app_name, filename):
         shutil.rmtree(tmp_dir, ignore_errors=True)
         return response
 
-    if dest_id != "local":
-        path = os.path.join(tmp_dir, filename)
-        try:
-            rclone_util.copyto(f"{root}/{app_name}/{filename}", path)
-        except rclone_util.RcloneError as exc:
-            return jsonify({"error": humanize_error(exc)}), 500
-    if not decrypt:
-        return send_file(path, as_attachment=True, download_name=filename)
-    plain = archive_crypto.plain_name(filename)
     try:
-        archive_crypto.decrypt_file(path, os.path.join(tmp_dir, f"plain-{plain}"))
-    except archive_crypto.WrongKeyError:
-        return jsonify({"error": f"{filename} was encrypted with a different encryption key. Decrypt it with that "
-                                 "key using Backuparr's decrypt command."}), 409
-    except archive_crypto.ArchiveCryptoError as exc:
-        return jsonify({"error": f"{filename}: {exc}"}), 409
-    if dest_id != "local":
-        os.remove(path)  # only the decrypted copy needs the space now
-    return send_file(os.path.join(tmp_dir, f"plain-{plain}"), as_attachment=True, download_name=plain)
+        path, name = _plain_copy(dest_id, root, app_name, filename, tmp_dir)
+    except _NotThere as exc:
+        return jsonify(exc.args[0]), exc.args[1]
+    return send_file(path, as_attachment=True, download_name=name)
+
+
+# Several backups picked on History at once (#148).
+MAX_BULK = 200
+_RUN_ID = re.compile(r"[A-Za-z0-9._-]{1,120}")
+
+
+def _bulk_backups(items):
+    """[(app, file)] from a list of {"app", "file"} (or "app/file" strings),
+    or None if any isn't one of Backuparr's backups."""
+    if not isinstance(items, list) or len(items) > MAX_BULK:
+        return None
+    out = []
+    for item in items:
+        if isinstance(item, str):
+            app_name, _, filename = item.partition("/")
+        elif isinstance(item, dict):
+            app_name, filename = item.get("app"), item.get("file")
+        else:
+            return None
+        if not (isinstance(app_name, str) and isinstance(filename, str) and destination_util.is_backup_folder(app_name)
+                and ra.SAFE_FILENAME.match(filename)):
+            return None
+        out.append((app_name, filename))
+    return list(dict.fromkeys(out))
+
+
+@bp.post("/api/history/<dest_id>/delete")
+def api_history_bulk_delete(dest_id):
+    """Deletes the backups and failed runs picked on History: {"backups":
+    [{"app", "file"}], "runs": [{"app", "run_id"}]}. Returns what was
+    deleted and what couldn't be, with why."""
+    data = request.get_json(force=True, silent=True) or {}
+    backups = _bulk_backups(data.get("backups", []))
+    runs = data.get("runs", [])
+    if backups is None or not isinstance(runs, list) or len(runs) > MAX_BULK or not all(
+            isinstance(r, dict) and isinstance(r.get("app"), str) and destination_util.is_backup_folder(r["app"])
+            and isinstance(r.get("run_id"), str) and _RUN_ID.fullmatch(r["run_id"]) for r in runs):
+        return jsonify({"error": "pick backups and runs from the list"}), 400
+    if not backups and not runs:
+        return jsonify({"error": "nothing picked"}), 400
+    cfg = load_config()
+    root, error = _destination_root_or_error(cfg, dest_id)
+    if error:
+        return error
+    deleted, failed = [], []
+    for app_name, filename in backups:
+        try:
+            rclone_util.delete_file(f"{root}/{app_name}/{filename}")
+        except rclone_util.RcloneError as exc:
+            failed.append({"app": app_name, "file": filename, "error": humanize_error(exc)})
+            continue
+        manifest.remove(app_name, filename, dest_id)
+        if manifest.get(app_name, filename) is None:
+            runlog.forget_file(app_name, filename)  # gone from every destination
+        deleted.append({"app": app_name, "file": filename})
+    for run in runs:
+        if runlog.forget_run(run["app"], run["run_id"], dest_id):
+            deleted.append({"app": run["app"], "run_id": run["run_id"]})
+        else:
+            failed.append({"app": run["app"], "run_id": run["run_id"], "error": "that run's log is already gone"})
+    log.info("history: deleted %d item(s) on %s%s", len(deleted), dest_id,
+             f", {len(failed)} couldn't be" if failed else "")
+    return jsonify({"deleted": deleted, "failed": failed})
+
+
+@bp.get("/api/history/<dest_id>/download")
+def api_history_bulk_download(dest_id):
+    """Several backups in one zip (?b=<app>/<file>, repeated), each under
+    <app>/ as a single download would give it: an app's encrypted backup
+    decrypted, Backuparr's own as it is."""
+    backups = _bulk_backups(request.args.getlist("b"))
+    if not backups:
+        return jsonify({"error": "pick the backups to download"}), 400
+    cfg = load_config()
+    root, error = _destination_root_or_error(cfg, dest_id)
+    if error:
+        return error
+    tmp_dir = tempfile.mkdtemp(prefix="backuparr-dl-")
+
+    @after_this_request
+    def _cleanup(response):
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        return response
+
+    bundle = os.path.join(tmp_dir, "bundle.zip")
+    # Stored, not deflated: the archives are compressed already.
+    with zipfile.ZipFile(bundle, "w", compression=zipfile.ZIP_STORED, allowZip64=True) as z:
+        for app_name, filename in backups:
+            try:
+                path, name = _plain_copy(dest_id, root, app_name, filename, tmp_dir)
+            except _NotThere as exc:
+                return jsonify(exc.args[0]), exc.args[1]
+            z.write(path, f"{app_name}/{name}")
+            if path.startswith(tmp_dir):
+                os.remove(path)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return send_file(bundle, as_attachment=True, download_name=f"backuparr-{dest_id}-{stamp}.zip")
 
 
 # ------------------------------------------------------------- restore ----

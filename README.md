@@ -27,11 +27,11 @@ If you like Backuparr, give it a ⭐ star - it helps the project grow.
 <table>
   <tr>
     <td><img src="docs/screenshots/overview.png" alt="Overview tab: enabled services, destinations, schedule and retention, and each app's last backup"><br><b>Overview</b></td>
-    <td><img src="docs/screenshots/settings.png" alt="Settings tab: app cards with URL and API key on the left, destinations on the right"><br><b>Settings</b></td>
+    <td><img src="docs/screenshots/settings.png" alt="Settings tab: apps grouped by category on the left, each category folding away under a header with its enabled count, and destinations on the right"><br><b>Settings</b></td>
   </tr>
   <tr>
     <td><img src="docs/screenshots/run.png" alt="Run and Status tab: a backup in progress with its live log"><br><b>Run &amp; Status</b></td>
-    <td><img src="docs/screenshots/history.png" alt="History tab: an app's backups with their version, size, date and whether each is encrypted, View log, download and delete buttons"><br><b>History</b></td>
+    <td><img src="docs/screenshots/history.png" alt="History tab: Backuparr's own backups, then each category's apps, with each backup's version, size, date and whether it's encrypted"><br><b>History</b></td>
   </tr>
 </table>
 
