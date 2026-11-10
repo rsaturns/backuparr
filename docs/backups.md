@@ -22,6 +22,16 @@ schedule picker never writes these.
 
 ![Run & Status tab: a backup of all apps in progress, with its live log]({{ '/screenshots/run.png' | relative_url }})
 
+## The Overview
+
+Under **At a Glance**, one line sums up the latest backup of every enabled
+app and instance, and of Backuparr itself: "All 17 backups succeeded", or
+"15 of 17 backups succeeded" with a line for each one that failed, its error
+included. Click a line to jump to that app's card, which has its log. A
+backup that failed on one destination counts as failed. An app with no backup
+yet isn't a failure: the line says how many aren't backed up yet. While a
+backup runs it says "Backing up...", and it updates when the run ends.
+
 ## Retention
 
 **Default retention (days)** deletes each app's backups older than that,

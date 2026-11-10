@@ -21,7 +21,7 @@ LazyLibrarian also need a folder mounted into Backuparr - see [Apps](apps/index.
 [Get started](getting-started.md){: .btn .btn-primary }
 [View on GitHub](https://github.com/rsaturns/backuparr){: .btn }
 
-![Overview tab: enabled services, destinations, schedule and retention, and each app's last backup](screenshots/overview.png)
+![Overview tab: enabled services, destinations, schedule and retention, a line saying all 23 backups succeeded, and each app's last backup](screenshots/overview.png)
 
 ## Where to find things
 

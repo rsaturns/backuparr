@@ -26,7 +26,7 @@ If you like Backuparr, give it a ⭐ star - it helps the project grow.
 
 <table>
   <tr>
-    <td><img src="docs/screenshots/overview.png" alt="Overview tab: enabled services, destinations, schedule and retention, and each app's last backup"><br><b>Overview</b></td>
+    <td><img src="docs/screenshots/overview.png" alt="Overview tab: enabled services, destinations, schedule and retention, a line saying all 23 backups succeeded, and each app's last backup"><br><b>Overview</b></td>
     <td><img src="docs/screenshots/settings.png" alt="Settings tab: apps grouped by category on the left, each category folding away under a header with its enabled count, Server open on Backuparr's own card, and destinations on the right"><br><b>Settings</b></td>
   </tr>
   <tr>
