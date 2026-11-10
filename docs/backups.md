@@ -9,6 +9,13 @@ nav_order: 6
 
 Set the schedule under **Settings → Schedule & Notifications**: daily, weekly,
 every few hours, or a 5-field cron schedule. Changes apply without a restart.
+If a saved schedule stops being valid (3.0's cron update refuses a few
+hand-typed forms, such as `1#7` or non-ASCII digits), no scheduled backups
+run, and the Overview and Run & Status say so until you fix it in Settings.
+
+A hand-typed step that starts at a field's maximum, such as `59/15` or `6/1`,
+now means just that value, not "every": use `*/15` for every 15 minutes. The
+schedule picker never writes these.
 
 **Run & Status → Run backup now** backs up every app, or the one you pick, and
 shows the run live. A backup and a restore never run at the same time.

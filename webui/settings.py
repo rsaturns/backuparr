@@ -1,13 +1,12 @@
 """Settings: the config API, its validation, and the app and notification tests."""
 import logging
 
-from croniter import croniter
 from flask import Blueprint, jsonify, request
 
 import destination_util
 from apps.http_headers import headers_for_app, RequestHeadersError, validate_request_headers
 from backup import build_app, humanize_error, notify
-from config_store import acknowledge_encryption_notice, app_meta, APP_NAMES, DEFAULT_APP, DEFAULT_INSTANCE, DEST_EDITABLE_FIELDS, DEST_NAMES, instance_ids, instance_type, key_required, load_config, MAX_EXTRA_INSTANCES, MULTI_INSTANCE_APPS, save_config
+from config_store import acknowledge_encryption_notice, app_meta, APP_NAMES, DEFAULT_APP, DEFAULT_INSTANCE, DEST_EDITABLE_FIELDS, DEST_NAMES, instance_ids, instance_type, key_required, load_config, MAX_EXTRA_INSTANCES, MULTI_INSTANCE_APPS, save_config, valid_schedule
 
 
 bp = Blueprint("settings", __name__)
@@ -37,6 +36,8 @@ def api_get_config():
     # connect and disconnect routes write it, so it never has to come back.
     for dest, remote in destination_util.REMOTES.items():
         cfg["destinations"][dest][remote.TOKEN_FIELD] = bool(cfg["destinations"][dest][remote.TOKEN_FIELD])
+    # For the Overview's warning; Save never sends it back.
+    cfg["schedule_valid"] = valid_schedule(cfg.get("cron_schedule"))
     return jsonify(cfg)
 
 
@@ -128,7 +129,7 @@ def _validate_config(data, cfg):
         schedule = str(data["cron_schedule"])
         if len(schedule.split()) != 5:
             return "cron_schedule must be 5 space-separated fields (minute hour day month weekday)"
-        if not croniter.is_valid(schedule):
+        if not valid_schedule(schedule):
             return "cron_schedule is not a valid cron expression"
     for name, app_data in data.get("apps", {}).items():
         if app_data is None:

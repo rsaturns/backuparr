@@ -29,6 +29,15 @@ def test_a_new_install_has_every_app_off_and_local_storage_on(authed_client):
     assert cfg["retention_days"] == 7 and cfg["cron_schedule"] == "0 3 * * *"
 
 
+def test_the_config_says_whether_the_saved_schedule_is_valid(authed_client, isolated_webui):
+    assert authed_client.get("/api/config").get_json()["schedule_valid"] is True
+    cfg = isolated_webui.settings.load_config()
+    cfg["cron_schedule"] = "0 0 * * 1#0"  # croniter 7.0 refuses it; 6.x took it
+    isolated_webui.settings.save_config(cfg)
+    assert authed_client.get("/api/config").get_json()["schedule_valid"] is False
+    assert "schedule_valid" not in stored(isolated_webui)
+
+
 def test_the_page_describes_what_the_ui_can_configure(authed_client):
     meta = ui_meta(authed_client)
     assert {a["id"] for a in meta["apps"]} == set(APP_NAMES)
@@ -66,6 +75,7 @@ def test_google_drive_credentials_use_appropriate_input_types(authed_client, fie
     ({"cron_schedule": "* * *"}, "5 space-separated"),
     ({"cron_schedule": "61 * * * *"}, "not a valid"),
     ({"cron_schedule": "a b c d e"}, "not a valid"),
+    ({"cron_schedule": "\uff10 \uff10 * * *"}, "not a valid"),  # fullwidth digits, refused since croniter 7.0
     ({"apps": {"nope": {}}}, "unknown app"),
     ({"apps": {"radarr": {"enabled": True}}}, "URL is required"),
     ({"apps": {"radarr": {"enabled": True, "url": "http://r"}}}, "API key is required"),

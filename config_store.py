@@ -6,6 +6,8 @@ import logging
 import os
 import re
 
+from croniter import croniter
+
 import atomic_file
 import secrets_crypto
 from apps.http_headers import RequestHeadersError, validate_request_headers
@@ -426,6 +428,13 @@ DESTINATION_META = [
         },
     },
 ]
+
+def valid_schedule(schedule):
+    """Whether cron_schedule is the 5-field cron schedule Settings accepts. One
+    saved before an update can stop being one: croniter 7.0 rejects some forms
+    6.x took, such as non-ASCII digits (#166)."""
+    return isinstance(schedule, str) and len(schedule.split()) == 5 and croniter.is_valid(schedule)
+
 
 DEFAULTS = {
     "request_headers": [],
