@@ -7,6 +7,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Home Assistant can read every backup's status: Enable Home Assistant integration on the Backuparr card gives a token for the read-only /api/ha/status (and /api/ha/status/<app>), which opens nothing else (#170). See https://rsaturns.github.io/backuparr/home-assistant/
 - The Overview sums up every app's latest backup in one line under At a Glance: "All 17 backups succeeded", or how many succeeded with a line per failure that jumps to its card; apps not backed up yet are counted apart, and it says "Backing up..." during a run (#167).
 - Pi-hole (v6 and newer) backups and restores over its API with Teleporter, using an app password; Test connection checks that Pi-hole lets app passwords use Teleporter (webserver.api.app_sudo) and says where to turn it on. Its backups are always encrypted, and a second Pi-hole can be added as an instance (#149).
 - History can download or delete several backups at once: Select, tick them, and use the bar at the bottom of the window; several downloads come as one zip (#148).

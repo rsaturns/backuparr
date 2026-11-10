@@ -102,6 +102,25 @@
                   <p class="hint">Its settings, login and backup records, at the end of each full run.</p>
                   <p class="hint encrypt-note">Always encrypted for safety.</p>
                 </div>
+                {# Home Assistant's read-only status (#170): on or off straight
+                   away, not on Save, as it makes or removes a token. #}
+                <div class="ha-integration">
+                  <label class="field toggle-field">
+                    <span class="switch"><input type="checkbox" id="ha-enabled"><span class="slider"></span></span>
+                    <span>Enable Home Assistant integration</span>
+                  </label>
+                  <div id="ha-token-field" class="field hidden">
+                    <span class="field-label">Token <span class="muted">(shown once - copy it into Home Assistant)</span></span>
+                    <div class="inline-group">
+                      <input type="text" id="ha-token" readonly autocomplete="off">
+                      <button type="button" class="btn btn-ghost btn-sm" id="ha-copy-btn">Copy</button>
+                    </div>
+                  </div>
+                  <div id="ha-actions" class="app-card-actions hidden">
+                    <button type="button" class="btn btn-ghost btn-sm" id="ha-new-token-btn">New token</button>
+                    <span id="ha-result" class="test-result"></span>
+                  </div>
+                </div>
               </div>
             {% endif %}
             {% for m in c.apps %}

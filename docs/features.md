@@ -60,6 +60,11 @@ See [Backups and history](backups.md).
 
 See [Restoring](restoring.md).
 
+## Home Assistant
+
+- A read-only status for Home Assistant, opened by a token of its own. See
+  [Home Assistant](home-assistant.md).
+
 ## Backuparr's own backup
 
 - At the end of each full run, Backuparr backs up its own settings, cloud

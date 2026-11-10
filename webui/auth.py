@@ -94,9 +94,17 @@ def _require_json_for_changes():
     return None
 
 
+# Home Assistant's read-only status routes (#170) take a bearer token of
+# their own, checked in webui/ha.py, never this login - so they skip it, and
+# BACKUPARR_DISABLE_AUTH doesn't open them.
+_HA_STATUS_PATH = "/api/ha/status"
+
+
 @bp.before_app_request
 def _check_auth():
     if request.path.startswith("/static/"):
+        return None
+    if request.method == "GET" and (request.path == _HA_STATUS_PATH or request.path.startswith(f"{_HA_STATUS_PATH}/")):
         return None
 
     if _AUTH_DISABLED:
