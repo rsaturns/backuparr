@@ -469,6 +469,10 @@ DEFAULTS = {
     "removed_instances": [],
     # Back up Backuparr's own configuration at the end of each full run (#110).
     "self_backup": True,
+    # Home Assistant's read-only status routes (#170): on, and the SHA-256 of
+    # their bearer token. Set only by /api/ha/token and /api/ha/disable.
+    "ha_enabled": False,
+    "ha_token_hash": "",
     # Whether the user has confirmed saving the encryption key; until then
     # the web UI shows it and allows nothing else. Set by Backuparr only.
     "secrets_key_acknowledged": False,

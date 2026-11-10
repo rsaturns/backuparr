@@ -38,6 +38,8 @@ def api_get_config():
         cfg["destinations"][dest][remote.TOKEN_FIELD] = bool(cfg["destinations"][dest][remote.TOKEN_FIELD])
     # For the Overview's warning; Save never sends it back.
     cfg["schedule_valid"] = valid_schedule(cfg.get("cron_schedule"))
+    # Home Assistant's token is shown once, when it's made; not even its hash comes back.
+    cfg.pop("ha_token_hash", None)
     return jsonify(cfg)
 
 

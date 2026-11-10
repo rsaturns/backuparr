@@ -14,12 +14,12 @@ import backup
 import manifest_backfill
 from backup import describe_failure
 from config_store import APP_CATEGORIES, APP_META, ConfigError, DESTINATION_META, DISCOVERABLE_APPS, SELF_APP
-from webui import auth, backups, destinations, runs, services, settings
+from webui import auth, backups, destinations, ha, runs, services, settings
 from webui.version import VERSION
 
 app = Flask(__name__)
 log = logging.getLogger("backuparr.webui")
-for _blueprint in (auth.bp, settings.bp, services.bp, destinations.bp, runs.bp, backups.bp):
+for _blueprint in (auth.bp, settings.bp, services.bp, destinations.bp, runs.bp, backups.bp, ha.bp):
     app.register_blueprint(_blueprint)
 
 # Off by default - the documented deployment is plain HTTP on a trusted

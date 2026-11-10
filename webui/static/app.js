@@ -775,6 +775,64 @@ function initLogout() {
 }
 
 // ------------------------------------------------------------- settings ----
+// Home Assistant's status token (#170): made, replaced and removed straight
+// away. Only shown when made; config.json keeps its hash.
+function showHaState(enabled, token) {
+  document.getElementById("ha-enabled").checked = enabled;
+  document.getElementById("ha-actions").classList.toggle("hidden", !enabled);
+  document.getElementById("ha-token-field").classList.toggle("hidden", !token);
+  document.getElementById("ha-token").value = token || "";
+}
+
+async function newHaToken(message) {
+  const result = document.getElementById("ha-result");
+  try {
+    const { token } = await apiFetch("/api/ha/token", { method: "POST", body: "{}" });
+    showHaState(true, token);
+    result.textContent = message;
+    result.className = "test-result ok";
+  } catch (e) {
+    showHaState(false, null);
+    toast(`Could not turn on the integration: ${clause(e.message)}`, "fail");
+  }
+}
+
+function initHaEvents() {
+  const toggle = document.getElementById("ha-enabled");
+  toggle.addEventListener("change", async () => {
+    if (toggle.checked) {
+      await newHaToken("Turned on.");
+      return;
+    }
+    if (!confirm("Turn off the Home Assistant integration? Its token stops working.")) {
+      toggle.checked = true;
+      return;
+    }
+    try {
+      await apiFetch("/api/ha/disable", { method: "POST", body: "{}" });
+      showHaState(false, null);
+      document.getElementById("ha-result").textContent = "";
+    } catch (e) {
+      toggle.checked = true;
+      toast(`Could not turn off the integration: ${clause(e.message)}`, "fail");
+    }
+  });
+  document.getElementById("ha-new-token-btn").addEventListener("click", async () => {
+    if (!confirm("Make a new token? The current one stops working.")) return;
+    await newHaToken("New token made.");
+  });
+  document.getElementById("ha-copy-btn").addEventListener("click", async () => {
+    const input = document.getElementById("ha-token");
+    try {
+      await navigator.clipboard.writeText(input.value);
+      toast("Copied", "ok");
+    } catch (e) {
+      input.select(); // no clipboard over plain HTTP
+      toast("Couldn't copy automatically - the token is selected, so copy it by hand.", "fail");
+    }
+  });
+}
+
 // Backuparr's own card (#165): its body, like an app card's, shows while on.
 function showSelfCardBody() {
   const card = document.querySelector(".self-card");
@@ -1639,6 +1697,8 @@ async function loadConfig() {
   SELF_BACKUP_ON = cfg.self_backup !== false;
   document.getElementById("s-self_backup").checked = SELF_BACKUP_ON;
   showSelfCardBody();
+  // A reload keeps a token just made in view; the next page load won't have it.
+  showHaState(!!cfg.ha_enabled, cfg.ha_enabled ? document.getElementById("ha-token").value : null);
   document.getElementById("s-cron_schedule").value = cfg.cron_schedule || "";
   initSchedulePicker(cfg.cron_schedule);
   document.getElementById("s-notify_url").value = cfg.notify_url || "";
@@ -2370,6 +2430,7 @@ function initSettingsEvents() {
   });
   document.querySelectorAll(".app-card[data-app]").forEach(bindAppCard);
   document.getElementById("s-self_backup").addEventListener("change", showSelfCardBody);
+  initHaEvents();
   initInstanceAddRows();
   document.getElementById("notify-test-btn").addEventListener("click", testNotifyUrl);
   initScheduleEvents();

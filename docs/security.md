@@ -161,3 +161,9 @@ History lists these backups under Server, for download and delete, and the
 Overview shows the latest one on its Backuparr card. See
 [Restoring Backuparr itself](restoring.md#restoring-backuparr-itself).
 
+## Home Assistant's token
+
+The [Home Assistant](home-assistant.md) integration has a token of its own,
+kept only as a SHA-256 hash. It opens nothing but its two read-only status
+addresses, is needed even with `BACKUPARR_DISABLE_AUTH`, and a wrong one
+counts towards the login lockout. Switching the integration off removes it.

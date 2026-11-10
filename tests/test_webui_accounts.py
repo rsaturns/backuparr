@@ -161,6 +161,7 @@ PROTECTED = [
     ("POST", "/api/destinations/onedrive/disconnect"),
     ("POST", "/api/destinations/dropbox/connect"), ("POST", "/api/destinations/dropbox/disconnect"),
     ("POST", "/api/destinations/local/disconnect"),
+    ("POST", "/api/ha/token"), ("POST", "/api/ha/disable"),
 ]
 
 
@@ -180,7 +181,9 @@ def test_static_files_need_no_login(anonymous):
 
 
 def test_every_registered_api_route_is_covered_by_the_gate_list(isolated_webui):
-    public = {"/api/logout", "/api/reset", "/api/setup", "/api/setup/restore", "/api/login"}
+    public = {"/api/logout", "/api/reset", "/api/setup", "/api/setup/restore", "/api/login",
+              # Home Assistant's: a bearer token of their own (test_webui_ha.py).
+              "/api/ha/status", "/api/ha/status/<app_id>"}
     routes = {rule.rule for rule in isolated_webui.app.url_map.iter_rules() if rule.rule.startswith("/api/")}
     listed = {path for _, path in PROTECTED}
 

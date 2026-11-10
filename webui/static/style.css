@@ -1089,6 +1089,13 @@ code {
   gap: 14px;
 }
 
+/* Home Assistant's switch on Backuparr's card (#170). */
+.ha-integration { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.ha-integration .toggle-field { margin-bottom: 0; }
+.ha-integration #ha-token-field { margin-top: 12px; }
+.ha-integration #ha-token { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+.ha-integration .app-card-actions { margin-top: 10px; }
+
 /* The status bar over the app cards (#167). */
 .overview-status-head {
   display: flex;

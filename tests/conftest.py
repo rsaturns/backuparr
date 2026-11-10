@@ -91,7 +91,7 @@ def load_webui():
     scheduler thread and no log file."""
     # Dependencies first, so each module binds the fresh state of the next.
     for name in ("webui.settings", "webui.services", "webui.auth", "webui.destinations", "webui.runs",
-                 "webui.backups", "webui.app"):
+                 "webui.backups", "webui.ha", "webui.app"):
         module = importlib.reload(sys.modules[name]) if name in sys.modules else importlib.import_module(name)
     module.app.secret_key = module.auth._load_or_create_secret_key()
     module.app.config.update(TESTING=True)
