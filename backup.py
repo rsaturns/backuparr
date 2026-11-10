@@ -38,6 +38,7 @@ from apps.jellyfin import JellyfinApp
 from apps.lazylibrarian import LazyLibrarianApp
 from apps.lidarr import LidarrApp
 from apps.nzbget import NzbgetApp
+from apps.pihole import PiholeApp
 from apps.plex import PlexApp
 from apps.profilarr import ProfilarrApp
 from apps.prowlarr import ProwlarrApp
@@ -241,6 +242,7 @@ DRIVERS = {
     "plex": PlexApp,
     "seerr": SeerrApp,
     "lazylibrarian": LazyLibrarianApp,
+    "pihole": PiholeApp,
 }
 
 

@@ -74,6 +74,8 @@ def sound_archives(tmp_path):
         "seerr": make_zip(tmp_path / "seerr.zip", {"backuparr-seerr.json": j({"seerr_version": "3.5.1"}), "db/db.sqlite3": db,
                                                     "settings.json": j({"main": {}})}),
         "lazylibrarian": make_tar(tmp_path / "ll.tgz", {"lazylibrarian.db": db, "config.ini": b"[General]\n"}),
+        "pihole-2": make_zip(tmp_path / "pihole.zip", {"etc/pihole/pihole.toml": "[dns]\n", "etc/hosts": "127.0.0.1 localhost\n",
+                                                       "etc/pihole/gravity.db": db, "etc/pihole/pihole-FTL.db": db}),
     }
 
 

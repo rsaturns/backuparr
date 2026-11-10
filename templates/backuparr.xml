@@ -9,9 +9,9 @@
   <Support>https://github.com/rsaturns/backuparr/issues</Support>
   <Project>https://github.com/rsaturns/backuparr</Project>
   <ReadMe>https://rsaturns.github.io/backuparr/</ReadMe>
-  <Overview>Everything you host, backed up. Scheduled config/database backups for Radarr, Sonarr, Lidarr, Whisparr, Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, NZBGet, Tautulli, Jellyfin, Emby, Plex, Seerr and LazyLibrarian, sent to every destination you enable: Local storage, Google Drive, OneDrive and Dropbox. Apps, destinations, schedule, retention and restores are all set up in the web UI. Most apps are backed up through their own API, so they need only a URL (your server's IP and the app's port) and an API key. Jellyfin, Emby, Plex, Seerr and LazyLibrarian also need their folder mapped below, and Bazarr needs its backup folder only to restore. Leave the paths for apps you don't use empty. Docs: https://rsaturns.github.io/backuparr/</Overview>
+  <Overview>Everything you host, backed up. Scheduled config/database backups for Radarr, Sonarr, Lidarr, Whisparr, Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, NZBGet, Tautulli, Jellyfin, Emby, Plex, Seerr, LazyLibrarian and Pi-hole, sent to every destination you enable: Local storage, Google Drive, OneDrive and Dropbox. Apps, destinations, schedule, retention and restores are all set up in the web UI. Most apps are backed up through their own API, so they need only a URL (your server's IP and the app's port) and an API key. Jellyfin, Emby, Plex, Seerr and LazyLibrarian also need their folder mapped below, and Bazarr needs its backup folder only to restore. Leave the paths for apps you don't use empty. Docs: https://rsaturns.github.io/backuparr/</Overview>
   <Category>Backup: Tools:Utilities</Category>
-  <ExtraSearchTerms>arr radarr sonarr lidarr whisparr prowlarr bazarr sabnzbd nzbget plex jellyfin emby seerr lazylibrarian tautulli rclone restore</ExtraSearchTerms>
+  <ExtraSearchTerms>arr radarr sonarr lidarr whisparr prowlarr bazarr sabnzbd nzbget plex jellyfin emby seerr lazylibrarian tautulli pihole pi-hole rclone restore</ExtraSearchTerms>
   <WebUI>http://[IP]:[PORT:8990]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/rsaturns/backuparr/main/templates/backuparr.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/rsaturns/backuparr/main/webui/static/logo.png</Icon>

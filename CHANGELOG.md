@@ -7,6 +7,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Pi-hole (v6 and newer) backups and restores over its API with Teleporter, using an app password; Test connection checks that Pi-hole lets app passwords use Teleporter (webserver.api.app_sudo) and says where to turn it on. Its backups are always encrypted, and a second Pi-hole can be added as an instance (#149).
 - History can download or delete several backups at once: Select, tick them, and use the bar at the bottom of the window; several downloads come as one zip (#148).
 - Backups are encrypted with your encryption key before upload, on by default for every app and switched per app with Encrypt backup on its card; History and the Overview show which backups are encrypted, downloads come back decrypted with a warning, and a restore from another install asks for that install's key (#147).
 - A `decrypt` command in the image opens an encrypted backup without a running Backuparr (#147).

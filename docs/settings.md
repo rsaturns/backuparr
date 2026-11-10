@@ -46,7 +46,7 @@ added with **Add as instance**.
 
 ## More than one instance
 
-Radarr, Sonarr, Lidarr and Whisparr can each run more than once. Click **Add
+Radarr, Sonarr, Lidarr, Whisparr and Pi-hole can each run more than once. Click **Add
 another** under the app's card and name the instance, such as `4K` or `Anime`.
 Each instance has its own settings, backups, History and Restore entry, and can
 get its own [authentication headers](#service-authentication-headers).

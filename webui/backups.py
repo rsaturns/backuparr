@@ -410,6 +410,9 @@ def _restore_work(app_name, root, app_cfg, data, bazarr_backup_dir):
                                 sabnzbd_password_prompt=password_prompt)
         RESTORE_RUN_STATE["summary"] = result.get("summary")
         RESTORE_RUN_STATE["message"] = ra.restore_message(app_name, result)
+        RESTORE_RUN_STATE["warning"] = bool(result.get("attention"))
+        if RESTORE_RUN_STATE["warning"]:
+            log.warning("restore: %s", RESTORE_RUN_STATE["message"])
         RESTORE_RUN_STATE["ok"] = True
     except Exception as exc:
         log_failure(log, f"restore failed for {app_name}", exc, app_cfg.get("url"), app=app_name)
@@ -440,6 +443,7 @@ def _start_restore_run(app_name, root, app_cfg, data, bazarr_backup_dir):
             "ok": False,
             "message": None,
             "summary": None,
+            "warning": False,
             "error": None,
             "key_needed": False,
             "log": [],

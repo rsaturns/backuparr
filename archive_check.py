@@ -38,6 +38,7 @@ _REQUIRED = {
     "plex": [["backuparr-plex.json"], ["com.plexapp.plugins.library.db"], ["Preferences.xml"]],
     "seerr": [["backuparr-seerr.json"], ["db/db.sqlite3"], ["settings.json"]],
     "lazylibrarian": [["lazylibrarian.db"], ["config.ini"]],
+    "pihole": [["etc/pihole/pihole.toml"], ["etc/pihole/gravity.db"]],
 }
 _SQLITE_SUFFIXES = (".db", ".sqlite", ".sqlite3")
 _CHUNK = 1024 * 1024

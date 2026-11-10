@@ -3110,7 +3110,7 @@ function renderRestoreState(state) {
       } else {
         resultEl.textContent = sentence(state.message || "Restore complete.");
       }
-      resultEl.className = `save-result ${s && s.config_staged ? "warn" : "ok"}`;
+      resultEl.className = `save-result ${(s && s.config_staged) || state.warning ? "warn" : "ok"}`;
     }
   }
 }
