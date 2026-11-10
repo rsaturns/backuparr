@@ -153,9 +153,11 @@ configuration to every destination as `backuparr/backuparr_<date>_<time>.enc`,
 kept like the app backups: its settings and destinations, the cloud
 connections, the admin login, the backup record and the run logs. It's
 encrypted with your encryption key and can't be read or changed without it.
-The key itself, the session key and `rclone.pass` aren't in it. Turn it off on
-the Settings tab. History lists these backups first, under "Backuparr", for
-download and delete, and the Overview shows the latest one on its Backuparr
-card. See
+The key itself, the session key and `rclone.pass` aren't in it.
+
+It has its own **Backuparr** card under **Server** on the Settings tab: switch
+it off there. **Run & Status** can back it up on its own (pick **Backuparr**).
+History lists these backups under Server, for download and delete, and the
+Overview shows the latest one on its Backuparr card. See
 [Restoring Backuparr itself](restoring.md#restoring-backuparr-itself).
 

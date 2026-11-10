@@ -31,7 +31,7 @@ nav_order: 12
 | `retention_days` | Delete backups older than this, per app and destination, always keeping each app's newest (default 7) |
 | `cron_schedule` | 5-field cron schedule (default `0 3 * * *`) |
 | `notify_url` | Optional summary after every run - see [Notifications](notifications.md) |
-| `self_backup` | Back up Backuparr's own configuration, encrypted, at the end of each full run (default `true`) - see [Backuparr's own backup](security.md#backuparrs-own-backup) |
+| `self_backup` | Back up Backuparr's own configuration, encrypted, at the end of each full run (default `true`; the switch on Settings' Backuparr card) - see [Backuparr's own backup](security.md#backuparrs-own-backup) |
 | `secrets_key_acknowledged` | Set once you've confirmed saving your encryption key - don't edit |
 | `encryption_notice_acknowledged` | Set once the "Backups Are Now Encrypted" notice has been seen - don't edit |
 

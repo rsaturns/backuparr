@@ -193,8 +193,9 @@ def test_each_app_card_sits_in_its_categorys_collapsed_section(webui):
     from config_store import APP_CATEGORIES, APP_META
     html = client_for(webui).get("/").get_data(as_text=True)
     sections = re.findall(r'<section class="app-category" data-category="([a-z-]+)">', html)
-    assert sections == ["media-management", "downloaders", "media-servers", "network"]
-    assert [c["id"] for c in APP_CATEGORIES][:4] == sections
+    # Server holds Backuparr's own card (#165), so it shows with no app in it.
+    assert sections == ["media-management", "downloaders", "media-servers", "network", "server"]
+    assert [c["id"] for c in APP_CATEGORIES if c["id"] != "security" and c["id"] != "home-automation"] == sections
     for meta in APP_META:
         section = html.split(f'data-category="{meta["category"]}"', 1)[1].split("</section>", 1)[0]
         assert f'data-app="{meta["id"]}"' in section

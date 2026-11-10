@@ -15,12 +15,13 @@ The **Settings** tab holds, from top to bottom:
   enabled apps come first. A card per app: switch it on, enter its URL and API
   key, and click **Test connection**. **Encrypt backup** is on unless you turn it off
   (see [Encrypted backups](security.md#encrypted-backups)). See
-  [Apps](apps/index.md).
+  [Apps](apps/index.md). **Server** starts with Backuparr's own card: its
+  switch turns [Backuparr's own backup](security.md#backuparrs-own-backup)
+  on or off.
 - **Destinations** - see [Destinations](destinations.md). Each card can set
   its own [retention](backups.md#retention). Click its heading to fold it.
-- **Schedule & Notifications** - the default retention, the schedule, the
-  [Notify URL](notifications.md), and whether Backuparr
-  [backs itself up](security.md#backuparrs-own-backup).
+- **Schedule & Notifications** - the default retention, the schedule and the
+  [Notify URL](notifications.md).
 - **Service Authentication** - see [below](#service-authentication-headers).
 - **Restore Backuparr** - see [Restoring Backuparr itself](restoring.md#restoring-backuparr-itself).
 

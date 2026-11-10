@@ -239,6 +239,11 @@ APP_META = [
         "restore_warning": {"lead": "Replaces Pi-hole's settings", "text": "with the backup's - DNS and DHCP settings, local DNS records, adlists, domains, groups and clients, DHCP leases, and its web password, app password and 2FA. Settings set by environment variables (FTLCONF_...) are kept. Pi-hole restarts to apply it. If the backup's app password differs from the one on this card, update the card afterwards."},
     },
 ]
+# Backuparr's own backup, shown as an app card in Server (#165). Not an
+# APP_META app: it has no URL or key, its switch is cfg["self_backup"], and
+# its backups are always encrypted (self_backup.py).
+SELF_APP = {"id": "backuparr", "label": "Backuparr", "icon": "logo.png", "category": "server", "always_encrypted": True}
+
 for _meta in APP_META:
     _meta["discoverable"] = _meta["id"] in DISCOVERABLE_APPS
     _meta["category"] = _APP_CATEGORY[_meta["id"]]

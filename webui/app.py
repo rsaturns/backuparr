@@ -13,7 +13,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 import backup
 import manifest_backfill
 from backup import describe_failure
-from config_store import APP_CATEGORIES, APP_META, ConfigError, DESTINATION_META, DISCOVERABLE_APPS
+from config_store import APP_CATEGORIES, APP_META, ConfigError, DESTINATION_META, DISCOVERABLE_APPS, SELF_APP
 from webui import auth, backups, destinations, runs, services, settings
 from webui.version import VERSION
 
@@ -97,10 +97,14 @@ def index():
     lead = ("prowlarr", *DISCOVERABLE_APPS)
     apps = sorted(APP_META, key=lambda m: lead.index(m["id"]) if m["id"] in lead else len(lead))
     categories = [{**c, "apps": [m for m in apps if m["category"] == c["id"]]} for c in APP_CATEGORIES]
-    return render_template("index.html", app_categories=[c for c in categories if c["apps"]],
+    # Backuparr's own card (#165) heads its category, which shows even with
+    # no other app in it.
+    shown = [c for c in categories if c["apps"] or c["id"] == SELF_APP["category"]]
+    return render_template("index.html", app_categories=shown, self_app=SELF_APP,
                            destination_meta=DESTINATION_META, version=VERSION,
                            auth_disabled=auth._AUTH_DISABLED, username=auth.auth_store.username() or "",
-                           ui_meta={"apps": APP_META, "categories": APP_CATEGORIES, "destinations": DESTINATION_META})
+                           ui_meta={"apps": APP_META, "categories": APP_CATEGORIES, "destinations": DESTINATION_META,
+                                    "self_app": SELF_APP})
 
 
 # ------------------------------------------------------------- startup ----

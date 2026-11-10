@@ -64,7 +64,8 @@ See [Restoring](restoring.md).
 
 - At the end of each full run, Backuparr backs up its own settings, cloud
   connections, login, backup record and run logs to every destination,
-  encrypted with your encryption key.
+  encrypted with your encryption key. It has its own card under Server, and
+  Run & Status can back it up on its own.
 - On a new install, restore it from the setup screen. On a running install,
   restore it from Settings.
 
