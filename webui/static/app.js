@@ -327,6 +327,14 @@ function overviewCard(appId, { label, icon, latest, failure, latestRun, idleText
   return card;
 }
 
+// The scheduler skips a saved schedule that isn't valid, e.g. one an update
+// of the cron library stopped accepting (#166) - say so instead of nothing.
+function showScheduleWarning(elementId, valid) {
+  const el = document.getElementById(elementId);
+  el.textContent = valid === false ? "Your backup schedule isn't valid any more. Check it in Settings." : "";
+  el.classList.toggle("hidden", valid !== false);
+}
+
 async function loadOverview() {
   const summaryEl = document.getElementById("overview-summary");
   const appsEl = document.getElementById("overview-apps");
@@ -384,6 +392,7 @@ async function loadOverview() {
       return div;
     });
     summaryEl.append(enabledStat, destinationsStat(destIds), cronStat, retentionStat(cfg, destIds));
+    showScheduleWarning("overview-schedule-warning", cfg.schedule_valid);
 
     // Backuparr's own backup leads, always there (#110); then each enabled app.
     appsEl.appendChild(overviewCard("backuparr", {
@@ -2247,6 +2256,7 @@ function renderRunState(state) {
   const progress = document.getElementById("run-progress");
   const progressBar = document.getElementById("run-progress-bar");
 
+  showScheduleWarning("run-schedule-warning", state.schedule_valid);
   runBtn.disabled = !!state.running;
   document.getElementById("run-app").disabled = !!state.running;
   runBtn.textContent = state.running ? "Running..." : "Run backup now";

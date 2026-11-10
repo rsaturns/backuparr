@@ -845,6 +845,10 @@ input:focus, select:focus, textarea:focus {
 
 .run-summary strong { color: var(--text); }
 
+/* A saved schedule that stopped being valid (#166), on Overview and Run & Status. */
+.schedule-warning { color: var(--warn); font-weight: 600; margin: 12px 0 0; }
+#run-schedule-warning { margin: 0 0 12px; }
+
 .spinner {
   display: inline-block;
   width: 14px;

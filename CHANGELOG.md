@@ -18,9 +18,12 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Settings groups the apps by category, each folding away under a header with its enabled count and last-run status; categories open once an app in them is set up and are remembered per browser. Destinations folds too, its header showing the destinations' icons; History (where Backuparr's own backups are now listed as Backuparr) and the Run & Status and Restore app lists use the same categories (#148).
 - Headings in title case, e.g. Run & Status, Schedule & Notifications, Media Management, Local Storage (#148).
 - New tagline: "Everything you host, backed up.", as Backuparr covers more than media apps.
+- rclone 1.76.0 (from 1.75.0, taking the security fixes in 1.75.1 and 1.75.2), croniter 7.0.0, and the release workflow's docker/login-action 4.8.0 and softprops/action-gh-release 3.0.4 (#166).
+- With croniter 7.0, a hand-typed schedule step that starts at a field's maximum, such as `59/15`, means only that value; schedules made with the picker are unchanged (#166).
 
 ### Fixed
 
+- A saved schedule that isn't valid no longer just stops backups without a word: the Overview and Run & Status say "Your backup schedule isn't valid any more. Check it in Settings.", and the log says so once (#166).
 - On a phone, Prowlarr's card no longer runs off the screen: its buttons wrap onto a second line.
 
 ## [2.5.6] - 2026-11-07

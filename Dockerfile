@@ -2,7 +2,7 @@ FROM python:3.15-alpine
 
 # rclone from its own GitHub release, not apk - apk's build lags
 # upstream and carries known CVEs in its bundled Go dependencies.
-ARG RCLONE_VERSION=1.75.0
+ARG RCLONE_VERSION=1.76.0
 ARG TARGETARCH
 
 # su-exec (from the community repo, enabled in python:alpine) drops from root

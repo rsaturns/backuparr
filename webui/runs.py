@@ -13,7 +13,7 @@ import backup
 import config_store
 import runlog
 from backup import describe_failure, format_run_message, log_failure, notify, run_backup
-from config_store import enabled_apps, load_config
+from config_store import enabled_apps, load_config, valid_schedule
 
 
 bp = Blueprint("runs", __name__)
@@ -169,7 +169,10 @@ def _cancel_backup_run():
 # In-process, not an external cron daemon - re-reads cron_schedule whenever
 # config.json changes, so a Settings change applies on the next tick.
 _SCHEDULER_INTERVAL_SECONDS = 20
-_scheduler_state = {"last_run_minute": None, "last_error": None, "config_stamp": None, "schedule": None}
+# "schedule" is (config stamp, cron_schedule), replaced as one so a status
+# request reading it beside the scheduler thread never pairs a stamp with
+# another config's schedule.
+_scheduler_state = {"last_run_minute": None, "last_error": None, "schedule": (None, None), "invalid_schedule": None}
 
 
 def _config_stamp():
@@ -184,21 +187,34 @@ def _config_stamp():
 def _scheduled_cron():
     """cron_schedule, without decrypting the whole config every tick."""
     stamp = _config_stamp()
-    if stamp is None or stamp != _scheduler_state["config_stamp"]:
-        _scheduler_state["schedule"] = load_config().get("cron_schedule", "0 3 * * *")
-        _scheduler_state["config_stamp"] = stamp
-    return _scheduler_state["schedule"]
+    cached_stamp, schedule = _scheduler_state["schedule"]
+    if stamp is None or stamp != cached_stamp:
+        schedule = load_config().get("cron_schedule", "0 3 * * *")
+        _scheduler_state["schedule"] = (stamp, schedule)
+    return schedule
+
+
+def _report_invalid_schedule(schedule, valid):
+    """Log a saved schedule that isn't valid once, not every tick - and again
+    if it's fixed and later broken the same way."""
+    if valid:
+        _scheduler_state["invalid_schedule"] = None
+    elif _scheduler_state["invalid_schedule"] != schedule:
+        _scheduler_state["invalid_schedule"] = schedule
+        log.warning("scheduler: the backup schedule %r isn't valid - no scheduled backups run until it's fixed in Settings", schedule)
 
 
 def _scheduler_loop():
     while True:
         try:
             schedule = _scheduled_cron()
+            valid = valid_schedule(schedule)
+            _report_invalid_schedule(schedule, valid)
             now = datetime.now().replace(second=0, microsecond=0)
             # Dedup: a matching minute is seen on more than one ~20s tick.
             if (
-                _scheduler_state["last_run_minute"] != now
-                and croniter.is_valid(schedule)
+                valid
+                and _scheduler_state["last_run_minute"] != now
                 and croniter.match(schedule, now)
             ):
                 _scheduler_state["last_run_minute"] = now
@@ -279,6 +295,7 @@ def api_runlog(app_name, run_id):
 @bp.get("/api/backup/status")
 def api_backup_status():
     state = dict(RUN_STATE)
+    state["schedule_valid"] = valid_schedule(_scheduled_cron())
     # The UI shows the run's own log while it runs, backup.log's tail after.
     state["log_tail"] = []
     if not state["running"]:
