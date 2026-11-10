@@ -17,8 +17,8 @@ A hand-typed step that starts at a field's maximum, such as `59/15` or `6/1`,
 now means just that value, not "every": use `*/15` for every 15 minutes. The
 schedule picker never writes these.
 
-**Run & Status → Run backup now** backs up every app, or the one you pick, and
-shows the run live. A backup and a restore never run at the same time.
+**Run & Status → Run backup now** backs up every app, or the one you pick
+(Backuparr itself included), and shows the run live. A backup and a restore never run at the same time.
 
 ![Run & Status tab: a backup of all apps in progress, with its live log]({{ '/screenshots/run.png' | relative_url }})
 
@@ -69,10 +69,10 @@ download or delete any of them, or open its log. An encrypted backup downloads
 decrypted - see [Encrypted backups](security.md#encrypted-backups).
 
 The apps are grouped under the same categories as on Settings, each with a
-header that folds it away; Backuparr's own backups come first. Which
+header that folds it away; Backuparr's own backups are under Server. Which
 categories are folded is remembered in your browser.
 
-![History tab: Backuparr's own backups, then the Media Management category, each backup with its version, size, date and Encrypted badge, and Select and Refresh buttons]({{ '/screenshots/history.png' | relative_url }})
+![History tab: the categories folded except Server, which lists Backuparr's own backups with their version, size, date and Encrypted badge, and Select and Refresh buttons]({{ '/screenshots/history.png' | relative_url }})
 
 **Several at once:** click **Select**, tick the backups (or a whole app with
 the box beside its name), then use the bar at the bottom of the window:

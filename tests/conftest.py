@@ -62,10 +62,11 @@ def skip_version_check(request, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def skip_self_backup(request, monkeypatch):
-    """run_backup tests are about the apps; tests marked self_backup make
-    Backuparr's own backup for real."""
+    """run_backup tests are about the apps, so a run skips Backuparr's own
+    backup step; tests marked self_backup make it for real."""
     if request.node.get_closest_marker("self_backup") is None:
         monkeypatch.setattr(self_backup, "run", lambda dest_roots, timestamp: None)
+        monkeypatch.setattr(backup, "_self_backup_step", lambda *args, **kwargs: None)
 
 
 @pytest.fixture(autouse=True)

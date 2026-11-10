@@ -1,7 +1,7 @@
 "use strict";
 
 const AUTH_DISABLED = document.body.dataset.authDisabled === "true";
-const { apps: APP_META, categories: APP_CATEGORIES, destinations: DESTINATION_META } = JSON.parse(document.body.dataset.uiMeta);
+const { apps: APP_META, categories: APP_CATEGORIES, destinations: DESTINATION_META, self_app: SELF_APP } = JSON.parse(document.body.dataset.uiMeta);
 let RUN_POLL_TIMER = null;
 let RESTORE_POLL_TIMER = null;
 let SETTINGS_SNAPSHOT = null;
@@ -16,6 +16,9 @@ const REMOVED_INSTANCES = new Set();
 const RETIRED_INSTANCES = new Set();
 // Enabled apps and instances as last saved: the Run tab can back up any one.
 const ENABLED_APPS = new Set();
+// Whether Backuparr's own backup is on in the saved settings (#165): its card
+// counts and shows like an enabled app's, and Run & Status can run it alone.
+let SELF_BACKUP_ON = true;
 
 async function apiFetch(url, opts) {
   opts = { ...opts };
@@ -634,6 +637,12 @@ function initLogout() {
 }
 
 // ------------------------------------------------------------- settings ----
+// Backuparr's own card (#165): its body, like an app card's, shows while on.
+function showSelfCardBody() {
+  const card = document.querySelector(".self-card");
+  card.querySelector(".app-card-body").classList.toggle("hidden", !document.getElementById("s-self_backup").checked);
+}
+
 function appCard(appId) {
   return document.querySelector(`.app-card[data-app="${appId}"]`);
 }
@@ -1489,7 +1498,9 @@ async function loadConfig() {
   const cfg = await apiFetch("/api/config");
   document.getElementById("s-retention_days").value = cfg.retention_days || 7;
   updateRetentionPlaceholders();
-  document.getElementById("s-self_backup").checked = cfg.self_backup !== false;
+  SELF_BACKUP_ON = cfg.self_backup !== false;
+  document.getElementById("s-self_backup").checked = SELF_BACKUP_ON;
+  showSelfCardBody();
   document.getElementById("s-cron_schedule").value = cfg.cron_schedule || "";
   initSchedulePicker(cfg.cron_schedule);
   document.getElementById("s-notify_url").value = cfg.notify_url || "";
@@ -1605,11 +1616,14 @@ function sortAppCards() {
         ...types.filter((type) => !enabledTypes.has(type)).sort(byLabel)];
     }
     body.append(...order.flatMap((type) => blocks.get(type)));
-    section.querySelector(".category-count").textContent = `${enabled.length} of ${types.length} enabled`;
+    // Backuparr's own card heads its category and counts like an app (#165).
+    const self = body.querySelector(".self-card") ? 1 : 0;
+    const selfOn = self && SELF_BACKUP_ON ? 1 : 0;
+    section.querySelector(".category-count").textContent = `${enabled.length + selfOn} of ${types.length + self} enabled`;
 
     // Closed on a fresh install; open once one of its apps is set up; after
     // that, as the user left it.
-    const has = enabled.length > 0;
+    const has = enabled.length + selfOn > 0;
     CATEGORY_HAD_ENABLED[id] = has;
     if (hadEnabled && has && !hadEnabled[id]) {
       openCategory(section, true);
@@ -1635,8 +1649,12 @@ async function refreshCategoryStatus() {
   } catch (e) {
     return; // the dots stay as they were; the Overview has the detail
   }
+  // Backuparr's card has no Test connection: its dot is its last run.
+  const selfRun = SELF_BACKUP_ON ? runs[SELF_APP.id] : null;
+  const selfDot = document.querySelector(".self-card .status-dot");
+  if (selfDot) selfDot.dataset.state = selfRun ? (selfRun.ok ? "ok" : "fail") : "idle";
   document.querySelectorAll(".app-category").forEach((section) => {
-    const results = Array.from(ENABLED_APPS)
+    const results = [...ENABLED_APPS, ...(SELF_BACKUP_ON ? [SELF_APP.id] : [])]
       .filter((appId) => appMeta(appId)?.category === section.dataset.category)
       .map((appId) => runs[appId])
       .filter(Boolean);
@@ -1731,6 +1749,7 @@ async function saveSettings() {
     REMOVED_INSTANCES.forEach((appId) => RETIRED_INSTANCES.add(appId));
     REMOVED_INSTANCES.clear();
     rememberSavedInstances(cfg.apps);
+    SELF_BACKUP_ON = cfg.self_backup;
     rememberEnabledApps(cfg.apps);
     sortAppCards();
     resultEl.textContent = "Saved";
@@ -2212,6 +2231,7 @@ function initSettingsEvents() {
     input.addEventListener("input", updateDiscoveryButton);
   });
   document.querySelectorAll(".app-card[data-app]").forEach(bindAppCard);
+  document.getElementById("s-self_backup").addEventListener("change", showSelfCardBody);
   initInstanceAddRows();
   document.getElementById("notify-test-btn").addEventListener("click", testNotifyUrl);
   initScheduleEvents();
@@ -2354,14 +2374,15 @@ async function refreshRunStatus() {
   });
 }
 
-// "All apps", then every enabled app with its saved instances after it.
+// "All apps", then every enabled app with its saved instances after it, and
+// Backuparr itself while its card is on.
 function initRunAppOptions() {
   const select = document.getElementById("run-app");
   const previous = select.value;
   select.replaceChildren(new Option("All apps", ""));
-  addCategoryOptions(select, APP_META.flatMap((m) =>
+  addCategoryOptions(select, [...(SELF_BACKUP_ON ? [SELF_APP.id] : []), ...APP_META.flatMap((m) =>
     [m.id, ...Array.from(INSTANCE_NAMES.keys()).filter((appId) => instanceType(appId) === m.id)])
-    .filter((appId) => ENABLED_APPS.has(appId)));
+    .filter((appId) => ENABLED_APPS.has(appId))]);
   if (Array.from(select.options).some((opt) => opt.value === previous)) select.value = previous;
 }
 
@@ -2408,6 +2429,7 @@ function isExtraInstance(appId) {
 }
 
 function appMeta(appId) {
+  if (appId === SELF_APP.id) return SELF_APP;
   const type = instanceType(appId);
   return APP_META.find((m) => m.id === type);
 }
@@ -2514,8 +2536,8 @@ async function loadHistory() {
   }
 }
 
-// Backuparr's own backups first, then each category's apps under its own
-// collapsible header (#148), open unless closed here before.
+// Each category's apps under its own collapsible header (#148), open unless
+// closed here before; Backuparr's own backups head Server (#165).
 function renderHistory(root, destId, history) {
   root.innerHTML = "";
   const appIds = Object.keys(history).filter((appId) => (history[appId] || []).length > 0);
@@ -2523,7 +2545,6 @@ function renderHistory(root, destId, history) {
     root.innerHTML = '<p class="empty-note">No backups yet on this destination - run a backup first.</p>';
     return;
   }
-  if (appIds.includes("backuparr")) root.appendChild(historyAppSection(destId, "backuparr", history.backuparr));
   const layout = savedLayout("history");
   APP_CATEGORIES.forEach((category) => {
     const ids = appIds.filter((appId) => appMeta(appId)?.category === category.id);
@@ -2534,6 +2555,7 @@ function renderHistory(root, destId, history) {
     const body = document.createElement("div");
     body.className = "category-body";
     body.id = `history-category-${category.id}`;
+    ids.sort((a, b) => (b === SELF_APP.id) - (a === SELF_APP.id));
     ids.forEach((appId) => body.appendChild(historyAppSection(destId, appId, history[appId])));
     setOpen(head, body, layout[category.id] !== false);
     head.addEventListener("click", () => {

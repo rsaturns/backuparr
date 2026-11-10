@@ -242,12 +242,18 @@ def start_scheduler():
 
 
 # ------------------------------------------------------------- backups ----
+def _runnable(cfg):
+    """What /api/backup/run can back up on its own: each enabled app, and
+    Backuparr itself while its card is on (#165)."""
+    return [*enabled_apps(cfg), *(["backuparr"] if cfg.get("self_backup", True) is not False else [])]
+
+
 @bp.post("/api/backup/run")
 def api_backup_run():
     data = request.get_json(force=True, silent=True)
     # No "app" (or null) backs up every enabled app; otherwise just that one.
     only = data.get("app") if isinstance(data, dict) else None
-    if only is not None and (not isinstance(only, str) or only not in enabled_apps(load_config())):
+    if only is not None and (not isinstance(only, str) or only not in _runnable(load_config())):
         return jsonify({"error": "that app isn't enabled - pick an enabled app, or All apps"}), 400
     if not _start_backup_run(only):
         if RESTORE_RUN_STATE["running"]:

@@ -17,6 +17,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Backuparr's own backup uses the same encryption format; backups made before 3.0 still restore (#147).
 - Error and result messages in the web UI start with a capital letter and end with a full stop.
 - Settings groups the apps by category, each folding away under a header with its enabled count and last-run status; categories open once an app in them is set up and are remembered per browser. Destinations folds too, its header showing the destinations' icons; History (where Backuparr's own backups are now listed as Backuparr) and the Run & Status and Restore app lists use the same categories (#148).
+- Backuparr's own backup has its own Backuparr card under Server, in place of the checkbox in Schedule & Notifications; Run & Status can back it up on its own, a full run lists it with the apps, and History shows its backups under Server (#165).
 - Headings in title case, e.g. Run & Status, Schedule & Notifications, Media Management, Local Storage (#148).
 - New tagline: "Everything you host, backed up.", as Backuparr covers more than media apps.
 - rclone 1.76.0 (from 1.75.0, taking the security fixes in 1.75.1 and 1.75.2), croniter 7.0.0, and the release workflow's docker/login-action 4.8.0 and softprops/action-gh-release 3.0.4 (#166).

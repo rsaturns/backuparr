@@ -410,7 +410,9 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
     "<instance id>: <message>" strings.
 
     only, if given, is one enabled app or instance id: back up just that
-    one, and apply retention to its backups alone.
+    one, and apply retention to its backups alone. "backuparr" backs up
+    Backuparr's own configuration alone (#165); a full run backs it up
+    last, after the apps, while self_backup is on.
 
     on_progress(index, total, name), if given, is called right before each
     app starts - lets a caller (e.g. the web UI) show "app N of M".
@@ -424,15 +426,22 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
         if should_cancel and should_cancel():
             raise RunCancelled()
 
+    backs_up_self = cfg.get("self_backup", True) is not False and only in (None, self_backup.FOLDER)
     apps = enabled_apps(cfg)
-    if only is not None:
+    if only == self_backup.FOLDER:
+        if not backs_up_self:
+            log.error("Backuparr's own backup is turned off - nothing to do")
+            return [], ["backuparr: its own backup is turned off in Settings"]
+        apps = []
+    elif only is not None:
         if only not in apps:
             log.error("%s is not enabled - nothing to do", only)
             return [], [f"{only}: not enabled in config"]
         apps = [only]
-    if not apps:
+    if not apps and not backs_up_self:
         log.error("No apps enabled - nothing to do")
         return [], ["no apps enabled in config"]
+    total = len(apps) + backs_up_self
 
     destinations = enabled_destinations(cfg)
     if not destinations:
@@ -464,7 +473,7 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
         for i, name in enumerate(apps, start=1):
             check_cancel()
             if on_progress:
-                on_progress(i, len(apps), name)
+                on_progress(i, total, name)
             log.info("=== %s ===", name)
             app_cfg = app_connection_config(cfg, name)
 
@@ -566,11 +575,21 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
     # A run's log stays while any destination still keeps its backup.
     runlog.prune(max(keep.values()))
 
-    # Last, so its manifest and run logs include this run. Only a full run
-    # makes one: a single app's run leaves Backuparr's backup as it was.
-    if only is None and cfg.get("self_backup", True):
-        problem = self_backup.run(dest_roots, timestamp)
-        if problem:
-            failed.append(f"backuparr: {problem}")
+    # Last, so its manifest and run logs include this run. A single app's run
+    # leaves Backuparr's backup as it was.
+    if backs_up_self:
+        _self_backup_step(dest_roots, timestamp, ok, failed, on_progress, total)
 
     return ok, failed
+
+
+def _self_backup_step(dest_roots, timestamp, ok, failed, on_progress=None, total=None):
+    """Backuparr's own backup, the last step of a run (#110), reported like
+    an app's (#165)."""
+    if on_progress:
+        on_progress(total, total, self_backup.FOLDER)
+    problem = self_backup.run(dest_roots, timestamp)
+    if problem:
+        failed.append(f"{self_backup.FOLDER}: {problem}")
+    else:
+        ok.append(self_backup.FOLDER)

@@ -97,6 +97,16 @@ def test_a_run_can_back_up_just_one_enabled_app(inline, authed_client, monkeypat
     assert seen == ["radarr", None, None]
 
 
+def test_backuparr_can_be_run_on_its_own_while_its_card_is_on(inline, authed_client, monkeypatch):
+    seen = []
+    monkeypatch.setattr(inline.runs, "run_backup", lambda cfg, only=None, **kw: seen.append(only) or ([only], []))
+    assert authed_client.post("/api/backup/run", json={"app": "backuparr"}).get_json() == {"started": True}
+    assert authed_client.post("/api/config", json={"self_backup": False}).status_code == 200
+    response = authed_client.post("/api/backup/run", json={"app": "backuparr"})
+    assert response.status_code == 400 and "isn't enabled" in response.get_json()["error"]
+    assert seen == ["backuparr"]
+
+
 @pytest.mark.parametrize("target", ["sonarr", "radarr-4k", "nope", "", 7, ["radarr"]])
 def test_a_one_app_run_needs_an_enabled_app(inline, authed_client, monkeypatch, target):
     started = []
