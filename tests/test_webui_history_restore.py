@@ -214,7 +214,8 @@ def test_sabnzbd_preview_failure_is_explained_and_cleaned_up(authed_client, monk
 def configure(client, **apps):
     body = {"bazarr_backup_dir": "/mnt/bazarr", "apps": {}}
     defaults = {name: {"enabled": True, "url": f"http://{name}:1", "api_key": f"{name}-key"} for name in
-                ("radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "bazarr", "tdarr", "tautulli", "sabnzbd", "profilarr")}
+                ("radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "bazarr", "tdarr", "tautulli", "sabnzbd", "profilarr",
+                 "pihole")}
     defaults["jellyfin"] = {"enabled": True, "url": "http://jellyfin:1", "api_key": "jellyfin-key", "backup_dir": "/mnt/jellyfin"}
     defaults["emby"] = {"enabled": True, "url": "http://emby:1", "api_key": "emby-key", "data_dir": "/mnt/emby"}
     defaults["plex"] = {"enabled": True, "url": "http://plex:1", "api_key": "plex-key", "data_dir": "/mnt/plex"}
@@ -325,6 +326,19 @@ def test_each_app_restores_and_reports_its_own_message(restore, authed_client, a
     assert state["app"] == app and state["file"] == f"{app}_latest.zip" and state["running"] is False
     assert state["started_at"] and state["finished_at"]
     assert not restore["tmp"].exists(), "the downloaded backup must be removed afterwards"
+
+
+@pytest.mark.parametrize("outcome, warning, fragment", [
+    ({"back": True, "password_ok": True, "sudo_ok": True, "attention": False}, False, "Pi-hole restarted to apply it"),
+    ({"back": True, "password_ok": False, "sudo_ok": None, "attention": True}, True, "the app password on its card no longer works"),
+])
+def test_a_restore_that_needs_attention_finishes_as_a_warning(restore, authed_client, outcome, warning, fragment):
+    restore["results"]["pihole"] = outcome
+    start(authed_client, "pihole")
+    state = result(authed_client)
+    assert state["ok"] is True and state["warning"] is warning and fragment in state["message"]
+    start(authed_client, "radarr")
+    assert result(authed_client)["warning"] is False  # reset for the next run
 
 
 def test_a_named_file_is_restored_instead_of_the_newest(restore, authed_client):

@@ -249,12 +249,14 @@ def test_the_version_is_read_from_inside_each_apps_archive(tmp_path):
         "emby": make_zip(tmp_path / "e.zip", {"backuparr-emby.json": json.dumps({"emby_version": "4.10.2.0"})}),
         "seerr": make_zip(tmp_path / "s.zip", {"backuparr-seerr.json": json.dumps({"seerr_version": "3.5.1"})}),
         "nzbget": make_zip(tmp_path / "n.zip", {"backuparr-nzbget.json": json.dumps({"nzbget_version": "26.3"})}),
+        # Pi-hole's own Teleporter zip, first lines as FTL v6.8 writes them (lab, 2026-11-10).
+        "pihole": make_zip(tmp_path / "ph.zip", {"etc/pihole/pihole.toml": "# Pi-hole configuration file (v6.8)\n# Encoding: UTF-8\n"}),
     }
     found = {app: manifest_backfill.read_version(app, path) for app, path in cases.items()}
     assert found == {
         "radarr": "v6.4.4.10685", "whisparr": "v3.6.5.1886", "profilarr": "2.3.1", "jellyfin": "12.4.0.0",
         "tautulli": "v2.18.2", "lazylibrarian": "228abd29", "plex": "1.43.5.11079-b3b13e506",
-        "emby": "4.10.2.0", "seerr": "3.5.1", "nzbget": "26.3",
+        "emby": "4.10.2.0", "seerr": "3.5.1", "nzbget": "26.3", "pihole": "FTL v6.8",
     }
 
 
@@ -263,6 +265,7 @@ def test_apps_whose_archives_hold_no_version_and_broken_archives_give_none(tmp_p
     assert manifest_backfill.read_version("sabnzbd", make_zip(tmp_path / "s.zip", {"sabnzbd_config.json": "{}"})) is None
     assert manifest_backfill.read_version("tdarr", make_zip(tmp_path / "t.zip", {"FlowsJSONDB.json": "[]"})) is None
     assert manifest_backfill.read_version("radarr", make_zip(tmp_path / "r.zip", {"radarr.db": ""})) is None
+    assert manifest_backfill.read_version("pihole", make_zip(tmp_path / "ph.zip", {"etc/pihole/pihole.toml": "[dns]\n"})) is None
     assert manifest_backfill.read_version("tautulli", make_zip(tmp_path / "t2.zip", {"tautulli.db": tautulli_db(tmp_path, None)})) is None
     broken = tmp_path / "broken.zip"
     broken.write_bytes(b"not a zip")

@@ -180,7 +180,8 @@ def test_prowlarr_and_discovered_apps_lead_their_category(webui):
     assert [c.split('data-app="')[1].split('"')[0] for c in cards] == [
         "prowlarr", "radarr", "sonarr", "lidarr", "whisparr", "lazylibrarian", "profilarr", "bazarr", "tdarr",
         "sabnzbd", "nzbget",
-        "tautulli", "jellyfin", "emby", "plex", "seerr"]
+        "tautulli", "jellyfin", "emby", "plex", "seerr",
+        "pihole"]
     assert html.count('id="discover-btn"') == 1
     assert html.index('data-app="prowlarr"') < html.index('id="discover-btn"') < html.index('class="help-tip"') < html.index('data-app="profilarr"')
     assert html.count('class="help-tip"') == 1
@@ -192,8 +193,8 @@ def test_each_app_card_sits_in_its_categorys_collapsed_section(webui):
     from config_store import APP_CATEGORIES, APP_META
     html = client_for(webui).get("/").get_data(as_text=True)
     sections = re.findall(r'<section class="app-category" data-category="([a-z-]+)">', html)
-    assert sections == ["media-management", "downloaders", "media-servers"]
-    assert [c["id"] for c in APP_CATEGORIES][:3] == sections
+    assert sections == ["media-management", "downloaders", "media-servers", "network"]
+    assert [c["id"] for c in APP_CATEGORIES][:4] == sections
     for meta in APP_META:
         section = html.split(f'data-category="{meta["category"]}"', 1)[1].split("</section>", 1)[0]
         assert f'data-app="{meta["id"]}"' in section

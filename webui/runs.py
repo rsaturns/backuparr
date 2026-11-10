@@ -46,6 +46,9 @@ RESTORE_RUN_STATE = {
     "ok": False,
     "message": None,
     "summary": None,
+    # The restore ran, but something needs the user's attention (a Pi-hole
+    # backup brought back another app password, say): shown as a warning.
+    "warning": False,
     "error": None,
     "log": [],
 }

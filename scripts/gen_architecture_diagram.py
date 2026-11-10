@@ -51,6 +51,7 @@ SOURCES = [
     ("Plex", os.path.join(ICONS, "plex.svg"), "svg"),
     ("Seerr", os.path.join(ICONS, "seerr.svg"), "svg"),
     ("LazyLibrarian", os.path.join(ICONS, "lazylibrarian.png"), "png"),
+    ("Pi-hole", os.path.join(ICONS, "pi-hole.svg"), "svg"),
 ]
 
 DESTS = [

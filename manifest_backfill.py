@@ -6,7 +6,8 @@ it stopped.
 
 Where each app's archive keeps its version (checked against real backups):
 the *arrs' INFO file; Profilarr's data/INFO.json; Jellyfin's manifest.json;
-Tautulli's version_info table; LazyLibrarian's config.ini (a commit); and
+Tautulli's version_info table; LazyLibrarian's config.ini (a commit);
+Pi-hole's pihole.toml header (FTL's version, as apps/pihole.py records it); and
 for Plex, Emby, Seerr and NZBGet the backuparr-<app>.json Backuparr writes.
 Bazarr, SABnzbd and Tdarr archives hold none, so theirs is recorded as
 unknown. An encrypted archive (#147) is decrypted with this install's key to
@@ -15,6 +16,7 @@ import configparser
 import json
 import logging
 import os
+import re
 import shutil
 import sqlite3
 import tarfile
@@ -103,6 +105,16 @@ def _lazylibrarian_version(archive):
     return None
 
 
+# pihole.toml's first line: "# Pi-hole configuration file (v6.8)".
+_PIHOLE_TOML_VERSION = re.compile(r"#\s*Pi-hole configuration file \((v[0-9][^)\s]*)\)")
+
+
+def _pihole_version(archive):
+    text = _zip_text(archive, "etc/pihole/pihole.toml")
+    match = _PIHOLE_TOML_VERSION.match(text or "")
+    return f"FTL {match.group(1)}" if match else None
+
+
 def read_version(app_type, archive):
     """The app version recorded inside a backup archive, as written there,
     or None when it has none (or it can't be read)."""
@@ -120,6 +132,8 @@ def read_version(app_type, archive):
             return _tautulli_version(archive)
         if app_type == "lazylibrarian":
             return _lazylibrarian_version(archive)
+        if app_type == "pihole":
+            return _pihole_version(archive)
         if app_type in _OWN_MANIFEST:
             text = _zip_text(archive, f"backuparr-{app_type}.json")
             return json.loads(text).get(f"{app_type}_version") if text else None

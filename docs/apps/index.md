@@ -21,6 +21,7 @@ has_toc: false
 | Plex | Plex's database export (`GET /diagnostics/databases`) plus `Preferences.xml` from its mounted data folder | Written back while Plex is stopped; the server keeps its identity - see the [Plex note](plex.md) |
 | Seerr | Database and `settings.json` from its mounted config folder, while Seerr runs | Written back while Seerr is stopped - see the [Seerr note](seerr.md) |
 | LazyLibrarian | The app's own backup (`cmd=backup`), collected from its mounted data folder | Written back while LazyLibrarian is stopped - see the [LazyLibrarian note](lazylibrarian.md) |
+| Pi-hole (v6+) | Teleporter (`GET /api/teleporter`), with an app password; always encrypted - see the [Pi-hole note](pihole.md) | Imported over `POST /api/teleporter`; Pi-hole restarts |
 
 For the apps with a mounted folder, read-only is enough for backups; restoring
 from the web UI needs it read-write, with Backuparr running as the app's
