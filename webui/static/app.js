@@ -278,6 +278,7 @@ async function showEncryptionNotice() {
 function overviewCard(appId, { label, icon, latest, failure, latestRun, idleText }) {
   const card = document.createElement("div");
   card.className = "overview-app-card";
+  card.id = `overview-card-${appId}`; // the status bar's failure lines scroll here
 
   const head = document.createElement("div");
   head.className = "overview-app-head";
@@ -330,6 +331,131 @@ function overviewCard(appId, { label, icon, latest, failure, latestRun, idleText
   return card;
 }
 
+// ------------------------------------------------------- status bar (#167) ----
+// One line for every app's latest backup, under At a Glance: each enabled app
+// and instance, and Backuparr's own while it's on, judged like its card's dot.
+let OVERVIEW_RUN_TIMER = null;
+
+function statusIcon(ok) {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("class", "status-icon");
+  const circle = document.createElementNS(ns, "circle");
+  Object.entries({ cx: 12, cy: 12, r: 11 }).forEach(([k, v]) => circle.setAttribute(k, v));
+  const mark = document.createElementNS(ns, "path");
+  mark.setAttribute("d", ok ? "M7 12.5l3.2 3.2L17 9" : "M8 8l8 8M16 8l-8 8");
+  svg.append(circle, mark);
+  return svg;
+}
+
+function overviewStatusState(item) {
+  return item.failure ? "fail" : item.latest ? "ok" : "idle";
+}
+
+// While a backup runs the bar says so, and the Overview reloads when it ends.
+async function reloadOverviewWhenRunEnds() {
+  OVERVIEW_RUN_TIMER = null;
+  if (!document.getElementById("tab-overview").classList.contains("active")) return;
+  try {
+    if (!(await apiFetch("/api/backup/status")).running) {
+      loadOverview();
+      return;
+    }
+  } catch (e) {
+    // the container may be restarting; try again
+  }
+  OVERVIEW_RUN_TIMER = setTimeout(reloadOverviewWhenRunEnds, 5000);
+}
+
+function scrollToOverviewCard(appId) {
+  const card = document.getElementById(`overview-card-${appId}`);
+  if (!card) return;
+  card.scrollIntoView({ behavior: "smooth", block: "center" });
+  card.classList.remove("flash");
+  void card.offsetWidth; // restart the highlight
+  card.classList.add("flash");
+  setTimeout(() => card.classList.remove("flash"), 1700);
+}
+
+function renderOverviewStatus(items, running) {
+  const bar = document.getElementById("overview-status");
+  bar.replaceChildren();
+  clearTimeout(OVERVIEW_RUN_TIMER);
+  OVERVIEW_RUN_TIMER = null;
+  bar.classList.toggle("hidden", !items.length);
+  if (!items.length) return;
+
+  const head = document.createElement("div");
+  head.className = "overview-status-head";
+  bar.appendChild(head);
+  if (running) {
+    bar.dataset.state = "running";
+    const spinner = document.createElement("span");
+    spinner.className = "spinner";
+    const link = document.createElement("button");
+    link.type = "button";
+    link.className = "link-btn";
+    link.textContent = "Run & Status";
+    link.addEventListener("click", () => document.querySelector('.tab-btn[data-tab="run"]').click());
+    head.append(spinner, document.createTextNode("Backing up... "), link);
+    OVERVIEW_RUN_TIMER = setTimeout(reloadOverviewWhenRunEnds, 5000);
+    return;
+  }
+
+  const failed = items.filter((item) => overviewStatusState(item) === "fail");
+  const succeeded = items.filter((item) => overviewStatusState(item) === "ok").length;
+  const notYet = items.length - failed.length - succeeded;
+  bar.dataset.state = failed.length ? "fail" : "ok";
+  const total = items.length;
+  let text;
+  if (!failed.length && !notYet) text = total === 1 ? "The backup succeeded" : `All ${total} backups succeeded`;
+  else text = `${succeeded} of ${total} ${total === 1 ? "backup" : "backups"} succeeded`;
+  const strong = document.createElement("span");
+  strong.className = "overview-status-text";
+  strong.textContent = text;
+  head.append(statusIcon(!failed.length), strong);
+  if (notYet) {
+    const extra = document.createElement("span");
+    extra.className = "overview-status-extra";
+    extra.textContent = `${notYet} not backed up yet`;
+    head.appendChild(extra);
+  }
+
+  if (!failed.length) return;
+  const list = document.createElement("ul");
+  list.className = "overview-status-list";
+  failed.forEach((item) => {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "overview-status-item";
+    btn.title = `Go to ${item.label}`;
+    if (item.icon) {
+      const img = document.createElement("img");
+      img.className = "app-icon";
+      img.src = item.icon;
+      img.alt = "";
+      btn.appendChild(img);
+    }
+    // One run of text, so a long error wraps under the name on a phone.
+    const line = document.createElement("span");
+    line.className = "overview-status-line";
+    const name = document.createElement("strong");
+    name.textContent = `${item.label}:`;
+    const error = document.createElement("span");
+    error.className = "overview-status-error";
+    error.textContent = ` ${item.failure}`;
+    line.append(name, error);
+    btn.appendChild(line);
+    btn.addEventListener("click", () => scrollToOverviewCard(item.id));
+    li.appendChild(btn);
+    list.appendChild(li);
+  });
+  bar.appendChild(list);
+}
+
 // The scheduler skips a saved schedule that isn't valid, e.g. one an update
 // of the cron library stopped accepting (#166) - say so instead of nothing.
 function showScheduleWarning(elementId, valid) {
@@ -343,11 +469,12 @@ async function loadOverview() {
   const appsEl = document.getElementById("overview-apps");
   summaryEl.textContent = "Loading...";
   appsEl.innerHTML = "";
+  renderOverviewStatus([], false); // nothing stale while it loads
   try {
     const cfg = await apiFetch("/api/config");
     const destIds = enabledDestinationIds(cfg);
 
-    const [histories, latestRuns] = await Promise.all([
+    const [histories, latestRuns, runState] = await Promise.all([
       Promise.all(destIds.map((id) => whileStorageWakes(id, apiFetch(`/api/history/${id}`), () => {
         summaryEl.textContent = STORAGE_WAIT_TEXT;
       }).catch((e) => {
@@ -355,6 +482,7 @@ async function loadOverview() {
         return {};
       }))),
       apiFetch("/api/runlogs"),
+      apiFetch("/api/backup/status").catch(() => null), // the status bar's "Backing up..."
     ]);
     // Per app, the single most recent backup across every enabled destination.
     const latestByApp = {};
@@ -396,6 +524,16 @@ async function loadOverview() {
     });
     summaryEl.append(enabledStat, destinationsStat(destIds), cronStat, retentionStat(cfg, destIds));
     showScheduleWarning("overview-schedule-warning", cfg.schedule_valid);
+
+    const statusItems = [
+      ...(cfg.self_backup === false ? [] : ["backuparr"]),
+      ...enabledIds,
+    ].map((appId) => ({
+      id: appId, label: appLabel(appId), latest: latestByApp[appId], failure: failureByApp[appId],
+      icon: appId === "backuparr" ? "/static/logo.png" : appMeta(appId) ? `/static/icons/${appMeta(appId).icon}` : null,
+    }));
+    // With no app enabled the page says to add one; the bar has nothing to say.
+    renderOverviewStatus(enabledIds.length ? statusItems : [], !!(runState && runState.running));
 
     // Backuparr's own backup leads, always there (#110); then each enabled app.
     appsEl.appendChild(overviewCard("backuparr", {

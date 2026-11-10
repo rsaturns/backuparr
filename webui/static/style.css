@@ -1089,6 +1089,53 @@ code {
   gap: 14px;
 }
 
+/* The status bar over the app cards (#167). */
+.overview-status-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 16px;
+}
+.overview-status-text { font-weight: 600; }
+.overview-status-extra { color: var(--text-muted); }
+.overview-status-extra::before { content: "\00b7"; margin-right: 10px; }
+.status-icon { width: 24px; height: 24px; flex: none; fill: currentColor; stroke: var(--bg-elevated); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.overview-status[data-state="ok"] .status-icon { color: var(--ok); }
+.overview-status[data-state="fail"] .status-icon { color: var(--danger); }
+.overview-status-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.overview-status-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.overview-status-item:hover, .overview-status-item:focus-visible { background: var(--bg); }
+.overview-status-item .app-icon { width: 20px; height: 20px; flex: none; margin-top: 1px; }
+.overview-status-line { min-width: 0; overflow-wrap: anywhere; line-height: 1.45; }
+.overview-status-error { color: var(--text-muted); }
+@media (max-width: 480px) {
+  /* "n not backed up yet" on its own line, under the text, without the dot. */
+  .overview-status-extra { flex-basis: 100%; padding-left: 34px; }
+  .overview-status-extra::before { content: none; }
+}
+.overview-app-card.flash { animation: card-flash 1.6s ease-out; }
+@keyframes card-flash {
+  from { box-shadow: 0 0 0 3px var(--accent); }
+  to { box-shadow: var(--shadow); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .overview-app-card.flash { animation: none; outline: 3px solid var(--accent); }
+}
+
 .overview-app-card {
   background: var(--bg-elevated);
   border: 1px solid var(--border);

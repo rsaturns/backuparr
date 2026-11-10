@@ -485,6 +485,12 @@ def test_the_page_carries_the_ui_metadata_as_data(authed_client):
                                       "self_app": SELF_APP}
 
 
+def test_the_overview_has_its_status_bar_under_at_a_glance(authed_client):
+    """#167: app.js fills it; it sits between At a Glance and the app cards."""
+    html = authed_client.get("/").get_data(as_text=True)
+    assert html.index("At a Glance") < html.index('id="overview-status"') < html.index('id="overview-apps"')
+
+
 def test_backuparrs_own_card_heads_server_and_is_never_an_app(authed_client):
     """#165: its switch is self_backup, out of Schedule & Notifications; the
     card has no data-app, so Save never sends it as an app."""
