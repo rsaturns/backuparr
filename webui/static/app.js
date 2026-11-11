@@ -2982,19 +2982,66 @@ function updateHistoryBulkBar() {
   });
 }
 
-function downloadPicked() {
-  const destId = document.getElementById("h-destination").value;
-  const backups = Array.from(HISTORY_PICKED.values()).filter((item) => item.kind === "backup");
-  if (!backups.length) return;
-  const url = backups.length === 1
-    ? `/api/history/${encodeURIComponent(destId)}/${encodeURIComponent(backups[0].app)}/${encodeURIComponent(backups[0].file)}/download`
-    : `/api/history/${encodeURIComponent(destId)}/download?${backups.map((b) => `b=${encodeURIComponent(`${b.app}/${b.file}`)}`).join("&")}`;
-  if (backups.some((b) => b.encrypted && b.app !== "backuparr")) toast(DECRYPTED_DOWNLOAD_TEXT, "warn");
+// While several backups are deleted or prepared for download (#164): the
+// bar shows a spinner and a count, and nothing in History can change the
+// selection meanwhile.
+let HISTORY_BUSY = false;
+
+function setHistoryBusy(text) {
+  HISTORY_BUSY = !!text;
+  const count = document.getElementById("history-bulk-count");
+  if (text) {
+    const spinner = document.createElement("span");
+    spinner.className = "spinner";
+    spinner.setAttribute("aria-hidden", "true");
+    count.replaceChildren(spinner, document.createTextNode(` ${text}`));
+  }
+  ["history-bulk-download", "history-bulk-delete", "history-bulk-cancel", "history-select-btn", "h-destination"]
+    .forEach((id) => { document.getElementById(id).disabled = HISTORY_BUSY; });
+  document.querySelectorAll("#history-root .history-select").forEach((box) => { box.disabled = HISTORY_BUSY; });
+  if (!text) updateHistoryBulkBar();
+}
+
+function downloadUrl(url) {
   const link = document.createElement("a");
   link.href = url;
   document.body.appendChild(link);
   link.click();
   link.remove();
+}
+
+async function downloadPicked() {
+  const destId = document.getElementById("h-destination").value;
+  const backups = Array.from(HISTORY_PICKED.values()).filter((item) => item.kind === "backup");
+  if (!backups.length || HISTORY_BUSY) return;
+  if (backups.some((b) => b.encrypted && b.app !== "backuparr")) toast(DECRYPTED_DOWNLOAD_TEXT, "warn");
+  const dest = encodeURIComponent(destId);
+  if (backups.length === 1) {
+    downloadUrl(`/api/history/${dest}/${encodeURIComponent(backups[0].app)}/${encodeURIComponent(backups[0].file)}/download`);
+    return;
+  }
+  // Several come as one zip, built on the server first.
+  setHistoryBusy(`Preparing 0 of ${backups.length}...`);
+  try {
+    const { job_id: jobId } = await apiFetch(`/api/history/${dest}/download`, {
+      method: "POST", body: JSON.stringify({ backups: backups.map(({ app, file }) => ({ app, file })) }),
+    });
+    const job = `/api/history/${dest}/download/${encodeURIComponent(jobId)}`;
+    for (;;) {
+      await sleep(1000);
+      const status = await apiFetch(job);
+      if (status.state === "failed") throw new Error(status.message);
+      setHistoryBusy(`Preparing ${status.done} of ${status.total}...`);
+      if (status.state === "ready") {
+        downloadUrl(`${job}/file`);
+        break;
+      }
+    }
+  } catch (e) {
+    toast(`Download failed: ${clause(e.message)}`, "fail");
+  } finally {
+    setHistoryBusy(null);
+  }
 }
 
 function countText(n, one, many) {
@@ -3004,28 +3051,44 @@ function countText(n, one, many) {
 async function deletePicked() {
   const destId = document.getElementById("h-destination").value;
   const items = Array.from(HISTORY_PICKED.values());
-  const backups = items.filter((item) => item.kind === "backup").map(({ app, file }) => ({ app, file }));
-  const runs = items.filter((item) => item.kind === "run").map(({ app, run_id }) => ({ app, run_id }));
+  const backups = items.filter((item) => item.kind === "backup");
+  const runs = items.filter((item) => item.kind === "run");
   const what = [backups.length && countText(backups.length, "backup", "backups"),
     runs.length && countText(runs.length, "failed run", "failed runs")].filter(Boolean).join(" and ");
-  if (!what || !confirm(`Delete ${what} from ${destLabel(destId)}? This can't be undone.`)) return;
-  const btn = document.getElementById("history-bulk-delete");
-  btn.disabled = true;
-  try {
-    const result = await whileStorageWakes(destId, apiFetch(`/api/history/${destId}/delete`, {
-      method: "POST", body: JSON.stringify({ backups, runs }),
-    }), () => toast(STORAGE_WAIT_TEXT));
-    if (result.failed.length) {
-      toast(`Deleted ${result.deleted.length}; ${result.failed.length} couldn't be: ${clause(result.failed[0].error)}`, "fail");
-    } else {
-      toast(`Deleted ${countText(result.deleted.length, "item", "items")}.`, "ok");
+  if (!what || HISTORY_BUSY || !confirm(`Delete ${what} from ${destLabel(destId)}? This can't be undone.`)) return;
+  // One per request, so the count goes up by one; each is one delete either way.
+  const failed = [];
+  let deleted = 0;
+  for (const [index, item] of items.entries()) {
+    setHistoryBusy(`Deleting ${index + 1} of ${items.length}...`);
+    const body = item.kind === "backup"
+      ? { backups: [{ app: item.app, file: item.file }], runs: [] }
+      : { backups: [], runs: [{ app: item.app, run_id: item.run_id }] };
+    try {
+      const request = apiFetch(`/api/history/${destId}/delete`, { method: "POST", body: JSON.stringify(body) });
+      const result = await (index === 0 ? whileStorageWakes(destId, request, () => toast(STORAGE_WAIT_TEXT)) : request);
+      deleted += result.deleted.length;
+      result.failed.forEach((f) => failed.push({ item, error: f.error }));
+    } catch (e) {
+      failed.push({ item, error: e.message });
     }
-    setHistorySelecting(false);
-    loadHistory();
-  } catch (e) {
-    toast(`Delete failed: ${clause(e.message)}`, "fail");
-    updateHistoryBulkBar();
   }
+  setHistoryBusy(null);
+  await loadHistory();
+  if (!failed.length) {
+    toast(`Deleted ${countText(deleted, "item", "items")}.`, "ok");
+    setHistorySelecting(false);
+    return;
+  }
+  // The ones that couldn't be deleted stay picked, with why, in the bar.
+  HISTORY_PICKED.clear();
+  failed.forEach(({ item }) => HISTORY_PICKED.set(historyKey(item), item));
+  document.querySelectorAll("#history-root tbody .history-select").forEach((box) => {
+    box.checked = HISTORY_PICKED.has(historyKey(JSON.parse(box.dataset.item)));
+  });
+  updateHistoryBulkBar();
+  document.getElementById("history-bulk-count").textContent =
+    `Deleted ${deleted}; ${failed.length} couldn't be: ${clause(failed[0].error)}`;
 }
 
 // ---------------------------------------------------------- restore tab ----

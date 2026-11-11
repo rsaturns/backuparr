@@ -4,6 +4,8 @@ import logging
 import os
 
 import pytest
+
+from conftest import PASSWORD
 import requests
 
 import restore_actions
@@ -555,6 +557,22 @@ def test_bulk_delete_refuses_anything_that_isnt_a_listed_backup(authed_client, r
     assert rclone["delete"] == []
 
 
+def bulk_download(client, dest, *items):
+    """Starts a bulk download job and waits until it's ready or failed:
+    (status, job url)."""
+    import time
+    backups = [dict(zip(("app", "file"), item.split("/"))) for item in items]
+    response = client.post(f"/api/history/{dest}/download", json={"backups": backups})
+    assert response.status_code == 202, response.get_json()
+    job = f"/api/history/{dest}/download/{response.get_json()['job_id']}"
+    for _ in range(200):
+        status = client.get(job).get_json()
+        if status["state"] != "preparing":
+            return status, job
+        time.sleep(0.02)
+    raise AssertionError("the download never finished")
+
+
 def test_a_bulk_download_is_one_zip_of_the_backups_as_single_downloads_give_them(authed_client, isolated_webui):
     import io
     import zipfile as zf
@@ -566,27 +584,69 @@ def test_a_bulk_download_is_one_zip_of_the_backups_as_single_downloads_give_them
     sealed = archive_crypto.encrypt_bytes(b"PK self")
     with open(os.path.join(own, "backuparr_1.enc"), "wb") as f:
         f.write(sealed)
-    response = authed_client.get("/api/history/local/download?b=radarr/radarr_1.zip&b=radarr/radarr_2.zip.enc"
-                                 "&b=backuparr/backuparr_1.enc")
+    status, job = bulk_download(authed_client, "local", "radarr/radarr_1.zip", "radarr/radarr_2.zip.enc",
+                                "backuparr/backuparr_1.enc")
+    assert status == {"state": "ready", "done": 3, "total": 3}
+    response = authed_client.get(f"{job}/file")
     assert response.status_code == 200 and "backuparr-local-" in response.headers["Content-Disposition"]
     with zf.ZipFile(io.BytesIO(response.data)) as z:
         assert sorted(z.namelist()) == ["backuparr/backuparr_1.enc", "radarr/radarr_1.zip", "radarr/radarr_2.zip"]
         assert z.read("radarr/radarr_2.zip") == b"PK secret" and z.read("backuparr/backuparr_1.enc") == sealed
+    response.close()
+    # Fetched once: then it's gone from the server.
+    assert authed_client.get(f"{job}/file").status_code == 404
+    assert authed_client.get(job).status_code == 404
 
 
 def test_a_bulk_download_names_a_backup_that_isnt_there(authed_client, isolated_webui):
     local_backup(isolated_webui, "radarr_1.zip")
-    response = authed_client.get("/api/history/local/download?b=radarr/radarr_1.zip&b=radarr/radarr_9.zip")
-    assert response.status_code == 404 and "radarr_9.zip" in response.get_json()["error"]
+    status, job = bulk_download(authed_client, "local", "radarr/radarr_1.zip", "radarr/radarr_9.zip")
+    assert status["state"] == "failed" and "radarr_9.zip" in status["message"]
+    assert authed_client.get(f"{job}/file").status_code == 409
 
 
 def test_a_bulk_download_from_the_cloud_leaves_no_copies(authed_client, rclone, dropbox):
-    response = authed_client.get("/api/history/dropbox/download?b=radarr/radarr_1.zip&b=sonarr/sonarr_1.zip")
+    status, job = bulk_download(authed_client, "dropbox", "radarr/radarr_1.zip", "sonarr/sonarr_1.zip")
+    assert status["state"] == "ready"
+    tmp_dir = os.path.dirname(rclone["copyto"][0][1])
+    assert os.path.isdir(tmp_dir)
+    response = authed_client.get(f"{job}/file")
     assert response.status_code == 200
     response.close()
-    assert not os.path.exists(os.path.dirname(rclone["copyto"][0][1]))
+    assert not os.path.exists(tmp_dir)
 
 
 def test_a_bulk_download_needs_backups_picked(authed_client, rclone):
-    assert authed_client.get("/api/history/local/download").status_code == 400
-    assert authed_client.get("/api/history/local/download?b=stranger/a.zip").status_code == 400
+    assert authed_client.post("/api/history/local/download", json={}).status_code == 400
+    assert authed_client.post("/api/history/local/download", json={"backups": [{"app": "stranger", "file": "a.zip"}]}).status_code == 400
+
+
+def test_a_bulk_download_is_only_for_the_browser_that_started_it(authed_client, isolated_webui):
+    local_backup(isolated_webui, "radarr_1.zip")
+    _, job = bulk_download(authed_client, "local", "radarr/radarr_1.zip")
+    other = isolated_webui.app.test_client()
+    assert other.post("/api/login", json={"username": "admin", "password": PASSWORD}).status_code == 200
+    assert other.get(job).status_code == 404 and other.get(f"{job}/file").status_code == 404
+    # Nor under another destination's address.
+    assert authed_client.get(job.replace("/local/", "/dropbox/")).status_code == 404
+
+
+def test_an_unfetched_bulk_download_is_removed(authed_client, isolated_webui, monkeypatch):
+    local_backup(isolated_webui, "radarr_1.zip")
+    status, job = bulk_download(authed_client, "local", "radarr/radarr_1.zip")
+    jobs = isolated_webui.backups.DOWNLOAD_JOBS
+    (_, prepared), = jobs.jobs.values()
+    assert os.path.isdir(prepared["tmp_dir"])
+    prepared["finished"] -= isolated_webui.backups.DOWNLOAD_TTL + 1
+    isolated_webui.backups._expire_downloads()
+    assert not os.path.exists(prepared["tmp_dir"]) and not jobs.jobs
+    assert authed_client.get(job).status_code == 404
+
+
+def test_only_a_few_bulk_downloads_are_prepared_at_once(authed_client, isolated_webui):
+    jobs = isolated_webui.backups.DOWNLOAD_JOBS
+    for _ in range(isolated_webui.backups.MAX_DOWNLOADS_PREPARING):
+        jobs.add("someone", {"state": "preparing", "tmp_dir": "/nonexistent", "dest": "local"})
+    response = authed_client.post("/api/history/local/download", json={"backups": [{"app": "radarr", "file": "radarr_1.zip"}]})
+    assert response.status_code == 429
+    jobs.jobs.clear()
