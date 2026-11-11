@@ -181,7 +181,7 @@ def test_prowlarr_and_discovered_apps_lead_their_category(webui):
         "prowlarr", "radarr", "sonarr", "lidarr", "whisparr", "lazylibrarian", "profilarr", "bazarr", "tdarr",
         "sabnzbd", "nzbget",
         "tautulli", "jellyfin", "emby", "plex", "seerr",
-        "pihole",
+        "pihole", "opnsense",
         "vaultwarden"]
     assert html.count('id="discover-btn"') == 1
     assert html.index('data-app="prowlarr"') < html.index('id="discover-btn"') < html.index('class="help-tip"') < html.index('data-app="profilarr"')

@@ -22,7 +22,7 @@ class ConfigError(RuntimeError):
     truncated by a full disk, ...). The message says what to do about it."""
 
 
-APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr", "lazylibrarian", "pihole", "vaultwarden"]
+APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr", "lazylibrarian", "pihole", "vaultwarden", "opnsense"]
 
 # encrypt: whether its backups are encrypted (#147) - on unless turned off,
 # and ignored for an app whose APP_META sets always_encrypted.
@@ -33,7 +33,7 @@ DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "pass
 # archive names never change; each extra one is "<app>-<suffix>" (radarr-4k),
 # an id fixed when it's added because it names the instance's backup folder.
 # Only its display name can change later.
-MULTI_INSTANCE_APPS = ("radarr", "sonarr", "lidarr", "whisparr", "pihole")
+MULTI_INSTANCE_APPS = ("radarr", "sonarr", "lidarr", "whisparr", "pihole", "opnsense")
 MAX_EXTRA_INSTANCES = 10
 _EXTRA_INSTANCE_ID = re.compile(rf"({'|'.join(MULTI_INSTANCE_APPS)})-([a-z0-9]+(?:-[a-z0-9]+)*)")
 _MAX_INSTANCE_ID_LENGTH = 40
@@ -55,6 +55,8 @@ SERVARR_LOGIN_FIELDS = [
 ]
 # Apps whose "password" extra field is encrypted at rest.
 PASSWORD_APPS = ("bazarr", "nzbget", "radarr", "sonarr", "lidarr", "whisparr", "prowlarr")
+# Other extra fields encrypted at rest, by app type.
+SECRET_EXTRA_FIELDS = {"opnsense": ("api_secret",)}
 
 # Settings, History and the Restore and Run & Status pickers group the apps
 # under these, in this order (#148). A category with no apps isn't shown, so
@@ -76,7 +78,7 @@ _APP_CATEGORY = {
     "sabnzbd": "downloaders", "nzbget": "downloaders",
     "plex": "media-servers", "jellyfin": "media-servers", "emby": "media-servers", "tautulli": "media-servers",
     "seerr": "media-servers",
-    "pihole": "network",
+    "pihole": "network", "opnsense": "network",
     "vaultwarden": "security",
 }
 
@@ -86,7 +88,8 @@ _APP_CATEGORY = {
 # (one or more titled lists) and a link to its "docs" page (#151).
 # always_encrypted: True for an app whose backups hold secrets that must never
 # sit readable on a destination (#147) - its card has no "Encrypt backup"
-# toggle.
+# toggle. pins_certificate: its self-signed HTTPS certificate can be trusted
+# on the card and is then pinned (trusted_cert, apps/cert_pin.py, #153).
 APP_META = [
     {"id": "radarr", "label": "Radarr", "icon": "radarr.svg", "key_required": True, "url_placeholder": "http://radarr:7878", "extra_fields": SERVARR_LOGIN_FIELDS, "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
     {"id": "sonarr", "label": "Sonarr", "icon": "sonarr.svg", "key_required": True, "url_placeholder": "http://sonarr:8989", "extra_fields": SERVARR_LOGIN_FIELDS, "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
@@ -254,6 +257,45 @@ APP_META = [
         "max_extra_instances": MAX_EXTRA_INSTANCES,
         "always_encrypted": True,
         "restore_warning": {"lead": "Replaces Pi-hole's settings", "text": "with the backup's - DNS and DHCP settings, local DNS records, adlists, domains, groups and clients, DHCP leases, and its web password, app password and 2FA. Settings set by environment variables (FTLCONF_...) are kept. Pi-hole restarts to apply it. If the backup's app password differs from the one on this card, update the card afterwards."},
+    },
+    {
+        "id": "opnsense",
+        "label": "OPNsense",
+        "icon": "opnsense.svg",
+        "key_required": True,
+        # GET /api/core/backup/download/this with an API key and secret of a
+        # user holding only "Diagnostics: Configuration History" and "Lobby:
+        # Dashboard" (the version) - see apps/opnsense.py. config.xml holds
+        # private keys and password hashes.
+        "key_help": "a user with Diagnostics: Configuration History and Lobby: Dashboard - see the docs",
+        "url_placeholder": "https://192.168.1.1",
+        "extra_fields": [
+            {"name": "api_secret", "label": "API secret", "type": "password", "required": True,
+             "help": "from the same API key file"},
+        ],
+        "multi_instance": True,
+        "max_extra_instances": MAX_EXTRA_INSTANCES,
+        "always_encrypted": True,
+        "pins_certificate": True,
+        "manual_restore": {
+            "docs": "https://rsaturns.github.io/backuparr/apps/opnsense/",
+            "steps": [
+                {"title": "Firewall still running", "steps": [
+                    "Download the backup.",
+                    "In OPNsense, open System > Configuration > Backups.",
+                    "Under Restore, leave Restore areas at All and Reboot after a successful restore ticked.",
+                    "Choose the downloaded file and click Restore configuration. The firewall reboots.",
+                    "If OPNsense asks you to assign the interfaces again, do so.",
+                ]},
+                {"title": "New install", "steps": [
+                    "Download the backup and rename it config.xml.",
+                    "On a second USB stick formatted FAT32, make a folder named conf and put config.xml in it.",
+                    "Boot the OPNsense installer with both sticks plugged in.",
+                    "At \"Press any key to start the configuration importer\", press a key and enter the second stick's device name (for example da1).",
+                    "Log in as installer with the backup's root password and install.",
+                ]},
+            ],
+        },
     },
     {
         "id": "vaultwarden",
@@ -612,6 +654,9 @@ def _secret_fields(cfg):
         fields.append((("apps", instance_id, "api_key"), app, "api_key"))
         if instance_type(instance_id) in PASSWORD_APPS:
             fields.append((("apps", instance_id, "password"), app, "password"))
+        for key in SECRET_EXTRA_FIELDS.get(instance_type(instance_id), ()):
+            if key in app:  # extra fields aren't in DEFAULT_APP until a card saves one
+                fields.append((("apps", instance_id, key), app, key))
     for dest, key in (("gdrive", "client_secret"), ("gdrive", "developer_key"), ("gdrive", "refresh_token"),
                       ("onedrive", "token"), ("dropbox", "token")):
         fields.append((("destinations", dest, key), cfg["destinations"][dest], key))

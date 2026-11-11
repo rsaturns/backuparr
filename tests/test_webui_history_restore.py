@@ -697,7 +697,7 @@ def test_every_manual_restore_has_steps_and_a_docs_page():
     from config_store import APP_META, restore_supported
     from restore_actions import RESTORES
     manual = [m for m in APP_META if m.get("manual_restore")]
-    assert [m["id"] for m in manual] == ["profilarr"]
+    assert [m["id"] for m in manual] == ["profilarr", "opnsense"]
     for meta in manual:
         info = meta["manual_restore"]
         assert info["docs"].startswith("https://rsaturns.github.io/backuparr/apps/")

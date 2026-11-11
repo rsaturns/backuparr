@@ -16,6 +16,7 @@ import tarfile
 import tempfile
 import zipfile
 
+from apps import opnsense
 from apps.base import AppError
 from apps.sqlite_snapshot import quick_check
 from apps.tdarr import COLLECTIONS as TDARR_COLLECTIONS
@@ -165,7 +166,17 @@ def _quick_check(archive, name, work_dir):
         os.remove(db_path)
 
 
+# Apps whose backup is a single file rather than an archive, and its check.
+_SINGLE_FILE = {"opnsense": opnsense.check_config}
+
+
 def _check(app_type, path):
+    if app_type in _SINGLE_FILE:
+        try:
+            _SINGLE_FILE[app_type](path)
+        except AppError as exc:
+            raise ArchiveCheckError(str(exc).partition(": ")[2] or str(exc)) from None
+        return
     try:
         archive = _open(path)
     except (OSError, zipfile.BadZipFile, tarfile.TarError, EOFError) as exc:

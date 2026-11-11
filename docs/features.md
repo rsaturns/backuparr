@@ -7,14 +7,14 @@ nav_order: 2
 
 ## Apps
 
-- Backs up 18 apps: Radarr, Sonarr, Lidarr, Whisparr (v2 and v3), Prowlarr,
+- Backs up 19 apps: Radarr, Sonarr, Lidarr, Whisparr (v2 and v3), Prowlarr,
   Profilarr, Bazarr, Tdarr (2 and 3), SABnzbd, NZBGet, Tautulli, Jellyfin,
-  Emby, Plex, Seerr, LazyLibrarian, Pi-hole (v6) and Vaultwarden. See
-  [Apps](apps/index.md).
+  Emby, Plex, Seerr, LazyLibrarian, Pi-hole (v6), Vaultwarden and OPNsense.
+  See [Apps](apps/index.md).
 - Most apps are backed up through their own API. Jellyfin, Emby, Plex, Seerr,
   LazyLibrarian and Vaultwarden also need a folder mounted into Backuparr.
-- Up to 10 extra instances each of Radarr, Sonarr, Lidarr, Whisparr and
-  Pi-hole, such as a 4K Radarr or a second Pi-hole. See [More than one instance](settings.md#more-than-one-instance).
+- Up to 10 extra instances each of Radarr, Sonarr, Lidarr, Whisparr, Pi-hole
+  and OPNsense, such as a 4K Radarr or a second firewall. See [More than one instance](settings.md#more-than-one-instance).
 - **Prowlarr discovery** fills in the apps Prowlarr already knows, API keys
   included. See [Prowlarr discovery](settings.md#prowlarr-discovery).
 - **Test connection** on every app card.

@@ -38,6 +38,7 @@ from apps.jellyfin import JellyfinApp
 from apps.lazylibrarian import LazyLibrarianApp
 from apps.lidarr import LidarrApp
 from apps.nzbget import NzbgetApp
+from apps.opnsense import OpnsenseApp
 from apps.pihole import PiholeApp
 from apps.plex import PlexApp
 from apps.profilarr import ProfilarrApp
@@ -245,6 +246,7 @@ DRIVERS = {
     "lazylibrarian": LazyLibrarianApp,
     "pihole": PiholeApp,
     "vaultwarden": VaultwardenApp,
+    "opnsense": OpnsenseApp,
 }
 
 
@@ -253,6 +255,8 @@ def _build_app(name, app_cfg):
     if name not in DRIVERS or meta is None:
         raise ValueError(f"Unknown app: {name}")
     extras = {field["name"]: app_cfg.get(field["name"]) or None for field in meta["extra_fields"]}
+    if meta.get("pins_certificate"):
+        extras["trusted_cert"] = app_cfg.get("trusted_cert") or None
     if meta.get("no_api_key"):
         return DRIVERS[name](app_cfg["url"], **extras)
     return DRIVERS[name](app_cfg["url"], app_cfg.get("api_key", ""), **extras)

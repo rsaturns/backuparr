@@ -310,6 +310,7 @@ function overviewCard(appId, { label, icon, latest, failure, latestRun, idleText
     const failLine = document.createElement("span");
     failLine.textContent = `Last run failed: ${clause(failure)}`;
     last.appendChild(failLine);
+    if (isCertificateFailure(failure)) last.appendChild(cardLink(appId));
   } else if (latest) {
     const summaryLine = document.createElement("span");
     summaryLine.textContent = `Last backup: ${fmtTime(latest.mod_time)} (${fmtBytes(latest.size)})`;
@@ -457,6 +458,7 @@ function renderOverviewStatus(items, running) {
     btn.appendChild(line);
     btn.addEventListener("click", () => scrollToOverviewCard(item.id));
     li.appendChild(btn);
+    if (isCertificateFailure(item.failure)) li.appendChild(cardLink(item.id));
     list.appendChild(li);
   });
   bar.appendChild(list);
@@ -933,6 +935,8 @@ function fillAppCard(appId, cfg) {
   });
   const encryptInput = card.querySelector(".f-encrypt");
   if (encryptInput) encryptInput.checked = cfg.encrypt !== false; // absent on always-encrypted apps
+  if (appMeta(appId)?.pins_certificate) card.dataset.trustedCert = cfg.trusted_cert ? JSON.stringify(cfg.trusted_cert) : "";
+  card.querySelector(".cert-trust")?.remove();
   showLoginFields(card, !!(cfg.username || cfg.password));
   const nameInput = card.querySelector(".f-name");
   if (nameInput) {
@@ -990,6 +994,7 @@ function readAppCard(appId) {
   if (encryptInput) out.encrypt = encryptInput.checked;
   const nameInput = card.querySelector(".f-name");
   if (nameInput) out.name = nameInput.value.trim();
+  if (appMeta(appId)?.pins_certificate) out.trusted_cert = card.dataset.trustedCert ? JSON.parse(card.dataset.trustedCert) : null;
   return out;
 }
 
@@ -2057,6 +2062,7 @@ async function runTest({ btn, resultEl, dot, pendingText, request }) {
 
 async function testApp(appId) {
   const card = appCard(appId);
+  card.querySelector(".cert-trust")?.remove();
   const payload = readAppCard(appId);
   payload.request_headers = readRequestHeaders();
   const res = await runTest({
@@ -2071,6 +2077,108 @@ async function testApp(appId) {
       }),
   });
   if (res?.needs_login) revealLoginFields(card);
+  if (res && "certificate" in res) renderCertTrust(card, appId, res);
+}
+
+// "AB:CD:..." - easier to compare with the app's own display.
+function formatFingerprint(sha256) {
+  return sha256.toUpperCase().match(/.{2}/g).join(":");
+}
+
+function certificateDetails(title, cert) {
+  const box = document.createElement("div");
+  box.className = "cert-details";
+  const heading = document.createElement("strong");
+  heading.textContent = title;
+  box.appendChild(heading);
+  const rows = [["Name", cert.subject], ["Expires", new Date(cert.not_after).toLocaleDateString()], ["SHA-256", formatFingerprint(cert.sha256)]];
+  rows.forEach(([label, value]) => {
+    const line = document.createElement("div");
+    const name = document.createElement("span");
+    name.className = "muted";
+    name.textContent = `${label}: `;
+    const text = document.createElement("span");
+    text.textContent = value;
+    if (label === "SHA-256") text.className = "fingerprint";
+    line.append(name, text);
+    box.appendChild(line);
+  });
+  return box;
+}
+
+// A self-signed certificate (#153): what the app presents now, the one
+// trusted until then if it changed, and Trust. Trust checks it's still the
+// same certificate; the card keeps it, and Save stores it.
+function renderCertTrust(card, appId, res) {
+  const block = document.createElement("div");
+  block.className = "cert-trust";
+  if (!res.certificate) {
+    const note = document.createElement("p");
+    note.className = "hint";
+    note.textContent = "Backuparr couldn't read the certificate.";
+    block.appendChild(note);
+  } else {
+    block.appendChild(certificateDetails(res.certificate_changed ? "New certificate" : "Certificate", res.certificate));
+    if (res.trusted_certificate) block.appendChild(certificateDetails("Trusted until now", res.trusted_certificate));
+    const row = document.createElement("div");
+    row.className = "app-card-actions";
+    const trust = document.createElement("button");
+    trust.type = "button";
+    trust.className = "btn btn-primary btn-sm";
+    trust.textContent = "Trust";
+    const result = document.createElement("span");
+    result.className = "test-result";
+    row.append(trust, result);
+    block.appendChild(row);
+    trust.addEventListener("click", async () => {
+      trust.disabled = true;
+      try {
+        const { trusted_cert: trusted } = await apiFetch(`/api/trust-certificate/${appId}`, {
+          method: "POST",
+          body: JSON.stringify({ url: card.querySelector(".f-url").value.trim(), sha256: res.certificate.sha256 }),
+        });
+        card.dataset.trustedCert = JSON.stringify(trusted);
+        await testApp(appId);
+        toast("Certificate trusted. Save to keep it.", "ok");
+      } catch (e) {
+        result.textContent = sentence(e.message);
+        result.className = "test-result fail";
+        trust.disabled = false;
+      }
+    });
+  }
+  card.querySelector(".app-card-actions").after(block);
+}
+
+// A backup that stopped over the app's certificate (#153) is fixed on its
+// card: these failures link there.
+function isCertificateFailure(message) {
+  return /certificate/i.test(message || "") && /trust (it|the new one)/i.test(message || "");
+}
+
+function goToAppCard(appId) {
+  document.querySelector('.tab-btn[data-tab="settings"]').click();
+  const card = appCard(appId);
+  if (!card) return;
+  revealAppCard(card);
+  setAppCardExpanded(card, true);
+  card.scrollIntoView({ behavior: "smooth", block: "center" });
+  card.classList.remove("flash");
+  void card.offsetWidth; // restart the highlight
+  card.classList.add("flash");
+  setTimeout(() => card.classList.remove("flash"), 1700);
+}
+
+function cardLink(appId) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "link-btn card-link";
+  btn.textContent = "Check the card";
+  btn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    goToAppCard(appId);
+  });
+  return btn;
 }
 
 async function testDestination(destId) {
@@ -2583,6 +2691,7 @@ function renderRunState(state) {
     addPart("OK:", (state.ok || []).join(", ") || "none");
     if ((state.failed || []).length) {
       addPart("Failed:", state.failed.join("; "), true);
+      state.failed.filter(isCertificateFailure).forEach((entry) => summary.appendChild(cardLink(entry.split(": ")[0])));
     }
   }
 

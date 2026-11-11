@@ -34,6 +34,7 @@ body:
         - LazyLibrarian
         - Pi-hole
         - Vaultwarden
+        - OPNsense
         - Web UI / general
         - Not app-specific
     validations:
