@@ -81,9 +81,12 @@ _APP_CATEGORY = {
 }
 
 # Drives the web UI's forms generically. restore_warning is shown on the
-# Restore tab before an app's restore. always_encrypted: True for an app
-# whose backups hold secrets that must never sit readable on a destination
-# (#147) - its card has no "Encrypt backup" toggle.
+# Restore tab before an app's restore. manual_restore: an app Backuparr can't
+# restore itself - the Restore tab offers the backup's download, its "steps"
+# (one or more titled lists) and a link to its "docs" page (#151).
+# always_encrypted: True for an app whose backups hold secrets that must never
+# sit readable on a destination (#147) - its card has no "Encrypt backup"
+# toggle.
 APP_META = [
     {"id": "radarr", "label": "Radarr", "icon": "radarr.svg", "key_required": True, "url_placeholder": "http://radarr:7878", "extra_fields": SERVARR_LOGIN_FIELDS, "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
     {"id": "sonarr", "label": "Sonarr", "icon": "sonarr.svg", "key_required": True, "url_placeholder": "http://sonarr:8989", "extra_fields": SERVARR_LOGIN_FIELDS, "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
@@ -97,8 +100,21 @@ APP_META = [
         "key_required": True,
         "url_placeholder": "http://profilarr:6868",
         "extra_fields": [],
-        # Profilarr's restore has no public API - see docs/apps/profilarr.md.
-        "restore_supported": False,
+        # Profilarr's restore is a form on its own Backups page, applied when
+        # it restarts - no API. The Restore tab offers the download and these
+        # steps instead (#151), from https://profilarr.com/installation/backups.
+        "manual_restore": {
+            "docs": "https://rsaturns.github.io/backuparr/apps/profilarr/",
+            "steps": [
+                {"title": "Restore in Profilarr", "steps": [
+                    "Download the backup.",
+                    "In Profilarr, open Settings > Backups. The restore replaces all of Profilarr's data, so click Create Backup first if you might need it.",
+                    "Click Upload Backup and pick the downloaded file.",
+                    "Click Restore on its row, then restart Profilarr (for example docker restart profilarr).",
+                    "If Profilarr asks, create an account on its setup page. Then add back what its backups leave out: the Arr instances, notification services and API keys.",
+                ]},
+            ],
+        },
     },
     {
         "id": "bazarr",
@@ -716,7 +732,10 @@ def key_required(name):
 
 
 def restore_supported(name):
-    return (app_meta(name) or {}).get("restore_supported", True)
+    """Whether Backuparr restores the app itself. An app with manual_restore
+    gets a download and steps on the Restore tab instead (#151)."""
+    meta = app_meta(name) or {}
+    return not meta.get("manual_restore") and meta.get("restore_supported", True)
 
 
 def always_encrypted(name):

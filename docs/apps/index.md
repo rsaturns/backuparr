@@ -10,7 +10,7 @@ has_toc: false
 | App | Backup | Restore |
 |---|---|---|
 | Radarr / Sonarr / Lidarr / Whisparr / Prowlarr | The app's own backup zip (`POST /system/backup`), downloaded and then deleted on the server. If the app asks every address to log in, it needs its login on the card or **Disabled for Local Addresses** - see the [Radarr, Sonarr and Lidarr note](servarr.md) | Uploaded to `/system/backup/restore/upload`; the app restarts itself. Whisparr - see the [Whisparr note](whisparr.md) |
-| Profilarr | The app's own backup (`POST /api/v1/backups`), downloaded and then deleted on the server | Manual only - see the [Profilarr note](profilarr.md) |
+| Profilarr | The app's own backup (`POST /api/v1/backups`), downloaded and then deleted on the server | By hand: the Restore tab gives the download and the steps - see the [Profilarr note](profilarr.md) |
 | Bazarr | The app's own backup (`POST /api/system/backups`), downloaded and then deleted on the server | Written into Bazarr's mounted backup folder, then restored over the API. Downloads depend on Bazarr's web auth - see the [Bazarr note](bazarr.md) |
 | Tdarr | Every internal database collection, read over `/api/v2/cruddb` | Destructive: each collection is wiped, then refilled - see the [Tdarr note](tdarr.md) |
 | SABnzbd | `get_config` over the API. SABnzbd masks every password as `**********` | Settings and Usenet servers over `set_config`; you're asked for each server's password. Categories, RSS feeds and sorters aren't restored |

@@ -51,7 +51,8 @@ See [Backups and history](backups.md).
 
 - Restore from the web UI, with live progress and a log. Every app can be
   restored this way except Profilarr and Tautulli's database, which are
-  restored by hand.
+  restored by hand; for Profilarr the Restore tab gives the download and the
+  steps.
 - A backup is only restored onto the exact app version it came from. When the
   versions differ, the message names the version to install.
 - Each download is checked against the checksum recorded when the backup was

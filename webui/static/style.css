@@ -970,6 +970,14 @@ input:focus, select:focus, textarea:focus {
 .restore-version.fail { color: var(--danger); }
 .restore-version .btn { margin-left: 6px; }
 
+/* An app restored by hand (#151): its download and steps on the Restore tab. */
+.restore-manual { margin: 4px 0 8px; }
+.restore-manual a.btn { display: inline-block; text-decoration: none; }
+.restore-steps-title { font-size: 15px; margin: 16px 0 6px; }
+.restore-steps { margin: 0 0 8px; padding-left: 22px; }
+.restore-steps li { margin: 4px 0; line-height: 1.45; }
+.restore-manual a:not(.btn) { color: var(--accent); }
+
 .server-pw-row {
   display: flex;
   align-items: center;

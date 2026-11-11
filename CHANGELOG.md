@@ -20,6 +20,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- The Restore tab lists Profilarr too: picking it shows a Download button (decrypted), the steps for restoring it in Profilarr and a link to its docs page, in place of Restore (#151).
 - The web server is now Hypercorn instead of Waitress, to serve HTTP and HTTPS from one process (#177).
 - Over HTTPS the login cookie is Secure and has its own name, so signing in over HTTP and HTTPS works side by side (#177).
 - Backuparr's own backup uses the same encryption format (#147). Its backups from before 3.0 no longer restore: the first start of 3.0 makes a new one straight away when it has a destination, and restoring an old one (or the decrypt command) says to use Backuparr 2.5.6. Old ones stay until retention removes them (#162).
