@@ -7,10 +7,10 @@ nav_order: 2
 
 ## Apps
 
-- Backs up 20 apps: Radarr, Sonarr, Lidarr, Whisparr (v2 and v3), Prowlarr,
+- Backs up 21 apps: Radarr, Sonarr, Lidarr, Whisparr (v2 and v3), Prowlarr,
   Profilarr, Bazarr, Tdarr (2 and 3), SABnzbd, NZBGet, Tautulli, Jellyfin,
-  Emby, Plex, Seerr, LazyLibrarian, Pi-hole (v6), Vaultwarden, OPNsense and
-  pfSense. See [Apps](apps/index.md).
+  Emby, Plex, Seerr, Immich (its database), LazyLibrarian, Pi-hole (v6),
+  Vaultwarden, OPNsense and pfSense. See [Apps](apps/index.md).
 - Most apps are backed up through their own API. Jellyfin, Emby, Plex, Seerr,
   LazyLibrarian and Vaultwarden also need a folder mounted into Backuparr.
 - Up to 10 extra instances each of Radarr, Sonarr, Lidarr, Whisparr, Pi-hole,

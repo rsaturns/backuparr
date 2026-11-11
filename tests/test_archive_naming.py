@@ -19,6 +19,7 @@ def make_zip(path):
     ("backup-2026-10-06-172005.tar.gz", ".tar.gz"),
     ("backup.tar.xz", ".tar.xz"),
     ("dump.sqlite", ".sqlite"),
+    ("immich-database.sql.gz", ".sql.gz"),
     ("no_extension", ".bin"),
 ])
 def test_non_zip_archives_keep_their_own_suffix(tmp_path, name, expected):

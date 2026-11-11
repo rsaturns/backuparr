@@ -141,6 +141,18 @@ def _pihole_done(result):
     return "pihole restore complete, Pi-hole restarted to apply it"
 
 
+def _immich(app, tmp_dir, local_zip, options):
+    result = app.restore_from_file(local_zip)
+    return {**result, "attention": not result.get("key_ok")}
+
+
+def _immich_done(result):
+    if not result.get("key_ok"):
+        return ("immich restore complete, but the API key on its card no longer works: the restored database has the "
+                "API keys it was backed up with. Put that one on the card, or create a new one in Immich")
+    return "immich restore complete, Immich restarted with the restored database"
+
+
 def _tautulli(app, tmp_dir, local_zip, options):
     return {"summary": _extracted(app, tmp_dir, local_zip, options)}
 
@@ -194,6 +206,7 @@ RESTORES = {
         else "tautulli restore uploaded")),
     "sabnzbd": Restore("restoring sabnzbd config", _sabnzbd, "sabnzbd restore complete"),
     "pihole": Restore("importing the backup into {name} with Teleporter", _pihole, _pihole_done),
+    "immich": Restore("restoring {name}'s database, Immich is in maintenance mode", _immich, _immich_done),
 }
 
 

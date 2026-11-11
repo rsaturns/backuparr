@@ -31,6 +31,7 @@ body:
         - Emby
         - Plex
         - Seerr
+        - Immich
         - LazyLibrarian
         - Pi-hole
         - Vaultwarden

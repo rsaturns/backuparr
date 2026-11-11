@@ -1,7 +1,7 @@
 ---
 title: OPNsense
 parent: Apps
-nav_order: 6
+nav_order: 7
 ---
 
 # OPNsense

@@ -1,7 +1,7 @@
 ---
 title: Pi-hole
 parent: Apps
-nav_order: 8
+nav_order: 9
 ---
 
 # Pi-hole
