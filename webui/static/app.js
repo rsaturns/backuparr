@@ -3114,9 +3114,9 @@ function initRestoreAppOptions() {
   const select = document.getElementById("r-app");
   const previous = select.value;
   select.replaceChildren();
-  // restore_supported defaults to true; only explicit opt-outs (e.g. Profilarr) are excluded.
-  // Saved extra instances follow their app.
-  addCategoryOptions(select, APP_META.filter((m) => m.restore_supported !== false).flatMap((m) =>
+  // restore_supported defaults to true; an app restored by hand (manual_restore,
+  // #151) is listed for its download and steps. Saved extra instances follow their app.
+  addCategoryOptions(select, APP_META.filter((m) => m.restore_supported !== false || m.manual_restore).flatMap((m) =>
     [m.id, ...Array.from(INSTANCE_NAMES.keys()).filter((appId) => instanceType(appId) === m.id)]));
   if (Array.from(select.options).some((opt) => opt.value === previous)) select.value = previous;
 }
@@ -3190,8 +3190,13 @@ async function loadRestoreFiles() {
   fileSelect.innerHTML = "<option>Loading...</option>";
   document.getElementById("r-extra").innerHTML = "";
   showRestoreKeyField(false);
+  const manual = Boolean(appMeta(appId)?.manual_restore);
+  document.getElementById("r-auto").classList.toggle("hidden", manual);
+  document.getElementById("r-manual").classList.toggle("hidden", !manual);
+  document.getElementById("r-manual").replaceChildren();
   if (!destId) {
     fileSelect.innerHTML = "<option>No destinations enabled</option>";
+    if (manual) renderManualRestore();
     return;
   }
   try {
@@ -3202,6 +3207,7 @@ async function loadRestoreFiles() {
     if (!res.files.length) {
       fileSelect.innerHTML = '<option value="">No backups found</option>';
       setRestoreReady(false);
+      if (manual) renderManualRestore();
       return;
     }
     res.files.forEach((f) => {
@@ -3241,9 +3247,65 @@ function restoreKey() {
   return document.getElementById("r-key").value.trim();
 }
 
+// An app Backuparr can't restore itself (#151): the picked backup's download
+// (decrypted, like History's) and the steps for putting it back by hand.
+function renderManualRestore() {
+  const destId = document.getElementById("r-destination").value;
+  const appId = document.getElementById("r-app").value;
+  const file = document.getElementById("r-file").value;
+  const meta = appMeta(appId);
+  const root = document.getElementById("r-manual");
+  root.replaceChildren();
+  const intro = document.createElement("p");
+  intro.className = "hint";
+  intro.textContent = `Backuparr can't restore ${meta.label} itself. Download the backup and follow these steps.`;
+  root.appendChild(intro);
+  if (destId && file) {
+    const row = document.createElement("div");
+    row.className = "save-row";
+    const link = document.createElement("a");
+    link.className = "btn btn-primary";
+    link.href = `/api/history/${encodeURIComponent(destId)}/${encodeURIComponent(appId)}/${encodeURIComponent(file)}/download`;
+    link.textContent = "Download";
+    row.appendChild(link);
+    root.appendChild(row);
+    if (file.endsWith(".enc")) {
+      const note = document.createElement("p");
+      note.className = "hint";
+      note.textContent = DECRYPTED_DOWNLOAD_TEXT;
+      root.appendChild(note);
+    }
+  }
+  meta.manual_restore.steps.forEach(({ title, steps }) => {
+    const heading = document.createElement("h3");
+    heading.className = "restore-steps-title";
+    heading.textContent = title;
+    const list = document.createElement("ol");
+    list.className = "restore-steps";
+    steps.forEach((step) => {
+      const item = document.createElement("li");
+      item.textContent = step;
+      list.appendChild(item);
+    });
+    root.append(heading, list);
+  });
+  const docs = document.createElement("a");
+  docs.href = meta.manual_restore.docs;
+  docs.target = "_blank";
+  docs.rel = "noopener noreferrer";
+  docs.textContent = "More in the docs";
+  const more = document.createElement("p");
+  more.appendChild(docs);
+  root.appendChild(more);
+}
+
 async function renderRestoreExtra() {
   const destId = document.getElementById("r-destination").value;
   const appId = document.getElementById("r-app").value;
+  if (appMeta(appId)?.manual_restore) {
+    renderManualRestore();
+    return;
+  }
   const file = document.getElementById("r-file").value;
   const extraRoot = document.getElementById("r-extra");
   extraRoot.innerHTML = "";

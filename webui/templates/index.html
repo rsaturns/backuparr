@@ -510,23 +510,27 @@
         <span class="field-label">Backup file</span>
         <select id="r-file"></select>
       </div>
-      <label class="field checkbox-field">
-        <input type="checkbox" id="r-override-toggle">
-        <span>Restore to a different target (override the URL / API key configured in Settings, for this restore only)</span>
-      </label>
-      <div id="r-override" class="hidden"></div>
-      <label class="field hidden" id="r-key-field">
-        <span class="field-label">Encryption key <span class="muted">(the key this backup was made with)</span></span>
-        <input type="password" id="r-key" autocomplete="off">
-      </label>
-      <div id="r-extra"></div>
-      <label class="field checkbox-field">
-        <input type="checkbox" id="r-confirm">
-        <span>I understand this will overwrite the current configuration.</span>
-      </label>
-      <div class="save-row">
-        <button type="button" class="btn btn-danger" id="restore-btn">Restore</button>
-        <span id="restore-result" class="save-result"></span>
+      <!-- An app Backuparr can't restore itself: its download and steps (#151). -->
+      <div id="r-manual" class="restore-manual hidden"></div>
+      <div id="r-auto">
+        <label class="field checkbox-field">
+          <input type="checkbox" id="r-override-toggle">
+          <span>Restore to a different target (override the URL / API key configured in Settings, for this restore only)</span>
+        </label>
+        <div id="r-override" class="hidden"></div>
+        <label class="field hidden" id="r-key-field">
+          <span class="field-label">Encryption key <span class="muted">(the key this backup was made with)</span></span>
+          <input type="password" id="r-key" autocomplete="off">
+        </label>
+        <div id="r-extra"></div>
+        <label class="field checkbox-field">
+          <input type="checkbox" id="r-confirm">
+          <span>I understand this will overwrite the current configuration.</span>
+        </label>
+        <div class="save-row">
+          <button type="button" class="btn btn-danger" id="restore-btn">Restore</button>
+          <span id="restore-result" class="save-result"></span>
+        </div>
       </div>
       <div id="restore-summary" class="run-summary hidden"></div>
       <pre id="restore-log" class="log-view hidden"></pre>

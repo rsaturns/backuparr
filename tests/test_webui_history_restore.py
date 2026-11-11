@@ -689,3 +689,39 @@ def test_a_bulk_download_counts_up_as_it_prepares(authed_client, isolated_webui,
             break
         time.sleep(0.01)
     assert authed_client.get(job).get_json() == {"state": "ready", "done": 2, "total": 2}
+
+
+# --- apps restored by hand (#151) ---------------------------------------------
+
+def test_every_manual_restore_has_steps_and_a_docs_page():
+    from config_store import APP_META, restore_supported
+    from restore_actions import RESTORES
+    manual = [m for m in APP_META if m.get("manual_restore")]
+    assert [m["id"] for m in manual] == ["profilarr"]
+    for meta in manual:
+        info = meta["manual_restore"]
+        assert info["docs"].startswith("https://rsaturns.github.io/backuparr/apps/")
+        assert info["steps"] and all(group["title"] and group["steps"] for group in info["steps"])
+        assert all(isinstance(step, str) and step.endswith((".", '."')) for group in info["steps"] for step in group["steps"])
+        # Backuparr itself never restores it.
+        assert not restore_supported(meta["id"]) and meta["id"] not in RESTORES
+
+
+def test_a_manual_restore_apps_backup_downloads_decrypted(authed_client, rclone, isolated_webui):
+    import archive_crypto
+    folder = os.path.join(isolated_webui.backups.destination_util.DEFAULT_LOCAL_DIR, "profilarr")
+    os.makedirs(folder, exist_ok=True)
+    with open(os.path.join(folder, "profilarr_20261111_030000.tar.gz.enc"), "wb") as f:
+        f.write(archive_crypto.encrypt_bytes(b"profilarr tar"))
+    response = authed_client.get("/api/history/local/profilarr/profilarr_20261111_030000.tar.gz.enc/download")
+    assert response.status_code == 200 and response.data == b"profilarr tar"
+    assert "profilarr_20261111_030000.tar.gz" in response.headers["Content-Disposition"]
+    assert ".enc" not in response.headers["Content-Disposition"]
+
+
+def test_the_restore_tab_has_the_manual_panel_and_the_steps_reach_the_page(authed_client):
+    from test_webui_settings import ui_meta
+    page = authed_client.get("/").get_data(as_text=True)
+    assert 'id="r-manual"' in page and 'id="r-auto"' in page
+    profilarr = next(m for m in ui_meta(authed_client)["apps"] if m["id"] == "profilarr")
+    assert profilarr["manual_restore"]["steps"][0]["title"] == "Restore in Profilarr"
