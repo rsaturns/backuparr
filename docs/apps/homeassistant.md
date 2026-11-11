@@ -6,7 +6,7 @@ nav_order: 3
 
 # Home Assistant
 
-Home Assistant 2025.1 or newer is backed up over its own backup API: Backuparr
+Home Assistant 2025.5 or newer is backed up over its own backup API: Backuparr
 has Home Assistant make a backup, downloads it, then deletes that copy from
 Home Assistant. No folder is mounted, and Home Assistant's own backups and
 schedule are left alone.

@@ -373,6 +373,24 @@ def test_an_unreachable_home_assistant_is_a_clean_message(monkeypatch):
     assert backup.describe_failure(error.value) == str(error.value)
 
 
+@pytest.mark.parametrize("version, ok", [("2025.4.4", False), ("2025.1.4", False), ("2024.12.5", False),
+                                         ("2025.5.0", True), ("2025.12.0b3", True), ("2026.11.1", True)])
+def test_home_assistant_must_be_2025_5_or_newer(ha, tmp_path, version, ok):
+    ha.version = version
+    if ok:
+        assert make().test_connection().startswith(f"Home Assistant {version} reachable")
+        return
+    for call in (make().test_connection, lambda: make().backup(str(tmp_path))):
+        with pytest.raises(HomeAssistantError, match=f"Home Assistant {version} is too old .* update it to 2025.5 or newer"):
+            call()
+    assert make().app_version() == version  # the version check on the Restore tab can still say which it is
+    assert not ha.messages  # not even logged in
+    ha.onboarded = False
+    with pytest.raises(HomeAssistantError, match="too old"):
+        make().restore_from_file(make_ha_backup(tmp_path / "ha.tar"))
+    assert not ha.http[1:] or not any("upload" in r.path_url for r in ha.http)
+
+
 def test_something_that_isnt_home_assistant_is_refused(ha, monkeypatch):
     def not_ha(url, **options):
         raise websocket.WebSocketBadStatusException("Handshake status %d %s", 404, "Not Found")

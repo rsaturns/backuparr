@@ -99,10 +99,26 @@ _RESULT_S = 20 * 60  # back, but its backup integration not loaded yet
 _HTTP_S = 120
 _DATA_DB = re.compile(r"(?:\./)?data/[^/]+\.db")
 _MIB = 1024 * 1024
+# The first release with everything used here: a backup's agents, events with
+# a reason and the upload's backup_id (2025.2), the restore's result in
+# backup/info (2025.4) and the onboarding restore (2025.5).
+MIN_VERSION = (2025, 5)
+_VERSION_PARTS = re.compile(r"(\d{4})\.(\d{1,2})")
 
 
 class HomeAssistantError(AppError):
     pass
+
+
+def check_version(version):
+    """Raises HomeAssistantError for a Home Assistant older than MIN_VERSION
+    (or one that didn't say its version)."""
+    match = _VERSION_PARTS.match(version or "")
+    if not match:
+        raise HomeAssistantError("homeassistant: Home Assistant didn't say its version")
+    if (int(match.group(1)), int(match.group(2))) < MIN_VERSION:
+        raise HomeAssistantError(f"homeassistant: Home Assistant {version} is too old for Backuparr's backups - "
+                                 f"update it to {MIN_VERSION[0]}.{MIN_VERSION[1]} or newer")
 
 
 class _CommandRefused(HomeAssistantError):
@@ -392,6 +408,7 @@ class HomeAssistantApp:
         refused token."""
         connection = self._open()
         try:
+            check_version(connection.version)
             connection.ws.send(json.dumps({"type": "auth", "access_token": self.token}))
             answer = connection.recv(_CONNECT_S)
         except _Closed:
@@ -414,7 +431,7 @@ class HomeAssistantApp:
                 raise HomeAssistantError("homeassistant: the token must belong to an administrator") from None
             if exc.code == "unknown_command":
                 raise HomeAssistantError("homeassistant: this Home Assistant has no backup API yet - update it to "
-                                         "2025.1 or newer (or wait until it has finished starting)") from None
+                                         "2025.5 or newer (or wait until it has finished starting)") from None
             raise
 
     def _subscribe(self, connection):
@@ -812,6 +829,7 @@ class HomeAssistantApp:
                                      "check it has finished starting")
 
     def _fresh_restore(self, path, contents):
+        check_version(self.app_version())
         self._onboarding_backup_ready()
         install = self._onboarding_install()
         self._refuse_onto_core(contents, install)

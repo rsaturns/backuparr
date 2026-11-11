@@ -379,7 +379,7 @@ APP_META = [
         "id": "homeassistant",
         "label": "Home Assistant",
         "icon": "home-assistant.svg",
-        # Home Assistant's own backup API (2025.1 and newer) over its
+        # Home Assistant's own backup API (2025.5 and newer) over its
         # WebSocket - see apps/homeassistant.py. The options mirror its own
         # backup page; the ones only HA OS and Supervised have show once a
         # Test connection found such an install.
