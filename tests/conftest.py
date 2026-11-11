@@ -44,6 +44,20 @@ def secrets_key_in_tmp(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def tls_in_tmp(tmp_path, monkeypatch):
+    """Every test's HTTPS key and certificate live in its own tmp_path (#177),
+    with no certificate of the user's, HTTPS only unset, and no server
+    listening for certificate changes."""
+    import tls
+    for name in ("BACKUPARR_TLS_CERT", "BACKUPARR_TLS_KEY", "BACKUPARR_HTTPS_ONLY"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(tls, "TLS_DIR", str(tmp_path / "tls"))
+    monkeypatch.setattr(tls, "CERT_PATH", str(tmp_path / "tls" / "cert.pem"))
+    monkeypatch.setattr(tls, "KEY_PATH", str(tmp_path / "tls" / "key.pem"))
+    monkeypatch.setattr(tls, "_listeners", [])
+
+
+@pytest.fixture(autouse=True)
 def skip_archive_check(request, monkeypatch):
     """Most run_backup tests use fake drivers whose placeholder archives
     aren't real backups; tests marked archive_check run the real check."""
@@ -90,8 +104,8 @@ def load_webui():
     environment again, with the session key create_app() would load - but no
     scheduler thread and no log file."""
     # Dependencies first, so each module binds the fresh state of the next.
-    for name in ("webui.settings", "webui.services", "webui.auth", "webui.destinations", "webui.runs",
-                 "webui.backups", "webui.ha", "webui.app"):
+    for name in ("webui.cookies", "webui.settings", "webui.services", "webui.auth", "webui.destinations", "webui.runs",
+                 "webui.backups", "webui.ha", "webui.https", "webui.app"):
         module = importlib.reload(sys.modules[name]) if name in sys.modules else importlib.import_module(name)
     module.app.secret_key = module.auth._load_or_create_secret_key()
     module.app.config.update(TESTING=True)

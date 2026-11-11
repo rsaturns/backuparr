@@ -12,6 +12,9 @@ Fernet; those still open:
 - rclone-remotes.json: the rclone remotes, so a restore needs no second
   password (rclone.conf itself is encrypted with rclone.pass)
 - backuparr-meta.json: Backuparr's version, when it was made, the format
+- tls-key.pem and tls-cert.pem: its own HTTPS key and certificate (#177),
+  so a restored install keeps them and Home Assistant's pin still matches
+  (never your own certificate's files from BACKUPARR_TLS_CERT/_KEY)
 
 Left out: the secrets key itself (it unlocks the archive), the session key
 (a restore signs everyone out) and rclone.pass (not needed).
@@ -36,6 +39,7 @@ import manifest
 import rclone_util
 import runlog
 import secrets_crypto
+import tls
 from apps.base import AppError
 from webui.version import VERSION
 
@@ -48,7 +52,7 @@ META = "backuparr-meta.json"
 REMOTES = "rclone-remotes.json"
 # The only files an archive may hold, and how big they may be unzipped -
 # a restore reads them into memory.
-MEMBERS = {"config.json", "auth.json", "manifest.json", "run_logs.json", REMOTES, META}
+MEMBERS = {"config.json", "auth.json", "manifest.json", "run_logs.json", REMOTES, META, *tls.BACKUP_NAMES}
 MAX_UNZIPPED = 256 * 1024 * 1024
 
 
@@ -74,6 +78,7 @@ def build():
         REMOTES: json.dumps(rclone_util.config_dump(), indent=1).encode("utf-8"),
         META: json.dumps({"format": FORMAT, "backuparr_version": VERSION,
                           "created": datetime.now(timezone.utc).isoformat(timespec="seconds")}).encode("utf-8"),
+        **tls.backup_files(),
     }
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as z:

@@ -23,6 +23,7 @@ import manifest
 import rclone_util
 import runlog
 import secrets_crypto
+import tls
 import self_backup
 from apps.base import AppError
 from webui.version import VERSION
@@ -98,6 +99,14 @@ def _write_or_remove(path, data):
         atomic_file.write_private(path, data)
 
 
+def _current_https_only():
+    try:
+        with open(config_store.CONFIG_PATH, encoding="utf-8") as f:
+            return json.load(f).get("https_only") is True
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
 def apply(members, key):
     """Writes a prepare()d archive in place of this install's state. Returns
     warnings for the user."""
@@ -112,7 +121,12 @@ def apply(members, key):
                         "can't be read.")
 
     manifest.clear()  # also stops a backfill still running from writing over it
-    atomic_file.write_private(config_store.CONFIG_PATH, members["config.json"])
+    # HTTPS only belongs to this install, like its ports: carried over to a
+    # server that hasn't published the HTTPS port, it would lock you out (#177).
+    # Read and written as plain JSON: the secrets key already changed above.
+    restored = json.loads(members["config.json"])
+    restored["https_only"] = _current_https_only()
+    atomic_file.write_private(config_store.CONFIG_PATH, json.dumps(restored, indent=2))
     config_store.forget_secrets_key_acknowledged()
     atomic_file.write_private(auth_store.AUTH_PATH, members["auth.json"])
     _write_or_remove(manifest.path(), members.get("manifest.json"))
@@ -128,5 +142,8 @@ def apply(members, key):
     except rclone_util.RcloneError as exc:
         warnings.append(f"The cloud connections couldn't all be restored ({exc.detail}); "
                         "the next backup sets them up again from the restored settings.")
+    key_pem, cert_pem = (members.get(name) for name in tls.BACKUP_NAMES)
+    if key_pem and cert_pem:
+        tls.restore_files(key_pem, cert_pem)
     log.info("backuparr: restored its configuration from its own backup")
     return warnings

@@ -3,6 +3,8 @@ import time
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
+
+from conftest import PASSWORD
 import requests
 
 from webui.plex_auth import PlexLogin
@@ -212,10 +214,18 @@ def test_mismatched_pin_is_rejected(authed_client, plex_api):
     assert response.status_code == 502 and "account-secret" not in response.text
 
 
-def test_plex_auth_cookie_is_secure_behind_https(authed_client, isolated_webui, plex_api):
-    isolated_webui.app.config["SESSION_COOKIE_SECURE"] = True
+def test_plex_auth_cookie_is_secure_behind_https(authed_client, isolated_webui, plex_api, monkeypatch):
+    monkeypatch.setattr(isolated_webui.cookies, "BEHIND_HTTPS_PROXY", True)
     start(authed_client)
     assert authed_client.get_cookie(isolated_webui.services.PLEX_LOGINS.cookie).secure
+
+
+def test_plex_auth_cookie_over_https_is_secure_and_host_only(authed_client, isolated_webui, plex_api):
+    https = {"base_url": "https://localhost"}
+    assert authed_client.post("/api/login", json={"username": "admin", "password": PASSWORD}, **https).status_code == 200
+    assert authed_client.post("/api/plex/auth", json={}, **https).status_code == 201
+    cookie = authed_client.get_cookie(f"__Host-{isolated_webui.services.PLEX_LOGINS.cookie}", domain="localhost")
+    assert cookie is not None and cookie.secure
 
 
 def test_pending_logins_are_bounded(authed_client, isolated_webui, plex_api):

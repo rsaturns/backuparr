@@ -7,6 +7,8 @@ import threading
 
 from flask import request
 
+from webui import cookies
+
 
 class OwnedJobs:
     def __init__(self, cookie, expired):
@@ -17,7 +19,7 @@ class OwnedJobs:
 
     def owner(self):
         """(this browser's owner id, the id to set as its new cookie or None)."""
-        current = request.cookies.get(self.cookie)
+        current = request.cookies.get(cookies.name(self.cookie))
         if current:
             return current, None
         new = secrets.token_urlsafe(24)
@@ -39,7 +41,7 @@ class OwnedJobs:
         """The job, if this browser started it and it hasn't expired."""
         self.purge_locked()
         owner, job = self.jobs.get(job_id, (None, None))
-        return job if owner is not None and owner == request.cookies.get(self.cookie) else None
+        return job if owner is not None and owner == request.cookies.get(cookies.name(self.cookie)) else None
 
     def current_locked(self, job_id):
         return self.jobs.get(job_id, (None, None))[1]
@@ -57,4 +59,4 @@ class OwnedJobs:
     def set_cookie(self, response, new_owner, secure):
         # Set only when new, so a browser's own cookie is never echoed back.
         if new_owner:
-            response.set_cookie(self.cookie, new_owner, httponly=True, secure=secure, samesite="Strict")
+            response.set_cookie(cookies.name(self.cookie), new_owner, httponly=True, secure=secure, samesite="Strict")

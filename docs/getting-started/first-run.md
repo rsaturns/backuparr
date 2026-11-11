@@ -6,9 +6,11 @@ nav_order: 4
 
 # First run
 
-Open `http://<host>:8990` and create the admin account on the setup screen
+Open `https://<host>:8991` and create the admin account on the setup screen
 (rebuilding a server? choose to [restore Backuparr](../restoring.md#restoring-backuparr-itself)
-there instead).
+there instead). Your browser warns about Backuparr's self-signed certificate
+the first time; see [HTTPS](../security.md#https). Plain HTTP on
+`http://<host>:8990` works too.
 Backuparr then shows your [encryption key](../security.md#your-encryption-key):
 save it in a password manager before you continue - you need it to restore
 Backuparr. Then, on the **Settings** tab:

@@ -51,24 +51,10 @@ mkdir -p "$(dirname "$BACKUPARR_CONFIG")" "$BACKUPARR_LOG_DIR"
 find "$(dirname "$BACKUPARR_CONFIG")" "$BACKUPARR_LOG_DIR" \( ! -user "$PUID" -o ! -group "$PGID" \) \
     -exec chown -h "$PUID:$PGID" {} +
 
-WAITRESS_ARGS=(--host="${WEBUI_HOST}" --port="${WEBUI_PORT}" --threads=6)
-
-# Same opt-in as webui/app.py's ProxyFix wrapping (BACKUPARR_FORCE_HTTPS).
-# Without --trusted-proxy, waitress silently drops incoming
-# X-Forwarded-Proto/-For/-Host headers before the WSGI app ever sees them
-# - ProxyFix alone isn't enough, since it never gets a header to read.
-# The client address (X-Forwarded-For) is only taken from the proxy named
-# in BACKUPARR_TRUSTED_PROXY: from anyone else it could be forged to dodge
-# the login lockout. Without it, every login counts against the proxy's
-# own address.
-FORCE_HTTPS_LOWER="$(printf '%s' "${BACKUPARR_FORCE_HTTPS:-}" | tr '[:upper:]' '[:lower:]')"
-if [ "$FORCE_HTTPS_LOWER" = "1" ] || [ "$FORCE_HTTPS_LOWER" = "true" ] || [ "$FORCE_HTTPS_LOWER" = "yes" ]; then
-    if [ -n "${BACKUPARR_TRUSTED_PROXY:-}" ]; then
-        WAITRESS_ARGS+=(--trusted-proxy="$BACKUPARR_TRUSTED_PROXY" --trusted-proxy-headers="x-forwarded-proto x-forwarded-for x-forwarded-host")
-    else
-        WAITRESS_ARGS+=(--trusted-proxy="*" --trusted-proxy-headers="x-forwarded-proto x-forwarded-host")
-    fi
-fi
+# HTTPS (#177) and any reverse proxy's X-Forwarded-* headers are handled in
+# Python: webui/serve.py and webui/forwarded.py.
+WEBUI_HTTPS_PORT="${WEBUI_HTTPS_PORT:-8991}"
+export WEBUI_HOST WEBUI_PORT WEBUI_HTTPS_PORT
 
 # Backups hold API keys and credentials, so new files are owner-only
 # (0600, directories 0700) unless UMASK says otherwise, e.g. UMASK=022.
@@ -79,5 +65,6 @@ case "$UMASK" in
 esac
 umask "$UMASK"
 
-echo "Backuparr: starting web UI on ${WEBUI_HOST}:${WEBUI_PORT} (as ${USER_NAME}:${GROUP_NAME}, ${PUID}:${PGID})"
-exec su-exec "$PUID:$PGID" waitress-serve "${WAITRESS_ARGS[@]}" --call webui.app:create_app
+echo "Backuparr: starting web UI on ${WEBUI_HOST}, HTTP ${WEBUI_PORT} and HTTPS ${WEBUI_HTTPS_PORT} (as ${USER_NAME}:${GROUP_NAME}, ${PUID}:${PGID})"
+cd /app
+exec su-exec "$PUID:$PGID" python -m webui.serve

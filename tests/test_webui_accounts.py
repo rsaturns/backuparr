@@ -162,6 +162,7 @@ PROTECTED = [
     ("POST", "/api/destinations/dropbox/connect"), ("POST", "/api/destinations/dropbox/disconnect"),
     ("POST", "/api/destinations/local/disconnect"),
     ("POST", "/api/ha/token"), ("POST", "/api/ha/disable"),
+    ("GET", "/api/https"), ("POST", "/api/https/only"),
 ]
 
 
@@ -276,7 +277,7 @@ def test_reset_still_resets_when_the_backup_folder_cant_be_cleared(isolated_webu
 def test_failed_logins_from_concurrent_requests_all_count(isolated_webui):
     import threading
     threads = [threading.Thread(target=lambda: [isolated_webui.auth._login_record_failure("10.0.0.9") for _ in range(200)])
-               for _ in range(6)]  # waitress's thread count
+               for _ in range(6)]  # several request threads at once
     for thread in threads:
         thread.start()
     for thread in threads:
