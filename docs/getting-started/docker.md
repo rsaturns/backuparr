@@ -47,6 +47,8 @@ services:
       #- /share/Container/seerr/config:/mnt/seerr:ro
       # Needed to back up LazyLibrarian - its /config folder (see the LazyLibrarian note).
       #- /share/Container/lazylibrarian/config:/mnt/lazylibrarian
+      # Needed to back up Vaultwarden - its /data folder (see the Vaultwarden note).
+      #- /share/Container/vaultwarden/data:/mnt/vaultwarden:ro
 ```
 
 ```sh
@@ -72,7 +74,7 @@ and the same images are on GitHub Container Registry as
 The optional settings are explained under
 [Environment variables](../environment-variables.md), and the extra volumes in the
 notes for [Bazarr](../apps/bazarr.md), [Jellyfin](../apps/jellyfin.md),
-[Emby](../apps/emby.md), [Plex](../apps/plex.md), [Seerr](../apps/seerr.md) and
-[LazyLibrarian](../apps/lazylibrarian.md).
+[Emby](../apps/emby.md), [Plex](../apps/plex.md), [Seerr](../apps/seerr.md),
+[LazyLibrarian](../apps/lazylibrarian.md) and [Vaultwarden](../apps/vaultwarden.md).
 
 Then go through the [first run](first-run.md).

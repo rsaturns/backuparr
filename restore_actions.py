@@ -185,6 +185,7 @@ RESTORES = {
     "plex": _mounted("Plex"),
     "seerr": _mounted("Seerr"),
     "lazylibrarian": _mounted("LazyLibrarian"),
+    "vaultwarden": _mounted("Vaultwarden"),
     "nzbget": Restore("restoring nzbget settings", _nzbget, lambda result: (
         "nzbget restore complete, NZBGet is reloading to apply it" if result.get("reloaded")
         else "nzbget settings restored, but NZBGet didn't confirm the reload - restart NZBGet to apply them")),

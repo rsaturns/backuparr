@@ -20,6 +20,7 @@ nav_order: 13
 | `apps.plex.data_dir` | Plex's mounted `Plex Media Server` folder - required |
 | `apps.seerr.data_dir` | Seerr's mounted config folder (its `/app/config`) - required |
 | `apps.lazylibrarian.data_dir` | LazyLibrarian's mounted data folder (its `/config`) - required |
+| `apps.vaultwarden.data_dir` | Vaultwarden's mounted data folder (its `/data`) - required |
 | `bazarr_backup_dir` | Bazarr's mounted config/backup folder, for restores |
 | `request_headers` | [Service authentication headers](settings.md#service-authentication-headers): `[{"name": "Proxy-Authorization", "value": "Basic …", "apps": ["radarr"]}]`; omit `apps` for every app |
 | `destinations.local.enabled/path` | Local Storage; the path defaults to `/config/backuparr/backups` |

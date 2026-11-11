@@ -1,5 +1,5 @@
 """Helpers for the drivers that work on an app's folder mounted into this
-container (Jellyfin, Emby, Plex, Seerr, LazyLibrarian)."""
+container (Jellyfin, Emby, Plex, Seerr, LazyLibrarian, Vaultwarden)."""
 import os
 import shutil
 import sqlite3

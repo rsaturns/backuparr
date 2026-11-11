@@ -249,6 +249,7 @@ def test_the_version_is_read_from_inside_each_apps_archive(tmp_path):
         "emby": make_zip(tmp_path / "e.zip", {"backuparr-emby.json": json.dumps({"emby_version": "4.10.2.0"})}),
         "seerr": make_zip(tmp_path / "s.zip", {"backuparr-seerr.json": json.dumps({"seerr_version": "3.5.1"})}),
         "nzbget": make_zip(tmp_path / "n.zip", {"backuparr-nzbget.json": json.dumps({"nzbget_version": "26.3"})}),
+        "vaultwarden": make_zip(tmp_path / "vw.zip", {"backuparr-vaultwarden.json": json.dumps({"vaultwarden_version": "1.37.5"})}),
         # Pi-hole's own Teleporter zip, first lines as FTL v6.8 writes them (lab, 2026-11-10).
         "pihole": make_zip(tmp_path / "ph.zip", {"etc/pihole/pihole.toml": "# Pi-hole configuration file (v6.8)\n# Encoding: UTF-8\n"}),
     }
@@ -256,7 +257,7 @@ def test_the_version_is_read_from_inside_each_apps_archive(tmp_path):
     assert found == {
         "radarr": "v6.4.4.10685", "whisparr": "v3.6.5.1886", "profilarr": "2.3.1", "jellyfin": "12.4.0.0",
         "tautulli": "v2.18.2", "lazylibrarian": "228abd29", "plex": "1.43.5.11079-b3b13e506",
-        "emby": "4.10.2.0", "seerr": "3.5.1", "nzbget": "26.3", "pihole": "FTL v6.8",
+        "emby": "4.10.2.0", "seerr": "3.5.1", "nzbget": "26.3", "pihole": "FTL v6.8", "vaultwarden": "1.37.5",
     }
 
 

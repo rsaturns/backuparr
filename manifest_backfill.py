@@ -8,7 +8,8 @@ Where each app's archive keeps its version (checked against real backups):
 the *arrs' INFO file; Profilarr's data/INFO.json; Jellyfin's manifest.json;
 Tautulli's version_info table; LazyLibrarian's config.ini (a commit);
 Pi-hole's pihole.toml header (FTL's version, as apps/pihole.py records it); and
-for Plex, Emby, Seerr and NZBGet the backuparr-<app>.json Backuparr writes.
+for Plex, Emby, Seerr, NZBGet and Vaultwarden the backuparr-<app>.json
+Backuparr writes.
 Bazarr, SABnzbd and Tdarr archives hold none, so theirs is recorded as
 unknown. An encrypted archive (#147) is decrypted with this install's key to
 read it; one made with another key is recorded with its version unknown."""
@@ -34,7 +35,7 @@ from config_store import enabled_destinations, instance_type, load_config
 log = logging.getLogger("backuparr.manifest")
 
 _SERVARR = {"radarr", "sonarr", "lidarr", "whisparr", "prowlarr"}
-_OWN_MANIFEST = {"plex", "emby", "seerr", "nzbget"}
+_OWN_MANIFEST = {"plex", "emby", "seerr", "nzbget", "vaultwarden"}
 _MAX_MEMBER = 1024 * 1024  # A version file larger than this isn't one.
 
 _running = threading.Lock()

@@ -3222,7 +3222,8 @@ async function loadRestoreFiles() {
 
 // Restore stays disabled until the backup's version has been checked
 // against the installed app - first, while the app is still running, so
-// Emby, Plex, Seerr and LazyLibrarian are only asked to stop after it.
+// Emby, Plex, Seerr, LazyLibrarian and Vaultwarden are only asked to stop
+// after it.
 let restoreCheckSeq = 0;
 
 function setRestoreReady(ready) {

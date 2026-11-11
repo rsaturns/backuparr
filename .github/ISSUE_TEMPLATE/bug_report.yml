@@ -33,6 +33,7 @@ body:
         - Seerr
         - LazyLibrarian
         - Pi-hole
+        - Vaultwarden
         - Web UI / general
         - Not app-specific
     validations:

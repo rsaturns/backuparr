@@ -409,6 +409,7 @@ def test_restore_override_fields_are_the_url_key_and_the_apps_own_extras(isolate
     assert fields("lazylibrarian") == {"url", "api_key", "data_dir"}
     assert fields("nzbget") == {"url", "api_key", "username", "password"}
     assert fields("pihole") == {"url", "api_key"}
+    assert fields("vaultwarden") == {"url", "api_key", "data_dir"}
     assert fields("unknown") == {"url", "api_key"}
 
 
