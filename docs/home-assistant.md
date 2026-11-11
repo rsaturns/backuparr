@@ -9,6 +9,9 @@ Home Assistant can read whether your backups worked, for a dashboard, a
 notification or an automation. Backuparr only answers questions: Home
 Assistant can't change settings, run a backup or restore through it.
 
+This page is about Home Assistant reading Backuparr. To back up Home Assistant
+itself, see the [Home Assistant app note](apps/homeassistant.md).
+
 ## The Backuparr integration
 
 The [Backuparr integration](https://github.com/rsaturns/ha-backuparr) sets

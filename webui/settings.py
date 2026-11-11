@@ -1,5 +1,6 @@
 """Settings: the config API, its validation, and the app and notification tests."""
 import logging
+import re
 
 from flask import Blueprint, jsonify, request
 
@@ -17,11 +18,41 @@ log = logging.getLogger("backuparr.webui")
 
 # Fields an override in the restore request is allowed to replace for a given
 # app - url/api_key plus whatever that app's own extra_fields declare (e.g.
-# bazarr's basic-auth username/password). Never lets an override touch
-# anything outside this set.
+# bazarr's basic-auth username/password), but not its web login or backup
+# options. Never lets an override touch anything outside this set.
 def _restore_override_fields(app_name):
     meta = app_meta(app_name) or {}
-    return {"url", "api_key"} | {f["name"] for f in meta.get("extra_fields", []) if not f.get("login_only")}
+    return {"url", "api_key"} | {f["name"] for f in meta.get("extra_fields", [])
+                                 if not f.get("login_only") and not f.get("option")}
+
+
+_APP_SLUG = re.compile(r"[a-z0-9_]{1,64}")
+MAX_LISTED_APPS = 100
+
+
+def _valid_app_list(value):
+    """An app_list field: [{"slug", "name"}] as a Test connection listed them."""
+    return isinstance(value, list) and len(value) <= MAX_LISTED_APPS and all(
+        isinstance(item, dict) and set(item) == {"slug", "name"} and isinstance(item["slug"], str)
+        and _APP_SLUG.fullmatch(item["slug"]) and isinstance(item["name"], str) and len(item["name"]) <= 100
+        for item in value)
+
+
+def _extra_field_error(name, meta, app_data):
+    """Why a typed extra field's value (#155) can't be saved, or None."""
+    for field in meta.get("extra_fields", []):
+        if field["name"] not in app_data or field.get("locked"):
+            continue
+        value, kind = app_data[field["name"]], field.get("type")
+        if kind == "switch" and not isinstance(value, bool):
+            return f"{name}: {field['name']} must be true or false"
+        if kind == "select" and value not in [choice["value"] for choice in field["choices"]]:
+            return f"{name}: {field['name']} must be one of {', '.join(c['value'] for c in field['choices'])}"
+        if kind == "hidden" and value not in ("", *field.get("choices", ())):
+            return f"{name}: {field['name']} isn't a value Backuparr knows"
+        if kind == "app_list" and not _valid_app_list(value):
+            return f"{name}: {field['name']} must be a list of apps (slug and name)"
+    return None
 
 
 def _missing_required_field(app_name, app_data):
@@ -141,6 +172,9 @@ def _validate_config(data, cfg):
         meta = app_meta(name)
         if "encrypt" in app_data and not isinstance(app_data["encrypt"], bool):
             return f"{name}: encrypt must be true or false"
+        error = _extra_field_error(name, meta, app_data)
+        if error:
+            return error
         if "trusted_cert" in app_data and not (meta.get("pins_certificate") and cert_pin.valid_trusted_cert(app_data["trusted_cert"])):
             return f"{name}: trusted_cert isn't a certificate Backuparr can trust here"
         if app_data.get("enabled") and not app_data.get("url"):
@@ -186,7 +220,8 @@ def api_set_config():
         extra = name not in APP_NAMES
         if extra and name not in cfg["apps"]:
             cfg["apps"][name] = dict(DEFAULT_INSTANCE)
-        fields = set(DEFAULT_INSTANCE if extra else DEFAULT_APP) | {f["name"] for f in app_meta(name).get("extra_fields", [])}
+        fields = set(DEFAULT_INSTANCE if extra else DEFAULT_APP) | {
+            f["name"] for f in app_meta(name).get("extra_fields", []) if not f.get("locked")}
         if app_meta(name).get("pins_certificate"):
             fields.add("trusted_cert")
         cfg["apps"][name].update({k: v for k, v in incoming.items() if k in fields})
@@ -251,7 +286,12 @@ def api_test(app_name):
     try:
         instance = build_app(app_name, app_cfg)
         message = instance.test_connection()
-        return jsonify({"ok": True, "message": message})
+        body = {"ok": True, "message": message}
+        # What the test found for the card to show, e.g. Home Assistant's
+        # install type and its apps (#155).
+        if getattr(instance, "card_info", None):
+            body["card"] = instance.card_info
+        return jsonify(body)
     except Exception as exc:
         body = {"ok": False, "message": humanize_error(exc)}
         if getattr(exc, "needs_login", False):

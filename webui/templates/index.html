@@ -177,12 +177,37 @@
                   </label>
                   {% endif %}
                   {% for f in m.extra_fields %}
+                  {% set install_cls = ' only-install' if f.only_install else '' %}
+                  {% if f.type == 'switch' %}
+                  {# A backup option (#155); a locked one is always on and saves nothing. #}
+                  <label class="field toggle-field{{ install_cls }}"{% if f.only_install %} data-only-install="{{ f.only_install }}"{% endif %}>
+                    <span class="switch">{% if f.locked %}<input type="checkbox" checked disabled>{% else %}<input type="checkbox" class="f-extra" data-field="{{ f.name }}" data-default="{{ 'true' if f.default else 'false' }}">{% endif %}<span class="slider"></span></span>
+                    <span>{{ f.label }}{% if f.help %} <span class="muted">({{ f.help }})</span>{% endif %}</span>
+                  </label>
+                  {% elif f.type == 'select' %}
+                  <label class="field{{ install_cls }}"{% if f.only_install %} data-only-install="{{ f.only_install }}"{% endif %}>
+                    <span class="field-label">{{ f.label }}</span>
+                    <select class="f-extra" data-field="{{ f.name }}" data-default="{{ f.default }}">
+                      {% for c in f.choices %}<option value="{{ c.value }}">{{ c.label }}</option>{% endfor %}
+                    </select>
+                  </label>
+                  {% elif f.type == 'app_list' %}
+                  {# The apps a Test connection listed, shown while the select above is "chosen". #}
+                  <fieldset class="field app-list hidden{{ install_cls }}" data-field="{{ f.name }}"{% if f.only_install %} data-only-install="{{ f.only_install }}"{% endif %}>
+                    <legend class="field-label">{{ f.label }}</legend>
+                    <div class="app-list-items"></div>
+                    <p class="hint app-list-empty">Test the connection to list the installed apps.</p>
+                  </fieldset>
+                  {% elif f.type == 'hidden' %}
+                  <input type="hidden" class="f-extra" data-field="{{ f.name }}">
+                  {% else %}
                   <label class="field{% if f.login_only %} login-field hidden{% endif %}">
                     <span class="field-label">{{ f.label }} {% if f.help %}<span class="muted">({{ f.help }})</span>{% endif %}</span>
                     <input type="{{ f.type }}" class="f-extra" data-field="{{ f.name }}"{% if f.placeholder %} placeholder="{{ f.placeholder }}"{% endif %} autocomplete="off">
                     {# NZBGet's discovered secret is its password: its note goes here. #}
                     {% if m.discoverable and m.no_api_key and f.name == 'password' %}<span class="discovery-key-status hidden" role="status"></span>{% endif %}
                   </label>
+                  {% endif %}
                   {% endfor %}
                   {% if m.id == 'bazarr' %}
                   <label class="field">

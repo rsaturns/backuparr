@@ -16,7 +16,7 @@ import tarfile
 import tempfile
 import zipfile
 
-from apps import immich, opnsense, pfsense
+from apps import homeassistant, immich, opnsense, pfsense
 from apps.base import AppError
 from apps.sqlite_snapshot import quick_check
 from apps.tdarr import COLLECTIONS as TDARR_COLLECTIONS
@@ -166,8 +166,31 @@ def _quick_check(archive, name, work_dir):
         os.remove(db_path)
 
 
-# Apps whose backup is a single file rather than an archive, and its check.
-_SINGLE_FILE = {"opnsense": opnsense.check_config, "pfsense": pfsense.check_config, "immich": immich.check_dump}
+def _quick_check_file(fileobj, work_dir):
+    """quick_check on a database read from fileobj (copied to work_dir)."""
+    db_path = os.path.join(work_dir, "check.db")
+    with open(db_path, "wb") as dst:
+        shutil.copyfileobj(fileobj, dst, _CHUNK)
+    try:
+        return _run_quick_check(db_path)
+    finally:
+        os.remove(db_path)
+
+
+def _check_homeassistant(path):
+    """Home Assistant's own backup (a tar of tars): see apps/homeassistant.py.
+    Its databases get SQLite's quick check like any other app's."""
+    work_dir = tempfile.mkdtemp(prefix="backuparr-check-", dir=os.path.dirname(path) or None)
+    try:
+        homeassistant.check_backup(path, lambda fileobj, _name: _quick_check_file(fileobj, work_dir))
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
+
+
+# Apps whose backup is the app's own file rather than an archive Backuparr
+# reads member by member, and its check.
+_SINGLE_FILE = {"opnsense": opnsense.check_config, "pfsense": pfsense.check_config, "immich": immich.check_dump,
+                "homeassistant": _check_homeassistant}
 
 
 def _check(app_type, path):

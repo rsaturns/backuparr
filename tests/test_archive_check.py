@@ -10,6 +10,7 @@ import tarfile
 import zipfile
 
 import pytest
+from ha_backup import make_ha_backup
 
 import archive_check
 import backup
@@ -83,6 +84,7 @@ def sound_archives(tmp_path):
                                                       "db.sqlite3": db, "rsa_key.pem": "-----BEGIN PRIVATE KEY-----",
                                                       "attachments/a1/f1": b"x"}),
         "immich-2": str(immich_dump(tmp_path / "immich.sql.gz")),
+        "homeassistant": make_ha_backup(tmp_path / "ha.tar", database=db, folders=["ssl", "share"], addons=["core_ssh"]),
     }
 
 

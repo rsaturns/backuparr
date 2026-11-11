@@ -931,8 +931,13 @@ function fillAppCard(appId, cfg) {
   const keyInput = card.querySelector(".f-api_key");
   if (keyInput) keyInput.value = cfg.api_key || ""; // absent for apps without an API key
   card.querySelectorAll(".f-extra").forEach((input) => {
-    input.value = cfg[input.dataset.field] || "";
+    const value = cfg[input.dataset.field];
+    if (input.type === "checkbox") input.checked = typeof value === "boolean" ? value : input.dataset.default === "true";
+    else if (input.tagName === "SELECT") input.value = value || input.dataset.default || "";
+    else input.value = value || "";
   });
+  card.querySelectorAll(".app-list").forEach((list) => renderAppList(list, cfg[list.dataset.field] || [], null));
+  showInstallOptions(card);
   const encryptInput = card.querySelector(".f-encrypt");
   if (encryptInput) encryptInput.checked = cfg.encrypt !== false; // absent on always-encrypted apps
   if (appMeta(appId)?.pins_certificate) card.dataset.trustedCert = cfg.trusted_cert ? JSON.stringify(cfg.trusted_cert) : "";
@@ -945,6 +950,61 @@ function fillAppCard(appId, cfg) {
   }
   setAppCardExpanded(card, !!cfg.enabled);
   if (appId === "prowlarr") updateDiscoveryButton();
+}
+
+// Home Assistant's backup options (#155): the ones only some installs have
+// show once a Test connection found that kind (its install_type), and the
+// list of apps while Apps is "Chosen apps".
+function showInstallOptions(card) {
+  const install = card.querySelector('.f-extra[data-field="install_type"]')?.value || "";
+  const choice = card.querySelector('select.f-extra[data-field="apps"]')?.value;
+  card.querySelectorAll("[data-only-install]").forEach((el) => {
+    let show = el.dataset.onlyInstall === install;
+    if (el.classList.contains("app-list")) show = show && choice === "chosen";
+    el.classList.toggle("hidden", !show);
+  });
+}
+
+function readAppList(list) {
+  return Array.from(list.querySelectorAll("input:checked"), (input) => ({ slug: input.value, name: input.dataset.name }));
+}
+
+// chosen: the apps picked ([{slug, name}]); installed: the apps a Test
+// connection listed, or null before one - then the chosen ones are listed.
+function renderAppList(list, chosen, installed) {
+  const picked = new Set(chosen.map((app) => app.slug));
+  const apps = installed || chosen;
+  const items = list.querySelector(".app-list-items");
+  items.replaceChildren(...apps.map((app) => {
+    const row = document.createElement("label");
+    row.className = "field toggle-field app-list-item";
+    const toggle = document.createElement("span");
+    toggle.className = "switch";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.value = app.slug;
+    input.dataset.name = app.name;
+    input.checked = picked.has(app.slug);
+    const slider = document.createElement("span");
+    slider.className = "slider";
+    toggle.append(input, slider);
+    const name = document.createElement("span");
+    name.textContent = app.name;
+    row.append(toggle, name);
+    return row;
+  }));
+  const empty = list.querySelector(".app-list-empty");
+  empty.textContent = installed ? "No apps are installed." : "Test the connection to list the installed apps.";
+  empty.classList.toggle("hidden", apps.length > 0);
+}
+
+// What a Test connection found for the card (#155): Home Assistant's
+// install type and its installed apps.
+function applyCardInfo(card, info) {
+  const install = card.querySelector('.f-extra[data-field="install_type"]');
+  if (install && typeof info.install === "string") install.value = info.install;
+  card.querySelectorAll(".app-list").forEach((list) => renderAppList(list, readAppList(list), info.apps || []));
+  showInstallOptions(card);
 }
 
 // Radarr, Sonarr, Lidarr, Whisparr and Prowlarr cards keep their username
@@ -988,7 +1048,10 @@ function readAppCard(appId) {
     api_key: keyInput ? keyInput.value.trim() : "",
   };
   card.querySelectorAll(".f-extra").forEach((input) => {
-    out[input.dataset.field] = input.value;
+    out[input.dataset.field] = input.type === "checkbox" ? input.checked : input.value;
+  });
+  card.querySelectorAll(".app-list").forEach((list) => {
+    out[list.dataset.field] = readAppList(list);
   });
   const encryptInput = card.querySelector(".f-encrypt");
   if (encryptInput) out.encrypt = encryptInput.checked;
@@ -1035,10 +1098,11 @@ function addInstanceCard(appId, values = {}) {
   card.dataset.app = appId;
   card.classList.add("instance-card");
   delete card.dataset.discovered;
-  card.querySelectorAll("input").forEach((input) => {
+  card.querySelectorAll("input:not([disabled])").forEach((input) => {
     input.value = "";
     input.checked = false;
   });
+  card.querySelectorAll(".app-list-items").forEach((items) => items.replaceChildren());
   card.querySelector(".status-dot").dataset.state = "idle";
   card.querySelector(".test-result").textContent = "";
   card.querySelector(".app-discovery")?.replaceChildren();
@@ -2077,6 +2141,7 @@ async function testApp(appId) {
       }),
   });
   if (res?.needs_login) revealLoginFields(card);
+  if (res?.card) applyCardInfo(card, res.card);
   if (res && "certificate" in res) renderCertTrust(card, appId, res);
 }
 
@@ -2580,6 +2645,7 @@ function bindAppCard(card) {
     });
   });
   card.querySelector(".test-btn")?.addEventListener("click", () => testApp(card.dataset.app));
+  card.querySelectorAll("select.f-extra").forEach((select) => select.addEventListener("change", () => showInstallOptions(card)));
   card.querySelector(".f-enabled").addEventListener("change", (event) => setAppCardExpanded(card, event.target.checked));
   card.querySelector(".f-name")?.addEventListener("input", () => {
     updateInstanceCardLabel(card);
@@ -3265,7 +3331,7 @@ function renderRestoreOverride() {
     block.appendChild(overrideField(meta.key_label || "API key", hint, { type: "password", id: "r-ovr-api_key" }));
   }
   // A restore never needs the app's web login (login_only fields).
-  (meta.extra_fields || []).filter((f) => !f.login_only).forEach((f) => {
+  (meta.extra_fields || []).filter((f) => !f.login_only && !f.option).forEach((f) => {
     const field = overrideField(f.label, f.help, { type: f.type, className: "r-ovr-extra", placeholder: f.placeholder || "" });
     field.querySelector("input").dataset.field = f.name;
     block.appendChild(field);

@@ -123,3 +123,41 @@ def test_plain_http_is_untouched(server):
 ])
 def test_a_stored_trusted_cert_must_be_well_formed(value, ok):
     assert cert_pin.valid_trusted_cert(value) is ok
+
+
+# A protocol requests doesn't speak (Home Assistant's WebSocket, #155) gets a
+# socket checked by the same rules before anything is sent on it.
+def test_a_socket_to_an_untrusted_certificate_is_refused_before_anything_is_sent(server):
+    with pytest.raises(CertificateUntrusted) as raised:
+        cert_pin.connect_socket(server["url"], "homeassistant", None, timeout=5)
+    assert raised.value.certificate["sha256"] == server["first"]["sha256"] and not raised.value.changed
+    assert str(raised.value) == ("homeassistant: Home Assistant's certificate isn't trusted. Check it and trust it "
+                                 "in Settings to back it up.")
+    assert server["requests"] == []
+
+
+def test_a_socket_to_the_trusted_certificate_carries_the_request(server):
+    sock = cert_pin.connect_socket(server["url"], "homeassistant", trusted(server["first"]), timeout=5)
+    try:
+        sock.sendall(b"GET /ws HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")
+        answer = b""
+        while chunk := sock.recv(4096):
+            answer += chunk
+    finally:
+        sock.close()
+    assert answer.startswith(b"HTTP/1.0 200") and server["requests"] == [("/ws", None)]
+
+
+def test_a_socket_to_a_changed_certificate_is_refused(server):
+    pinned = trusted(server["first"])
+    new = server["use"]("homeassistant.lab")
+    with pytest.raises(CertificateUntrusted) as raised:
+        cert_pin.connect_socket(server["url"], "homeassistant", pinned, timeout=5)
+    assert raised.value.changed and raised.value.certificate["sha256"] == new["sha256"]
+    assert server["requests"] == []
+
+
+def test_a_plain_socket_for_http(server):
+    sock = cert_pin.connect_socket(server["url"].replace("https://", "http://"), "homeassistant", None, timeout=5)
+    assert not hasattr(sock, "getpeercert")
+    sock.close()

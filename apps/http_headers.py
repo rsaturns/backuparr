@@ -120,6 +120,10 @@ def configure_app_headers(app, rows):
         origin = _origin(requests.Request("GET", app.url).prepare().url)
         for prefix, adapter in list(app.session.adapters.items()):
             app.session.mount(prefix, _HeadersAdapter(adapter, origin, headers))
+        # A driver that also talks over something other than its session
+        # (Home Assistant's WebSocket) sends them there too.
+        if hasattr(app, "set_request_headers"):
+            app.set_request_headers(headers)
     return app
 
 
