@@ -9,13 +9,38 @@ Home Assistant can read whether your backups worked, for a dashboard, a
 notification or an automation. Backuparr only answers questions: Home
 Assistant can't change settings, run a backup or restore through it.
 
+## The Backuparr integration
+
+The [Backuparr integration](https://github.com/rsaturns/ha-backuparr) sets
+everything up from Home Assistant's UI. It needs Home Assistant 2026.10 or
+later.
+
+[![Open your Home Assistant instance and open the Backuparr repository.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=rsaturns&repository=ha-backuparr&category=integration)
+
+1. Select the badge to open the integration in Home Assistant's
+   **Marketplace** (or HACS before 2026.11), and select **Download**.
+2. [Turn on](#turning-it-on) the integration in Backuparr and copy the token.
+3. In Home Assistant, go to **Settings** > **Devices & services** > **Add
+   integration**, pick **Backuparr**, and enter Backuparr's address (like
+   `https://192.168.1.10:8991`) and the token.
+4. Home Assistant shows the fingerprint of Backuparr's
+   [certificate](security.md#https). Compare it with the one on the Backuparr
+   card and submit if they match.
+
+It adds a Backuparr device with an **All backups** problem sensor, one for
+each app and for Backuparr's own backup, a **Failed backups** count and,
+switched off at first, the time of each app's last backup. Apps you add or
+remove in Backuparr follow. See the
+[integration's README](https://github.com/rsaturns/ha-backuparr#readme).
+
 ## Turning it on
 
 1. On the **Settings** tab, open **Server** and switch on **Enable Home
    Assistant integration** on the Backuparr card.
 2. Copy the **token** it shows. It's shown only this once; Backuparr keeps
    just a hash of it.
-3. Give the token to Home Assistant (see the example below).
+3. Give the token to Home Assistant: in the [Backuparr integration](#the-backuparr-integration),
+   or a [REST sensor](#example-a-rest-sensor) of your own.
 
 **New token** makes another one, and the old one stops working. Switching the
 integration off removes the token. Both take effect straight away, without
