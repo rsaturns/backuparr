@@ -39,6 +39,7 @@ from apps.lazylibrarian import LazyLibrarianApp
 from apps.lidarr import LidarrApp
 from apps.nzbget import NzbgetApp
 from apps.opnsense import OpnsenseApp
+from apps.pfsense import PfsenseApp
 from apps.pihole import PiholeApp
 from apps.plex import PlexApp
 from apps.profilarr import ProfilarrApp
@@ -247,6 +248,7 @@ DRIVERS = {
     "pihole": PiholeApp,
     "vaultwarden": VaultwardenApp,
     "opnsense": OpnsenseApp,
+    "pfsense": PfsenseApp,
 }
 
 

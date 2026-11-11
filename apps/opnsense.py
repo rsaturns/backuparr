@@ -29,9 +29,8 @@ certificate is trusted on the card and pinned (apps/cert_pin.py).
 import logging
 import os
 import re
-import xml.etree.ElementTree as ET
 
-from apps import cert_pin
+from apps import cert_pin, config_xml
 from apps.base import AppError
 from apps.servarr import SameHostSession
 
@@ -49,20 +48,8 @@ class OpnsenseError(AppError):
 
 
 def check_config(path):
-    """Raises OpnsenseError unless path is a whole OPNsense config.xml: it
-    parses to the end (a cut-off download doesn't) and its root is
-    <opnsense>. Streamed, so a large file isn't held in memory."""
-    root = None
-    try:
-        for event, element in ET.iterparse(path, events=("start", "end")):
-            if root is None:
-                root = element.tag
-            elif event == "end":
-                element.clear()
-    except ET.ParseError as exc:
-        raise OpnsenseError(f"opnsense: the configuration isn't valid XML ({exc})") from None
-    if root != "opnsense":
-        raise OpnsenseError("opnsense: that isn't an OPNsense configuration (no <opnsense> root) - check the URL")
+    """Raises OpnsenseError unless path is a whole OPNsense config.xml."""
+    config_xml.check(path, "opnsense", OpnsenseError, "opnsense", "an OPNsense")
 
 
 class OpnsenseApp:

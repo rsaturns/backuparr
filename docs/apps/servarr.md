@@ -1,7 +1,7 @@
 ---
 title: Radarr, Sonarr and Lidarr
 parent: Apps
-nav_order: 10
+nav_order: 11
 ---
 
 # Radarr, Sonarr, Lidarr, Whisparr and Prowlarr

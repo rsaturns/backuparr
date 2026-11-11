@@ -77,10 +77,16 @@ def sound_archives(tmp_path):
         "pihole-2": make_zip(tmp_path / "pihole.zip", {"etc/pihole/pihole.toml": "[dns]\n", "etc/hosts": "127.0.0.1 localhost\n",
                                                        "etc/pihole/gravity.db": db, "etc/pihole/pihole-FTL.db": db}),
         "opnsense": str(opnsense_config(tmp_path / "config.xml")),
+        "pfsense-site2": str(pfsense_config(tmp_path / "pf.xml")),
         "vaultwarden": make_zip(tmp_path / "vw.zip", {"backuparr-vaultwarden.json": j({"vaultwarden_version": "1.37.5"}),
                                                       "db.sqlite3": db, "rsa_key.pem": "-----BEGIN PRIVATE KEY-----",
                                                       "attachments/a1/f1": b"x"}),
     }
+
+
+def pfsense_config(path):
+    path.write_text('<?xml version="1.0"?>\n<pfsense><version>23.3</version><system/></pfsense>\n')
+    return path
 
 
 def opnsense_config(path, body="<system><hostname>fw</hostname></system>"):

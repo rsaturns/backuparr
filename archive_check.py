@@ -16,7 +16,7 @@ import tarfile
 import tempfile
 import zipfile
 
-from apps import opnsense
+from apps import opnsense, pfsense
 from apps.base import AppError
 from apps.sqlite_snapshot import quick_check
 from apps.tdarr import COLLECTIONS as TDARR_COLLECTIONS
@@ -167,7 +167,7 @@ def _quick_check(archive, name, work_dir):
 
 
 # Apps whose backup is a single file rather than an archive, and its check.
-_SINGLE_FILE = {"opnsense": opnsense.check_config}
+_SINGLE_FILE = {"opnsense": opnsense.check_config, "pfsense": pfsense.check_config}
 
 
 def _check(app_type, path):

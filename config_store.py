@@ -22,7 +22,7 @@ class ConfigError(RuntimeError):
     truncated by a full disk, ...). The message says what to do about it."""
 
 
-APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr", "lazylibrarian", "pihole", "vaultwarden", "opnsense"]
+APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr", "lazylibrarian", "pihole", "vaultwarden", "opnsense", "pfsense"]
 
 # encrypt: whether its backups are encrypted (#147) - on unless turned off,
 # and ignored for an app whose APP_META sets always_encrypted.
@@ -33,7 +33,7 @@ DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "pass
 # archive names never change; each extra one is "<app>-<suffix>" (radarr-4k),
 # an id fixed when it's added because it names the instance's backup folder.
 # Only its display name can change later.
-MULTI_INSTANCE_APPS = ("radarr", "sonarr", "lidarr", "whisparr", "pihole", "opnsense")
+MULTI_INSTANCE_APPS = ("radarr", "sonarr", "lidarr", "whisparr", "pihole", "opnsense", "pfsense")
 MAX_EXTRA_INSTANCES = 10
 _EXTRA_INSTANCE_ID = re.compile(rf"({'|'.join(MULTI_INSTANCE_APPS)})-([a-z0-9]+(?:-[a-z0-9]+)*)")
 _MAX_INSTANCE_ID_LENGTH = 40
@@ -54,7 +54,7 @@ SERVARR_LOGIN_FIELDS = [
      "help": "the app's own login"},
 ]
 # Apps whose "password" extra field is encrypted at rest.
-PASSWORD_APPS = ("bazarr", "nzbget", "radarr", "sonarr", "lidarr", "whisparr", "prowlarr")
+PASSWORD_APPS = ("bazarr", "nzbget", "radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "pfsense")
 # Other extra fields encrypted at rest, by app type.
 SECRET_EXTRA_FIELDS = {"opnsense": ("api_secret",)}
 
@@ -78,7 +78,7 @@ _APP_CATEGORY = {
     "sabnzbd": "downloaders", "nzbget": "downloaders",
     "plex": "media-servers", "jellyfin": "media-servers", "emby": "media-servers", "tautulli": "media-servers",
     "seerr": "media-servers",
-    "pihole": "network", "opnsense": "network",
+    "pihole": "network", "opnsense": "network", "pfsense": "network",
     "vaultwarden": "security",
 }
 
@@ -293,6 +293,41 @@ APP_META = [
                     "Boot the OPNsense installer with both sticks plugged in.",
                     "At \"Press any key to start the configuration importer\", press a key and enter the second stick's device name (for example da1).",
                     "Log in as installer with the backup's root password and install.",
+                ]},
+            ],
+        },
+    },
+    {
+        "id": "pfsense",
+        "label": "pfSense",
+        "icon": "pfsense.svg",
+        # No official API: the web UI's own backup page, signed in the way
+        # Netgate documents for scripted backups - see apps/pfsense.py.
+        "key_required": False,
+        "no_api_key": True,
+        "url_placeholder": "https://192.168.1.1",
+        "extra_fields": [
+            {"name": "username", "label": "Username", "type": "text", "required": True,
+             "help": "a user with WebCfg - Diagnostics: Backup & Restore and WebCfg - System: Login / Logout / Dashboard - see the docs"},
+            {"name": "password", "label": "Password", "type": "password", "required": True},
+        ],
+        "multi_instance": True,
+        "max_extra_instances": MAX_EXTRA_INSTANCES,
+        "always_encrypted": True,
+        "pins_certificate": True,
+        "manual_restore": {
+            "docs": "https://rsaturns.github.io/backuparr/apps/pfsense/",
+            "steps": [
+                {"title": "Firewall still running", "steps": [
+                    "Download the backup.",
+                    "In pfSense, open Diagnostics > Backup & Restore.",
+                    "Under Restore Backup, leave Restore area at All, choose the downloaded file and click Restore Configuration. The firewall reboots.",
+                ]},
+                {"title": "New install", "steps": [
+                    "Download the backup and rename it config.xml.",
+                    "On a USB stick formatted FAT or FAT32, make a folder named config and put config.xml in it.",
+                    "Install pfSense. Then plug in the stick and boot the firewall: pfSense copies the configuration from it.",
+                    "Remove the stick once the firewall is up, or pfSense copies it again at every boot.",
                 ]},
             ],
         },

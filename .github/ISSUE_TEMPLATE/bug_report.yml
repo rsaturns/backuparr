@@ -35,6 +35,7 @@ body:
         - Pi-hole
         - Vaultwarden
         - OPNsense
+        - pfSense
         - Web UI / general
         - Not app-specific
     validations:
