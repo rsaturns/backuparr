@@ -36,6 +36,7 @@ nav_order: 13
 | `self_backup` | Back up Backuparr's own configuration, encrypted, at the end of each full run (default `true`; the switch on Settings' Backuparr card) - see [Backuparr's own backup](security.md#backuparrs-own-backup) |
 | `secrets_key_acknowledged` | Set once you've confirmed saving your encryption key - don't edit |
 | `encryption_notice_acknowledged` | Set once the "Backups Are Now Encrypted" notice has been seen - don't edit |
+| `upgrade_self_backup_tried`, `upgrade_self_backup_made` | Set once the first start of 3.0 has made Backuparr's own backup, and whether it worked - don't edit |
 
 ## Other files
 

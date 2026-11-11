@@ -4,6 +4,7 @@ import base64
 import io
 import json
 import os
+import time
 import zipfile
 from pathlib import Path
 
@@ -386,11 +387,12 @@ def test_backuparrs_own_backup_uses_the_shared_format(isolated_webui, monkeypatc
     assert "config.json" in self_backup.open_archive(data)
 
 
-def test_a_backup_of_backuparr_from_before_3_0_still_opens():
-    legacy = secrets_crypto.encrypt_bytes(self_zip())
-    assert set(self_backup.open_archive(legacy)) == {"config.json", self_backup.META}
-    other = Fernet(OTHER_KEY.encode()).encrypt(self_zip())
-    assert set(self_backup.open_archive(other, OTHER_KEY)) == {"config.json", self_backup.META}
+def test_a_backup_of_backuparr_from_before_3_0_says_to_use_2_5_6():
+    """Recognised, not opened - with the key it was made with or another."""
+    legacy = Fernet(OTHER_KEY.encode()).encrypt(self_zip())  # as 2.5.x wrote it
+    for key in (None, OTHER_KEY):
+        with pytest.raises(self_backup.SelfBackupError, match=r"from before Backuparr 3\.0\. Restore it with Backuparr 2\.5\.6, then update"):
+            self_backup.open_archive(legacy, key)
 
 
 def test_backuparrs_own_backup_with_the_wrong_key_is_refused():
@@ -407,18 +409,87 @@ def test_encrypt_must_be_true_or_false(authed_client):
     assert authed_client.get("/api/config").get_json()["apps"]["radarr"]["encrypt"] is False
 
 
-def test_a_new_install_never_sees_the_encryption_notice(authed_client):
-    assert authed_client.get("/api/encryption-notice").get_json() == {"show": False}
+NO_NOTICE = {"show": False, "self_backup_pending": False, "self_backup_made": False}
 
 
-def test_an_updated_install_sees_the_notice_once(authed_client, isolated_webui):
-    authed_client.get("/api/config")  # writes config.json
+def test_a_new_install_never_sees_the_encryption_notice(authed_client, isolated_webui):
+    assert authed_client.get("/api/encryption-notice").get_json() == NO_NOTICE
+    assert isolated_webui.runs.start_upgrade_self_backup() is False  # no old backups of itself either
+
+
+def updated_from_2_5(isolated_webui, self_backup_on=True, destination=True):
+    """config.json as an install updated from 2.5.x has it."""
+    cfg = config_store.load_config()
+    cfg["self_backup"] = self_backup_on
+    cfg["destinations"]["local"]["enabled"] = destination
+    config_store.save_config(cfg)
     path = isolated_webui.auth.CONFIG_PATH
     with open(path) as f:
         data = json.load(f)
-    del data["encryption_notice_acknowledged"]  # as a config from before 3.0
+    for name in ("encryption_notice_acknowledged", "upgrade_self_backup_tried", "upgrade_self_backup_made"):
+        del data[name]
     with open(path, "w") as f:
         json.dump(data, f)
-    assert authed_client.get("/api/encryption-notice").get_json() == {"show": True}
+
+
+def test_an_updated_install_sees_the_notice_once(authed_client, isolated_webui):
+    updated_from_2_5(isolated_webui)
+    assert authed_client.get("/api/encryption-notice").get_json() == {**NO_NOTICE, "show": True}
     assert authed_client.post("/api/encryption-notice/acknowledge", json={}).status_code == 200
-    assert authed_client.get("/api/encryption-notice").get_json() == {"show": False}
+    assert authed_client.get("/api/encryption-notice").get_json() == NO_NOTICE
+
+
+@pytest.fixture
+def first_start(isolated_webui, monkeypatch):
+    """Starts the first start's backup of Backuparr with a stand-in run that
+    succeeds or fails; returns what it ran, once it's done."""
+    runs = isolated_webui.runs
+    calls = []
+
+    def start(succeeds=True):
+        def fake_run(only):
+            calls.append(only)
+            assert runs.UPGRADE_SELF_BACKUP["running"] is True
+            runs.RUN_STATE["ok" if succeeds else "failed"] = ["backuparr" if succeeds else "backuparr: failed on local: down"]
+
+        monkeypatch.setattr(runs, "_backup_work", fake_run)
+        started = runs.start_upgrade_self_backup()
+        for _ in range(500):
+            if not runs.RUN_STATE["running"]:
+                break
+            time.sleep(0.01)
+        return started, calls
+
+    return start
+
+
+def test_the_first_start_of_3_0_backs_up_backuparr_once_and_the_notice_says_so(authed_client, isolated_webui, first_start):
+    updated_from_2_5(isolated_webui)
+    started, calls = first_start()
+    assert started is True and calls == ["backuparr"]
+    cfg = config_store.load_config()
+    assert cfg["upgrade_self_backup_tried"] is True and cfg["upgrade_self_backup_made"] is True
+    assert authed_client.get("/api/encryption-notice").get_json() == {**NO_NOTICE, "show": True, "self_backup_made": True}
+    assert first_start() == (False, ["backuparr"])  # the next start leaves it to the runs
+
+
+def test_a_failed_first_start_backup_isnt_tried_again_or_mentioned(authed_client, isolated_webui, first_start):
+    updated_from_2_5(isolated_webui)
+    assert first_start(succeeds=False) == (True, ["backuparr"])
+    cfg = config_store.load_config()
+    assert cfg["upgrade_self_backup_tried"] is True and cfg["upgrade_self_backup_made"] is False
+    assert authed_client.get("/api/encryption-notice").get_json() == {**NO_NOTICE, "show": True}
+    assert first_start() == (False, ["backuparr"])
+
+
+@pytest.mark.parametrize("self_backup_on, destination", [(False, True), (True, False)])
+def test_no_first_start_backup_without_self_backup_or_a_destination(isolated_webui, first_start, self_backup_on, destination):
+    updated_from_2_5(isolated_webui, self_backup_on=self_backup_on, destination=destination)
+    assert first_start() == (False, [])
+    assert config_store.load_config()["upgrade_self_backup_tried"] is True
+
+
+def test_the_notice_waits_while_the_first_start_backup_runs(authed_client, isolated_webui, monkeypatch):
+    updated_from_2_5(isolated_webui)
+    monkeypatch.setitem(isolated_webui.runs.UPGRADE_SELF_BACKUP, "running", True)
+    assert authed_client.get("/api/encryption-notice").get_json()["self_backup_pending"] is True

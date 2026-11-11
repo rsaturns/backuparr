@@ -10,6 +10,7 @@ import zipfile
 import pytest
 from cryptography.fernet import Fernet
 
+import archive_crypto
 import auth_store
 import config_store
 import manifest
@@ -61,7 +62,7 @@ def encrypted_zip(members, key):
     with zipfile.ZipFile(buffer, "w") as z:
         for name, data in members.items():
             z.writestr(name, data)
-    return Fernet(key.encode()).encrypt(buffer.getvalue())
+    return archive_crypto.encrypt_bytes(buffer.getvalue(), key)
 
 
 META = json.dumps({"format": 1, "backuparr_version": "2.5.0", "created": "2026-11-05T00:00:00+00:00"})
@@ -184,6 +185,15 @@ def test_the_setup_restore_reports_a_wrong_key_and_bad_uploads(old_install, isol
     assert not auth_store.has_credentials()
 
 
+def test_a_backup_from_before_3_0_says_to_restore_it_with_2_5_6(old_install, isolated_webui):
+    _archive, key = old_install
+    legacy = Fernet(key.encode()).encrypt(b"PK as 2.5.x wrote it")
+    response = isolated_webui.app.test_client().post("/api/setup/restore", json=upload(legacy, key))
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "this backup is from before Backuparr 3.0. Restore it with Backuparr 2.5.6, then update."
+    assert not os.path.exists(config_store.CONFIG_PATH) and not auth_store.has_credentials()
+
+
 def test_an_upload_over_the_limit_is_refused(isolated_webui):
     isolated_webui.app.config["MAX_CONTENT_LENGTH"] = 1000
     response = isolated_webui.app.test_client().post("/api/setup/restore", json={"archive": "A" * 5000, "key": "k"})
@@ -235,3 +245,11 @@ def test_no_restore_while_a_backup_runs(running_install, isolated_webui):
     finally:
         isolated_webui.runs.RUN_STATE["running"] = False
     assert response.status_code == 409 and auth_store.verify_password("newadmin", "new-admin-password")
+
+
+def test_settings_restore_of_a_backup_from_before_3_0_says_to_use_2_5_6(running_install, isolated_webui):
+    client, _archive, key = running_install
+    legacy = Fernet(key.encode()).encrypt(b"PK as 2.5.x wrote it")
+    response = client.post("/api/backuparr/restore", json=upload(legacy, key, confirm=True, password="new-admin-password"))
+    assert response.status_code == 400 and "Restore it with Backuparr 2.5.6, then update" in response.get_json()["error"]
+    assert auth_store.verify_password("newadmin", "new-admin-password")

@@ -151,7 +151,8 @@ docker run --rm -it --user "$(id -u):$(id -g)" -v "$PWD:/work" \
 It writes `radarr_20261108_030000.zip` beside it, and never overwrites a file.
 In a running Backuparr container, `docker exec -it backuparr python
 /app/decrypt.py <file>` uses the install's own key. Backuparr's own backup
-becomes a `.zip`, though the secrets in its `config.json` stay encrypted.
+becomes a `.zip`, though the secrets in its `config.json` stay encrypted;
+one from before 3.0 needs Backuparr 2.5.6.
 
 ### The format
 

@@ -114,15 +114,3 @@ def key_bytes(key=None):
     if len(raw) != 32 or base64.urlsafe_b64encode(raw) != text:
         raise ValueError("not an encryption key")
     return raw
-
-
-def encrypt_bytes(data):
-    """Encrypts a whole file (Backuparr's own backup) with the key."""
-    return _get_fernet().encrypt(data)
-
-
-def decrypt_bytes(token, key=None):
-    """Reverses encrypt_bytes(), with this install's key or the one given.
-    Raises InvalidToken for a wrong key or a damaged or altered file."""
-    fernet = Fernet(key.encode("ascii") if isinstance(key, str) else key) if key else _get_fernet()
-    return fernet.decrypt(token)

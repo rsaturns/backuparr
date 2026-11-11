@@ -134,10 +134,11 @@ def _backup_work(only=None):
         log_failure(backup_logger, "backup run stopped", exc)
 
 
-def _start_backup_run(only=None):
+def _start_backup_run(only=None, work=_backup_work):
     """Starts a backup run unless one's already in progress - of every
     enabled app, or of just the `only` app or instance id. Returns whether
-    it started. Shared by the manual endpoint and the scheduler."""
+    it started. Shared by the manual endpoint, the scheduler and the first
+    start of 3.0."""
     return _start_tracked_run(
         RUN_STATE,
         RUN_LOCK,
@@ -150,7 +151,7 @@ def _start_backup_run(only=None):
             "total_apps": 0,
             "cancel_requested": False,
         },
-        _backup_work,
+        work,
         only,
         before_start=RUN_CANCEL_EVENT.clear,
         blocked_by=RESTORE_RUN_STATE,
@@ -166,6 +167,47 @@ def _cancel_backup_run():
     RUN_STATE["cancel_requested"] = True
     RUN_CANCEL_EVENT.set()
     return True
+
+
+# ---------------------------------------------- first start of 3.0 -----
+# Backuparr's own backups from before 3.0 no longer restore (#162), so the
+# first start makes a new one straight away. "running" lets the encryption
+# notice wait for it, to say whether it was made.
+UPGRADE_SELF_BACKUP = {"running": False}
+
+
+def _upgrade_self_backup_work(only):
+    try:
+        _backup_work(only)
+        made = only in RUN_STATE["ok"]
+        if made:
+            log.info("backuparr: made a new backup of itself for 3.0 - its backups from before 3.0 can't be restored any more")
+        config_store.mark_upgrade_self_backup(made=made)
+    except Exception as exc:
+        log_failure(log, "couldn't record the first 3.0 backup of Backuparr", exc)
+    finally:
+        UPGRADE_SELF_BACKUP["running"] = False
+
+
+def start_upgrade_self_backup():
+    """On the first start of 3.0, Backuparr backs itself up in the background
+    when its own backup is on and a destination is set up. Tried once: if it
+    fails, the next full run makes one as usual. Returns whether it started."""
+    try:
+        cfg = load_config()
+        if cfg.get("upgrade_self_backup_tried") is True:
+            return False
+        if cfg.get("self_backup", True) is False or not config_store.enabled_destinations(cfg):
+            config_store.mark_upgrade_self_backup()
+            return False
+    except Exception as exc:  # an unreadable config.json: the UI says why
+        log_failure(log, "couldn't check for the first 3.0 backup of Backuparr", exc)
+        return False
+    UPGRADE_SELF_BACKUP["running"] = True
+    if _start_backup_run("backuparr", work=_upgrade_self_backup_work):
+        return True
+    UPGRADE_SELF_BACKUP["running"] = False
+    return False
 
 
 # ------------------------------------------------------------ scheduler ----

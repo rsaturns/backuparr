@@ -2,8 +2,8 @@
 page of a fresh install or from Settings.
 
 Everything is checked before anything changes: the archive must open with
-the key given (Fernet is authenticated, so a wrong key or a damaged file
-fails here), hold only Backuparr's files, come from this or an older
+the key given (the encryption is authenticated, so a wrong key or a
+damaged file fails here), hold only Backuparr's files, come from this or an older
 Backuparr, and every file must parse. Then the restored key becomes this
 install's key - first, so a restore cut short can simply be run again -
 followed by the config, the login, the manifest, the run logs and the

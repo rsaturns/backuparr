@@ -16,7 +16,6 @@ import sys
 
 import archive_crypto
 import secrets_crypto
-from cryptography.fernet import Fernet, InvalidToken
 
 
 def _key():
@@ -51,19 +50,21 @@ def main(argv=None):
     output = args.output or _output_for(args.file)
     if os.path.exists(output):
         sys.exit(f"decrypt: {output} already exists - move it or name another output")
-    key = _key()
     try:
-        if archive_crypto.is_encrypted(args.file):
-            archive_crypto.decrypt_file(args.file, output, key)
-        else:
-            # Backuparr's own backup from before 3.0: one Fernet token.
-            with open(args.file, "rb") as f:
-                data = Fernet(key.strip().encode("ascii")).decrypt(f.read())
-            with open(output, "wb") as f:
-                f.write(data)
+        with open(args.file, "rb") as f:
+            head = f.read(len(archive_crypto.MAGIC))
     except FileNotFoundError:
         sys.exit(f"decrypt: {args.file} not found")
-    except (archive_crypto.ArchiveCryptoError, InvalidToken, ValueError) as exc:
+    except OSError as exc:
+        sys.exit(f"decrypt: {args.file} can't be read ({exc.strerror})")
+    if not archive_crypto.is_encrypted_bytes(head):
+        if archive_crypto.is_pre_3_self_backup(head):
+            sys.exit(f"decrypt: {archive_crypto.PRE_3_SELF_BACKUP}")
+        sys.exit("decrypt: this isn't an encrypted Backuparr backup")
+    key = _key()
+    try:
+        archive_crypto.decrypt_file(args.file, output, key)
+    except (archive_crypto.ArchiveCryptoError, ValueError) as exc:
         reason = str(exc) if isinstance(exc, archive_crypto.ArchiveCryptoError) else "the key doesn't open it, or it isn't a Backuparr backup"
         sys.exit(f"decrypt: {reason}")
     print(f"decrypted to {output}")

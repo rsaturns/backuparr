@@ -483,6 +483,12 @@ DEFAULTS = {
     # config from before 3.0 has no value, so it shows once; a new install
     # starts with it seen.
     "encryption_notice_acknowledged": False,
+    # The first start of 3.0 makes Backuparr's own backup once, as those from
+    # before 3.0 no longer restore (#162): whether that's been tried (a config
+    # from before 3.0 has no value; a new install starts with it tried), and
+    # whether it worked (the notice above then says so). Set by Backuparr only.
+    "upgrade_self_backup_tried": False,
+    "upgrade_self_backup_made": False,
     "apps": {name: dict(DEFAULT_APP) for name in APP_NAMES},
     "destinations": {name: dict(DEFAULT_DEST[name]) for name in DEST_NAMES},
 }
@@ -615,6 +621,7 @@ def load_config():
     if not os.path.exists(CONFIG_PATH):
         cfg = copy.deepcopy(DEFAULTS)
         cfg["encryption_notice_acknowledged"] = True  # new: there's no change to tell about
+        cfg["upgrade_self_backup_tried"] = True  # nor old backups of itself
         save_config(cfg)
         return cfg
 
@@ -705,6 +712,15 @@ def encrypts(cfg, name):
 def acknowledge_encryption_notice():
     cfg = load_config()
     cfg["encryption_notice_acknowledged"] = True
+    save_config(cfg)
+
+
+def mark_upgrade_self_backup(made=False):
+    """Records that the first start of 3.0 tried its self-backup (#162), and
+    that it worked when made."""
+    cfg = load_config()
+    cfg["upgrade_self_backup_tried"] = True
+    cfg["upgrade_self_backup_made"] = cfg.get("upgrade_self_backup_made") is True or made
     save_config(cfg)
 
 
