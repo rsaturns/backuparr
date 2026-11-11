@@ -38,8 +38,9 @@ logger = logging.getLogger(f"backuparr.{__name__}")
 
 CONFIG_FILE = "config.xml"
 _MAX_CONFIG = 256 * 1024 * 1024  # a config.xml this large isn't one
-# The first of system_information's "versions": "<product name> <version>-<arch>".
-_PRODUCT_VERSION = re.compile(r"(\d+\.\d+(?:\.\d+)?(?:[_p.][0-9A-Za-z]+)*)-[A-Za-z0-9_]+$")
+# The first of system_information's "versions" is "<product name> <version>-<arch>":
+# the version is the last word without its "-<arch>".
+_VERSION = re.compile(r"\d+\.\d+[0-9A-Za-z_.]*")
 PRIVILEGES = '"Diagnostics: Configuration History" and "Lobby: Dashboard"'
 
 
@@ -95,10 +96,11 @@ class OpnsenseApp:
             first = res.json()["versions"][0]
         except (ValueError, KeyError, IndexError, TypeError):
             raise OpnsenseError("opnsense: the URL didn't answer like OPNsense's API - check it") from None
-        match = _PRODUCT_VERSION.search(str(first))
-        if not match:
-            raise OpnsenseError(f"opnsense: couldn't read the firmware version from {first!r}")
-        return match.group(1)
+        words = str(first).split()
+        version = words[-1].rpartition("-")[0] if words else ""
+        if not _VERSION.fullmatch(version):
+            raise OpnsenseError(f"opnsense: couldn't read the firmware version from {str(first)[:80]!r}")
+        return version
 
     def test_connection(self):
         items = self._history()

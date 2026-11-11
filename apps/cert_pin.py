@@ -85,6 +85,7 @@ def fetch_certificate(url, timeout=10):
     parts = urlsplit(url)
     host, port = parts.hostname, parts.port or 443
     context = ssl.create_default_context()
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
     with socket.create_connection((host, port), timeout=timeout) as sock:
