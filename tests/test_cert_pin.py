@@ -84,7 +84,7 @@ def test_an_untrusted_certificate_is_refused_with_its_details_and_nothing_sent(s
     assert error.changed is False and error.trusted is None
     assert error.certificate["sha256"] == server["first"]["sha256"]
     assert error.certificate["subject"] == "firewall.lab" and error.certificate["self_signed"] is True
-    assert "isn't trusted. Check it and trust it on the card" in str(error)
+    assert "isn't trusted. Check it and trust it in Settings" in str(error)
     assert server["requests"] == []
 
 

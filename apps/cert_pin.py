@@ -37,7 +37,7 @@ from apps.base import AppError
 
 _FINGERPRINT = re.compile(r"[0-9a-f]{64}")
 CHANGED_TEXT = "the firewall's certificate changed. Check it and trust the new one to resume backups."
-UNTRUSTED_TEXT = "the firewall's certificate isn't trusted. Check it and trust it on the card to back it up."
+UNTRUSTED_TEXT = "the firewall's certificate isn't trusted. Check it and trust it in Settings to back it up."
 
 
 class CertificateUntrusted(AppError):

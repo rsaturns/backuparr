@@ -1356,7 +1356,7 @@ function renderInstanceChoice(appId, candidates) {
     btn.disabled = !selected;
     if (!selected) {
       description.textContent = appMeta(appId).multi_instance
-        ? "Several found in Prowlarr. Choose the one for this card; the others can be added as instances below."
+        ? "Several found in Prowlarr. Choose the one for this app; the others can be added as instances below."
         : "Multiple instances found in Prowlarr. Choose the one you want to configure.";
       keyStatus.classList.add("hidden");
       panel.classList.remove("hidden");
@@ -2173,7 +2173,7 @@ function cardLink(appId) {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "link-btn card-link";
-  btn.textContent = "Check the card";
+  btn.textContent = "Check settings";
   btn.addEventListener("click", (event) => {
     event.stopPropagation();
     goToAppCard(appId);

@@ -256,7 +256,7 @@ APP_META = [
         "multi_instance": True,
         "max_extra_instances": MAX_EXTRA_INSTANCES,
         "always_encrypted": True,
-        "restore_warning": {"lead": "Replaces Pi-hole's settings", "text": "with the backup's - DNS and DHCP settings, local DNS records, adlists, domains, groups and clients, DHCP leases, and its web password, app password and 2FA. Settings set by environment variables (FTLCONF_...) are kept. Pi-hole restarts to apply it. If the backup's app password differs from the one on this card, update the card afterwards."},
+        "restore_warning": {"lead": "Replaces Pi-hole's settings", "text": "with the backup's - DNS and DHCP settings, local DNS records, adlists, domains, groups and clients, DHCP leases, and its web password, app password and 2FA. Settings set by environment variables (FTLCONF_...) are kept. Pi-hole restarts to apply it. If the backup's app password differs from the one in Settings, update it there afterwards."},
     },
     {
         "id": "opnsense",

@@ -332,7 +332,7 @@ def test_each_app_restores_and_reports_its_own_message(restore, authed_client, a
 
 @pytest.mark.parametrize("outcome, warning, fragment", [
     ({"back": True, "password_ok": True, "sudo_ok": True, "attention": False}, False, "Pi-hole restarted to apply it"),
-    ({"back": True, "password_ok": False, "sudo_ok": None, "attention": True}, True, "the app password on its card no longer works"),
+    ({"back": True, "password_ok": False, "sudo_ok": None, "attention": True}, True, "the app password in Settings no longer works"),
 ])
 def test_a_restore_that_needs_attention_finishes_as_a_warning(restore, authed_client, outcome, warning, fragment):
     restore["results"]["pihole"] = outcome

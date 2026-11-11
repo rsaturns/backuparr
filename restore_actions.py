@@ -133,8 +133,8 @@ def _pihole_done(result):
     if not result.get("back"):
         return "pihole restore imported, but Pi-hole didn't come back from its restart within 2 minutes - check it's running"
     if result.get("password_ok") is False:
-        return ("pihole restore complete, but the app password on its card no longer works: the backup brought back "
-                "the app password it was made with. Put that one on the card, or configure a new one in Pi-hole")
+        return ("pihole restore complete, but the app password in Settings no longer works: the backup brought back "
+                "the app password it was made with. Enter that one in Settings, or configure a new one in Pi-hole")
     if result.get("sudo_ok") is False:
         return ("pihole restore complete, but the backup turned webserver.api.app_sudo off, so backups will fail - "
                 "turn it on again under Settings > All settings > Webserver and API (Expert mode)")
@@ -148,8 +148,8 @@ def _immich(app, tmp_dir, local_zip, options):
 
 def _immich_done(result):
     if not result.get("key_ok"):
-        return ("immich restore complete, but the API key on its card no longer works: the restored database has the "
-                "API keys it was backed up with. Put that one on the card, or create a new one in Immich")
+        return ("immich restore complete, but the API key in Settings no longer works: the restored database has the "
+                "API keys it was backed up with. Enter that one in Settings, or create a new one in Immich")
     return "immich restore complete, Immich restarted with the restored database"
 
 
