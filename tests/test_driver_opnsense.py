@@ -88,7 +88,8 @@ def test_the_version_needs_lobby_dashboard(app, server):
 
 
 @pytest.mark.parametrize("first, version", [
-    ("OPNsense 26.7-amd64", "26.7"), ("OPNsense 26.7.8_2-amd64", "26.7.8_2"),
+    ("OPNsense 26.7-amd64", "26.7"), ("OPNsense 26.7.9-amd64", "26.7.9"),  # the lab VM before and after updating
+    ("OPNsense 26.7.8_2-amd64", "26.7.8_2"),  # a hotfix package revision
     ("OPNsense Business 25.10.1-amd64", "25.10.1"), ("OPNsense 25.1-aarch64", "25.1"),
 ])
 def test_the_firmware_version_is_read_from_system_information(app, server, first, version):
