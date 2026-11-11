@@ -1091,6 +1091,11 @@ code {
 
 /* Home Assistant's switch on Backuparr's card (#170). */
 .ha-integration { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.https-settings { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.https-settings .hint { margin: 0 0 8px; }
+.https-settings .hint.warn { color: var(--warn); }
+.https-settings .toggle-field { margin: 4px 0 4px; }
+.https-settings #https-fingerprint { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; word-break: break-all; }
 .ha-integration .toggle-field { margin-bottom: 0; }
 .ha-integration #ha-token-field { margin-top: 12px; }
 .ha-integration #ha-token { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }

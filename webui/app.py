@@ -8,35 +8,38 @@ import os
 from datetime import timedelta
 
 from flask import Flask, jsonify, render_template, request
-from werkzeug.middleware.proxy_fix import ProxyFix
+from flask.sessions import SecureCookieSessionInterface
 
 import backup
 import manifest_backfill
 from backup import describe_failure
 from config_store import APP_CATEGORIES, APP_META, ConfigError, DESTINATION_META, DISCOVERABLE_APPS, SELF_APP
-from webui import auth, backups, destinations, ha, runs, services, settings
+from webui import auth, backups, cookies, destinations, ha, https, runs, services, settings
 from webui.version import VERSION
 
 app = Flask(__name__)
 log = logging.getLogger("backuparr.webui")
-for _blueprint in (auth.bp, settings.bp, services.bp, destinations.bp, runs.bp, backups.bp, ha.bp):
+for _blueprint in (auth.bp, settings.bp, services.bp, destinations.bp, runs.bp, backups.bp, ha.bp, https.bp):
     app.register_blueprint(_blueprint)
 
-# Off by default - the documented deployment is plain HTTP on a trusted
-# LAN, where a Secure-only cookie would just break login. Set this if
-# Backuparr sits behind your own TLS-terminating reverse proxy - it also
-# makes the app trust that proxy's X-Forwarded-Proto/-For, so redirect
-# URIs built for OAuth (Google Drive) come out https:// instead of the
-# http:// this container actually listens on, and login-lockout tracking
-# sees the real client IP instead of the proxy's.
-_BEHIND_HTTPS_PROXY = os.environ.get("BACKUPARR_FORCE_HTTPS", "").lower() in ("1", "true", "yes")
-if _BEHIND_HTTPS_PROXY:
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_for=1)
+# The session cookie is Secure over HTTPS, and named per scheme so signing
+# in over HTTP after HTTPS still works (webui/cookies.py, #177). Behind your
+# own TLS reverse proxy (BACKUPARR_FORCE_HTTPS) it's always Secure; the
+# proxy's X-Forwarded-* headers are applied by webui/forwarded.py, which
+# the server (webui/serve.py) puts in front of this app.
+class _SessionInterface(SecureCookieSessionInterface):
+    def get_cookie_name(self, app):
+        return cookies.name(super().get_cookie_name(app))
 
+    def get_cookie_secure(self, app):
+        return cookies.secure()
+
+
+app.session_interface = _SessionInterface()
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
-    SESSION_COOKIE_SECURE=_BEHIND_HTTPS_PROXY,
+    SESSION_COOKIE_SECURE=cookies.BEHIND_HTTPS_PROXY,
     PERMANENT_SESSION_LIFETIME=timedelta(days=30),
     # Nothing sent here is large; the biggest is Backuparr's own backup,
     # uploaded as base64 to restore it (#111).
@@ -111,8 +114,8 @@ def index():
 def create_app():
     """The app, ready to serve: logging set up, the session key loaded, the
     scheduler running and existing backups being added to the manifest
-    (paused while a backup or restore runs). Importing this module does none of that; waitress
-    calls this (entrypoint.sh), once."""
+    (paused while a backup or restore runs). Importing this module does none of that; the
+    server (webui/serve.py) calls this, once."""
     backup.configure_logging()
     if auth._AUTH_DISABLED:
         log.warning("BACKUPARR_DISABLE_AUTH is set: local authentication is DISABLED. "

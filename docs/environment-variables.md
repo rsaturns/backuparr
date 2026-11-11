@@ -12,7 +12,10 @@ compose file:
 | Env var | Default | Purpose |
 |---|---|---|
 | `WEBUI_HOST` | `0.0.0.0` | Address the web UI listens on (see below) |
-| `WEBUI_PORT` | `8990` | Port the web UI listens on inside the container |
+| `WEBUI_PORT` | `8990` | Port of the web UI's plain HTTP inside the container |
+| `WEBUI_HTTPS_PORT` | `8991` | Port of the web UI's HTTPS inside the container (see [HTTPS](security.md#https)) |
+| `BACKUPARR_HTTPS_ONLY` | *(none)* | `true` closes plain HTTP and locks the HTTPS only switch on the Backuparr card; `false` keeps HTTP open (and gets you back in if you're locked out). Unset, the switch decides |
+| `BACKUPARR_TLS_CERT` / `BACKUPARR_TLS_KEY` | *(none)* | Your own PEM certificate (with its chain) and unencrypted key instead of Backuparr's self-signed one, as paths inside the container |
 | `PUID` / `PGID` | `1000` / `1000` | User/group the container runs as. Match your host user (`id`) so files on the config volume are owned by you |
 | `TZ` | UTC | Timezone for the schedule and `backup.log` timestamps |
 | `UMASK` | `077` | Permissions of new files: by default only the container user can read backups (`0600`/`0700`). Set `022` if another user on the host reads the backup folder |
@@ -26,7 +29,7 @@ compose file:
 | `BACKUPARR_ALLOW_CROSS_HOST_REDIRECTS` | `false` | `true` only if an app's URL redirects to a *different* host and you can't use the final address. By default such redirects are refused so credentials never go to another host |
 
 To listen on loopback only: with bridge networking, publish
-`ports: ["127.0.0.1:8990:8990"]` and leave `WEBUI_HOST` alone (setting it to
+`ports: ["127.0.0.1:8990:8990", "127.0.0.1:8991:8991"]` and leave `WEBUI_HOST` alone (setting it to
 `127.0.0.1` there blocks the published port). With `network_mode: host`, set
 `WEBUI_HOST: "127.0.0.1"` and remove `ports:`.
 

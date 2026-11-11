@@ -33,9 +33,10 @@ ENV RCLONE_CONFIG=/config/backuparr/rclone.conf \
     BACKUPARR_LOG_DIR=/var/log/backuparr \
     WEBUI_HOST=0.0.0.0 \
     WEBUI_PORT=8990 \
+    WEBUI_HTTPS_PORT=8991 \
     PYTHONUNBUFFERED=1
 
-EXPOSE 8990
+EXPOSE 8990 8991
 
 # Check the configured bind address, mapping wildcard listeners to loopback.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

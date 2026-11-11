@@ -3,12 +3,13 @@ import logging
 import threading
 import time
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, jsonify, request
 
 import discovery
 from apps.http_headers import configure_app_headers, headers_for_app, RequestHeadersError, validate_request_headers
 from apps.prowlarr import ProwlarrApp
 from config_store import load_config
+from webui import cookies
 from webui.jobs import OwnedJobs
 from webui.plex_auth import PlexAuthError, PlexLogin
 from webui.settings import _header_scope_ids, _instances_after
@@ -42,7 +43,7 @@ def api_plex_auth_start():
         login = PlexLogin(VERSION)
         job_id = PLEX_LOGINS.add(owner, login)
         response = jsonify({"job_id": job_id, "auth_url": login.auth_url, "expires_in": login.expires_in})
-        PLEX_LOGINS.set_cookie(response, new_owner, current_app.config["SESSION_COOKIE_SECURE"])
+        PLEX_LOGINS.set_cookie(response, new_owner, cookies.secure())
         return response, 201
     except PlexAuthError as exc:
         return jsonify({"error": str(exc)}), exc.status
@@ -128,7 +129,7 @@ def api_discovery_prowlarr():
         DISCOVERY_RUN_LOCK.release()
         return jsonify({"error": "Could not start discovery. Try again."}), 503
     response = jsonify({"job_id": job_id})
-    DISCOVERY_JOBS.set_cookie(response, new_owner, current_app.config["SESSION_COOKIE_SECURE"])
+    DISCOVERY_JOBS.set_cookie(response, new_owner, cookies.secure())
     return response, 202
 
 

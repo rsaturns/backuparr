@@ -65,12 +65,17 @@ Put the token in `secrets.yaml`:
 backuparr_auth: "Bearer <your token>"
 ```
 
-Then in `configuration.yaml`, with Backuparr's address:
+Then in `configuration.yaml`, with Backuparr's address. Over HTTPS (port
+8991), Home Assistant can't check Backuparr's self-signed certificate, so
+`verify_ssl: false` is needed, which also accepts anyone pretending to be
+Backuparr. The Backuparr integration for Home Assistant pins the certificate
+instead.
 
 {% raw %}
 ```yaml
 rest:
-  - resource: http://192.168.1.10:8990/api/ha/status
+  - resource: https://192.168.1.10:8991/api/ha/status
+    verify_ssl: false
     headers:
       Authorization: !secret backuparr_auth
     scan_interval: 300

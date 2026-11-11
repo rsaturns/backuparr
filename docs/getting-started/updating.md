@@ -21,6 +21,9 @@ and then restore one.
 
 ## Updating to 3.0.0
 
+- **HTTPS on port 8991:** add `"8991:8991"` to the container's ports (on
+  Unraid, add a port with container port 8991). Port 8990 keeps working. See
+  [HTTPS](../security.md#https).
 - **Backups are encrypted** with your encryption key from the next run,
   including apps you set up before; Backuparr says so once. Turn it off for
   an app on its card in Settings. See

@@ -833,6 +833,70 @@ function initHaEvents() {
   });
 }
 
+// HTTPS (#177): the certificate in use, and HTTPS only, which closes plain
+// HTTP straight away. It can only be turned on from a page that came in on
+// the HTTPS port, so it can't lock anyone out.
+let HTTPS_STATE = null;
+
+async function loadHttps() {
+  try {
+    HTTPS_STATE = await apiFetch("/api/https");
+  } catch (e) {
+    return;
+  }
+  showHttpsState();
+}
+
+function showHttpsState() {
+  const s = HTTPS_STATE;
+  const until = new Date(s.expires).toLocaleDateString();
+  document.getElementById("https-summary").textContent = s.own_certificate
+    ? `HTTPS on port ${s.port}, with your certificate (until ${until}).`
+    : `HTTPS on port ${s.port}, with a self-signed certificate (until ${until}).`;
+  document.getElementById("https-fingerprint").textContent = s.fingerprint;
+  const certError = document.getElementById("https-cert-error");
+  certError.textContent = s.certificate_error ? `Your certificate isn't used: ${s.certificate_error}.` : "";
+  certError.classList.toggle("hidden", !s.certificate_error);
+
+  const toggle = document.getElementById("https-only");
+  toggle.checked = s.https_only;
+  toggle.disabled = s.https_only_locked || (!s.https_only && !s.on_https);
+  const note = document.getElementById("https-note");
+  note.replaceChildren();
+  if (s.https_only_locked) {
+    note.textContent = "Set by BACKUPARR_HTTPS_ONLY.";
+  } else if (s.https_only || s.on_https) {
+    note.textContent = `Closes HTTP on port ${s.http_port}.`;
+  } else if (location.protocol === "http:") {
+    // The container's port: the host may publish it as another.
+    note.textContent = `To turn this on, open Backuparr over HTTPS (port ${s.port}).`;
+  } else {
+    note.textContent = `To turn this on, point your proxy at HTTPS port ${s.port}.`;
+  }
+}
+
+function initHttpsEvents() {
+  const toggle = document.getElementById("https-only");
+  toggle.addEventListener("change", async () => {
+    const enabled = toggle.checked;
+    if (enabled && !confirm(`Close HTTP on port ${HTTPS_STATE.http_port}? Backuparr will only answer on HTTPS, port ${HTTPS_STATE.port}.`)) {
+      toggle.checked = false;
+      return;
+    }
+    const result = document.getElementById("https-result");
+    try {
+      await apiFetch("/api/https/only", { method: "POST", body: JSON.stringify({ enabled }) });
+      HTTPS_STATE.https_only = enabled;
+      showHttpsState();
+      result.textContent = enabled ? "HTTP closed." : "HTTP open again.";
+      result.className = "test-result ok";
+    } catch (e) {
+      toggle.checked = !enabled;
+      toast(`Could not change HTTPS only: ${clause(e.message)}`, "fail");
+    }
+  });
+}
+
 // Backuparr's own card (#165): its body, like an app card's, shows while on.
 function showSelfCardBody() {
   const card = document.querySelector(".self-card");
@@ -1699,6 +1763,7 @@ async function loadConfig() {
   showSelfCardBody();
   // A reload keeps a token just made in view; the next page load won't have it.
   showHaState(!!cfg.ha_enabled, cfg.ha_enabled ? document.getElementById("ha-token").value : null);
+  loadHttps();
   document.getElementById("s-cron_schedule").value = cfg.cron_schedule || "";
   initSchedulePicker(cfg.cron_schedule);
   document.getElementById("s-notify_url").value = cfg.notify_url || "";
@@ -2431,6 +2496,7 @@ function initSettingsEvents() {
   document.querySelectorAll(".app-card[data-app]").forEach(bindAppCard);
   document.getElementById("s-self_backup").addEventListener("change", showSelfCardBody);
   initHaEvents();
+  initHttpsEvents();
   initInstanceAddRows();
   document.getElementById("notify-test-btn").addEventListener("click", testNotifyUrl);
   initScheduleEvents();

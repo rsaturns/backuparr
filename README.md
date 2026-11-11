@@ -58,10 +58,13 @@ services:
       #- BACKUPARR_DISABLE_AUTH=true
       #- BACKUPARR_SECRETS_KEY=
       #- RCLONE_CONFIG_PASS=
-      # Changing this also means updating the ports: mapping below.
+      #- BACKUPARR_HTTPS_ONLY=true
+      # Changing these also means updating the ports: mapping below.
       #- WEBUI_PORT=8990
+      #- WEBUI_HTTPS_PORT=8991
     ports:
-      - "8990:8990"
+      - "8990:8990"   # HTTP
+      - "8991:8991"   # HTTPS, self-signed certificate
     volumes:
       # config.json, rclone.conf, and local-destination backups.
       - /share/Container/backuparr:/config/backuparr
@@ -88,7 +91,7 @@ Or without Compose:
 ```sh
 docker run -d --name backuparr --restart unless-stopped \
   -e TZ=America/Los_Angeles -e PUID=1000 -e PGID=1000 \
-  -p 8990:8990 \
+  -p 8990:8990 -p 8991:8991 \
   -v /share/Container/backuparr:/config/backuparr \
   rsaturns/backuparr:latest
 ```
@@ -113,7 +116,7 @@ fill in the folders of the apps that need one - see
 
 ### First run
 
-Open `http://<host>:8990` and create the admin account on the setup screen
+Open `https://<host>:8991` (or `http://<host>:8990`) and create the admin account on the setup screen
 (or [restore Backuparr](https://rsaturns.github.io/backuparr/restoring/#restoring-backuparr-itself) from its own
 backup). Save the encryption key Backuparr then shows - you need it to restore
 Backuparr. Then, on the **Settings** tab:

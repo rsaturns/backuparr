@@ -7,6 +7,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- HTTPS on port 8991 next to HTTP on 8990, with a self-signed certificate Backuparr makes and renews itself (825 days, accepted by Apple devices), or your own with BACKUPARR_TLS_CERT and BACKUPARR_TLS_KEY. The Backuparr card shows its fingerprint, and HTTPS only (or BACKUPARR_HTTPS_ONLY) closes plain HTTP. Add "8991:8991" to your ports (#177). See https://rsaturns.github.io/backuparr/security/#https
 - Home Assistant can read every backup's status: Enable Home Assistant integration on the Backuparr card gives a token for the read-only /api/ha/status (and /api/ha/status/<app>), which opens nothing else (#170). See https://rsaturns.github.io/backuparr/home-assistant/
 - The Overview sums up every app's latest backup in one line under At a Glance: "All 17 backups succeeded", or how many succeeded with a line per failure that jumps to its card; apps not backed up yet are counted apart, and it says "Backing up..." during a run (#167).
 - Pi-hole (v6 and newer) backups and restores over its API with Teleporter, using an app password; Test connection checks that Pi-hole lets app passwords use Teleporter (webserver.api.app_sudo) and says where to turn it on. Its backups are always encrypted, and a second Pi-hole can be added as an instance (#149).
@@ -16,6 +17,8 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- The web server is now Hypercorn instead of Waitress, to serve HTTP and HTTPS from one process (#177).
+- Over HTTPS the login cookie is Secure and has its own name, so signing in over HTTP and HTTPS works side by side (#177).
 - Backuparr's own backup uses the same encryption format; backups made before 3.0 still restore (#147).
 - Error and result messages in the web UI start with a capital letter and end with a full stop.
 - Settings groups the apps by category, each folding away under a header with its enabled count and last-run status; categories open once an app in them is set up and are remembered per browser. Destinations folds too, its header showing the destinations' icons; History (where Backuparr's own backups are now listed as Backuparr) and the Run & Status and Restore app lists use the same categories (#148).

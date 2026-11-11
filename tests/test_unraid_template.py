@@ -38,11 +38,11 @@ def test_ca_essentials_present(template):
     assert template.findtext("Repository").startswith("rsaturns/backuparr:")
 
 
-def test_port_matches_image(template):
-    exposed = re.search(r"^EXPOSE (\d+)$", _read("Dockerfile"), re.M).group(1)
-    (port,) = _configs(template, "Port")
-    assert port.get("Target") == exposed
-    assert f"[PORT:{exposed}]" in template.findtext("WebUI")
+def test_ports_match_image(template):
+    exposed = re.search(r"^EXPOSE ([\d ]+)$", _read("Dockerfile"), re.M).group(1).split()
+    assert sorted(port.get("Target") for port in _configs(template, "Port")) == sorted(exposed) == ["8990", "8991"]
+    # The WebUI link opens HTTPS, which is on even with HTTPS only (#177).
+    assert template.findtext("WebUI") == "https://[IP]:[PORT:8991]/"
 
 
 def test_appdata_is_the_config_volume(template):

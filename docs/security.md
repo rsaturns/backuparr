@@ -16,8 +16,46 @@ towards the login lockout.
 **Authentication at a reverse proxy:** if your proxy (e.g. Authelia) already
 protects every request, set `BACKUPARR_DISABLE_AUTH=true` and recreate the
 container. The UI and API then need no local login, and the setup, login,
-logout, password change and reset endpoints return `403`. **Block direct access to port 8990**:
-anyone who reaches it has full access, stored credentials included.
+logout, password change and reset endpoints return `403`. **Block direct access to ports 8990 and 8991**:
+anyone who reaches them has full access, stored credentials included.
+
+## HTTPS
+
+Backuparr answers on two ports:
+
+- **8991, HTTPS**, always on. Your password, session and API keys are
+  encrypted on the way.
+- **8990, plain HTTP**, until you switch on **HTTPS only**. Everything there,
+  your password included, crosses the network readable.
+
+On first start Backuparr makes a **self-signed certificate**, so your browser
+warns the first time: check that the SHA-256 fingerprint it shows matches the
+one on the Backuparr card (**Settings**, **Server**), then continue. The
+certificate lasts 825 days, the longest Apple devices accept, and is renewed
+30 days before it runs out with the same key, so Home Assistant's
+[integration](home-assistant.md) keeps trusting it. It's in
+`/config/backuparr/tls/` and in [Backuparr's own backup](#backuparrs-own-backup),
+so a restored install keeps it.
+
+**Your own certificate:** set `BACKUPARR_TLS_CERT` and `BACKUPARR_TLS_KEY` to a
+PEM certificate (with its chain) and its unencrypted key, for example files in
+`/config/backuparr/`. Backuparr checks them twice a day and loads replaced
+files without a restart. If they can't be used, the Backuparr card and the
+log say why, and Backuparr serves its own certificate meanwhile.
+
+**HTTPS only:** switch it on on the Backuparr card to close port 8990 straight
+away. It can only be switched on from a page opened over HTTPS on port 8991,
+so it can't lock you out of a container that doesn't publish that port.
+`BACKUPARR_HTTPS_ONLY=true` does the same from your compose file and locks the
+switch; if you're ever locked out, set `BACKUPARR_HTTPS_ONLY=false` and
+recreate the container. Restoring [Backuparr's own backup](#backuparrs-own-backup)
+keeps this install's HTTPS only setting.
+
+**Behind a reverse proxy:** nothing changes. Keep `BACKUPARR_FORCE_HTTPS` and
+`BACKUPARR_TRUSTED_PROXY`, and point the proxy at `http://backuparr:8990` or
+`https://backuparr:8991`. To switch on HTTPS only, the proxy must use 8991.
+
+Signing in over HTTP and over HTTPS are separate: each keeps its own login.
 
 ## Forgot your password?
 
@@ -48,8 +86,8 @@ Backups already in Google Drive, OneDrive or Dropbox are untouched.
 The reset works without logging in, gated only by a confirmation phrase that's
 public in this repo. Other websites can't trigger it (or any other change):
 Backuparr only accepts changes sent as JSON from its own page. Still, **don't
-expose port 8990 to an untrusted network** - put it behind a reverse proxy
-with its own login and TLS.
+expose Backuparr's ports to an untrusted network** - put it behind a reverse
+proxy with its own login.
 
 ## Encryption at rest
 
@@ -151,7 +189,8 @@ If you set `BACKUPARR_SECRETS_KEY`, that's the key shown.
 At the end of each full run (not a single app's), Backuparr backs up its own
 configuration to every destination as `backuparr/backuparr_<date>_<time>.enc`,
 kept like the app backups: its settings and destinations, the cloud
-connections, the admin login, the backup record and the run logs. It's
+connections, the admin login, the backup record, the run logs and its own
+[HTTPS certificate](#https) (not yours from `BACKUPARR_TLS_CERT`). It's
 encrypted with your encryption key and can't be read or changed without it.
 The key itself, the session key and `rclone.pass` aren't in it.
 
