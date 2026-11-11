@@ -261,7 +261,7 @@ def test_a_backup_with_another_app_password_is_reported(ph, app, tmp_path):
     ph.after_import = new_password
     result = app.restore_from_file(make_archive(tmp_path))
     assert result["back"] and result["password_ok"] is False
-    assert "the app password on its card no longer works" in restore_actions.restore_message("pihole", result)
+    assert "the app password in Settings no longer works" in restore_actions.restore_message("pihole", result)
 
 
 def test_a_backup_that_turns_app_sudo_off_is_reported(ph, app, tmp_path):

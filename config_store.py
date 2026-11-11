@@ -22,7 +22,7 @@ class ConfigError(RuntimeError):
     truncated by a full disk, ...). The message says what to do about it."""
 
 
-APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr", "lazylibrarian", "pihole", "vaultwarden", "opnsense", "pfsense", "immich"]
+APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr", "lazylibrarian", "pihole", "vaultwarden", "opnsense", "pfsense", "immich", "homeassistant"]
 
 # encrypt: whether its backups are encrypted (#147) - on unless turned off,
 # and ignored for an app whose APP_META sets always_encrypted.
@@ -33,7 +33,7 @@ DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "pass
 # archive names never change; each extra one is "<app>-<suffix>" (radarr-4k),
 # an id fixed when it's added because it names the instance's backup folder.
 # Only its display name can change later.
-MULTI_INSTANCE_APPS = ("radarr", "sonarr", "lidarr", "whisparr", "pihole", "opnsense", "pfsense", "immich")
+MULTI_INSTANCE_APPS = ("radarr", "sonarr", "lidarr", "whisparr", "pihole", "opnsense", "pfsense", "immich", "homeassistant")
 MAX_EXTRA_INSTANCES = 10
 _EXTRA_INSTANCE_ID = re.compile(rf"({'|'.join(MULTI_INSTANCE_APPS)})-([a-z0-9]+(?:-[a-z0-9]+)*)")
 _MAX_INSTANCE_ID_LENGTH = 40
@@ -80,6 +80,7 @@ _APP_CATEGORY = {
     "seerr": "media-servers", "immich": "media-servers",
     "pihole": "network", "opnsense": "network", "pfsense": "network",
     "vaultwarden": "security",
+    "homeassistant": "home-automation",
 }
 
 # Drives the web UI's forms generically. restore_warning is shown on the
@@ -90,6 +91,15 @@ _APP_CATEGORY = {
 # sit readable on a destination (#147) - its card has no "Encrypt backup"
 # toggle. pins_certificate: its self-signed HTTPS certificate can be trusted
 # on the card and is then pinned (trusted_cert, apps/cert_pin.py, #153).
+#
+# extra_fields are text or password inputs, unless "type" says otherwise
+# (#155): "switch" (on/off, "default"), "select" ("choices", "default"),
+# "app_list" (the apps a Test connection listed, [{"slug", "name"}], shown
+# while the select before it is "chosen") or "hidden" (set by a Test
+# connection, one of "choices"). A "locked" switch is shown on and saves
+# nothing. "option": a backup option, never asked for by the Restore tab.
+# "only_install": shown once a Test connection (install_type) found that
+# kind of install.
 APP_META = [
     {"id": "radarr", "label": "Radarr", "icon": "radarr.svg", "key_required": True, "url_placeholder": "http://radarr:7878", "extra_fields": SERVARR_LOGIN_FIELDS, "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
     {"id": "sonarr", "label": "Sonarr", "icon": "sonarr.svg", "key_required": True, "url_placeholder": "http://sonarr:8989", "extra_fields": SERVARR_LOGIN_FIELDS, "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
@@ -256,7 +266,7 @@ APP_META = [
         "multi_instance": True,
         "max_extra_instances": MAX_EXTRA_INSTANCES,
         "always_encrypted": True,
-        "restore_warning": {"lead": "Replaces Pi-hole's settings", "text": "with the backup's - DNS and DHCP settings, local DNS records, adlists, domains, groups and clients, DHCP leases, and its web password, app password and 2FA. Settings set by environment variables (FTLCONF_...) are kept. Pi-hole restarts to apply it. If the backup's app password differs from the one on this card, update the card afterwards."},
+        "restore_warning": {"lead": "Replaces Pi-hole's settings", "text": "with the backup's - DNS and DHCP settings, local DNS records, adlists, domains, groups and clients, DHCP leases, and its web password, app password and 2FA. Settings set by environment variables (FTLCONF_...) are kept. Pi-hole restarts to apply it. If the backup's app password differs from the one in Settings, update it there afterwards."},
     },
     {
         "id": "opnsense",
@@ -364,6 +374,42 @@ APP_META = [
         "multi_instance": True,
         "max_extra_instances": MAX_EXTRA_INSTANCES,
         "restore_warning": {"lead": "Replaces Immich's database", "text": "with the backup's - users, albums, people and faces, shared links, settings and API keys. Photos and videos aren't in the backup and stay where they are; ones uploaded since the backup won't be in the restored library. Immich goes into maintenance mode while it restores, then restarts."},
+    },
+    {
+        "id": "homeassistant",
+        "label": "Home Assistant",
+        "icon": "home-assistant.svg",
+        # Home Assistant's own backup API (2025.5 and newer) over its
+        # WebSocket - see apps/homeassistant.py. The options mirror its own
+        # backup page; the ones only HA OS and Supervised have show once a
+        # Test connection found such an install.
+        "key_required": True,
+        "key_label": "Access token",
+        "key_help": "a long-lived access token of an administrator, from your profile's Security tab",
+        "url_placeholder": "http://homeassistant:8123",
+        "extra_fields": [
+            {"name": "settings", "label": "Settings", "type": "switch", "locked": True, "option": True},
+            {"name": "history", "label": "History", "type": "switch", "default": True, "option": True,
+             "help": "history, statistics and energy"},
+            {"name": "media", "label": "Media", "type": "switch", "default": False, "option": True,
+             "only_install": "supervisor"},
+            {"name": "share", "label": "Share folder", "type": "switch", "default": False, "option": True,
+             "only_install": "supervisor"},
+            {"name": "local_apps", "label": "Local apps folder", "type": "switch", "default": False, "option": True,
+             "only_install": "supervisor", "help": "apps you built"},
+            {"name": "apps", "label": "Apps", "type": "select", "default": "none", "option": True,
+             "only_install": "supervisor",
+             "choices": [{"value": "none", "label": "None"}, {"value": "all", "label": "All"},
+                         {"value": "chosen", "label": "Chosen apps"}]},
+            {"name": "chosen_apps", "label": "Chosen apps", "type": "app_list", "option": True,
+             "only_install": "supervisor"},
+            {"name": "install_type", "type": "hidden", "option": True, "choices": ["core", "supervisor"]},
+        ],
+        "multi_instance": True,
+        "max_extra_instances": MAX_EXTRA_INSTANCES,
+        "always_encrypted": True,
+        "pins_certificate": True,
+        "restore_warning": {"lead": "Home Assistant restarts", "text": "and is offline for a few minutes. The backup replaces its settings, and its history if the backup has it - on HA OS its apps and folders too. A token made after the backup stops working."},
     },
 ]
 # Backuparr's own backup, shown as an app card in Server (#165). Not an

@@ -411,6 +411,7 @@ def test_restore_override_fields_are_the_url_key_and_the_apps_own_extras(isolate
     assert fields("pihole") == {"url", "api_key"}
     assert fields("vaultwarden") == {"url", "api_key", "data_dir"}
     assert fields("immich") == {"url", "api_key"}
+    assert fields("homeassistant") == {"url", "api_key"}  # its backup options aren't asked for
     assert fields("unknown") == {"url", "api_key"}
 
 

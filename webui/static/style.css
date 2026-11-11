@@ -810,6 +810,27 @@ input:focus, select:focus, textarea:focus {
   cursor: pointer;
 }
 
+/* An option that's always on (Home Assistant's Settings, #155). */
+.switch input:disabled + .slider { opacity: 0.6; cursor: default; }
+.toggle-field:has(input:disabled) { cursor: default; }
+
+/* Home Assistant's chosen apps (#155): one switch per installed app. */
+.app-list {
+  border: 0;
+  margin: 0 0 12px;
+  padding: 0;
+  min-width: 0;
+}
+.app-list .field-label { padding: 0; margin-bottom: 6px; }
+.app-list-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.app-list-item { margin: 0; overflow-wrap: anywhere; }
+
 .save-row {
   display: flex;
   align-items: center;

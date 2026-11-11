@@ -30,6 +30,8 @@ import archive_crypto
 import destination_util
 import manifest
 import rclone_util
+from apps import homeassistant
+from apps.base import AppError
 from config_store import enabled_destinations, instance_type, load_config
 
 log = logging.getLogger("backuparr.manifest")
@@ -135,11 +137,13 @@ def read_version(app_type, archive):
             return _lazylibrarian_version(archive)
         if app_type == "pihole":
             return _pihole_version(archive)
+        if app_type == "homeassistant":
+            return homeassistant.backup_version(homeassistant.read_backup_json(archive))
         if app_type in _OWN_MANIFEST:
             text = _zip_text(archive, f"backuparr-{app_type}.json")
             return json.loads(text).get(f"{app_type}_version") if text else None
     except (OSError, ValueError, AttributeError, zipfile.BadZipFile, tarfile.TarError, sqlite3.Error,
-            configparser.Error) as exc:
+            configparser.Error, AppError) as exc:
         log.warning("manifest: couldn't read the version inside %s (%s)", os.path.basename(archive), type(exc).__name__)
     return None
 

@@ -40,17 +40,16 @@ before it looks at the request, so each check changes nothing). The version
 recorded with a backup comes from GET /api/server/version, which is public.
 """
 import gzip
-import io
 import logging
 import os
 import re
-import secrets
 import time
 import zlib
 
 import requests
 
 from apps.base import AppError, poll_until, save_stream
+from apps.multipart import MultipartFile
 from apps.servarr import SameHostSession
 
 logger = logging.getLogger(f"backuparr.{__name__}")
@@ -109,38 +108,6 @@ def upload_name(path):
     restores it differently, and every dump Backuparr makes is a pg_dump."""
     match = _TIMESTAMP.search(os.path.basename(path))
     return f"backuparr-{match.group(1) if match else 'restore'}.sql.gz"
-
-
-class _MultipartFile:
-    """A multipart/form-data body holding one file, read from disk while
-    it's sent: requests' files= would build the whole body in memory, and
-    a database dump can be gigabytes."""
-
-    def __init__(self, path, field, filename, content_type):
-        boundary = secrets.token_hex(16)
-        self.content_type = f"multipart/form-data; boundary={boundary}"
-        head = (f'--{boundary}\r\nContent-Disposition: form-data; name="{field}"; filename="{filename}"\r\n'
-                f"Content-Type: {content_type}\r\n\r\n").encode()
-        tail = f"\r\n--{boundary}--\r\n".encode()
-        self._length = len(head) + os.path.getsize(path) + len(tail)
-        self._file = open(path, "rb")
-        self._parts = [io.BytesIO(head), self._file, io.BytesIO(tail)]
-
-    def __len__(self):
-        return self._length
-
-    def read(self, size=-1):
-        out = b""
-        while self._parts and (size < 0 or len(out) < size):
-            chunk = self._parts[0].read(-1 if size < 0 else size - len(out))
-            if chunk:
-                out += chunk
-            else:
-                self._parts.pop(0)
-        return out
-
-    def close(self):
-        self._file.close()
 
 
 class ImmichApp:
@@ -384,7 +351,7 @@ class ImmichApp:
             raise ImmichError("immich: Immich didn't go into maintenance mode within 2 minutes - check it's running")
 
     def _upload(self, path, name, key):
-        body = _MultipartFile(path, "file", name, "application/gzip")
+        body = MultipartFile(path, "file", name, "application/gzip")
         try:
             self._call("POST", "/admin/database-backups/upload", key=key, data=body,
                        headers={"Content-Type": body.content_type}, timeout=_UPLOAD_TIMEOUT_S)

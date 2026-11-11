@@ -348,7 +348,7 @@ def test_a_damaged_backup_is_never_uploaded(app, server, tmp_path):
 def test_restore_message_says_when_the_cards_key_stopped_working(monkeypatch, tmp_path):
     monkeypatch.setattr(ImmichApp, "restore_from_file", lambda self, path: {"fresh": False, "key_ok": False, "cleaned": False})
     result = restore_actions.restore_app("immich", {"url": "http://immich:2283", "api_key": KEY}, str(tmp_path), "x.sql.gz")
-    assert result["attention"] and "the API key on its card no longer works" in restore_actions.restore_message("immich", result)
+    assert result["attention"] and "the API key in Settings no longer works" in restore_actions.restore_message("immich", result)
     ok = {"kind": "immich", "fresh": False, "key_ok": True, "cleaned": True, "attention": False}
     assert restore_actions.restore_message("immich", ok) == "immich restore complete, Immich restarted with the restored database"
 

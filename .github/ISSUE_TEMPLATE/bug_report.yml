@@ -37,6 +37,7 @@ body:
         - Vaultwarden
         - OPNsense
         - pfSense
+        - Home Assistant
         - Web UI / general
         - Not app-specific
     validations:

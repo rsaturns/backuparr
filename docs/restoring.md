@@ -62,6 +62,7 @@ restore never leaves an app half-migrated.
 | NZBGet | Automatic; NZBGet reloads. See the [NZBGet note](apps/nzbget.md) |
 | Tautulli | Config only - see the [Tautulli note](apps/tautulli.md) |
 | Jellyfin | Automatic; Jellyfin restarts. Read the [Jellyfin note](apps/jellyfin.md) before restoring onto a new install |
+| Home Assistant | Automatic; Home Assistant restarts. A token made after the backup stops working - see the [Home Assistant note](apps/homeassistant.md) |
 | Immich | Automatic; Immich restores in maintenance mode and restarts, also onto a new install - see the [Immich note](apps/immich.md) |
 | Pi-hole | Automatic; Pi-hole restarts. The backup's passwords come back too - see the [Pi-hole note](apps/pihole.md) |
 | Emby, Plex, Seerr, LazyLibrarian, Vaultwarden | Stop the app, restore, then start it again. See the [Emby](apps/emby.md), [Plex](apps/plex.md), [Seerr](apps/seerr.md), [LazyLibrarian](apps/lazylibrarian.md) and [Vaultwarden](apps/vaultwarden.md) notes |

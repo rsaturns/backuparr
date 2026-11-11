@@ -27,6 +27,7 @@ import ssl
 import warnings
 from urllib.parse import urlsplit
 
+import certifi
 import requests
 from cryptography import x509
 from cryptography.x509.oid import NameOID
@@ -36,8 +37,11 @@ from urllib3.exceptions import InsecureRequestWarning
 from apps.base import AppError
 
 _FINGERPRINT = re.compile(r"[0-9a-f]{64}")
-CHANGED_TEXT = "the firewall's certificate changed. Check it and trust the new one to resume backups."
-UNTRUSTED_TEXT = "the firewall's certificate isn't trusted. Check it and trust it on the card to back it up."
+CHANGED_TEXT = "{whose} certificate changed. Check it and trust the new one to resume backups."
+UNTRUSTED_TEXT = "{whose} certificate isn't trusted. Check it and trust it in Settings to back it up."
+# Whose certificate the messages name, by app type; the rest are firewalls.
+_WHOSE = {"homeassistant": "Home Assistant's"}
+_FIREWALLS = "the firewall's"
 
 
 class CertificateUntrusted(AppError):
@@ -49,7 +53,8 @@ class CertificateUntrusted(AppError):
         self.certificate = certificate
         self.trusted = trusted
         self.changed = bool(trusted)
-        super().__init__(f"{app}: {CHANGED_TEXT if self.changed else UNTRUSTED_TEXT}")
+        text = CHANGED_TEXT if self.changed else UNTRUSTED_TEXT
+        super().__init__(f"{app}: {text.format(whose=_WHOSE.get(app, _FIREWALLS))}")
 
 
 def valid_trusted_cert(value):
@@ -92,6 +97,48 @@ def fetch_certificate(url, timeout=10):
         server_name = None if _is_ip(host) else host
         with context.wrap_socket(sock, server_hostname=server_name) as tls:
             return tls.getpeercert(binary_form=True)
+
+
+def _same_certificate(tls, trusted):
+    return hashlib.sha256(tls.getpeercert(binary_form=True)).hexdigest() == trusted["sha256"]
+
+
+def connect_socket(url, app, trusted=None, timeout=10):
+    """A connected socket to the http(s) URL's host, for a protocol requests
+    doesn't speak (Home Assistant's WebSocket API). For https it's TLS that a
+    CA vouches for, or the trusted certificate by its fingerprint - the same
+    rules as PinnedAdapter, checked before a byte of the protocol is sent.
+    Raises CertificateUntrusted."""
+    parts = urlsplit(url)
+    host, port = parts.hostname, parts.port or (443 if parts.scheme == "https" else 80)
+    if parts.scheme != "https":
+        return socket.create_connection((host, port), timeout=timeout)
+    trusted = trusted if trusted and valid_trusted_cert(trusted) else None
+    if trusted:
+        context = ssl.create_default_context()
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        tls = context.wrap_socket(socket.create_connection((host, port), timeout=timeout),
+                                  server_hostname=None if _is_ip(host) else host)
+        if _same_certificate(tls, trusted):
+            return tls
+        tls.close()  # Another certificate: fine if a CA vouches for it, else refused.
+    context = ssl.create_default_context(cafile=certifi.where())
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    raw = socket.create_connection((host, port), timeout=timeout)
+    try:
+        return context.wrap_socket(raw, server_hostname=host)
+    except ssl.SSLCertVerificationError:
+        raw.close()
+        try:
+            presented = describe(fetch_certificate(url, timeout))
+        except (OSError, ValueError):
+            presented = None
+        raise CertificateUntrusted(app, presented, trusted) from None
+    except BaseException:
+        raw.close()
+        raise
 
 
 def _is_ip(host):

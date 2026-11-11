@@ -56,6 +56,7 @@ SOURCES = [
     ("Vaultwarden", os.path.join(ICONS, "vaultwarden.svg"), "svg"),
     ("OPNsense", os.path.join(ICONS, "opnsense.svg"), "svg"),
     ("pfSense", os.path.join(ICONS, "pfsense.svg"), "svg"),
+    ("Home Assistant", os.path.join(ICONS, "home-assistant.svg"), "svg"),
 ]
 
 DESTS = [

@@ -78,7 +78,7 @@ def _refused(cfg):
         return jsonify({"error": "send the token as Authorization: Bearer <token>"}), 401, {"WWW-Authenticate": "Bearer"}
     if not hmac.compare_digest(_hash(token), cfg["ha_token_hash"]):
         auth._login_record_failure(ip)
-        return jsonify({"error": "that token isn't valid - make a new one on Backuparr's card"}), 401, {"WWW-Authenticate": "Bearer"}
+        return jsonify({"error": "that token isn't valid - make a new one in Backuparr's Settings (Server > Backuparr)"}), 401, {"WWW-Authenticate": "Bearer"}
     return None
 
 

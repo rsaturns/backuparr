@@ -1,6 +1,6 @@
 """Trigger each configured app's own backup mechanism, zip the result if
 needed, and upload it to the configured rclone remote. Most apps are backed
-up over their HTTP API. A few need their folder mounted into this container:
+up over their HTTP API (Home Assistant over its WebSocket API). A few need their folder mounted into this container:
 Jellyfin's and LazyLibrarian's APIs can't download the backup they create, so
 it's picked up from the mounted folder; Emby, Seerr and Vaultwarden have no
 backup API, so their files are read from their mounted data folders; and
@@ -33,6 +33,7 @@ import self_backup
 from apps.base import AppError
 from apps.bazarr import BazarrApp
 from apps.emby import EmbyApp
+from apps.homeassistant import HomeAssistantApp
 from apps.http_headers import RequestHeadersError, app_connection_config, configure_app_headers
 from apps.immich import ImmichApp
 from apps.jellyfin import JellyfinApp
@@ -251,14 +252,21 @@ DRIVERS = {
     "opnsense": OpnsenseApp,
     "pfsense": PfsenseApp,
     "immich": ImmichApp,
+    "homeassistant": HomeAssistantApp,
 }
+
+
+def _field_value(value):
+    return value if isinstance(value, bool) else value or None
 
 
 def _build_app(name, app_cfg):
     meta = app_meta(name)
     if name not in DRIVERS or meta is None:
         raise ValueError(f"Unknown app: {name}")
-    extras = {field["name"]: app_cfg.get(field["name"]) or None for field in meta["extra_fields"]}
+    # An unset field is None; a switch that's off stays False (#155).
+    extras = {field["name"]: _field_value(app_cfg.get(field["name"]))
+              for field in meta["extra_fields"] if not field.get("locked")}
     if meta.get("pins_certificate"):
         extras["trusted_cert"] = app_cfg.get("trusted_cert") or None
     if meta.get("no_api_key"):
