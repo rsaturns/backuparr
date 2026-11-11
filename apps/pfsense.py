@@ -117,6 +117,11 @@ class PfsenseApp:
 
     def _version(self):
         res = self._request("GET", "/index.php")
+        # The first-time page redirects to the wizard; a set-up dashboard only
+        # links to it (System > Setup Wizard).
+        if 'id="loading-wizard"' in res.text or "url=wizard.php?xml=setup_wizard.xml" in res.text:
+            raise PfsenseError("pfsense: finish pfSense's setup wizard first (sign in as admin once) - until then "
+                               "it shows no dashboard, so the version can't be read")
         match = _VERSION.search(res.text) if res.status_code == 200 else None
         if not match:
             raise PfsenseError("pfsense: the user can't read the version from the dashboard - give it the "

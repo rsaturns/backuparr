@@ -47,6 +47,7 @@ def server(monkeypatch):
     state.version = "2.7.2-RELEASE"
     state.config = CONFIG
     state.signed_out = False
+    state.wizard = False
 
     def token():
         state.counter += 1
@@ -78,6 +79,9 @@ def server(monkeypatch):
             state.signed_in, state.signed_out = False, True
             return reply(request, 302, "", {"Location": "/"})
         if page == "index.php":
+            if state.wizard:
+                return reply(request, 200, f'<meta http-equiv="refresh" content="1;url=wizard.php?xml=setup_wizard.xml" />'
+                                           f'<script>var csrfMagicToken = "{token()}";</script>')
             return reply(request, 200, dashboard(token(), state.version))
         if request.method == "POST" and form.get("download") and form.get("__csrf_magic"):
             assert form.get("donotbackuprrd") == "yes"
@@ -131,6 +135,13 @@ def test_a_user_without_backup_and_restore_is_told_which_privileges(app, server)
 def test_a_user_without_the_dashboard_is_told_for_the_version(app, server):
     server.allowed = {"diag_backup.php"}
     with pytest.raises(PfsenseError, match='"WebCfg - System: Login / Logout / Dashboard" privilege too'):
+        app.test_connection()
+
+
+def test_a_firewall_still_in_its_setup_wizard_says_so(app, server):
+    # A fresh pfSense shows the first-time setup wizard instead (2.8.1, lab).
+    server.wizard = True
+    with pytest.raises(PfsenseError, match="finish pfSense's setup wizard first"):
         app.test_connection()
 
 
