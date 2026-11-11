@@ -2967,6 +2967,7 @@ function clearHistorySelection() {
 }
 
 function updateHistoryBulkBar() {
+  showHistoryBulkError(null);
   const items = Array.from(HISTORY_PICKED.values());
   const backups = items.filter((item) => item.kind === "backup");
   document.getElementById("history-bulk-count").textContent = `${items.length} selected`;
@@ -3080,15 +3081,24 @@ async function deletePicked() {
     setHistorySelecting(false);
     return;
   }
-  // The ones that couldn't be deleted stay picked, with why, in the bar.
+  // The ones that couldn't be deleted stay picked (if still listed), with why, in the bar.
+  const keep = new Set(failed.map(({ item }) => historyKey(item)));
   HISTORY_PICKED.clear();
-  failed.forEach(({ item }) => HISTORY_PICKED.set(historyKey(item), item));
   document.querySelectorAll("#history-root tbody .history-select").forEach((box) => {
-    box.checked = HISTORY_PICKED.has(historyKey(JSON.parse(box.dataset.item)));
+    const item = JSON.parse(box.dataset.item);
+    box.checked = keep.has(historyKey(item));
+    if (box.checked) HISTORY_PICKED.set(historyKey(item), item);
   });
   updateHistoryBulkBar();
   document.getElementById("history-bulk-count").textContent =
-    `Deleted ${deleted}; ${failed.length} couldn't be: ${clause(failed[0].error)}`;
+    `Deleted ${deleted}; ${failed.length} couldn't be deleted`;
+  showHistoryBulkError(clause(failed[0].error));
+}
+
+function showHistoryBulkError(text) {
+  const error = document.getElementById("history-bulk-error");
+  error.textContent = text || "";
+  error.classList.toggle("hidden", !text);
 }
 
 // ---------------------------------------------------------- restore tab ----

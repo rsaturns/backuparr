@@ -278,8 +278,10 @@ def api_history_bulk_delete(dest_id):
         try:
             rclone_util.delete_file(f"{root}/{app_name}/{filename}")
         except rclone_util.RcloneError as exc:
-            failed.append({"app": app_name, "file": filename, "error": humanize_error(exc)})
-            continue
+            # Already gone (retention, or another browser) is what was wanted.
+            if "object not found" not in (exc.detail or ""):
+                failed.append({"app": app_name, "file": filename, "error": humanize_error(exc)})
+                continue
         manifest.remove(app_name, filename, dest_id)
         if manifest.get(app_name, filename) is None:
             runlog.forget_file(app_name, filename)  # gone from every destination

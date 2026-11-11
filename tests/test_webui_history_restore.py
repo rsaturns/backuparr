@@ -545,6 +545,15 @@ def test_bulk_delete_reports_what_it_couldnt_delete(authed_client, isolated_webu
     assert "permission denied" in body["failed"][0]["error"]
 
 
+def test_bulk_delete_counts_a_backup_already_gone_as_deleted(authed_client, rclone, monkeypatch, isolated_webui):
+    def gone(path):
+        raise isolated_webui.backups.rclone_util.RcloneError(
+            "rclone deletefile ...", "Failed to deletefile: radarr_1.zip is a directory or doesn't exist: object not found")
+    monkeypatch.setattr(isolated_webui.backups.rclone_util, "delete_file", gone)
+    body = authed_client.post("/api/history/local/delete", json={"backups": [{"app": "radarr", "file": "radarr_1.zip"}]}).get_json()
+    assert body == {"deleted": [{"app": "radarr", "file": "radarr_1.zip"}], "failed": []}
+
+
 @pytest.mark.parametrize("body", [
     {"backups": [{"app": "radarr", "file": "../x.zip"}]},
     {"backups": [{"app": "stranger", "file": "a.zip"}]},
@@ -650,3 +659,33 @@ def test_only_a_few_bulk_downloads_are_prepared_at_once(authed_client, isolated_
     response = authed_client.post("/api/history/local/download", json={"backups": [{"app": "radarr", "file": "radarr_1.zip"}]})
     assert response.status_code == 429
     jobs.jobs.clear()
+
+
+def test_a_bulk_download_counts_up_as_it_prepares(authed_client, isolated_webui, monkeypatch):
+    import threading
+    import time
+    local_backup(isolated_webui, "radarr_1.zip")
+    local_backup(isolated_webui, "radarr_2.zip")
+    gate = threading.Event()
+    real = isolated_webui.backups._plain_copy
+
+    def held(dest_id, root, app_name, filename, tmp_dir):
+        if filename == "radarr_2.zip":
+            gate.wait(5)
+        return real(dest_id, root, app_name, filename, tmp_dir)
+    monkeypatch.setattr(isolated_webui.backups, "_plain_copy", held)
+    response = authed_client.post("/api/history/local/download", json={"backups": [
+        {"app": "radarr", "file": "radarr_1.zip"}, {"app": "radarr", "file": "radarr_2.zip"}]})
+    job = f"/api/history/local/download/{response.get_json()['job_id']}"
+    for _ in range(200):
+        status = authed_client.get(job).get_json()
+        if status["done"] == 1:
+            break
+        time.sleep(0.01)
+    assert status == {"state": "preparing", "done": 1, "total": 2}
+    gate.set()
+    for _ in range(200):
+        if authed_client.get(job).get_json()["state"] == "ready":
+            break
+        time.sleep(0.01)
+    assert authed_client.get(job).get_json() == {"state": "ready", "done": 2, "total": 2}
