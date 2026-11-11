@@ -3,8 +3,8 @@ after losing the server, encrypted with its existing secrets key.
 
 The archive is a zip made in memory, encrypted with archive_crypto like
 an encrypted app backup (authenticated, so a wrong key or a damaged or
-altered file is refused). Backups made before 3.0 were encrypted whole with
-Fernet; those still open:
+altered file is refused). Backups made before 3.0 (one Fernet token) are
+recognised but no longer open: restore them with 2.5.6 (#162). It holds:
 
 - config.json as stored (its secret fields stay encrypted with the same key)
 - auth.json: the admin username and password hash
@@ -29,8 +29,6 @@ import tempfile
 import zipfile
 from datetime import datetime, timezone
 
-from cryptography.fernet import InvalidToken
-
 import archive_crypto
 import auth_store
 import config_store
@@ -38,7 +36,6 @@ import destination_util
 import manifest
 import rclone_util
 import runlog
-import secrets_crypto
 import tls
 from apps.base import AppError
 from webui.version import VERSION
@@ -91,12 +88,11 @@ def build():
 def open_archive(data, key=None):
     """{name: bytes} from an encrypted archive, with this install's key or
     the one given. Raises SelfBackupError, saying why, if it can't be."""
+    if archive_crypto.is_pre_3_self_backup(data):
+        raise SelfBackupError(f"backuparr: {archive_crypto.PRE_3_SELF_BACKUP}")
     try:
-        if archive_crypto.is_encrypted_bytes(data):
-            plain = archive_crypto.decrypt_bytes(data, key)
-        else:
-            plain = secrets_crypto.decrypt_bytes(data, key)  # made before 3.0
-    except (archive_crypto.ArchiveCryptoError, InvalidToken, ValueError, TypeError):
+        plain = archive_crypto.decrypt_bytes(data, key)
+    except (archive_crypto.ArchiveCryptoError, ValueError, TypeError):
         raise SelfBackupError("backuparr: this isn't a Backuparr backup made with this key, or it's damaged") from None
     try:
         with zipfile.ZipFile(io.BytesIO(plain)) as z:

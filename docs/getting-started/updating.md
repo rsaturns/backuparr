@@ -29,6 +29,11 @@ and then restore one.
   an app on its card in Settings. See
   [Encrypted backups](../security.md#encrypted-backups).
 - **Backups made before stay as they are** and still restore.
+- **Backuparr backs itself up** in the background on the first start of 3.0
+  (if its own backup is on and a destination is set up). Its backups from
+  before 3.0 can't be restored any more: restore one with Backuparr 2.5.6,
+  then update. They stay until retention removes them. See
+  [Restoring Backuparr itself](../restoring.md#restoring-backuparr-itself).
 
 ## Updating to 2.5.0
 

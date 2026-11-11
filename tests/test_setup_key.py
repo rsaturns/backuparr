@@ -7,6 +7,7 @@ import os
 import pytest
 from cryptography.fernet import Fernet
 
+import archive_crypto
 import auth_store
 import config_store
 import secrets_crypto
@@ -110,7 +111,7 @@ def test_a_restore_on_the_setup_screen_needs_this_installs_key(lost_login, isola
     _old, key = lost_login
     client = isolated_webui.app.test_client()
     other_key = Fernet.generate_key().decode()
-    response = client.post("/api/setup/restore", json=restore_upload(Fernet(other_key.encode()).encrypt(b"x"), other_key))
+    response = client.post("/api/setup/restore", json=restore_upload(archive_crypto.encrypt_bytes(b"x", other_key), other_key))
     assert response.status_code == 403
     assert config_store.load_config()["apps"]["radarr"]["api_key"] == "radarr-secret-key"
 

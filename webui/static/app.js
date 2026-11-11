@@ -253,10 +253,16 @@ function warnWhenDownloadIsDecrypted(link, appId, entry) {
 }
 
 // The one-time notice for an install updated to 3.0, when backups became
-// encrypted by default. A new install never sees it.
+// encrypted by default. A new install never sees it. While the first start's
+// backup of Backuparr runs, it waits (up to 5 minutes) to say if it was made.
 async function showEncryptionNotice() {
-  const { show } = await apiFetch("/api/encryption-notice");
-  if (!show) return;
+  let notice = await apiFetch("/api/encryption-notice");
+  for (let tries = 0; notice.show && notice.self_backup_pending && tries < 100; tries++) {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    notice = await apiFetch("/api/encryption-notice");
+  }
+  if (!notice.show) return;
+  document.getElementById("encryption-notice-self-backup").classList.toggle("hidden", !notice.self_backup_made);
   const modal = document.getElementById("encryption-notice-modal");
   const ok = document.getElementById("encryption-notice-ok");
   modal.classList.remove("hidden");

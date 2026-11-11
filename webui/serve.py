@@ -217,8 +217,14 @@ SERVER = None
 
 def main():
     global SERVER
+    from webui import runs
     from webui.app import create_app
-    SERVER = Server(create_app())
+    app = create_app()
+    # The HTTPS key and certificate first: the first start of 3.0 backs
+    # Backuparr up straight away (#162), and its backup holds them.
+    tls.ensure()
+    runs.start_upgrade_self_backup()
+    SERVER = Server(app)
     asyncio.run(SERVER.main())
 
 

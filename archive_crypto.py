@@ -52,6 +52,13 @@ class WrongKeyError(ArchiveCryptoError):
     """The archive was encrypted with another key, or the key given isn't one."""
 
 
+# Backuparr's own backup from before 3.0 was one Fernet token. Every token
+# starts with version byte 0x80 and a 64-bit timestamp whose top bytes are
+# still zero, which base64 writes as "gAAAAA" - enough to name the file
+# without any code that could decrypt it (#162).
+_PRE_3_PREFIX = b"gAAAAA"
+PRE_3_SELF_BACKUP = "this backup is from before Backuparr 3.0. Restore it with Backuparr 2.5.6, then update."
+
 _WRONG_KEY = "this backup was encrypted with a different encryption key - enter that key to use it"
 _DAMAGED = "the encrypted backup is damaged or incomplete"
 
@@ -198,6 +205,12 @@ def is_encrypted(path):
 
 def is_encrypted_bytes(data):
     return data[:len(MAGIC)] == MAGIC
+
+
+def is_pre_3_self_backup(data):
+    """True for the first bytes of Backuparr's own backup in its pre-3.0
+    format, which 3.0 no longer opens."""
+    return data[:len(_PRE_3_PREFIX)] == _PRE_3_PREFIX
 
 
 def encrypt_bytes(data, key=None):

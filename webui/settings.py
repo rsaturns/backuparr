@@ -7,6 +7,7 @@ import destination_util
 from apps.http_headers import headers_for_app, RequestHeadersError, validate_request_headers
 from backup import build_app, humanize_error, notify
 from config_store import acknowledge_encryption_notice, app_meta, APP_NAMES, DEFAULT_APP, DEFAULT_INSTANCE, DEST_EDITABLE_FIELDS, DEST_NAMES, instance_ids, instance_type, key_required, load_config, MAX_EXTRA_INSTANCES, MULTI_INSTANCE_APPS, save_config, valid_schedule
+from webui import runs
 
 
 bp = Blueprint("settings", __name__)
@@ -197,10 +198,14 @@ def api_set_config():
 
 
 # The one-time "Backups are now encrypted" notice for an install that
-# updated to 3.0 (#147). A new install never sees it.
+# updated to 3.0 (#147). A new install never sees it. It waits while the
+# first start's backup of Backuparr runs, then says if it was made (#162).
 @bp.get("/api/encryption-notice")
 def api_encryption_notice():
-    return jsonify({"show": load_config().get("encryption_notice_acknowledged") is not True})
+    cfg = load_config()
+    return jsonify({"show": cfg.get("encryption_notice_acknowledged") is not True,
+                    "self_backup_pending": runs.UPGRADE_SELF_BACKUP["running"],
+                    "self_backup_made": cfg.get("upgrade_self_backup_made") is True})
 
 
 @bp.post("/api/encryption-notice/acknowledge")
