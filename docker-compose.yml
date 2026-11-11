@@ -39,3 +39,6 @@ services:
       # Needed to back up LazyLibrarian - the folder it has at /config. Read-write,
       # so each backup's file is removed from it and restores work.
       # - /share/Container/lazylibrarian/config:/mnt/lazylibrarian
+      # Needed to back up Vaultwarden - the folder Vaultwarden has at /data.
+      # Read-only is enough for backups; read-write to restore.
+      # - /share/Container/vaultwarden/data:/mnt/vaultwarden:ro

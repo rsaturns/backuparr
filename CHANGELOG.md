@@ -7,6 +7,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Vaultwarden backups and restores from its mounted data folder: the database (SQLite), RSA key, admin page settings, attachments and Send files, always encrypted; restores run while Vaultwarden is stopped (#150). See https://rsaturns.github.io/backuparr/apps/vaultwarden/
 - HTTPS on port 8991 next to HTTP on 8990, with a self-signed certificate Backuparr makes and renews itself (825 days, accepted by Apple devices), or your own with BACKUPARR_TLS_CERT and BACKUPARR_TLS_KEY. The Backuparr card shows its fingerprint, and HTTPS only (or BACKUPARR_HTTPS_ONLY) closes plain HTTP. Add "8991:8991" to your ports (#177). See https://rsaturns.github.io/backuparr/security/#https
 - The Backuparr integration for Home Assistant (https://github.com/rsaturns/ha-backuparr): a problem sensor for every app's backups and a failed count, set up from Home Assistant's UI, trusting Backuparr's HTTPS certificate by its fingerprint (#171).
 - Home Assistant can read every backup's status: Enable Home Assistant integration on the Backuparr card gives a token for the read-only /api/ha/status (and /api/ha/status/<app>), which opens nothing else (#170). See https://rsaturns.github.io/backuparr/home-assistant/

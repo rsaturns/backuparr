@@ -10,13 +10,13 @@
 
 Scheduled config/database backups for Radarr, Sonarr, Lidarr, Whisparr,
 Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, NZBGet, Tautulli, Jellyfin, Emby,
-Plex, Seerr, LazyLibrarian, and Pi-hole, sent to every destination you enable: Local
-storage, Google Drive, OneDrive, and Dropbox. Everything - apps, destinations,
+Plex, Seerr, LazyLibrarian, Pi-hole, and Vaultwarden, sent to every destination
+you enable: Local storage, Google Drive, OneDrive, and Dropbox. Everything - apps, destinations,
 schedule, retention and restores - is set up in the web UI, not env vars.
 
-Most apps are backed up through their own API. Jellyfin, Emby, Plex, Seerr and
-LazyLibrarian also need a folder mounted into Backuparr - see the [app
-notes](https://rsaturns.github.io/backuparr/apps/).
+Most apps are backed up through their own API. Jellyfin, Emby, Plex, Seerr,
+LazyLibrarian and Vaultwarden also need a folder mounted into Backuparr - see
+the [app notes](https://rsaturns.github.io/backuparr/apps/).
 
 **[Documentation](https://rsaturns.github.io/backuparr/)** · [Changelog](CHANGELOG.md)
 
@@ -80,6 +80,8 @@ services:
       #- /share/Container/seerr/config:/mnt/seerr:ro
       # Needed to back up LazyLibrarian - its /config folder (see the LazyLibrarian note).
       #- /share/Container/lazylibrarian/config:/mnt/lazylibrarian
+      # Needed to back up Vaultwarden - its /data folder (see the Vaultwarden note).
+      #- /share/Container/vaultwarden/data:/mnt/vaultwarden:ro
 ```
 
 ```sh

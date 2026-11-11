@@ -15,6 +15,7 @@ APPS = {
     "tdarr": ("x-api-key", {}),
     "sabnzbd": (None, {}),
     "pihole": (None, {}),  # its app password goes in the login's body
+    "vaultwarden": (None, {}),  # it has no key: /api/version needs no login
 }
 
 

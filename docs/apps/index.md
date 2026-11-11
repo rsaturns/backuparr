@@ -22,6 +22,7 @@ has_toc: false
 | Seerr | Database and `settings.json` from its mounted config folder, while Seerr runs | Written back while Seerr is stopped - see the [Seerr note](seerr.md) |
 | LazyLibrarian | The app's own backup (`cmd=backup`), collected from its mounted data folder | Written back while LazyLibrarian is stopped - see the [LazyLibrarian note](lazylibrarian.md) |
 | Pi-hole (v6+) | Teleporter (`GET /api/teleporter`), with an app password; always encrypted - see the [Pi-hole note](pihole.md) | Imported over `POST /api/teleporter`; Pi-hole restarts |
+| Vaultwarden | Database, RSA key, `config.json`, attachments and Sends from its mounted data folder, while Vaultwarden runs; always encrypted | Written back while Vaultwarden is stopped - see the [Vaultwarden note](vaultwarden.md) |
 
 For the apps with a mounted folder, read-only is enough for backups; restoring
 from the web UI needs it read-write, with Backuparr running as the app's

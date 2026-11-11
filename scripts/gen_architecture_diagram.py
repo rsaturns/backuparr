@@ -52,6 +52,7 @@ SOURCES = [
     ("Seerr", os.path.join(ICONS, "seerr.svg"), "svg"),
     ("LazyLibrarian", os.path.join(ICONS, "lazylibrarian.png"), "png"),
     ("Pi-hole", os.path.join(ICONS, "pi-hole.svg"), "svg"),
+    ("Vaultwarden", os.path.join(ICONS, "vaultwarden.svg"), "svg"),
 ]
 
 DESTS = [

@@ -13,7 +13,7 @@ from config_store import app_meta, instance_type
 
 # Restored while stopped: they can't be asked their version at restore time,
 # so the check runs on the Restore tab first, while they're still running.
-STOPPED_FOR_RESTORE = {"emby", "plex", "seerr", "lazylibrarian"}
+STOPPED_FOR_RESTORE = {"emby", "plex", "seerr", "lazylibrarian", "vaultwarden"}
 
 
 class RestoreVersionError(AppError):

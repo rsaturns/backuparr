@@ -22,7 +22,7 @@ class ConfigError(RuntimeError):
     truncated by a full disk, ...). The message says what to do about it."""
 
 
-APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr", "lazylibrarian", "pihole"]
+APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr", "lazylibrarian", "pihole", "vaultwarden"]
 
 # encrypt: whether its backups are encrypted (#147) - on unless turned off,
 # and ignored for an app whose APP_META sets always_encrypted.
@@ -77,6 +77,7 @@ _APP_CATEGORY = {
     "plex": "media-servers", "jellyfin": "media-servers", "emby": "media-servers", "tautulli": "media-servers",
     "seerr": "media-servers",
     "pihole": "network",
+    "vaultwarden": "security",
 }
 
 # Drives the web UI's forms generically. restore_warning is shown on the
@@ -237,6 +238,25 @@ APP_META = [
         "max_extra_instances": MAX_EXTRA_INSTANCES,
         "always_encrypted": True,
         "restore_warning": {"lead": "Replaces Pi-hole's settings", "text": "with the backup's - DNS and DHCP settings, local DNS records, adlists, domains, groups and clients, DHCP leases, and its web password, app password and 2FA. Settings set by environment variables (FTLCONF_...) are kept. Pi-hole restarts to apply it. If the backup's app password differs from the one on this card, update the card afterwards."},
+    },
+    {
+        "id": "vaultwarden",
+        "label": "Vaultwarden",
+        "icon": "vaultwarden.svg",
+        # Vaultwarden has no backup API, so its data folder is mounted into
+        # this container; the URL only gives its version and whether it's
+        # running - see apps/vaultwarden.py. The backup holds its RSA key and
+        # config.json (admin token, SMTP password) in plain text.
+        "key_required": False,
+        "no_api_key": True,
+        "url_placeholder": "http://vaultwarden",
+        "extra_fields": [
+            {"name": "data_dir", "label": "Data folder", "type": "text", "required": True,
+             "placeholder": "/mnt/vaultwarden",
+             "help": "Vaultwarden's /data folder as mounted here; read-write to restore"},
+        ],
+        "always_encrypted": True,
+        "restore_warning": {"lead": "Stop Vaultwarden first", "text": "- the restore is refused while it's running. It replaces Vaultwarden's database with the backup's - users, organisations, every vault item, devices and 2FA - and writes back its RSA key, admin page settings, attachments and Send files. Anything added since is lost. Start Vaultwarden again afterwards."},
     },
 ]
 # Backuparr's own backup, shown as an app card in Server (#165). Not an

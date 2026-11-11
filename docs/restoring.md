@@ -36,7 +36,7 @@ restore never leaves an app half-migrated.
   page (for example `FTL v6.8`).
 - Bazarr, SABnzbd and Tdarr backups made before 2.5.0 don't record a version.
   They restore with a warning.
-- Emby, Plex, Seerr and LazyLibrarian must be stopped to restore. Pick the
+- Emby, Plex, Seerr, LazyLibrarian and Vaultwarden must be stopped to restore. Pick the
   backup while the app is still running, then stop it and restore within
   6 hours.
 - Each download is also checked against the checksum recorded when the backup
@@ -58,7 +58,7 @@ restore never leaves an app half-migrated.
 | Tautulli | Config only - see the [Tautulli note](apps/tautulli.md) |
 | Jellyfin | Automatic; Jellyfin restarts. Read the [Jellyfin note](apps/jellyfin.md) before restoring onto a new install |
 | Pi-hole | Automatic; Pi-hole restarts. The backup's passwords come back too - see the [Pi-hole note](apps/pihole.md) |
-| Emby, Plex, Seerr, LazyLibrarian | Stop the app, restore, then start it again. See the [Emby](apps/emby.md), [Plex](apps/plex.md), [Seerr](apps/seerr.md) and [LazyLibrarian](apps/lazylibrarian.md) notes |
+| Emby, Plex, Seerr, LazyLibrarian, Vaultwarden | Stop the app, restore, then start it again. See the [Emby](apps/emby.md), [Plex](apps/plex.md), [Seerr](apps/seerr.md), [LazyLibrarian](apps/lazylibrarian.md) and [Vaultwarden](apps/vaultwarden.md) notes |
 
 ## Restoring Backuparr itself
 

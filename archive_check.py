@@ -39,6 +39,7 @@ _REQUIRED = {
     "seerr": [["backuparr-seerr.json"], ["db/db.sqlite3"], ["settings.json"]],
     "lazylibrarian": [["lazylibrarian.db"], ["config.ini"]],
     "pihole": [["etc/pihole/pihole.toml"], ["etc/pihole/gravity.db"]],
+    "vaultwarden": [["backuparr-vaultwarden.json"], ["db.sqlite3"]],
 }
 _SQLITE_SUFFIXES = (".db", ".sqlite", ".sqlite3")
 _CHUNK = 1024 * 1024

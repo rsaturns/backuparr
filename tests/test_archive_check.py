@@ -76,6 +76,9 @@ def sound_archives(tmp_path):
         "lazylibrarian": make_tar(tmp_path / "ll.tgz", {"lazylibrarian.db": db, "config.ini": b"[General]\n"}),
         "pihole-2": make_zip(tmp_path / "pihole.zip", {"etc/pihole/pihole.toml": "[dns]\n", "etc/hosts": "127.0.0.1 localhost\n",
                                                        "etc/pihole/gravity.db": db, "etc/pihole/pihole-FTL.db": db}),
+        "vaultwarden": make_zip(tmp_path / "vw.zip", {"backuparr-vaultwarden.json": j({"vaultwarden_version": "1.37.5"}),
+                                                      "db.sqlite3": db, "rsa_key.pem": "-----BEGIN PRIVATE KEY-----",
+                                                      "attachments/a1/f1": b"x"}),
     }
 
 

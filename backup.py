@@ -2,9 +2,9 @@
 needed, and upload it to the configured rclone remote. Most apps are backed
 up over their HTTP API. A few need their folder mounted into this container:
 Jellyfin's and LazyLibrarian's APIs can't download the backup they create, so
-it's picked up from the mounted folder; Emby and Seerr have no backup API, so
-their files are read from their mounted data folders; and Plex's settings
-and server identity come from its mounted data folder.
+it's picked up from the mounted folder; Emby, Seerr and Vaultwarden have no
+backup API, so their files are read from their mounted data folders; and
+Plex's settings and server identity come from its mounted data folder.
 Settings come from config_store, not environment variables.
 """
 import errno
@@ -49,6 +49,7 @@ from apps.servarr import UnsafeRedirectError
 from apps.sonarr import SonarrApp
 from apps.tautulli import TautulliApp
 from apps.tdarr import TdarrApp
+from apps.vaultwarden import VaultwardenApp
 from apps.whisparr import WhisparrApp
 from config_store import ConfigError, app_meta, enabled_apps, enabled_destinations, encrypts, instance_type, retention_days
 from webui.version import VERSION
@@ -243,6 +244,7 @@ DRIVERS = {
     "seerr": SeerrApp,
     "lazylibrarian": LazyLibrarianApp,
     "pihole": PiholeApp,
+    "vaultwarden": VaultwardenApp,
 }
 
 

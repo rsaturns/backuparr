@@ -612,7 +612,8 @@ def api_restore(dest_id, app_name):
 @bp.post("/api/restore/<dest_id>/<app_name>/check")
 def api_restore_check(dest_id, app_name):
     """The version check, run on the Restore tab when a backup is picked -
-    for Emby, Plex, Seerr and LazyLibrarian while they're still running."""
+    for Emby, Plex, Seerr, LazyLibrarian and Vaultwarden while they're still
+    running."""
     if not instance_type(app_name):
         return jsonify({"error": "unknown app"}), 404
     data = request.get_json(force=True, silent=True) or {}
