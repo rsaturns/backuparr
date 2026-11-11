@@ -1,6 +1,7 @@
 """The pre-upload check (#107): an archive is only uploaded once it opens,
 reads back intact, its SQLite databases pass a quick check and the files
 the app's restore needs are there."""
+import gzip
 import io
 import json
 import os
@@ -81,7 +82,26 @@ def sound_archives(tmp_path):
         "vaultwarden": make_zip(tmp_path / "vw.zip", {"backuparr-vaultwarden.json": j({"vaultwarden_version": "1.37.5"}),
                                                       "db.sqlite3": db, "rsa_key.pem": "-----BEGIN PRIVATE KEY-----",
                                                       "attachments/a1/f1": b"x"}),
+        "immich-2": str(immich_dump(tmp_path / "immich.sql.gz")),
     }
+
+
+def immich_dump(path, body=b"-- PostgreSQL database dump\n\nCREATE TABLE t ();\n\n-- PostgreSQL database dump complete\n"):
+    path.write_bytes(gzip.compress(body))
+    return path
+
+
+@pytest.mark.parametrize("content, fragment", [
+    (gzip.compress(b"<html>Login</html>"), "isn't an Immich database backup"),
+    (gzip.compress(b"-- PostgreSQL database dump\nCOPY public.asset"), "incomplete"),
+    (gzip.compress(b"-- PostgreSQL database dump\n-- PostgreSQL database dump complete\n")[:-6], "damaged"),
+    (b"not gzip", "damaged"),
+])
+def test_an_immich_backup_must_be_a_whole_database_dump(tmp_path, content, fragment):
+    path = tmp_path / "immich.sql.gz"
+    path.write_bytes(content)
+    with pytest.raises(archive_check.ArchiveCheckError, match=fragment):
+        archive_check.check("immich", str(path))
 
 
 def pfsense_config(path):

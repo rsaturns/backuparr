@@ -180,7 +180,7 @@ def test_prowlarr_and_discovered_apps_lead_their_category(webui):
     assert [c.split('data-app="')[1].split('"')[0] for c in cards] == [
         "prowlarr", "radarr", "sonarr", "lidarr", "whisparr", "lazylibrarian", "profilarr", "bazarr", "tdarr",
         "sabnzbd", "nzbget",
-        "tautulli", "jellyfin", "emby", "plex", "seerr",
+        "tautulli", "jellyfin", "emby", "plex", "seerr", "immich",
         "pihole", "opnsense", "pfsense",
         "vaultwarden"]
     assert html.count('id="discover-btn"') == 1

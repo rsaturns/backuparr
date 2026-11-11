@@ -34,6 +34,7 @@ from apps.base import AppError
 from apps.bazarr import BazarrApp
 from apps.emby import EmbyApp
 from apps.http_headers import RequestHeadersError, app_connection_config, configure_app_headers
+from apps.immich import ImmichApp
 from apps.jellyfin import JellyfinApp
 from apps.lazylibrarian import LazyLibrarianApp
 from apps.lidarr import LidarrApp
@@ -249,6 +250,7 @@ DRIVERS = {
     "vaultwarden": VaultwardenApp,
     "opnsense": OpnsenseApp,
     "pfsense": PfsenseApp,
+    "immich": ImmichApp,
 }
 
 
@@ -264,16 +266,17 @@ def _build_app(name, app_cfg):
     return DRIVERS[name](app_cfg["url"], app_cfg.get("api_key", ""), **extras)
 
 
-_TAR_SUFFIX = re.compile(r"\.tar\.(?:gz|bz2|xz|zst)$")
+_DOUBLE_SUFFIX = re.compile(r"\.(?:tar|sql)\.(?:gz|bz2|xz|zst)$")
 
 
 def archive_suffix(path):
     """.zip for a real zip; an app's own non-zip archive (e.g. Profilarr's
-    .tar.gz) keeps its extension rather than being renamed to .zip."""
+    .tar.gz, Immich's .sql.gz) keeps its extension rather than being renamed
+    to .zip."""
     if zipfile.is_zipfile(path):
         return ".zip"
     name = Path(path).name
-    match = _TAR_SUFFIX.search(name)
+    match = _DOUBLE_SUFFIX.search(name)
     return match.group(0) if match else Path(name).suffix or ".bin"
 
 

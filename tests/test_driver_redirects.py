@@ -16,6 +16,7 @@ APPS = {
     "sabnzbd": (None, {}),
     "pihole": (None, {}),  # its app password goes in the login's body
     "vaultwarden": (None, {}),  # it has no key: /api/version needs no login
+    "immich": (None, {}),  # its first call, /api/server/version, is public
 }
 
 

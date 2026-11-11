@@ -20,6 +20,7 @@ has_toc: false
 | Emby | Settings, plugins, lists and databases from its mounted data folder, while Emby runs | Written back while Emby is stopped - see the [Emby note](emby.md) |
 | Plex | Plex's database export (`GET /diagnostics/databases`) plus `Preferences.xml` from its mounted data folder | Written back while Plex is stopped; the server keeps its identity - see the [Plex note](plex.md) |
 | Seerr | Database and `settings.json` from its mounted config folder, while Seerr runs | Written back while Seerr is stopped - see the [Seerr note](seerr.md) |
+| Immich (2.5.0+) | A database dump from Immich's backup job, over its API, then deleted in Immich; photos and videos aren't included - see the [Immich note](immich.md) | Uploaded and restored by Immich in maintenance mode; Immich restarts. Works on a new install with no admin yet |
 | LazyLibrarian | The app's own backup (`cmd=backup`), collected from its mounted data folder | Written back while LazyLibrarian is stopped - see the [LazyLibrarian note](lazylibrarian.md) |
 | Pi-hole (v6+) | Teleporter (`GET /api/teleporter`), with an app password; always encrypted - see the [Pi-hole note](pihole.md) | Imported over `POST /api/teleporter`; Pi-hole restarts |
 | OPNsense (24.1+) | `config.xml` over its API (`GET /api/core/backup/download/this`) with a backup-only API key; a self-signed certificate is trusted on the card; always encrypted - see the [OPNsense note](opnsense.md) | By hand: the Restore tab gives the download and the steps |
