@@ -970,6 +970,12 @@ input:focus, select:focus, textarea:focus {
 .restore-version.fail { color: var(--danger); }
 .restore-version .btn { margin-left: 6px; }
 
+/* A self-signed certificate to trust (#153), and links to a card from a failure. */
+.cert-trust { margin-top: 10px; display: grid; gap: 10px; }
+.cert-details { display: grid; gap: 2px; font-size: 14px; overflow-wrap: anywhere; }
+.cert-details .fingerprint { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+.card-link { margin-left: 8px; }
+
 /* An app restored by hand (#151): its download and steps on the Restore tab. */
 .restore-manual { margin: 4px 0 8px; }
 .restore-manual a.btn { display: inline-block; text-decoration: none; }
@@ -1157,13 +1163,13 @@ code {
   .overview-status-extra { flex-basis: 100%; padding-left: 34px; }
   .overview-status-extra::before { content: none; }
 }
-.overview-app-card.flash { animation: card-flash 1.6s ease-out; }
+.overview-app-card.flash, .app-card.flash { animation: card-flash 1.6s ease-out; }
 @keyframes card-flash {
   from { box-shadow: 0 0 0 3px var(--accent); }
   to { box-shadow: var(--shadow); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .overview-app-card.flash { animation: none; outline: 3px solid var(--accent); }
+  .overview-app-card.flash, .app-card.flash { animation: none; outline: 3px solid var(--accent); }
 }
 
 .overview-app-card {

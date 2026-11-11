@@ -1,7 +1,7 @@
 ---
 title: Seerr
 parent: Apps
-nav_order: 10
+nav_order: 12
 ---
 
 # Seerr

@@ -76,10 +76,34 @@ def sound_archives(tmp_path):
         "lazylibrarian": make_tar(tmp_path / "ll.tgz", {"lazylibrarian.db": db, "config.ini": b"[General]\n"}),
         "pihole-2": make_zip(tmp_path / "pihole.zip", {"etc/pihole/pihole.toml": "[dns]\n", "etc/hosts": "127.0.0.1 localhost\n",
                                                        "etc/pihole/gravity.db": db, "etc/pihole/pihole-FTL.db": db}),
+        "opnsense": str(opnsense_config(tmp_path / "config.xml")),
+        "pfsense-site2": str(pfsense_config(tmp_path / "pf.xml")),
         "vaultwarden": make_zip(tmp_path / "vw.zip", {"backuparr-vaultwarden.json": j({"vaultwarden_version": "1.37.5"}),
                                                       "db.sqlite3": db, "rsa_key.pem": "-----BEGIN PRIVATE KEY-----",
                                                       "attachments/a1/f1": b"x"}),
     }
+
+
+def pfsense_config(path):
+    path.write_text('<?xml version="1.0"?>\n<pfsense><version>23.3</version><system/></pfsense>\n')
+    return path
+
+
+def opnsense_config(path, body="<system><hostname>fw</hostname></system>"):
+    path.write_text(f'<?xml version="1.0"?>\n<opnsense>{body}</opnsense>\n')
+    return path
+
+
+@pytest.mark.parametrize("content, fragment", [
+    ("<html><body>Login</body></html>", "isn't an OPNsense configuration"),
+    ("<opnsense><system>", "isn't valid XML"),
+    ("", "isn't valid XML"),
+])
+def test_an_opnsense_backup_must_be_its_config_xml(tmp_path, content, fragment):
+    path = tmp_path / "config.xml"
+    path.write_text(content)
+    with pytest.raises(archive_check.ArchiveCheckError, match=fragment):
+        archive_check.check("opnsense-site2", str(path))
 
 
 def test_a_sound_backup_of_every_app_passes(tmp_path):

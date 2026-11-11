@@ -4,6 +4,7 @@ import logging
 from flask import Blueprint, jsonify, request
 
 import destination_util
+from apps import cert_pin
 from apps.http_headers import headers_for_app, RequestHeadersError, validate_request_headers
 from backup import build_app, humanize_error, notify
 from config_store import acknowledge_encryption_notice, app_meta, APP_NAMES, DEFAULT_APP, DEFAULT_INSTANCE, DEST_EDITABLE_FIELDS, DEST_NAMES, instance_ids, instance_type, key_required, load_config, MAX_EXTRA_INSTANCES, MULTI_INSTANCE_APPS, save_config, valid_schedule
@@ -140,6 +141,8 @@ def _validate_config(data, cfg):
         meta = app_meta(name)
         if "encrypt" in app_data and not isinstance(app_data["encrypt"], bool):
             return f"{name}: encrypt must be true or false"
+        if "trusted_cert" in app_data and not (meta.get("pins_certificate") and cert_pin.valid_trusted_cert(app_data["trusted_cert"])):
+            return f"{name}: trusted_cert isn't a certificate Backuparr can trust here"
         if app_data.get("enabled") and not app_data.get("url"):
             return f"{name}: a URL is required to enable it"
         if app_data.get("enabled") and key_required(name) and not app_data.get("api_key"):
@@ -184,6 +187,8 @@ def api_set_config():
         if extra and name not in cfg["apps"]:
             cfg["apps"][name] = dict(DEFAULT_INSTANCE)
         fields = set(DEFAULT_INSTANCE if extra else DEFAULT_APP) | {f["name"] for f in app_meta(name).get("extra_fields", [])}
+        if app_meta(name).get("pins_certificate"):
+            fields.add("trusted_cert")
         cfg["apps"][name].update({k: v for k, v in incoming.items() if k in fields})
     for name in DEST_NAMES:
         if name in data.get("destinations", {}):
@@ -251,7 +256,30 @@ def api_test(app_name):
         body = {"ok": False, "message": humanize_error(exc)}
         if getattr(exc, "needs_login", False):
             body["needs_login"] = True  # the card shows its username and password
+        if isinstance(exc, cert_pin.CertificateUntrusted):
+            # The card shows it (and the one trusted until now) with Trust.
+            body.update(certificate=exc.certificate, trusted_certificate=exc.trusted, certificate_changed=exc.changed)
         return jsonify(body)
+
+
+# Trust (#153): the certificate the app presents now must be the one Test
+# connection showed. The card keeps it, and Save stores it as trusted_cert.
+@bp.post("/api/trust-certificate/<app_name>")
+def api_trust_certificate(app_name):
+    meta = app_meta(app_name) if instance_type(app_name) else None
+    if not meta or not meta.get("pins_certificate"):
+        return jsonify({"error": "this app has no certificate to trust"}), 404
+    data = request.get_json(force=True, silent=True) or {}
+    url, sha256 = data.get("url"), data.get("sha256")
+    if not isinstance(url, str) or not url.lower().startswith("https://") or not isinstance(sha256, str):
+        return jsonify({"error": "an https URL and the certificate's SHA-256 fingerprint are required"}), 400
+    try:
+        presented = cert_pin.describe(cert_pin.fetch_certificate(url))
+    except (OSError, ValueError) as exc:
+        return jsonify({"error": f"couldn't read the certificate: {humanize_error(exc)}"}), 502
+    if presented["sha256"] != sha256.lower():
+        return jsonify({"error": "the certificate changed again since the test - test the connection again"}), 409
+    return jsonify({"ok": True, "trusted_cert": {k: presented[k] for k in ("sha256", "subject", "not_after")}})
 
 
 @bp.post("/api/test-notify")

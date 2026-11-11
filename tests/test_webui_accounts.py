@@ -144,7 +144,7 @@ def test_lockout_is_tracked_per_address(isolated_webui):
 
 PROTECTED = [
     ("GET", "/api/config"), ("POST", "/api/config"),
-    ("POST", "/api/test/radarr"), ("POST", "/api/test-notify"), ("POST", "/api/test-destination/local"),
+    ("POST", "/api/test/radarr"), ("POST", "/api/trust-certificate/radarr"), ("POST", "/api/test-notify"), ("POST", "/api/test-destination/local"),
     ("POST", "/api/discovery/prowlarr"), ("GET", "/api/discovery/prowlarr/x"),
     ("POST", "/api/plex/auth"), ("GET", "/api/plex/auth/x"), ("DELETE", "/api/plex/auth/x"),
     ("POST", "/api/backup/run"), ("POST", "/api/backup/cancel"), ("GET", "/api/backup/status"),

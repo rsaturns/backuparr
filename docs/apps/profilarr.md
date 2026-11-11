@@ -1,7 +1,7 @@
 ---
 title: Profilarr
 parent: Apps
-nav_order: 8
+nav_order: 10
 ---
 
 # Profilarr
