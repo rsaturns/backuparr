@@ -11,9 +11,10 @@ from webui import cookies
 
 
 class OwnedJobs:
-    def __init__(self, cookie, expired):
+    def __init__(self, cookie, expired, forget=None):
         self.cookie = cookie
         self.expired = expired  # job -> whether it can be forgotten
+        self.forget = forget  # job -> None, run when it's dropped (e.g. remove its files)
         self.jobs = {}  # job id -> (owner, job)
         self.lock = threading.Lock()
 
@@ -28,7 +29,12 @@ class OwnedJobs:
     def purge_locked(self):
         for job_id, (_, job) in list(self.jobs.items()):
             if self.expired(job):
-                del self.jobs[job_id]
+                self.drop_locked(job_id)
+
+    def drop_locked(self, job_id):
+        _, job = self.jobs.pop(job_id, (None, None))
+        if job is not None and self.forget is not None:
+            self.forget(job)
 
     def add(self, owner, job):
         job_id = secrets.token_urlsafe(24)
@@ -48,13 +54,13 @@ class OwnedJobs:
 
     def discard(self, job_id):
         with self.lock:
-            self.jobs.pop(job_id, None)
+            self.drop_locked(job_id)
 
     def discard_owner(self, owner):
         with self.lock:
             for job_id, (job_owner, _) in list(self.jobs.items()):
                 if job_owner == owner:
-                    del self.jobs[job_id]
+                    self.drop_locked(job_id)
 
     def set_cookie(self, response, new_owner, secure):
         # Set only when new, so a browser's own cookie is never echoed back.

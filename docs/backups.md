@@ -87,9 +87,12 @@ categories are folded is remembered in your browser.
 **Several at once:** click **Select**, tick the backups (or a whole app with
 the box beside its name), then use the bar at the bottom of the window:
 **Download** gets one backup as usual, or several in one zip, each as a single
-download would give it; **Delete** removes them after one confirmation. A
-failed run's row can be ticked and deleted too, which removes it from this
-destination's History. **Cancel** leaves the selection.
+download would give it: the bar shows "Preparing 3 of 5..." while Backuparr
+builds the zip, then the download starts. **Delete** removes them after one
+confirmation, counting up ("Deleting 3 of 10..."); any that couldn't be
+deleted stay ticked, and the bar says why. A failed run's row can be ticked
+and deleted too, which removes it from this destination's History. **Cancel**
+leaves the selection. While the bar is busy, the selection can't change.
 
 ![Picking several backups: two of Sonarr's ticked, and the bar at the bottom with 2 selected, Download, Delete and Cancel]({{ '/screenshots/history-select.png' | relative_url }})
 

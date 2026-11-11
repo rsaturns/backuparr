@@ -22,6 +22,8 @@ import restore_version as rv
 from apps.http_headers import app_connection_config
 from backup import humanize_error, log_failure
 from config_store import DEST_NAMES, app_meta, instance_ids, instance_type, key_required, load_config, restore_supported
+from webui import cookies
+from webui.jobs import OwnedJobs
 from webui.runs import _start_tracked_run, RESTORE_RUN_STATE, RUN_LOCK, RUN_STATE
 from webui.settings import _missing_required_field, _restore_override_fields
 
@@ -276,8 +278,10 @@ def api_history_bulk_delete(dest_id):
         try:
             rclone_util.delete_file(f"{root}/{app_name}/{filename}")
         except rclone_util.RcloneError as exc:
-            failed.append({"app": app_name, "file": filename, "error": humanize_error(exc)})
-            continue
+            # Already gone (retention, or another browser) is what was wanted.
+            if "object not found" not in (exc.detail or ""):
+                failed.append({"app": app_name, "file": filename, "error": humanize_error(exc)})
+                continue
         manifest.remove(app_name, filename, dest_id)
         if manifest.get(app_name, filename) is None:
             runlog.forget_file(app_name, filename)  # gone from every destination
@@ -292,38 +296,117 @@ def api_history_bulk_delete(dest_id):
     return jsonify({"deleted": deleted, "failed": failed})
 
 
-@bp.get("/api/history/<dest_id>/download")
+# Several backups as one zip (#164). The zip is built in the background, as
+# a job the page polls for "Preparing 3 of 5...", then fetched once; one
+# nobody fetches is removed after DOWNLOAD_TTL.
+DOWNLOAD_TTL = 600
+MAX_DOWNLOADS_PREPARING = 2
+
+
+def _forget_download(job):
+    shutil.rmtree(job["tmp_dir"], ignore_errors=True)
+
+
+DOWNLOAD_JOBS = OwnedJobs(
+    "backuparr_download", lambda job: job.get("finished", float("inf")) < time.monotonic() - DOWNLOAD_TTL,
+    forget=_forget_download)
+
+
+def _expire_downloads():
+    with DOWNLOAD_JOBS.lock:
+        DOWNLOAD_JOBS.purge_locked()
+
+
+def _build_download(job_id, dest_id, root, backups):
+    with DOWNLOAD_JOBS.lock:
+        job = DOWNLOAD_JOBS.current_locked(job_id)
+        tmp_dir = job["tmp_dir"]
+
+    def update(**fields):
+        with DOWNLOAD_JOBS.lock:
+            current = DOWNLOAD_JOBS.current_locked(job_id)
+            if current is not None:
+                current.update(fields)
+
+    outcome = {}
+    try:
+        bundle = os.path.join(tmp_dir, "bundle.zip")
+        # Stored, not deflated: the archives are compressed already.
+        with zipfile.ZipFile(bundle, "w", compression=zipfile.ZIP_STORED, allowZip64=True) as z:
+            for done, (app_name, filename) in enumerate(backups, 1):
+                path, name = _plain_copy(dest_id, root, app_name, filename, tmp_dir)
+                z.write(path, f"{app_name}/{name}")
+                if path.startswith(tmp_dir):
+                    os.remove(path)
+                update(done=done)
+        outcome = {"state": "ready", "path": bundle}
+    except _NotThere as exc:
+        outcome = {"state": "failed", "message": exc.args[0]["error"]}
+    except Exception as exc:  # a full disk, mostly
+        log_failure(log, "history: preparing a download", exc)
+        outcome = {"state": "failed", "message": humanize_error(exc)}
+    finally:
+        update(**outcome, finished=time.monotonic())
+        timer = threading.Timer(DOWNLOAD_TTL + 1, _expire_downloads)
+        timer.daemon = True
+        timer.start()
+
+
+@bp.post("/api/history/<dest_id>/download")
 def api_history_bulk_download(dest_id):
-    """Several backups in one zip (?b=<app>/<file>, repeated), each under
-    <app>/ as a single download would give it: an app's encrypted backup
-    decrypted, Backuparr's own as it is."""
-    backups = _bulk_backups(request.args.getlist("b"))
+    """Starts preparing several backups as one zip ({"backups": [{"app",
+    "file"}]}), each under <app>/ as a single download would give it: an
+    app's encrypted backup decrypted, Backuparr's own as it is."""
+    data = request.get_json(force=True, silent=True) or {}
+    backups = _bulk_backups(data.get("backups", []))
     if not backups:
         return jsonify({"error": "pick the backups to download"}), 400
     cfg = load_config()
     root, error = _destination_root_or_error(cfg, dest_id)
     if error:
         return error
-    tmp_dir = tempfile.mkdtemp(prefix="backuparr-dl-")
-
-    @after_this_request
-    def _cleanup(response):
-        shutil.rmtree(tmp_dir, ignore_errors=True)
-        return response
-
-    bundle = os.path.join(tmp_dir, "bundle.zip")
-    # Stored, not deflated: the archives are compressed already.
-    with zipfile.ZipFile(bundle, "w", compression=zipfile.ZIP_STORED, allowZip64=True) as z:
-        for app_name, filename in backups:
-            try:
-                path, name = _plain_copy(dest_id, root, app_name, filename, tmp_dir)
-            except _NotThere as exc:
-                return jsonify(exc.args[0]), exc.args[1]
-            z.write(path, f"{app_name}/{name}")
-            if path.startswith(tmp_dir):
-                os.remove(path)
+    owner, new_owner = DOWNLOAD_JOBS.owner()
+    with DOWNLOAD_JOBS.lock:
+        DOWNLOAD_JOBS.purge_locked()
+        if sum(job["state"] == "preparing" for _, job in DOWNLOAD_JOBS.jobs.values()) >= MAX_DOWNLOADS_PREPARING:
+            return jsonify({"error": "other downloads are still being prepared - try again when they're done"}), 429
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return send_file(bundle, as_attachment=True, download_name=f"backuparr-{dest_id}-{stamp}.zip")
+    job_id = DOWNLOAD_JOBS.add(owner, {"state": "preparing", "done": 0, "total": len(backups), "dest": dest_id,
+                                       "tmp_dir": tempfile.mkdtemp(prefix="backuparr-dl-"),
+                                       "name": f"backuparr-{dest_id}-{stamp}.zip"})
+    threading.Thread(target=_build_download, args=(job_id, dest_id, root, backups), daemon=True).start()
+    response = jsonify({"job_id": job_id, "total": len(backups)})
+    DOWNLOAD_JOBS.set_cookie(response, new_owner, cookies.secure())
+    return response, 202
+
+
+def _my_download(dest_id, job_id):
+    job = DOWNLOAD_JOBS.mine_locked(job_id)
+    return job if job is not None and job["dest"] == dest_id else None
+
+
+@bp.get("/api/history/<dest_id>/download/<job_id>")
+def api_history_download_status(dest_id, job_id):
+    with DOWNLOAD_JOBS.lock:
+        job = _my_download(dest_id, job_id)
+        if job is None:
+            return jsonify({"error": "that download expired - pick the backups again"}), 404
+        return jsonify({key: job[key] for key in ("state", "done", "total", "message") if key in job})
+
+
+@bp.get("/api/history/<dest_id>/download/<job_id>/file")
+def api_history_download_file(dest_id, job_id):
+    """The prepared zip, once: it's removed from the server as it's sent."""
+    with DOWNLOAD_JOBS.lock:
+        job = _my_download(dest_id, job_id)
+        if job is None:
+            return jsonify({"error": "that download expired - pick the backups again"}), 404
+        if job["state"] != "ready":
+            return jsonify({"error": "the download isn't ready"}), 409
+        del DOWNLOAD_JOBS.jobs[job_id]  # its files go after the response below
+    response = send_file(job["path"], as_attachment=True, download_name=job["name"])
+    shutil.rmtree(job["tmp_dir"], ignore_errors=True)  # open already, so it still sends
+    return response
 
 
 # ------------------------------------------------------------- restore ----

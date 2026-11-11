@@ -477,6 +477,10 @@ body {
 .bulk-bar.hidden { display: none; }
 .bulk-count { font-weight: 600; font-size: 14.5px; margin-right: 4px; white-space: nowrap; }
 .bulk-bar .btn { white-space: nowrap; }
+/* Why some couldn't be deleted (#164): its own line, wrapping, under the rest. */
+.bulk-bar:has(.bulk-error:not(.hidden)) { flex-wrap: wrap; max-width: min(640px, calc(100vw - 32px)); }
+.bulk-error { flex-basis: 100%; color: var(--danger); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.bulk-error.hidden { display: none; }
 /* On a phone the bar spans the width, clear of the feedback button: the
    count on one line, the three buttons on the next. */
 @media (max-width: 560px) {
