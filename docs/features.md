@@ -64,6 +64,9 @@ See [Restoring](restoring.md).
 
 - A read-only status for Home Assistant, opened by a token of its own. See
   [Home Assistant](home-assistant.md).
+- The [Backuparr integration](https://github.com/rsaturns/ha-backuparr) for
+  Home Assistant: a problem sensor for every app's backups, set up from Home
+  Assistant's UI.
 
 ## Backuparr's own backup
 

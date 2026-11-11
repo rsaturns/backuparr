@@ -144,6 +144,7 @@ live, **History** lists, downloads and deletes backups, and **Restore** restores
 - [Restoring](https://rsaturns.github.io/backuparr/restoring/) - apps, the version check, and Backuparr itself
 - [Login and security](https://rsaturns.github.io/backuparr/security/)
 - [Notifications](https://rsaturns.github.io/backuparr/notifications/)
+- [Home Assistant](https://rsaturns.github.io/backuparr/home-assistant/) - the [Backuparr integration](https://github.com/rsaturns/ha-backuparr) and a read-only status
 - [Environment variables](https://rsaturns.github.io/backuparr/environment-variables/) and the [configuration reference](https://rsaturns.github.io/backuparr/configuration/)
 
 Want to help? See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).
