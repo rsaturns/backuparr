@@ -94,6 +94,24 @@ def test_a_backup_from_a_newer_backuparr_is_refused(isolated_webui, meta, messag
         self_restore.prepare(archive, key)
 
 
+@pytest.mark.parametrize("running, made_by, refused", [
+    ("3.0.0-beta", "3.0.1", True),
+    ("3.0.0-beta", "3.0.0-beta", False),
+    ("3.0.0", "3.0.0-beta", False),
+    ("3.0.1-beta", "3.0.0", False),
+])
+def test_a_beta_version_is_compared_as_its_release(isolated_webui, monkeypatch, running, made_by, refused):
+    monkeypatch.setattr(self_restore, "VERSION", running)
+    key = Fernet.generate_key().decode()
+    meta = json.dumps({"format": 1, "backuparr_version": made_by})
+    archive = encrypted_zip({"backuparr-meta.json": meta, "config.json": "{}", "auth.json": AUTH}, key)
+    if refused:
+        with pytest.raises(self_restore.SelfRestoreError, match=f"from Backuparr {made_by} and this is {running}"):
+            self_restore.prepare(archive, key)
+    else:
+        assert "config.json" in self_restore.prepare(archive, key)
+
+
 def test_a_backup_from_an_older_backuparr_is_fine(isolated_webui, monkeypatch):
     monkeypatch.setattr(self_restore, "VERSION", "2.6.0")
     key = Fernet.generate_key().decode()

@@ -36,7 +36,10 @@ class SelfRestoreError(AppError):
 
 
 def _version(text):
-    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", str(text or ""))
+    """(major, minor, patch) of a Backuparr version; a pre-release suffix
+    (3.0.0-beta) compares as its release, so a beta still refuses a backup
+    from a newer Backuparr."""
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.]+)?", str(text or ""))
     return tuple(int(part) for part in match.groups()) if match else None
 
 
