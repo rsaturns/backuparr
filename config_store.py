@@ -61,8 +61,8 @@ SECRET_EXTRA_FIELDS = {"opnsense": ("api_secret",)}
 # Settings, History and the Restore and Run & Status pickers group the apps
 # under these, in this order (#148). A category with no apps isn't shown, so
 # the later ones wait for their apps. A category with an "icon" shows that
-# image (style.css picks it per theme) in place of an emoji (#189); the
-# pickers' group labels can't hold an image, so they show just its name.
+# image (style.css picks it per theme) in place of an emoji (#189). The
+# pickers' group labels show just the name.
 APP_CATEGORIES = [
     {"id": "media-management", "label": "Media Management", "emoji": "🎬"},
     {"id": "downloaders", "label": "Downloaders", "emoji": "⬇️"},

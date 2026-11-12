@@ -2031,13 +2031,14 @@ function initCategoryEvents() {
 }
 
 // A <select>'s apps under one labelled group per category (the Run & Status
-// and Restore pickers).
+// and Restore pickers), headed by its name alone: an <optgroup> label can't
+// hold a category's icon, so none shows an emoji either (#189).
 function addCategoryOptions(select, appIds) {
   APP_CATEGORIES.forEach((category) => {
     const ids = appIds.filter((appId) => appMeta(appId)?.category === category.id);
     if (!ids.length) return;
     const group = document.createElement("optgroup");
-    group.label = category.emoji ? `${category.emoji} ${category.label}` : category.label;
+    group.label = category.label;
     ids.forEach((appId) => group.appendChild(new Option(appLabel(appId), appId)));
     select.appendChild(group);
   });

@@ -420,6 +420,8 @@ body {
 }
 .category-head:hover, .category-head:focus-visible { border-color: var(--accent); }
 .category-emoji { font-size: 18px; line-height: 1; }
+/* The pickers' category headings: bold, upright (Firefox slants them). */
+optgroup { font-weight: 700; font-style: normal; }
 /* A category's own icon (#189), drawn in the text colour: the outline one on
    the light theme, the filled one on the dark. As wide as an emoji, so every
    category's name starts in line. */

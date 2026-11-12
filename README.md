@@ -160,9 +160,7 @@ GitHub](https://github.com/selfhst/icons)), licensed
 [CC BY 4.0](https://github.com/selfhst/icons/blob/main/LICENSE).
 
 The Server category's icons (`server-outline.png`, `server-filled.png`):
-[Server icons created by Magnific - Flaticon](https://www.flaticon.com/free-icons/server)
-([outline](https://www.flaticon.com/free-icon/server_4144964),
-[filled](https://www.flaticon.com/free-icon/server_4144335)).
+<a href="https://www.flaticon.com/free-icons/server" title="server icons">Server icons created by Magnific - Flaticon</a>
 
 ## License
 
