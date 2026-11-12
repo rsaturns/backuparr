@@ -1,13 +1,21 @@
 #!/usr/bin/env python3
-"""Regenerates webui/static/architecture-diagram.svg, the docs site's
+"""Regenerates webui/static/architecture-diagram.png, the docs site's
 architecture reference diagram (apps -> Backuparr -> destinations).
 
 The apps come from config_store: a box per Settings category, holding the
 icons of its apps (#163), so a new app only adds an icon to its box. Re-run
 this after adding/removing an app or destination, or after any of the
-icon/logo assets it embeds change. Run it with Backuparr's requirements
-installed, plus Pillow (`pip install pillow`), which isn't a runtime
-dependency of the app itself.
+icon/logo assets it embeds change.
+
+The diagram is drawn as an SVG, then rendered to a PNG at twice its size by
+Chromium. A PNG shows the same everywhere: GitHub serves an SVG opened on
+its own with a policy that blocks the raster icons inside it (Backuparr's
+logo, Tdarr, LazyLibrarian).
+
+Run it with Backuparr's requirements installed, plus Pillow and Playwright
+(`pip install pillow playwright`), which aren't runtime dependencies of the
+app itself, and a Chromium: Playwright's (`playwright install chromium`), or
+a system one named in CHROMIUM (e.g. CHROMIUM=/usr/bin/chromium).
 """
 import base64
 import io
@@ -204,8 +212,19 @@ def build():
     return "\n".join(parts)
 
 
+def render_png(svg, out_path):
+    """Renders the SVG with Chromium at 2x, for sharp text on high-DPI screens."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(executable_path=os.environ.get("CHROMIUM") or None)
+        page = browser.new_page(viewport={"width": W, "height": 100}, device_scale_factor=2)
+        page.set_content(f'<html><body style="margin:0">{svg}</body></html>')
+        page.locator("svg").first.screenshot(path=out_path)
+        browser.close()
+
+
 if __name__ == "__main__":
-    out_path = os.path.join(STATIC, "architecture-diagram.svg")
-    with open(out_path, "w") as f:
-        f.write(build())
+    out_path = os.path.join(STATIC, "architecture-diagram.png")
+    render_png(build(), out_path)
     print("wrote", out_path)
