@@ -747,6 +747,21 @@ input:focus, select:focus, textarea:focus {
   text-align: left;
 }
 
+/* A certificate fingerprint's tooltip (#189): its "?" sits near the start of
+   a line, so the tooltip lines up with that line, within the card. */
+.cert-fingerprint, .https-fingerprint { position: relative; }
+.help-tip-fingerprint { position: static; }
+.help-tip-fingerprint:hover::after,
+.help-tip-fingerprint:focus::after {
+  left: 0;
+  transform: none;
+  width: max-content;
+  max-width: 100%;
+  white-space: pre;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+}
+
 .test-result {
   font-size: 14.5px;
   color: var(--text-muted);
@@ -994,7 +1009,7 @@ input:focus, select:focus, textarea:focus {
 /* A self-signed certificate to trust (#153), and links to a card from a failure. */
 .cert-trust { margin-top: 10px; display: grid; gap: 10px; }
 .cert-details { display: grid; gap: 2px; font-size: 14px; overflow-wrap: anywhere; }
-.cert-details .fingerprint { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+.cert-details .cert-fingerprint { display: flex; align-items: center; gap: 6px; }
 .card-link { margin-left: 8px; }
 
 /* An app restored by hand (#151): its download and steps on the Restore tab. */
@@ -1140,7 +1155,7 @@ code {
 .https-settings .hint { margin: 0 0 8px; }
 .https-settings .hint.warn { color: var(--warn); }
 .https-settings .toggle-field { margin: 4px 0 4px; }
-.https-settings #https-fingerprint { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; word-break: break-all; }
+.https-fingerprint { display: flex; align-items: center; gap: 6px; }
 .ha-integration .toggle-field { margin-bottom: 0; }
 .ha-integration #ha-token-field { margin-top: 12px; }
 .ha-integration #ha-token { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }

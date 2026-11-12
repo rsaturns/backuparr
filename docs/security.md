@@ -30,7 +30,8 @@ Backuparr answers on two ports:
 
 On first start Backuparr makes a **self-signed certificate**, so your browser
 warns the first time: check that the SHA-256 fingerprint it shows matches the
-one on the Backuparr card (**Settings**, **Server**), then continue. The
+one on the Backuparr card (**Settings**, **Server**: point at the **?** next to
+SHA-256, or tap it), then continue. The
 certificate lasts 825 days, the longest Apple devices accept, and is renewed
 30 days before it runs out with the same key, so Home Assistant's
 [integration](home-assistant.md) keeps trusting it. It's in
