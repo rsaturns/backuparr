@@ -60,7 +60,9 @@ SECRET_EXTRA_FIELDS = {"opnsense": ("api_secret",)}
 
 # Settings, History and the Restore and Run & Status pickers group the apps
 # under these, in this order (#148). A category with no apps isn't shown, so
-# the later ones wait for their apps.
+# the later ones wait for their apps. A category with an "icon" shows that
+# image (style.css picks it per theme) in place of an emoji (#189); the
+# pickers' group labels can't hold an image, so they show just its name.
 APP_CATEGORIES = [
     {"id": "media-management", "label": "Media Management", "emoji": "🎬"},
     {"id": "downloaders", "label": "Downloaders", "emoji": "⬇️"},
@@ -68,7 +70,7 @@ APP_CATEGORIES = [
     {"id": "network", "label": "Network", "emoji": "🌐"},
     {"id": "security", "label": "Security", "emoji": "🛡️"},
     {"id": "home-automation", "label": "Home Automation", "emoji": "🏠"},
-    {"id": "server", "label": "Server", "emoji": "🗄️"},
+    {"id": "server", "label": "Server", "icon": "server"},
 ]
 # Each app's category: a new app adds one line here.
 _APP_CATEGORY = {

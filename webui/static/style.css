@@ -420,6 +420,22 @@ body {
 }
 .category-head:hover, .category-head:focus-visible { border-color: var(--accent); }
 .category-emoji { font-size: 18px; line-height: 1; }
+/* A category's own icon (#189), drawn in the text colour: the outline one on
+   the light theme, the filled one on the dark. As wide as an emoji, so every
+   category's name starts in line. */
+.category-icon {
+  flex: none;
+  width: 22.5px;
+  height: 20px;
+  background-color: var(--text);
+  -webkit-mask: var(--category-icon) center / contain no-repeat;
+  mask: var(--category-icon) center / contain no-repeat;
+}
+.category-icon-server { --category-icon: url("icons/server-outline.png"); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .category-icon-server { --category-icon: url("icons/server-filled.png"); }
+}
+:root[data-theme="dark"] .category-icon-server { --category-icon: url("icons/server-filled.png"); }
 .category-name { font-size: 15.5px; font-weight: 600; flex: 1; }
 .category-count { color: var(--text-muted); font-size: 13.5px; white-space: nowrap; }
 .category-chevron {

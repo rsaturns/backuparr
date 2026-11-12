@@ -2037,7 +2037,7 @@ function addCategoryOptions(select, appIds) {
     const ids = appIds.filter((appId) => appMeta(appId)?.category === category.id);
     if (!ids.length) return;
     const group = document.createElement("optgroup");
-    group.label = `${category.emoji} ${category.label}`;
+    group.label = category.emoji ? `${category.emoji} ${category.label}` : category.label;
     ids.forEach((appId) => group.appendChild(new Option(appLabel(appId), appId)));
     select.appendChild(group);
   });
@@ -3054,9 +3054,13 @@ function categoryHead(category, controls) {
   head.className = "category-head";
   head.setAttribute("aria-controls", controls);
   const emoji = document.createElement("span");
-  emoji.className = "category-emoji";
   emoji.setAttribute("aria-hidden", "true");
-  emoji.textContent = category.emoji;
+  if (category.icon) {
+    emoji.className = `category-icon category-icon-${category.icon}`;
+  } else {
+    emoji.className = "category-emoji";
+    emoji.textContent = category.emoji;
+  }
   const name = document.createElement("span");
   name.className = "category-name";
   name.textContent = category.label;

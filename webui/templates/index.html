@@ -78,7 +78,7 @@
           {% for c in app_categories %}
           <section class="app-category" data-category="{{ c.id }}">
             <button type="button" class="category-head" aria-expanded="false" aria-controls="category-{{ c.id }}">
-              <span class="category-emoji" aria-hidden="true">{{ c.emoji }}</span>
+              {% if c.icon %}<span class="category-icon category-icon-{{ c.icon }}" aria-hidden="true"></span>{% else %}<span class="category-emoji" aria-hidden="true">{{ c.emoji }}</span>{% endif %}
               <span class="category-name">{{ c.label }}</span>
               <span class="category-count"></span>
               <span class="status-dot category-status" data-state="idle"></span>
