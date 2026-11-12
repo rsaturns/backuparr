@@ -42,8 +42,8 @@ Both files are encrypted with keys every UniFi install shares, so they
 protect nothing: read_backup() decrypts a copy to check it and read the
 version it records. A .unf is AES-128-CBC with a fixed IV and no padding (the
 zip's last bytes are cut off); a .unifi starts with its IV, then AES-256-CBC
-of a gzipped tar (the key as published by UniHosted's client-side Backup
-Explorer). They hold Wi-Fi passwords, VPN keys and admin logins, so Backuparr
+(PKCS#7 padding) of a gzipped tar (the key as published by UniHosted's
+client-side Backup Explorer). They hold Wi-Fi passwords, VPN keys and admin logins, so Backuparr
 always encrypts them (#147). Restores are by hand (manual_restore, #151). A
 self-signed certificate is trusted on the card and pinned (apps/cert_pin.py).
 """
@@ -214,8 +214,37 @@ def _json_member(archive, member):
     return data
 
 
+def _check_gzip(plain):
+    """The gzip stream reaches its end (its CRC and length checked by zlib)
+    and only the AES padding follows - PKCS#7, n bytes of value n (UniFi OS
+    5.1.42). tar alone can't tell a cut-off end: its own trailing padding
+    fills it."""
+    inflater = zlib.decompressobj(31)
+    trailing = b""
+    try:
+        with open(plain, "rb") as f:
+            for chunk in iter(lambda: f.read(_CHUNK), b""):
+                if inflater.eof:
+                    trailing += chunk
+                else:
+                    while chunk and not inflater.eof:
+                        inflater.decompress(chunk, _CHUNK)
+                        chunk = inflater.unconsumed_tail
+                    if inflater.eof:
+                        trailing += inflater.unused_data
+                if len(trailing) > 16:
+                    raise UnifiError("unifi: the backup has data after its end")
+    except zlib.error as exc:
+        raise UnifiError(f"unifi: the backup is damaged ({exc})") from None
+    if not inflater.eof:
+        raise UnifiError("unifi: the backup is damaged (it ends early)")
+    if not trailing or trailing != bytes([len(trailing)]) * len(trailing):
+        raise UnifiError("unifi: the backup has data after its end")
+
+
 def _read_unifi(path, plain):
     _decrypt(path, plain, _UNIFI_KEY)
+    _check_gzip(plain)
     found = {}
     try:
         # Every member is read to its end, so a cut-off or damaged file fails.

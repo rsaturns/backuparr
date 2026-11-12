@@ -28,7 +28,7 @@ def make_unf(version="10.5.67", pad=0, members=None):
 
 def make_unifi(firmware="5.1.42", network="10.6.109", members=None, cut=0):
     """A UniFi OS .unifi backup as UniFi OS writes it: a random IV, then
-    AES-256-CBC (no padding) of a gzipped tar. `cut` drops that many bytes
+    AES-256-CBC (PKCS#7 padding) of a gzipped tar. `cut` drops that many bytes
     of the gzip's end, as a damaged download would."""
     import json
     import os
@@ -50,7 +50,8 @@ def make_unifi(firmware="5.1.42", network="10.6.109", members=None, cut=0):
                 tar.addfile(info, io.BytesIO(data))
     plain = gzip.compress(raw.getvalue())
     plain = plain[:len(plain) - cut] if cut else plain
-    plain += b"\0" * (-len(plain) % 16)
+    pad = 16 - len(plain) % 16  # PKCS#7, as UniFi OS pads
+    plain += bytes([pad]) * pad
     iv = os.urandom(16)
     key = bytes.fromhex("e383b7c53698b36d4baea4ed22181ef73676bfd5d5b90005d9845ffd5dce985f")
     encryptor = Cipher(algorithms.AES(key), modes.CBC(iv)).encryptor()

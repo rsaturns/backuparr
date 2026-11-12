@@ -328,6 +328,8 @@ def test_a_unf_is_read_however_much_of_its_zip_end_was_cut(tmp_path, pad):
     (make_unifi(members={"backup/package-versions.json": b"[]"}), "isn't what UniFi OS writes"),
     (make_unifi(members={"backup/metadata.json": b'{"hardware_shortname": "UOSSERVER"}'}), "records no UniFi OS version"),
     (make_unifi(cut=40), "damaged"),
+    (make_unifi(cut=4), "damaged"),  # gzip's length field
+    (make_unifi(cut=1), "damaged"),
 ])
 def test_a_file_that_isnt_a_whole_backup_is_refused(tmp_path, data, fragment):
     path = tmp_path / "x.unf"
