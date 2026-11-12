@@ -58,6 +58,7 @@ SOURCES = [
     ("pfSense", os.path.join(ICONS, "pfsense.svg"), "svg"),
     ("UniFi", os.path.join(ICONS, "ubiquiti-unifi.svg"), "svg"),
     ("Home Assistant", os.path.join(ICONS, "home-assistant.svg"), "svg"),
+    ("Unraid", os.path.join(ICONS, "unraid.svg"), "svg"),
 ]
 
 DESTS = [

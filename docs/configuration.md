@@ -27,7 +27,8 @@ nav_order: 13
 | `apps.unifi.backup` | On UniFi OS: `everything` (UniFi OS's own backup, the default; needs a Super Admin) or `network` (UniFi Network's) |
 | `apps.unifi.history` | Statistics kept in a UniFi Network backup: `settings` (the default), `7`, `30`, `90`, `365` (days) or `all` |
 | `apps.unifi.install_type` | `unifi-os` or `standalone`, set by **Test connection** - don't edit |
-| `apps.<opnsense\|pfsense\|unifi>.trusted_cert` | The self-signed certificate trusted on the card: `{"sha256", "subject", "not_after"}`; set by **Trust** |
+| `apps.unraid.password` | Unraid's root password (encrypted at rest) - required |
+| `apps.<opnsense\|pfsense\|unifi\|unraid>.trusted_cert` | The self-signed certificate trusted on the card: `{"sha256", "subject", "not_after"}`; set by **Trust** |
 | `bazarr_backup_dir` | Bazarr's mounted config/backup folder, for restores |
 | `request_headers` | [Service authentication headers](settings.md#service-authentication-headers): `[{"name": "Proxy-Authorization", "value": "Basic …", "apps": ["radarr"]}]`; omit `apps` for every app |
 | `destinations.local.enabled/path` | Local Storage; the path defaults to `/config/backuparr/backups` |
