@@ -861,7 +861,7 @@ function showHttpsState() {
   document.getElementById("https-summary").textContent = s.own_certificate
     ? `HTTPS on port ${s.port}, with your certificate (until ${until}).`
     : `HTTPS on port ${s.port}, with a self-signed certificate (until ${until}).`;
-  document.getElementById("https-fingerprint").textContent = s.fingerprint;
+  setFingerprintTip(document.getElementById("https-fingerprint"), s.fingerprint);
   const certError = document.getElementById("https-cert-error");
   certError.textContent = s.certificate_error ? `Your certificate isn't used: ${s.certificate_error}.` : "";
   certError.classList.toggle("hidden", !s.certificate_error);
@@ -2031,13 +2031,14 @@ function initCategoryEvents() {
 }
 
 // A <select>'s apps under one labelled group per category (the Run & Status
-// and Restore pickers).
+// and Restore pickers), headed by its name alone: an <optgroup> label can't
+// hold a category's icon, so none shows an emoji either (#189).
 function addCategoryOptions(select, appIds) {
   APP_CATEGORIES.forEach((category) => {
     const ids = appIds.filter((appId) => appMeta(appId)?.category === category.id);
     if (!ids.length) return;
     const group = document.createElement("optgroup");
-    group.label = `${category.emoji} ${category.label}`;
+    group.label = category.label;
     ids.forEach((appId) => group.appendChild(new Option(appLabel(appId), appId)));
     select.appendChild(group);
   });
@@ -2160,13 +2161,31 @@ function formatFingerprint(sha256) {
   return sha256.toUpperCase().match(/.{2}/g).join(":");
 }
 
+// A SHA-256 fingerprint sits in a tooltip on its "?" (#189): shown on hover,
+// or on focus (a tap on a phone), and read out in full by a screen reader.
+// The tooltip shows it as four rows of 8 bytes, easy to compare in chunks.
+function setFingerprintTip(tip, fingerprint) {
+  tip.dataset.tip = fingerprint.match(/(?:[0-9A-F]{2}:?){1,8}/gi).join("\n");
+  tip.setAttribute("aria-label", `SHA-256 fingerprint ${fingerprint}`);
+}
+
+function fingerprintTip(fingerprint) {
+  const tip = document.createElement("span");
+  tip.className = "help-tip help-tip-fingerprint";
+  tip.tabIndex = 0;
+  tip.setAttribute("role", "img");
+  tip.textContent = "?";
+  setFingerprintTip(tip, fingerprint);
+  return tip;
+}
+
 function certificateDetails(title, cert) {
   const box = document.createElement("div");
   box.className = "cert-details";
   const heading = document.createElement("strong");
   heading.textContent = title;
   box.appendChild(heading);
-  const rows = [["Name", cert.subject], ["Expires", new Date(cert.not_after).toLocaleDateString()], ["SHA-256", formatFingerprint(cert.sha256)]];
+  const rows = [["Name", cert.subject], ["Expires", new Date(cert.not_after).toLocaleDateString()]];
   rows.forEach(([label, value]) => {
     const line = document.createElement("div");
     const name = document.createElement("span");
@@ -2174,10 +2193,16 @@ function certificateDetails(title, cert) {
     name.textContent = `${label}: `;
     const text = document.createElement("span");
     text.textContent = value;
-    if (label === "SHA-256") text.className = "fingerprint";
     line.append(name, text);
     box.appendChild(line);
   });
+  const line = document.createElement("div");
+  line.className = "cert-fingerprint";
+  const name = document.createElement("span");
+  name.className = "muted";
+  name.textContent = "SHA-256";
+  line.append(name, fingerprintTip(formatFingerprint(cert.sha256)));
+  box.appendChild(line);
   return box;
 }
 
@@ -3030,9 +3055,13 @@ function categoryHead(category, controls) {
   head.className = "category-head";
   head.setAttribute("aria-controls", controls);
   const emoji = document.createElement("span");
-  emoji.className = "category-emoji";
   emoji.setAttribute("aria-hidden", "true");
-  emoji.textContent = category.emoji;
+  if (category.icon) {
+    emoji.className = `category-icon category-icon-${category.icon}`;
+  } else {
+    emoji.className = "category-emoji";
+    emoji.textContent = category.emoji;
+  }
   const name = document.createElement("span");
   name.className = "category-name";
   name.textContent = category.label;

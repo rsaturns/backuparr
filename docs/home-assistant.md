@@ -28,7 +28,7 @@ later.
    `https://192.168.1.10:8991`) and the token.
 4. Home Assistant shows the fingerprint of Backuparr's
    [certificate](security.md#https). Compare it with the one on the Backuparr
-   card and submit if they match.
+   card (the **?** next to SHA-256) and submit if they match.
 
 It adds a Backuparr device with an **All backups** problem sensor, one for
 each app and for Backuparr's own backup, a **Failed backups** count and,

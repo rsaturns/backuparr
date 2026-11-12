@@ -37,13 +37,14 @@ configuration in use.
 ## The certificate
 
 OPNsense's web UI uses a self-signed certificate. The first **Test
-connection** says it isn't trusted and shows it: its name, expiry and SHA-256
-fingerprint. OPNsense prints the same fingerprint on its console (`HTTPS:
+connection** says it isn't trusted and shows it: its name and expiry, and its
+SHA-256 fingerprint when you point at the **?** next to SHA-256 (or tap it).
+OPNsense prints the same fingerprint on its console (`HTTPS:
 SHA256 ...`) and under **System > Trust > Certificates**. If they match,
 click **Trust**, then **Save**. From then on Backuparr accepts only that
 certificate.
 
-![OPNsense card: Test connection says the certificate isn't trusted and shows its name, expiry and SHA-256 fingerprint, with a Trust button]({{ '/screenshots/opnsense-certificate.png' | relative_url }})
+![OPNsense card: Test connection says the certificate isn't trusted, the ? next to SHA-256 shows its fingerprint in four rows, and a Trust button below]({{ '/screenshots/opnsense-certificate.png' | relative_url }})
 
 If the certificate changes (OPNsense made a new one, or you replaced it),
 backups stop with "The firewall's certificate changed. Check it and trust the

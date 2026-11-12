@@ -78,7 +78,7 @@
           {% for c in app_categories %}
           <section class="app-category" data-category="{{ c.id }}">
             <button type="button" class="category-head" aria-expanded="false" aria-controls="category-{{ c.id }}">
-              <span class="category-emoji" aria-hidden="true">{{ c.emoji }}</span>
+              {% if c.icon %}<span class="category-icon category-icon-{{ c.icon }}" aria-hidden="true"></span>{% else %}<span class="category-emoji" aria-hidden="true">{{ c.emoji }}</span>{% endif %}
               <span class="category-name">{{ c.label }}</span>
               <span class="category-count"></span>
               <span class="status-dot category-status" data-state="idle"></span>
@@ -106,7 +106,7 @@
                    closes plain HTTP straight away, not on Save. #}
                 <div class="https-settings">
                   <p class="hint" id="https-summary"></p>
-                  <p class="hint https-fingerprint">SHA-256 <code id="https-fingerprint"></code></p>
+                  <p class="hint https-fingerprint">SHA-256 <span class="help-tip help-tip-fingerprint" id="https-fingerprint" tabindex="0" role="img">?</span></p>
                   <p class="hint warn hidden" id="https-cert-error"></p>
                   <label class="field toggle-field">
                     <span class="switch"><input type="checkbox" id="https-only"><span class="slider"></span></span>
