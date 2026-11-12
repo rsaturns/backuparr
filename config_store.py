@@ -344,24 +344,31 @@ APP_META = [
     },
     {
         "id": "unifi",
-        "label": "UniFi Network",
+        "label": "UniFi",
         "icon": "ubiquiti-unifi.svg",
-        # No documented backup API: the Network app's own backup call, signed
-        # in as a local admin, on UniFi OS (Server or a console) or the
-        # standalone app - see apps/unifi.py. The backup holds Wi-Fi
-        # passwords, VPN keys and admin logins.
+        # No documented backup API: UniFi OS's own backup (everything, a Super
+        # Admin) or the Network app's (Network only), signed in as a local
+        # admin; the standalone UniFi Network Server only has the Network
+        # one - see apps/unifi.py. The backups hold Wi-Fi passwords, VPN keys
+        # and admin logins. A Test connection finds the install type, which
+        # picks the options shown.
         "key_required": False,
         "no_api_key": True,
         "url_placeholder": "https://192.168.1.1",
         "extra_fields": [
             {"name": "username", "label": "Username", "type": "text", "required": True,
-             "help": "a local admin with only Network: Full Management - see the docs"},
+             "help": "a local admin - see the docs for its role"},
             {"name": "password", "label": "Password", "type": "password", "required": True},
+            {"name": "backup", "label": "Backup", "type": "select", "default": "everything", "option": True,
+             "only_install": "unifi-os", "help": "everything needs a Super Admin",
+             "choices": [{"value": "everything", "label": "Everything"}, {"value": "network", "label": "Network only"}]},
             {"name": "history", "label": "History", "type": "select", "default": "settings", "option": True,
-             "help": "statistics kept with the settings",
+             "help": "statistics kept with the Network settings",
+             "show_if": [{"install_type": ["standalone"]}, {"install_type": ["unifi-os"], "backup": ["network"]}],
              "choices": [{"value": "settings", "label": "Settings only"}, {"value": "7", "label": "Last 7 days"},
                          {"value": "30", "label": "Last 30 days"}, {"value": "90", "label": "Last 90 days"},
                          {"value": "365", "label": "Last 365 days"}, {"value": "all", "label": "Everything"}]},
+            {"name": "install_type", "type": "hidden", "option": True, "choices": ["unifi-os", "standalone"]},
         ],
         "multi_instance": True,
         "max_extra_instances": MAX_EXTRA_INSTANCES,
@@ -371,10 +378,11 @@ APP_META = [
             "docs": "https://rsaturns.github.io/backuparr/apps/unifi/",
             "steps": [
                 {"title": "UniFi OS", "steps": [
-                    "Download the backup.",
-                    "On a new install, finish the setup first (Proceed Without a UI Account works) and update UniFi Network to the backup's version or newer.",
-                    "In UniFi Network, open Settings > Control Plane > Backups and click Upload & Restore.",
-                    "Choose the downloaded file and click Restore. UniFi Network restarts with the backup's settings.",
+                    "Download the backup: a .unifi file holds everything, a .unf file UniFi Network only.",
+                    "On a new install, finish the setup first (Proceed Without a UI Account works) and update it to the backup's versions or newer.",
+                    "Open Settings > Control Plane > Backups and click Upload & Restore.",
+                    "Choose the downloaded file. For a .unifi file, leave Restore All Applications and Settings ticked.",
+                    "Click Restore. UniFi restarts with the backup's settings.",
                 ]},
                 {"title": "Standalone app", "steps": [
                     "Download the backup.",

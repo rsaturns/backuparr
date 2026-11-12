@@ -23,8 +23,10 @@ nav_order: 13
 | `apps.vaultwarden.data_dir` | Vaultwarden's mounted data folder (its `/data`) - required |
 | `apps.opnsense.api_secret` | The secret of OPNsense's API key (encrypted at rest) - required |
 | `apps.pfsense.username/password` | The pfSense user's login (the password encrypted at rest) - required |
-| `apps.unifi.username/password` | The UniFi Network local admin's login (the password encrypted at rest) - required |
-| `apps.unifi.history` | Statistics kept with the settings: `settings` (the default), `7`, `30`, `90`, `365` (days) or `all` |
+| `apps.unifi.username/password` | The UniFi local admin's login (the password encrypted at rest) - required |
+| `apps.unifi.backup` | On UniFi OS: `everything` (UniFi OS's own backup, the default; needs a Super Admin) or `network` (UniFi Network's) |
+| `apps.unifi.history` | Statistics kept in a UniFi Network backup: `settings` (the default), `7`, `30`, `90`, `365` (days) or `all` |
+| `apps.unifi.install_type` | `unifi-os` or `standalone`, set by **Test connection** - don't edit |
 | `apps.<opnsense\|pfsense\|unifi>.trusted_cert` | The self-signed certificate trusted on the card: `{"sha256", "subject", "not_after"}`; set by **Trust** |
 | `bazarr_backup_dir` | Bazarr's mounted config/backup folder, for restores |
 | `request_headers` | [Service authentication headers](settings.md#service-authentication-headers): `[{"name": "Proxy-Authorization", "value": "Basic …", "apps": ["radarr"]}]`; omit `apps` for every app |

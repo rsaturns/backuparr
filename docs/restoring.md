@@ -18,7 +18,7 @@ The restore shows live progress and a log.
 
 ![Restore tab: Radarr and a backup picked, with the check saying the backup is from the installed Radarr version]({{ '/screenshots/restore.png' | relative_url }})
 
-An app Backuparr can't restore itself (Profilarr, OPNsense, pfSense, UniFi Network) is listed too: picking it
+An app Backuparr can't restore itself (Profilarr, OPNsense, pfSense, UniFi) is listed too: picking it
 shows a **Download** button (decrypted, like History's), the steps for
 restoring it by hand and a link to its page here, in place of **Restore**.
 
@@ -56,7 +56,7 @@ restore never leaves an app half-migrated.
 | Radarr, Sonarr, Lidarr, Whisparr, Prowlarr | Automatic; the app restarts |
 | Profilarr | By hand: the Restore tab gives the download and the steps - see the [Profilarr note](apps/profilarr.md) |
 | OPNsense, pfSense | By hand, on the running firewall or during a new install: the Restore tab gives the download and the steps - see the [OPNsense](apps/opnsense.md) and [pfSense](apps/pfsense.md) notes |
-| UniFi Network | By hand, in UniFi Network or on a new install: the Restore tab gives the download and the steps - see the [UniFi Network note](apps/unifi.md) |
+| UniFi | By hand, in UniFi OS or UniFi Network Server, also on a new install: the Restore tab gives the download and the steps - see the [UniFi note](apps/unifi.md) |
 | Bazarr | Needs Bazarr's config/backup folder mounted into Backuparr. Enter it under "Bazarr backup folder" unless it's set in Settings |
 | Tdarr | Wipes each database collection before refilling it; you're asked to confirm |
 | SABnzbd | Asks for each Usenet server's password. Leave any blank and set it in SABnzbd later |
