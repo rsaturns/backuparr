@@ -17,8 +17,12 @@ from apps.bitwarden import MANIFEST, BitwardenApp, BitwardenError
 from config_store import always_encrypted, app_meta, restore_supported
 
 VERSION = "2026.10.1"
-BAK = b"TAPE" + b"\0" * 252  # SQL Server's backups start with an MTF "TAPE" block.
-OLD = time.time() - 3600  # Long enough ago that SQL Server has finished the file.
+# A whole SQL Server backup, laid out as a real one from 2026.10.1's mssql
+# container (lab, 2026-11-12): 512-byte MTF blocks, TAPE first, then SSET and
+# the data, and ESET plus a soft filemark (SFMB) once SQL Server finishes it.
+UNFINISHED = b"TAPE".ljust(4096, b"\0") + b"SFMB".ljust(4096, b"\0") + b"SSET".ljust(8192, b"\x01")
+BAK = UNFINISHED + b"ESET".ljust(4096, b"\0") + b"SFMB".ljust(4096, b"\0")
+OLD = time.time() - 3600
 
 
 def age(path, seconds_ago):
@@ -160,19 +164,26 @@ def test_standard_backup_takes_bwdata_and_the_newest_bak_only(bwdata, server, tm
 
 
 def test_a_bak_still_being_written_is_skipped_for_the_one_before(bwdata, server, tmp_path, caplog):
-    caplog.set_level(logging.INFO, logger="backuparr")
-    age(bwdata / "mssql/backups/vault_FULL_20261111_000000.BAK", 30)
+    # No closing ESET block yet: SQL Server is still writing it.
+    (bwdata / "mssql/backups/vault_FULL_20261111_000000.BAK").write_bytes(UNFINISHED)
     archive = make_backup(BitwardenApp("http://bitwarden", data_dir=str(bwdata)), tmp_path)
     with zipfile.ZipFile(archive) as zf:
         assert "mssql/backups/vault_FULL_20261110_000000.BAK" in zf.namelist()
         assert "mssql/backups/vault_FULL_20261111_000000.BAK" not in zf.namelist()
-    assert "may still be being written" in caplog.text
+    assert "skipping vault_FULL_20261111_000000.BAK - it isn't a whole SQL Server backup" in caplog.text
 
 
-def test_the_only_bak_still_being_written_fails_the_backup(bwdata, server, tmp_path):
+def test_a_bak_made_a_moment_ago_is_taken_once_whole(bwdata, server, tmp_path):
+    # docker exec -i bitwarden-mssql /backup-db.sh, then Back up now.
+    age(bwdata / "mssql/backups/vault_FULL_20261111_000000.BAK", 5)
+    with zipfile.ZipFile(make_backup(BitwardenApp("http://bitwarden", data_dir=str(bwdata)), tmp_path)) as zf:
+        assert "mssql/backups/vault_FULL_20261111_000000.BAK" in zf.namelist()
+
+
+def test_no_whole_bak_fails_the_backup(bwdata, server, tmp_path):
     (bwdata / "mssql/backups/vault_FULL_20261110_000000.BAK").unlink()
-    age(bwdata / "mssql/backups/vault_FULL_20261111_000000.BAK", 30)
-    with pytest.raises(BitwardenError, match="still being written - try again in a few minutes"):
+    (bwdata / "mssql/backups/vault_FULL_20261111_000000.BAK").write_bytes(UNFINISHED)
+    with pytest.raises(BitwardenError, match="no whole database backup in .* - if one is being written, try again"):
         BitwardenApp("http://bitwarden", data_dir=str(bwdata)).backup(str(tmp_path / "work"))
 
 
@@ -191,10 +202,10 @@ def test_an_old_nightly_backup_is_warned_about(bwdata, server, tmp_path, caplog)
     assert "is 5 days old - check that its nightly backups still run" in caplog.text
 
 
-def test_a_file_that_isnt_a_sql_server_backup_is_refused(bwdata, server, tmp_path):
-    (bwdata / "mssql/backups/vault_FULL_20261111_000000.BAK").write_bytes(b"<html>")
-    age(bwdata / "mssql/backups/vault_FULL_20261111_000000.BAK", 3600)
-    with pytest.raises(BitwardenError, match="isn't a SQL Server backup"):
+def test_a_file_that_isnt_a_sql_server_backup_is_never_taken(bwdata, server, tmp_path):
+    for bak in (bwdata / "mssql/backups").iterdir():
+        bak.write_bytes(b"<html>" + b"ESET".rjust(1024))
+    with pytest.raises(BitwardenError, match="no whole database backup"):
         BitwardenApp("http://bitwarden", data_dir=str(bwdata)).backup(str(tmp_path / "work"))
 
 
@@ -212,6 +223,18 @@ def test_symlinks_in_bwdata_are_not_followed(bwdata, server, tmp_path):
     (bwdata / "linked-dir").symlink_to(tmp_path)
     with zipfile.ZipFile(make_backup(BitwardenApp("http://bitwarden", data_dir=str(bwdata)), tmp_path)) as zf:
         assert not any("link" in name for name in zf.namelist())
+
+
+@pytest.mark.archive_check
+def test_the_archive_check_needs_a_whole_bak(bwdata, server, tmp_path):
+    archive = make_backup(BitwardenApp("http://bitwarden", data_dir=str(bwdata)), tmp_path)
+    cut = str(tmp_path / "cut.zip")
+    with zipfile.ZipFile(archive) as src, zipfile.ZipFile(cut, "w") as dst:
+        for info in src.infolist():
+            body = src.read(info)
+            dst.writestr(info, UNFINISHED if info.filename.endswith(".BAK") else body)
+    with pytest.raises(archive_check.ArchiveCheckError, match="vault_FULL_20261111_000000.BAK is incomplete"):
+        archive_check.check("bitwarden", cut)
 
 
 @pytest.mark.archive_check

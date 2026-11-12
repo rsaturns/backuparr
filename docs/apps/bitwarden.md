@@ -47,9 +47,10 @@ backups in `mssql/backups` (`vault_FULL_YYYYMMDD_HHMMSS.BAK`). Bitwarden's
 
 - **Make one now** if there isn't one yet:
   `docker exec -i bitwarden-mssql /backup-db.sh`.
-- **A file still being written is skipped.** A `.BAK` changed in the last
-  few minutes may be one SQL Server is still writing, so Backuparr takes the
-  one before it.
+- **Only a finished backup is taken.** SQL Server writes the `.BAK` in
+  place, so Backuparr checks that it ends the way a finished one does. If
+  the newest is still being written, or was cut short, it takes the one
+  before it and says so in the run log.
 - **Permissions:** Backuparr must be able to read every file in `bwdata`.
   Run it as the user that owns `bwdata` (`PUID`/`PGID`), the user you
   installed Bitwarden as.
@@ -90,15 +91,36 @@ Restores are by hand. The Restore tab gives you the download (decrypted)
 and these steps.
 
 **Standard install**, following Bitwarden's [backup
-guide](https://bitwarden.com/help/backup-on-premise/):
+guide](https://bitwarden.com/help/backup-on-premise/). This works on the
+same server and on a new one; on a new server, the backup brings the
+installation ID, certificates and passwords with it, so you don't run
+Bitwarden's install.
 
-1. Unzip the backup. It holds `bwdata`'s files and the nightly database
-   backup in `mssql/backups`.
-2. Stop Bitwarden with `./bitwarden.sh stop`.
-3. Copy the backup's files into `bwdata`, replacing what's there.
-4. Start Bitwarden with `./bitwarden.sh start`.
-5. Restore the database from the `.BAK` file with `sqlcmd`, as Bitwarden's
-   guide shows, then restart Bitwarden.
+1. Stop Bitwarden: `./bitwarden.sh stop`. On a new server, download
+   `bitwarden.sh` as Bitwarden's [Linux install
+   guide](https://bitwarden.com/help/install-on-premise-linux/#install-bitwarden)
+   shows, but don't run `./bitwarden.sh install`.
+2. As the user Bitwarden runs as, unzip the backup into `bwdata`, replacing
+   what's there. On a new server, unzip it into an empty `bwdata` folder next
+   to `bitwarden.sh`.
+3. Start Bitwarden: `./bitwarden.sh start`. Give it a minute: on a new
+   server it makes an empty database first.
+4. Restore the database from the backup's `.BAK` file (it's in
+   `bwdata/mssql/backups`). The database password is the `SA_PASSWORD`
+   in `bwdata/env/mssql.override.env`:
+
+   ```sh
+   docker exec -it bitwarden-mssql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P '<SA_PASSWORD>' -C
+   1> use master
+   2> alter database vault set offline with rollback immediate
+   3> restore database vault from disk='/etc/bitwarden/mssql/backups/vault_FULL_<date>.BAK' with replace
+   4> alter database vault set online
+   5> GO
+   1> exit
+   ```
+
+5. Restart Bitwarden: `./bitwarden.sh restart`. Then sign in as an
+   existing user and open an item to check that the vault decrypts.
 
 **Bitwarden lite**, following lite's [backup
 guide](https://github.com/bitwarden/self-host/blob/main/bitwarden-lite/backup/README.md#restoring):

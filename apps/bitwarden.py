@@ -12,9 +12,11 @@ of install is told from what's in it:
   database in mssql/data. The database comes from the newest of the nightly
   backups the mssql container makes into mssql/backups
   (vault_FULL_YYYYMMDD_HHMMSS.BAK, util/MsSql/backup-db.sh in
-  bitwarden/server). SQL Server writes that file in place, so one changed in
-  the last few minutes may still be being written: it's skipped for the one
-  before it.
+  bitwarden/server). SQL Server writes that file in place, so a whole one is
+  told by its end: the Microsoft Tape Format block that closes a backup set
+  (ESET), which SQL Server writes last (checked against a real 2026.10.1
+  backup: TAPE at the start, ESET and a filemark at the end). One without it
+  is still being written, or cut short, and is skipped for the one before.
 - Lite (the single container): its backups folder (/backups in the
   container). Lite 2026.10.1 and newer make a backup there daily
   (bitwarden-lite_YYYYMMDD_HHMMSS.tar.gz: the database dump, whichever
@@ -27,8 +29,9 @@ The URL is only asked for the server's version: GET /api/config, which
 every Bitwarden client calls before signing in. Vaultwarden answers it too,
 naming itself in "server". Bitwarden serves HTTPS - its own self-signed
 certificate unless the install was given one - so a self-signed certificate
-is trusted on the card and pinned (apps/cert_pin.py). Backups are always encrypted - they hold the
-database and certificate passwords and the data-protection keys. Restores
+is trusted on the card and pinned (apps/cert_pin.py). Backups are always
+encrypted - they hold the database and certificate passwords and the
+data-protection keys. Restores
 are by hand (manual_restore): the database restore runs inside Bitwarden's
 containers.
 """
@@ -56,8 +59,10 @@ MANIFEST = "backuparr-bitwarden.json"
 LITE_BACKUPS_SINCE = (2026, 10, 1)
 # A nightly backup older than this is worth a warning.
 STALE_SECONDS = 2 * 24 * 3600
-# A .BAK changed this recently may still be being written by SQL Server.
-SETTLE_SECONDS = 10 * 60
+# Microsoft Tape Format: a .BAK is 512-byte aligned blocks, TAPE first and,
+# once SQL Server has finished it, an ESET block near the end.
+_MTF_BLOCK = 512
+_MTF_TAIL = 256 * 1024
 
 _BACKUPS = "mssql/backups"
 # <database>_FULL_<timestamp>.BAK - "vault" unless DATABASE is set.
@@ -80,6 +85,18 @@ def _version_tuple(version):
 
 def _age(path):
     return time.time() - os.stat(path).st_mtime
+
+
+def bak_complete(f, size):
+    """Whether the SQL Server backup in the open binary file f (size bytes)
+    starts with TAPE and has its closing ESET block - a whole backup."""
+    f.seek(0)
+    if f.read(4) != b"TAPE":
+        return False
+    start = max(0, size - _MTF_TAIL) // _MTF_BLOCK * _MTF_BLOCK
+    f.seek(start)
+    tail = f.read()
+    return any(tail[i:i + 4] == b"ESET" for i in range(0, len(tail), _MTF_BLOCK))
 
 
 def _days(seconds):
@@ -157,9 +174,12 @@ def _check_standard(path):
             database = f"{_BACKUPS}/{manifest.get('database_backup')}"
             if database not in names:
                 raise BitwardenError(f"bitwarden: {database} is missing from the backup")
-            with zf.open(database) as f:
+            info = zf.getinfo(database)
+            with zf.open(info) as f:
                 if f.read(4) != b"TAPE":
                     raise BitwardenError(f"bitwarden: {database} isn't a SQL Server backup")
+                if not bak_complete(f, info.file_size):
+                    raise BitwardenError(f"bitwarden: {database} is incomplete")
             if not any(name.startswith("env/") for name in names):
                 raise BitwardenError("bitwarden: env/ is missing from the backup")
     except (OSError, zipfile.BadZipFile) as exc:
@@ -234,11 +254,16 @@ class BitwardenApp:
                                  "Bitwarden makes one at midnight UTC, or run docker exec -i bitwarden-mssql /backup-db.sh")
         for _stamp, name in found:
             path = os.path.join(folder, name)
-            if _age(path) >= SETTLE_SECONDS:
-                return name, path
-            logger.info("bitwarden: skipping %s - changed in the last few minutes, so it may still be being written",
-                        name)
-        raise BitwardenError("bitwarden: the only database backup is still being written - try again in a few minutes")
+            problem = self._unreadable(path, False)
+            if problem:
+                raise BitwardenError(problem)
+            with open(path, "rb") as f:
+                if bak_complete(f, os.fstat(f.fileno()).st_size):
+                    return name, path
+            logger.warning("bitwarden: skipping %s - it isn't a whole SQL Server backup (still being written, "
+                           "or cut short)", name)
+        raise BitwardenError(f"bitwarden: no whole database backup in {self.data_dir}/{_BACKUPS} - if one is being "
+                             "written, try again in a few minutes")
 
     def _newest_lite(self, version=None):
         found = sorted(((m.group(1), name) for name in os.listdir(self.data_dir)
@@ -349,9 +374,6 @@ class BitwardenApp:
         logger.info("bitwarden: copying bwdata and the newest nightly database backup, %s (no logs or live "
                     "database)...", name)
         self._warn_if_stale(name, path, "nightly database backup")
-        with open(path, "rb") as f:
-            if f.read(4) != b"TAPE":
-                raise BitwardenError(f"bitwarden: {name} isn't a SQL Server backup")
         size = 0
         for relative, source in [(f"{_BACKUPS}/{name}", path), *files]:
             target = os.path.join(dest_dir, *relative.split("/"))

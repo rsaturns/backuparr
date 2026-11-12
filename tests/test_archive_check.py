@@ -86,7 +86,7 @@ def sound_archives(tmp_path):
                                                       "attachments/a1/f1": b"x"}),
         "bitwarden": make_zip(tmp_path / "bw.zip", {"backuparr-bitwarden.json": j({"bitwarden_version": "2026.10.1",
                                                     "install": "standard", "database_backup": "vault_FULL_20261112_000000.BAK"}),
-                                                    "mssql/backups/vault_FULL_20261112_000000.BAK": b"TAPE" + b"\0" * 60,
+                                                    "mssql/backups/vault_FULL_20261112_000000.BAK": b"TAPE".ljust(512, b"\0") + b"ESET".ljust(512, b"\0"),
                                                     "env/global.override.env": "globalSettings__x=1\n"}),
         "immich-2": str(immich_dump(tmp_path / "immich.sql.gz")),
         "unifi-site2": str(unifi_backup(tmp_path / "10.6.109.unf")),

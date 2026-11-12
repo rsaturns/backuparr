@@ -419,11 +419,11 @@ APP_META = [
             "docs": "https://rsaturns.github.io/backuparr/apps/bitwarden/",
             "steps": [
                 {"title": "Standard install", "steps": [
-                    "Download the backup and unzip it: it holds bwdata's files and the nightly database backup in mssql/backups.",
-                    "Stop Bitwarden with ./bitwarden.sh stop.",
-                    "Copy the backup's files into bwdata, replacing what's there.",
-                    "Start Bitwarden with ./bitwarden.sh start.",
-                    "Restore the database from the .BAK file with sqlcmd, as Bitwarden's guide shows, then restart Bitwarden.",
+                    "Stop Bitwarden with ./bitwarden.sh stop. On a new server, download bitwarden.sh but don't run its install.",
+                    "Download the backup and unzip it into bwdata, replacing what's there (on a new server, an empty bwdata next to bitwarden.sh).",
+                    "Start Bitwarden with ./bitwarden.sh start and give it a minute.",
+                    "Restore the database from the .BAK file in mssql/backups with sqlcmd, as the Bitwarden page in Backuparr's docs shows.",
+                    "Restart Bitwarden with ./bitwarden.sh restart, then sign in and open an item to check.",
                 ]},
                 {"title": "Bitwarden lite", "steps": [
                     "Download the backup and put it in lite's backups folder.",
