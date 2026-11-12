@@ -22,7 +22,7 @@ class ConfigError(RuntimeError):
     truncated by a full disk, ...). The message says what to do about it."""
 
 
-APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr", "lazylibrarian", "pihole", "vaultwarden", "opnsense", "pfsense", "immich", "homeassistant", "unifi"]
+APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr", "lazylibrarian", "pihole", "vaultwarden", "opnsense", "pfsense", "immich", "homeassistant", "unifi", "unraid"]
 
 # encrypt: whether its backups are encrypted (#147) - on unless turned off,
 # and ignored for an app whose APP_META sets always_encrypted.
@@ -33,7 +33,7 @@ DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "pass
 # archive names never change; each extra one is "<app>-<suffix>" (radarr-4k),
 # an id fixed when it's added because it names the instance's backup folder.
 # Only its display name can change later.
-MULTI_INSTANCE_APPS = ("radarr", "sonarr", "lidarr", "whisparr", "pihole", "opnsense", "pfsense", "immich", "homeassistant", "unifi")
+MULTI_INSTANCE_APPS = ("radarr", "sonarr", "lidarr", "whisparr", "pihole", "opnsense", "pfsense", "immich", "homeassistant", "unifi", "unraid")
 MAX_EXTRA_INSTANCES = 10
 _EXTRA_INSTANCE_ID = re.compile(rf"({'|'.join(MULTI_INSTANCE_APPS)})-([a-z0-9]+(?:-[a-z0-9]+)*)")
 _MAX_INSTANCE_ID_LENGTH = 40
@@ -54,7 +54,7 @@ SERVARR_LOGIN_FIELDS = [
      "help": "the app's own login"},
 ]
 # Apps whose "password" extra field is encrypted at rest.
-PASSWORD_APPS = ("bazarr", "nzbget", "radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "pfsense", "unifi")
+PASSWORD_APPS = ("bazarr", "nzbget", "radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "pfsense", "unifi", "unraid")
 # Other extra fields encrypted at rest, by app type.
 SECRET_EXTRA_FIELDS = {"opnsense": ("api_secret",)}
 
@@ -81,6 +81,7 @@ _APP_CATEGORY = {
     "pihole": "network", "opnsense": "network", "pfsense": "network", "unifi": "network",
     "vaultwarden": "security",
     "homeassistant": "home-automation",
+    "unraid": "server",
 }
 
 # Drives the web UI's forms generically. restore_warning is shown on the
@@ -460,6 +461,45 @@ APP_META = [
         "always_encrypted": True,
         "pins_certificate": True,
         "restore_warning": {"lead": "Home Assistant restarts", "text": "and is offline for a few minutes. The backup replaces its settings, and its history if the backup has it - on HA OS its apps and folders too. A token made after the backup stops working."},
+    },
+    {
+        "id": "unraid",
+        "label": "Unraid",
+        "icon": "unraid.svg",
+        # The web UI's own Boot Device Backup, signed in as root: Unraid's web
+        # UI has only that user, its API has no boot backup, and /boot is
+        # root-only - see apps/unraid.py. The zip is kept as Unraid makes it,
+        # so the USB Flash Creator restores it in one step.
+        "key_required": False,
+        "no_api_key": True,
+        "url_placeholder": "http://192.168.1.10",
+        "extra_fields": [
+            {"name": "password", "label": "Root password", "type": "password", "required": True,
+             "help": "Unraid's web UI has only the root user"},
+        ],
+        "multi_instance": True,
+        "max_extra_instances": MAX_EXTRA_INSTANCES,
+        "always_encrypted": True,
+        "pins_certificate": True,
+        "manual_restore": {
+            "docs": "https://rsaturns.github.io/backuparr/apps/unraid/",
+            "steps": [
+                {"title": "New or replacement drive", "steps": [
+                    "Download the backup: a .zip of the whole boot device.",
+                    "In the Unraid USB Flash Creator, choose Use custom, pick the downloaded .zip and write it to the USB flash drive.",
+                    "Boot the server from it. On a new drive, move the license to it with Tools > Registration > Replace Key.",
+                    "Check the disk assignments on Main before starting the array.",
+                ]},
+                {"title": "Internal boot", "steps": [
+                    "Restore the backup to a USB flash drive as above and boot from it.",
+                    "Switch to internal boot again (Tools > Internal Boot): Unraid copies the restored setup to the internal drive.",
+                ]},
+                {"title": "Single files", "steps": [
+                    "Download the backup and open the .zip.",
+                    "Copy the files you need from its config folder back to the same place on the boot device (the flash share, or /boot/config), then reboot.",
+                ]},
+            ],
+        },
     },
 ]
 # Backuparr's own backup, shown as an app card in Server (#165). Not an

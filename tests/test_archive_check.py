@@ -88,6 +88,8 @@ def sound_archives(tmp_path):
         "unifi-site2": str(unifi_backup(tmp_path / "10.6.109.unf")),
         "unifi": str(unifi_os_backup(tmp_path / "unifi_os_backup.unifi")),
         "homeassistant": make_ha_backup(tmp_path / "ha.tar", database=db, folders=["ssl", "share"], addons=["core_ssh"]),
+        "unraid-2": make_zip(tmp_path / "unraid.zip", {"changes.txt": "# Version 7.4.0 2026-11-09\n",
+                                                        "config/super.dat": b"\0" * 64, "bzimage": b"k"}),
     }
 
 

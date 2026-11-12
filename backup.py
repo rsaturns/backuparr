@@ -56,6 +56,7 @@ from apps.tdarr import TdarrApp
 from apps.vaultwarden import VaultwardenApp
 from apps.whisparr import WhisparrApp
 from apps.unifi import UnifiApp
+from apps.unraid import UnraidApp
 from config_store import ConfigError, app_meta, enabled_apps, enabled_destinations, encrypts, instance_type, retention_days
 from webui.version import VERSION
 
@@ -255,6 +256,7 @@ DRIVERS = {
     "immich": ImmichApp,
     "homeassistant": HomeAssistantApp,
     "unifi": UnifiApp,
+    "unraid": UnraidApp,
 }
 
 

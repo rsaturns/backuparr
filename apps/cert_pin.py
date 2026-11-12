@@ -40,7 +40,7 @@ _FINGERPRINT = re.compile(r"[0-9a-f]{64}")
 CHANGED_TEXT = "{whose} certificate changed. Check it and trust the new one to resume backups."
 UNTRUSTED_TEXT = "{whose} certificate isn't trusted. Check it and trust it in Settings to back it up."
 # Whose certificate the messages name, by app type; the rest are firewalls.
-_WHOSE = {"homeassistant": "Home Assistant's", "unifi": "UniFi's"}
+_WHOSE = {"homeassistant": "Home Assistant's", "unifi": "UniFi's", "unraid": "Unraid's"}
 _FIREWALLS = "the firewall's"
 
 
