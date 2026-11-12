@@ -39,6 +39,7 @@ body:
         - pfSense
         - UniFi
         - Home Assistant
+        - Unraid
         - Web UI / general
         - Not app-specific
     validations:
