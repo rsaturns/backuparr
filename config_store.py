@@ -22,7 +22,7 @@ class ConfigError(RuntimeError):
     truncated by a full disk, ...). The message says what to do about it."""
 
 
-APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr", "lazylibrarian", "pihole", "vaultwarden", "opnsense", "pfsense", "immich", "homeassistant", "unifi", "unraid", "bitwarden"]
+APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr", "lazylibrarian", "pihole", "vaultwarden", "opnsense", "pfsense", "immich", "homeassistant", "unifi", "unraid", "bitwarden", "synology"]
 
 # encrypt: whether its backups are encrypted (#147) - on unless turned off,
 # and ignored for an app whose APP_META sets always_encrypted.
@@ -33,7 +33,7 @@ DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "pass
 # archive names never change; each extra one is "<app>-<suffix>" (radarr-4k),
 # an id fixed when it's added because it names the instance's backup folder.
 # Only its display name can change later.
-MULTI_INSTANCE_APPS = ("radarr", "sonarr", "lidarr", "whisparr", "pihole", "opnsense", "pfsense", "immich", "homeassistant", "unifi", "unraid")
+MULTI_INSTANCE_APPS = ("radarr", "sonarr", "lidarr", "whisparr", "pihole", "opnsense", "pfsense", "immich", "homeassistant", "unifi", "unraid", "synology")
 MAX_EXTRA_INSTANCES = 10
 _EXTRA_INSTANCE_ID = re.compile(rf"({'|'.join(MULTI_INSTANCE_APPS)})-([a-z0-9]+(?:-[a-z0-9]+)*)")
 _MAX_INSTANCE_ID_LENGTH = 40
@@ -54,9 +54,9 @@ SERVARR_LOGIN_FIELDS = [
      "help": "the app's own login"},
 ]
 # Apps whose "password" extra field is encrypted at rest.
-PASSWORD_APPS = ("bazarr", "nzbget", "radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "pfsense", "unifi", "unraid")
+PASSWORD_APPS = ("bazarr", "nzbget", "radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "pfsense", "unifi", "unraid", "synology")
 # Other extra fields encrypted at rest, by app type.
-SECRET_EXTRA_FIELDS = {"opnsense": ("api_secret",)}
+SECRET_EXTRA_FIELDS = {"opnsense": ("api_secret",), "synology": ("device_token",)}
 
 # Settings, History and the Restore and Run & Status pickers group the apps
 # under these, in this order (#148). A category with no apps isn't shown, so
@@ -83,7 +83,7 @@ _APP_CATEGORY = {
     "pihole": "network", "opnsense": "network", "pfsense": "network", "unifi": "network",
     "bitwarden": "security", "vaultwarden": "security",
     "homeassistant": "home-automation",
-    "unraid": "server",
+    "synology": "server", "unraid": "server",
 }
 
 # Drives the web UI's forms generically. restore_warning is shown on the
@@ -99,8 +99,10 @@ _APP_CATEGORY = {
 # (#155): "switch" (on/off, "default"), "select" ("choices", "default"),
 # "app_list" (the apps a Test connection listed, [{"slug", "name"}], shown
 # while the select before it is "chosen") or "hidden" (set by a Test
-# connection, one of "choices"). A "locked" switch is shown on and saves
-# nothing. "option": a backup option, never asked for by the Restore tab.
+# connection: one of "choices", or any short text without them, e.g.
+# Synology's 2FA device token). A "locked" switch is shown on and saves
+# nothing; a "not_saved" field is sent with a Test connection only (a 2FA
+# code). "option": a backup option, never asked for by the Restore tab.
 # "only_install": shown once a Test connection (install_type) found that
 # kind of install.
 APP_META = [
@@ -502,6 +504,46 @@ APP_META = [
         "always_encrypted": True,
         "pins_certificate": True,
         "restore_warning": {"lead": "Home Assistant restarts", "text": "and is offline for a few minutes. The backup replaces its settings, and its history if the backup has it - on HA OS its apps and folders too. A token made after the backup stops working."},
+    },
+    {
+        "id": "synology",
+        "label": "Synology DSM",
+        "icon": "synology-dsm.svg",
+        # DSM's own Configuration Backup (.dss) - its settings, not the data in
+        # its shared folders - over the Control Panel's Web API calls, signed
+        # in as an administrator: see apps/synology.py. A 2FA code is asked
+        # for once; DSM's device token (set by Test connection) signs in after.
+        "key_required": False,
+        "no_api_key": True,
+        "url_placeholder": "https://192.168.1.20:5001",
+        "extra_fields": [
+            {"name": "username", "label": "Username", "type": "text", "required": True,
+             "help": "an account in the administrators group"},
+            {"name": "password", "label": "Password", "type": "password", "required": True},
+            {"name": "otp_code", "label": "2FA code", "type": "text", "login_only": True, "not_saved": True,
+             "help": "from the account's authenticator app, asked for once"},
+            {"name": "device_token", "type": "hidden"},
+        ],
+        "multi_instance": True,
+        "max_extra_instances": MAX_EXTRA_INSTANCES,
+        "always_encrypted": True,
+        "pins_certificate": True,
+        "manual_restore": {
+            "docs": "https://rsaturns.github.io/backuparr/apps/synology/",
+            "steps": [
+                {"title": "DSM 7", "steps": [
+                    "Download the backup: DSM's .dss configuration file. It holds DSM's settings, not the files in its shared folders.",
+                    "In DSM, open Control Panel > Update & Restore > Configuration Backup. Under Restore DSM Configurations, click Restore.",
+                    "Choose Restore from a configuration file on your computer, browse to the .dss and click Next.",
+                    "Tick the settings to restore, and Overwrite conflicting settings to replace ones that exist now. Click Done, then Yes: DSM stops its services while it restores.",
+                ]},
+                {"title": "DSM 6.2", "steps": [
+                    "Download the backup: DSM's .dss configuration file.",
+                    "In DSM, open Control Panel > Update & Restore > Configuration Backup and click Restore configuration.",
+                    "Browse to the .dss, tick the settings to restore, and Overwrite conflicting settings to replace ones that exist now. Click OK, then Yes: DSM stops its services while it restores.",
+                ]},
+            ],
+        },
     },
     {
         "id": "unraid",

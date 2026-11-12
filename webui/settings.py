@@ -28,6 +28,8 @@ def _restore_override_fields(app_name):
 
 _APP_SLUG = re.compile(r"[a-z0-9_]{1,64}")
 MAX_LISTED_APPS = 100
+# A hidden field without choices: set by a Test connection (Synology's 2FA device token).
+MAX_HIDDEN_TEXT = 512
 
 
 def _valid_app_list(value):
@@ -48,8 +50,10 @@ def _extra_field_error(name, meta, app_data):
             return f"{name}: {field['name']} must be true or false"
         if kind == "select" and value not in [choice["value"] for choice in field["choices"]]:
             return f"{name}: {field['name']} must be one of {', '.join(c['value'] for c in field['choices'])}"
-        if kind == "hidden" and value not in ("", *field.get("choices", ())):
+        if kind == "hidden" and "choices" in field and value not in ("", *field["choices"]):
             return f"{name}: {field['name']} isn't a value Backuparr knows"
+        if kind == "hidden" and "choices" not in field and not (isinstance(value, str) and len(value) <= MAX_HIDDEN_TEXT):
+            return f"{name}: {field['name']} must be text of at most {MAX_HIDDEN_TEXT} characters"
         if kind == "app_list" and not _valid_app_list(value):
             return f"{name}: {field['name']} must be a list of apps (slug and name)"
     return None
@@ -221,7 +225,7 @@ def api_set_config():
         if extra and name not in cfg["apps"]:
             cfg["apps"][name] = dict(DEFAULT_INSTANCE)
         fields = set(DEFAULT_INSTANCE if extra else DEFAULT_APP) | {
-            f["name"] for f in app_meta(name).get("extra_fields", []) if not f.get("locked")}
+            f["name"] for f in app_meta(name).get("extra_fields", []) if not f.get("locked") and not f.get("not_saved")}
         if app_meta(name).get("pins_certificate"):
             fields.add("trusted_cert")
         cfg["apps"][name].update({k: v for k, v in incoming.items() if k in fields})

@@ -57,6 +57,7 @@ from apps.vaultwarden import VaultwardenApp
 from apps.bitwarden import BitwardenApp
 from apps.whisparr import WhisparrApp
 from apps.unifi import UnifiApp
+from apps.synology import SynologyApp
 from apps.unraid import UnraidApp
 from config_store import ConfigError, app_label, app_meta, enabled_apps, enabled_destinations, encrypts, instance_type, retention_days
 from webui.version import VERSION
@@ -273,6 +274,7 @@ DRIVERS = {
     "homeassistant": HomeAssistantApp,
     "unifi": UnifiApp,
     "unraid": UnraidApp,
+    "synology": SynologyApp,
 }
 
 

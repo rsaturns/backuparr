@@ -7,16 +7,16 @@ nav_order: 2
 
 ## Apps
 
-- Backs up 25 apps: Radarr, Sonarr, Lidarr, Whisparr (v2 and v3), Prowlarr,
+- Backs up 26 apps: Radarr, Sonarr, Lidarr, Whisparr (v2 and v3), Prowlarr,
   Profilarr, Bazarr, Tdarr (2 and 3), SABnzbd, NZBGet, Tautulli, Jellyfin,
   Emby, Plex, Seerr, Immich (its database), LazyLibrarian, Pi-hole (v6),
-  Bitwarden (self-hosted), Vaultwarden, OPNsense, pfSense, UniFi, Home Assistant and Unraid (its boot
-  device). See [Apps](apps/index.md).
+  Bitwarden (self-hosted), Vaultwarden, OPNsense, pfSense, UniFi, Home Assistant, Unraid (its boot
+  device) and Synology DSM (its settings, not the NAS's data). See [Apps](apps/index.md).
 - Most apps are backed up through their own API. Jellyfin, Emby, Plex, Seerr,
   LazyLibrarian, Bitwarden and Vaultwarden also need a folder mounted into
   Backuparr.
 - Up to 10 extra instances each of Radarr, Sonarr, Lidarr, Whisparr, Pi-hole,
-  OPNsense, pfSense, UniFi, Immich, Home Assistant and Unraid, such as a 4K Radarr or a second firewall. See [More than one instance](settings.md#more-than-one-instance).
+  OPNsense, pfSense, UniFi, Immich, Home Assistant, Unraid and Synology DSM, such as a 4K Radarr or a second firewall. See [More than one instance](settings.md#more-than-one-instance).
 - **Prowlarr discovery** fills in the apps Prowlarr already knows, API keys
   included. See [Prowlarr discovery](settings.md#prowlarr-discovery).
 - **Test connection** on every app card.

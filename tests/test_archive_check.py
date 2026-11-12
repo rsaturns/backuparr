@@ -11,6 +11,7 @@ import zipfile
 
 import pytest
 from ha_backup import make_ha_backup
+from synology_backup import make_dss
 from unifi_backup import make_unf, make_unifi
 
 import archive_check
@@ -94,7 +95,13 @@ def sound_archives(tmp_path):
         "homeassistant": make_ha_backup(tmp_path / "ha.tar", database=db, folders=["ssl", "share"], addons=["core_ssh"]),
         "unraid-2": make_zip(tmp_path / "unraid.zip", {"changes.txt": "# Version 7.4.0 2026-11-09\n",
                                                         "config/super.dat": b"\0" * 64, "bzimage": b"k"}),
+        "synology-nas2": synology_backup(tmp_path / "synology-configuration.dss"),
     }
+
+
+def synology_backup(path, **kwargs):
+    path.write_bytes(make_dss(**kwargs))
+    return str(path)
 
 
 def unifi_os_backup(path):

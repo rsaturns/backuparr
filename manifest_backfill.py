@@ -31,7 +31,7 @@ import archive_crypto
 import destination_util
 import manifest
 import rclone_util
-from apps import bitwarden, homeassistant, unifi, unraid
+from apps import bitwarden, homeassistant, synology, unifi, unraid
 from apps.base import AppError
 from config_store import enabled_destinations, instance_type, load_config
 
@@ -144,6 +144,8 @@ def read_version(app_type, archive):
             return unifi.read_backup(archive)
         if app_type == "unraid":
             return unraid.backup_version(archive)
+        if app_type == "synology":
+            return synology.backup_version(archive)
         if app_type == "bitwarden":
             if zipfile.is_zipfile(archive):
                 text = _zip_text(archive, bitwarden.MANIFEST)

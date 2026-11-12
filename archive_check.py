@@ -16,7 +16,7 @@ import tarfile
 import tempfile
 import zipfile
 
-from apps import bitwarden, homeassistant, immich, opnsense, pfsense, unifi, unraid
+from apps import bitwarden, homeassistant, immich, opnsense, pfsense, synology, unifi, unraid
 from apps.base import AppError
 from apps.sqlite_snapshot import quick_check
 from apps.tdarr import COLLECTIONS as TDARR_COLLECTIONS
@@ -187,11 +187,22 @@ def _check_homeassistant(path):
         shutil.rmtree(work_dir, ignore_errors=True)
 
 
+def _check_synology(path):
+    """DSM's configuration backup (an xz tar): see apps/synology.py. Its
+    settings database gets SQLite's quick check like any other app's."""
+    work_dir = tempfile.mkdtemp(prefix="backuparr-check-", dir=os.path.dirname(path) or None)
+    try:
+        synology.check_backup(path, lambda fileobj: _quick_check_file(fileobj, work_dir))
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
+
+
 # Apps whose backup is the app's own file rather than an archive Backuparr
 # reads member by member, and its check.
 _SINGLE_FILE = {"opnsense": opnsense.check_config, "pfsense": pfsense.check_config, "immich": immich.check_dump,
                 "homeassistant": _check_homeassistant, "unifi": unifi.check_backup,
-                "unraid": unraid.check_backup, "bitwarden": bitwarden.check_backup}
+                "unraid": unraid.check_backup, "bitwarden": bitwarden.check_backup,
+                "synology": _check_synology}
 
 
 def _check(app_type, path):
