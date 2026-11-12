@@ -16,7 +16,7 @@ import tarfile
 import tempfile
 import zipfile
 
-from apps import homeassistant, immich, opnsense, pfsense, unifi, unraid
+from apps import bitwarden, homeassistant, immich, opnsense, pfsense, unifi, unraid
 from apps.base import AppError
 from apps.sqlite_snapshot import quick_check
 from apps.tdarr import COLLECTIONS as TDARR_COLLECTIONS
@@ -191,7 +191,7 @@ def _check_homeassistant(path):
 # reads member by member, and its check.
 _SINGLE_FILE = {"opnsense": opnsense.check_config, "pfsense": pfsense.check_config, "immich": immich.check_dump,
                 "homeassistant": _check_homeassistant, "unifi": unifi.check_backup,
-                "unraid": unraid.check_backup}
+                "unraid": unraid.check_backup, "bitwarden": bitwarden.check_backup}
 
 
 def _check(app_type, path):

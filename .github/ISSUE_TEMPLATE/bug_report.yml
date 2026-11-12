@@ -34,6 +34,7 @@ body:
         - Immich
         - LazyLibrarian
         - Pi-hole
+        - Bitwarden
         - Vaultwarden
         - OPNsense
         - pfSense

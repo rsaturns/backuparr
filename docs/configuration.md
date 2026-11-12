@@ -20,6 +20,7 @@ nav_order: 13
 | `apps.plex.data_dir` | Plex's mounted `Plex Media Server` folder - required |
 | `apps.seerr.data_dir` | Seerr's mounted config folder (its `/app/config`) - required |
 | `apps.lazylibrarian.data_dir` | LazyLibrarian's mounted data folder (its `/config`) - required |
+| `apps.bitwarden.data_dir` | Bitwarden's mounted `bwdata` folder (standard install) or lite's mounted backups folder - required |
 | `apps.vaultwarden.data_dir` | Vaultwarden's mounted data folder (its `/data`) - required |
 | `apps.opnsense.api_secret` | The secret of OPNsense's API key (encrypted at rest) - required |
 | `apps.pfsense.username/password` | The pfSense user's login (the password encrypted at rest) - required |

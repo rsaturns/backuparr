@@ -83,6 +83,8 @@ services:
       #- /share/Container/seerr/config:/mnt/seerr:ro
       # Needed to back up LazyLibrarian - its /config folder (see the LazyLibrarian note).
       #- /share/Container/lazylibrarian/config:/mnt/lazylibrarian
+      # Needed to back up Bitwarden - its bwdata folder, or lite's backups folder (see the Bitwarden note).
+      #- /share/Container/bitwarden/bwdata:/mnt/bitwarden:ro
       # Needed to back up Vaultwarden - its /data folder (see the Vaultwarden note).
       #- /share/Container/vaultwarden/data:/mnt/vaultwarden:ro
 ```

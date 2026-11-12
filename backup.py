@@ -54,6 +54,7 @@ from apps.sonarr import SonarrApp
 from apps.tautulli import TautulliApp
 from apps.tdarr import TdarrApp
 from apps.vaultwarden import VaultwardenApp
+from apps.bitwarden import BitwardenApp
 from apps.whisparr import WhisparrApp
 from apps.unifi import UnifiApp
 from apps.unraid import UnraidApp
@@ -264,6 +265,7 @@ DRIVERS = {
     "seerr": SeerrApp,
     "lazylibrarian": LazyLibrarianApp,
     "pihole": PiholeApp,
+    "bitwarden": BitwardenApp,
     "vaultwarden": VaultwardenApp,
     "opnsense": OpnsenseApp,
     "pfsense": PfsenseApp,

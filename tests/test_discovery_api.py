@@ -182,7 +182,7 @@ def test_prowlarr_and_discovered_apps_lead_their_category(webui):
         "sabnzbd", "nzbget",
         "tautulli", "jellyfin", "emby", "plex", "seerr", "immich",
         "pihole", "opnsense", "pfsense", "unifi",
-        "vaultwarden",
+        "bitwarden", "vaultwarden",
         "homeassistant",
         "unraid"]
     assert html.count('id="discover-btn"') == 1
