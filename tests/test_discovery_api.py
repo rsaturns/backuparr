@@ -213,6 +213,22 @@ def test_every_app_has_a_known_category():
     assert all(meta["category"] in known for meta in APP_META)
 
 
+def test_every_category_has_an_emoji_or_an_icon_for_both_themes(webui):
+    """#189: a category's icon has an image for the light and the dark theme."""
+    from pathlib import Path
+    from config_store import APP_CATEGORIES
+    static = Path(__file__).resolve().parent.parent / "webui" / "static"
+    css = (static / "style.css").read_text()
+    html = client_for(webui).get("/").get_data(as_text=True)
+    for category in APP_CATEGORIES:
+        assert bool(category.get("emoji")) != bool(category.get("icon")), category["id"]
+        if category.get("icon"):
+            rules = re.findall(rf'\.category-icon-{category["icon"]} \{{ --category-icon: url\("([^"]+)"\); \}}', css)
+            assert len(rules) == 3 and len(set(rules)) == 2, rules  # light, and dark twice (system and toggle)
+            assert all((static / path).is_file() for path in rules)
+            assert f'class="category-icon category-icon-{category["icon"]}"' in html
+
+
 def test_every_discoverable_card_can_show_what_prowlarr_found(webui):
     html = client_for(webui).get("/").get_data(as_text=True)
     starts = list(re.finditer(r'<div class="app-card[^"]*" data-app="([^"]+)"', html))

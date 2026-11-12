@@ -159,6 +159,9 @@ collection](https://selfh.st/icons/) ([selfhst/icons on
 GitHub](https://github.com/selfhst/icons)), licensed
 [CC BY 4.0](https://github.com/selfhst/icons/blob/main/LICENSE).
 
+The Server category's icons (`server-outline.png`, `server-filled.png`):
+<a href="https://www.flaticon.com/free-icons/server" title="server icons">Server icons created by Magnific - Flaticon</a>
+
 ## License
 
 [GNU AGPLv3](LICENSE) - if you run a modified version as a network service,

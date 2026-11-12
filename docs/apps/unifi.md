@@ -73,10 +73,11 @@ never retries, and says so when it's refused.
 ## The certificate
 
 UniFi uses a self-signed certificate unless you've given it your own. The
-first **Test connection** shows it (name, expiry, SHA-256 fingerprint):
-click **Trust** and **Save**. It works as for
-[OPNsense](opnsense.md#the-certificate): a changed certificate stops backups
-until you trust the new one. A certificate from a trusted CA needs nothing.
+first **Test connection** shows it (name and expiry, and the SHA-256
+fingerprint on the **?** next to SHA-256): click **Trust** and **Save**. It
+works as for [OPNsense](opnsense.md#the-certificate): a changed certificate
+stops backups until you trust the new one. A certificate from a trusted CA
+needs nothing.
 
 ## Restoring
 
