@@ -664,7 +664,7 @@ def test_a_test_connection_hands_the_card_what_it_found(authed_client, isolated_
 
     monkeypatch.setattr(isolated_webui.settings, "build_app", lambda name, cfg: Found())
     body = authed_client.post("/api/test/homeassistant", json={"url": URL, "api_key": TOKEN}).get_json()
-    assert body == {"ok": True, "message": "homeassistant 2026.11.1 reachable", "card": Found.card_info}
+    assert body == {"ok": True, "message": "Home Assistant 2026.11.1 reachable", "card": Found.card_info}
 
 
 def test_the_card_renders_its_options(authed_client):

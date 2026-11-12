@@ -2757,16 +2757,16 @@ function renderRunState(state) {
   if (state.running) {
     addPart("Running", `since ${fmtTime(state.started_at)}`);
     if (state.total_apps) {
-      addPart(null, `- backing up ${state.current_app} (${state.current_index} of ${state.total_apps})`);
+      addPart(null, `- backing up ${appLabel(state.current_app)} (${state.current_index} of ${state.total_apps})`);
       const spinner = document.createElement("span");
       spinner.className = "spinner";
       summary.appendChild(spinner);
     }
   } else if (state.finished_at) {
     addPart(null, `Last run finished ${fmtTime(state.finished_at)}`);
-    addPart("OK:", (state.ok || []).join(", ") || "none");
+    addPart("OK:", (state.ok || []).map(appLabel).join(", ") || "none");
     if ((state.failed || []).length) {
-      addPart("Failed:", state.failed.join("; "), true);
+      addPart("Failed:", state.failed.map(namedFailure).join("; "), true);
       state.failed.filter(isCertificateFailure).forEach((entry) => summary.appendChild(cardLink(entry.split(": ")[0])));
     }
   }
@@ -2891,6 +2891,13 @@ function appMeta(appId) {
 }
 
 // "Radarr (4K)" for an extra instance; a removed one's id stands in for its name.
+// A run's failure is logged as "<app id>: why" ("radarr-4k: ..."); the page
+// names the app as its card does: "Radarr (4K): why" (#191).
+function namedFailure(entry) {
+  const [appId, ...why] = entry.split(": ");
+  return why.length && appMeta(appId) ? `${appLabel(appId)}: ${why.join(": ")}` : entry;
+}
+
 function appLabel(appId) {
   if (appId === "backuparr") return "Backuparr";
   const m = appMeta(appId);

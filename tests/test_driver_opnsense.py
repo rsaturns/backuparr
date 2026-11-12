@@ -145,7 +145,7 @@ def test_test_connection_returns_the_certificate_to_trust(authed_client, monkeyp
     monkeypatch.setattr(OpnsenseApp, "test_connection", refuse)
     body = authed_client.post("/api/test/opnsense", json={"url": "https://fw.lab", "api_key": KEY, "api_secret": SECRET,
                                                            "trusted_cert": TRUSTED}).get_json()
-    assert body == {"ok": False, "message": "opnsense: the firewall's certificate changed. Check it and trust the new one to resume backups.",
+    assert body == {"ok": False, "message": "OPNsense: the firewall's certificate changed. Check it and trust the new one to resume backups.",
                     "certificate": PRESENTED, "trusted_certificate": TRUSTED, "certificate_changed": True}
 
 

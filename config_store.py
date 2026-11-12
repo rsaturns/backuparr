@@ -957,6 +957,20 @@ def app_meta(name):
     return next((m for m in APP_META if m["id"] == instance_type(name)), None)
 
 
+def app_label(app_id, app_cfg=None):
+    """An app or instance id's name as its card shows it: "Pi-hole",
+    "Radarr (4K)" - an instance's own name from its settings, or the end of
+    its id."""
+    if app_id == SELF_APP["id"]:
+        return SELF_APP["label"]
+    meta = app_meta(app_id)
+    if not meta:
+        return app_id
+    if instance_type(app_id) == app_id:
+        return meta["label"]
+    return f"{meta['label']} ({(app_cfg or {}).get('name') or app_id[len(meta['id']) + 1:]})"
+
+
 def key_required(name):
     return (app_meta(name) or {}).get("key_required", True)
 

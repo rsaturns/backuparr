@@ -269,7 +269,7 @@ def test_a_test_that_finds_the_apps_login_tells_the_card_to_ask_for_it(authed_cl
     error = LoginRequiredError("radarr 6.4 asks for a login. Enter its username and password.")
     monkeypatch.setattr(isolated_webui.settings, "build_app", lambda name, cfg: StubApp(error=error))
     result = authed_client.post("/api/test/radarr", json={"url": "http://r", "api_key": "k"}).get_json()
-    assert result == {"ok": False, "needs_login": True, "message": "radarr 6.4 asks for a login. Enter its username and password."}
+    assert result == {"ok": False, "needs_login": True, "message": "Radarr 6.4 asks for a login. Enter its username and password."}
     monkeypatch.setattr(isolated_webui.settings, "build_app", lambda name, cfg: StubApp(error=RuntimeError("radarr: down")))
     assert "needs_login" not in authed_client.post("/api/test/radarr", json={"url": "http://r", "api_key": "k"}).get_json()
 

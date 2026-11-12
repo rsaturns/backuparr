@@ -27,6 +27,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Messages in the web UI name each app as its card does, with the product's own capitalisation: "OPNsense: ...", "pfSense 2.8.1 reachable", "SABnzbd restore complete", and Run & Status's OK and Failed lists say "Radarr (4K)" in place of the app's id (#191).
 - The Restore tab lists Profilarr too: picking it shows a Download button (decrypted), the steps for restoring it in Profilarr and a link to its docs page, in place of Restore (#151).
 - The web server is now Hypercorn instead of Waitress, to serve HTTP and HTTPS from one process (#177).
 - Over HTTPS the login cookie is Secure and has its own name, so signing in over HTTP and HTTPS works side by side (#177).
