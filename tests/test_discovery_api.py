@@ -181,7 +181,7 @@ def test_prowlarr_and_discovered_apps_lead_their_category(webui):
         "prowlarr", "radarr", "sonarr", "lidarr", "whisparr", "lazylibrarian", "profilarr", "bazarr", "tdarr",
         "sabnzbd", "nzbget",
         "tautulli", "jellyfin", "emby", "plex", "seerr", "immich",
-        "pihole", "opnsense", "pfsense",
+        "pihole", "opnsense", "pfsense", "unifi",
         "vaultwarden",
         "homeassistant"]
     assert html.count('id="discover-btn"') == 1

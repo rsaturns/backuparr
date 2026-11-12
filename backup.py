@@ -55,6 +55,7 @@ from apps.tautulli import TautulliApp
 from apps.tdarr import TdarrApp
 from apps.vaultwarden import VaultwardenApp
 from apps.whisparr import WhisparrApp
+from apps.unifi import UnifiApp
 from config_store import ConfigError, app_meta, enabled_apps, enabled_destinations, encrypts, instance_type, retention_days
 from webui.version import VERSION
 
@@ -253,6 +254,7 @@ DRIVERS = {
     "pfsense": PfsenseApp,
     "immich": ImmichApp,
     "homeassistant": HomeAssistantApp,
+    "unifi": UnifiApp,
 }
 
 

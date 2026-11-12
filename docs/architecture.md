@@ -5,7 +5,7 @@ nav_order: 14
 
 # Architecture
 
-![Radarr, Sonarr, Lidarr, Whisparr, Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, NZBGet, Tautulli, Jellyfin, Emby, Plex, Seerr, Immich, LazyLibrarian, Pi-hole, Vaultwarden, OPNsense, pfSense, and Home Assistant each feed Backuparr; Backuparr uploads each backup via rclone to Local Storage, Google Drive, Microsoft OneDrive, and Dropbox](https://raw.githubusercontent.com/rsaturns/backuparr/main/webui/static/architecture-diagram.svg)
+![Radarr, Sonarr, Lidarr, Whisparr, Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, NZBGet, Tautulli, Jellyfin, Emby, Plex, Seerr, Immich, LazyLibrarian, Pi-hole, Vaultwarden, OPNsense, pfSense, UniFi, and Home Assistant each feed Backuparr; Backuparr uploads each backup via rclone to Local Storage, Google Drive, Microsoft OneDrive, and Dropbox](https://raw.githubusercontent.com/rsaturns/backuparr/main/webui/static/architecture-diagram.svg)
 
 ## Why not reuse an existing tool?
 

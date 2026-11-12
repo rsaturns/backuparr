@@ -47,7 +47,7 @@ added with **Add as instance**.
 
 ## More than one instance
 
-Radarr, Sonarr, Lidarr, Whisparr, Pi-hole, OPNsense and pfSense can each run more than once. Click **Add
+Radarr, Sonarr, Lidarr, Whisparr, Pi-hole, OPNsense, pfSense, UniFi, Immich and Home Assistant can each run more than once. Click **Add
 another** under the app's card and name the instance, such as `4K` or `Anime`.
 Each instance has its own settings, backups, History and Restore entry, and can
 get its own [authentication headers](#service-authentication-headers).

@@ -185,8 +185,9 @@
                     <span>{{ f.label }}{% if f.help %} <span class="muted">({{ f.help }})</span>{% endif %}</span>
                   </label>
                   {% elif f.type == 'select' %}
-                  <label class="field{{ install_cls }}"{% if f.only_install %} data-only-install="{{ f.only_install }}"{% endif %}>
-                    <span class="field-label">{{ f.label }}</span>
+                  {# show_if (#161): shown while any one of its conditions holds. #}
+                  <label class="field{{ install_cls }}{% if f.show_if %} show-if hidden{% endif %}"{% if f.only_install %} data-only-install="{{ f.only_install }}"{% endif %}{% if f.show_if %} data-show-if='{{ f.show_if | tojson }}'{% endif %}>
+                    <span class="field-label">{{ f.label }}{% if f.help %} <span class="muted">({{ f.help }})</span>{% endif %}</span>
                     <select class="f-extra" data-field="{{ f.name }}" data-default="{{ f.default }}">
                       {% for c in f.choices %}<option value="{{ c.value }}">{{ c.label }}</option>{% endfor %}
                     </select>

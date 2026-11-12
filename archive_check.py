@@ -16,7 +16,7 @@ import tarfile
 import tempfile
 import zipfile
 
-from apps import homeassistant, immich, opnsense, pfsense
+from apps import homeassistant, immich, opnsense, pfsense, unifi
 from apps.base import AppError
 from apps.sqlite_snapshot import quick_check
 from apps.tdarr import COLLECTIONS as TDARR_COLLECTIONS
@@ -190,7 +190,7 @@ def _check_homeassistant(path):
 # Apps whose backup is the app's own file rather than an archive Backuparr
 # reads member by member, and its check.
 _SINGLE_FILE = {"opnsense": opnsense.check_config, "pfsense": pfsense.check_config, "immich": immich.check_dump,
-                "homeassistant": _check_homeassistant}
+                "homeassistant": _check_homeassistant, "unifi": unifi.check_backup}
 
 
 def _check(app_type, path):

@@ -963,6 +963,16 @@ function showInstallOptions(card) {
     if (el.classList.contains("app-list")) show = show && choice === "chosen";
     el.classList.toggle("hidden", !show);
   });
+  // show_if (#161): [{field: [values]}, ...] - shown while every field of
+  // any one condition has one of its values (UniFi's History: the
+  // standalone app, or UniFi OS backing up Network only).
+  card.querySelectorAll("[data-show-if]").forEach((el) => {
+    let conditions = [];
+    try { conditions = JSON.parse(el.dataset.showIf); } catch { /* malformed: stays hidden */ }
+    const value = (name) => card.querySelector(`.f-extra[data-field="${name}"]`)?.value || "";
+    const show = conditions.some((cond) => Object.entries(cond).every(([name, values]) => values.includes(value(name))));
+    el.classList.toggle("hidden", !show);
+  });
 }
 
 function readAppList(list) {

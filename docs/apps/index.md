@@ -26,6 +26,7 @@ has_toc: false
 | Pi-hole (v6+) | Teleporter (`GET /api/teleporter`), with an app password; always encrypted - see the [Pi-hole note](pihole.md) | Imported over `POST /api/teleporter`; Pi-hole restarts |
 | OPNsense (24.1+) | `config.xml` over its API (`GET /api/core/backup/download/this`) with a backup-only API key; a self-signed certificate is trusted on the card; always encrypted - see the [OPNsense note](opnsense.md) | By hand: the Restore tab gives the download and the steps |
 | pfSense (CE and Plus) | `config.xml` from its web UI's Backup & Restore page, signed in as Netgate documents for scripted backups; a self-signed certificate is trusted on the card; always encrypted - see the [pfSense note](pfsense.md) | By hand: the Restore tab gives the download and the steps |
+| UniFi | UniFi OS's own backup (`.unifi`, everything; a Super Admin), or UniFi Network's (`.unf`, on UniFi OS or UniFi Network Server) with the statistics History keeps; signed in as a local admin; a self-signed certificate is trusted on the card; always encrypted - see the [UniFi note](unifi.md) | By hand: the Restore tab gives the download and the steps |
 | Vaultwarden | Database, RSA key, `config.json`, attachments and Sends from its mounted data folder, while Vaultwarden runs; always encrypted | Written back while Vaultwarden is stopped - see the [Vaultwarden note](vaultwarden.md) |
 
 For the apps with a mounted folder, read-only is enough for backups; restoring

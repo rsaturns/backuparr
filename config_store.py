@@ -22,7 +22,7 @@ class ConfigError(RuntimeError):
     truncated by a full disk, ...). The message says what to do about it."""
 
 
-APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr", "lazylibrarian", "pihole", "vaultwarden", "opnsense", "pfsense", "immich", "homeassistant"]
+APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr", "lazylibrarian", "pihole", "vaultwarden", "opnsense", "pfsense", "immich", "homeassistant", "unifi"]
 
 # encrypt: whether its backups are encrypted (#147) - on unless turned off,
 # and ignored for an app whose APP_META sets always_encrypted.
@@ -33,7 +33,7 @@ DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "pass
 # archive names never change; each extra one is "<app>-<suffix>" (radarr-4k),
 # an id fixed when it's added because it names the instance's backup folder.
 # Only its display name can change later.
-MULTI_INSTANCE_APPS = ("radarr", "sonarr", "lidarr", "whisparr", "pihole", "opnsense", "pfsense", "immich", "homeassistant")
+MULTI_INSTANCE_APPS = ("radarr", "sonarr", "lidarr", "whisparr", "pihole", "opnsense", "pfsense", "immich", "homeassistant", "unifi")
 MAX_EXTRA_INSTANCES = 10
 _EXTRA_INSTANCE_ID = re.compile(rf"({'|'.join(MULTI_INSTANCE_APPS)})-([a-z0-9]+(?:-[a-z0-9]+)*)")
 _MAX_INSTANCE_ID_LENGTH = 40
@@ -54,7 +54,7 @@ SERVARR_LOGIN_FIELDS = [
      "help": "the app's own login"},
 ]
 # Apps whose "password" extra field is encrypted at rest.
-PASSWORD_APPS = ("bazarr", "nzbget", "radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "pfsense")
+PASSWORD_APPS = ("bazarr", "nzbget", "radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "pfsense", "unifi")
 # Other extra fields encrypted at rest, by app type.
 SECRET_EXTRA_FIELDS = {"opnsense": ("api_secret",)}
 
@@ -78,7 +78,7 @@ _APP_CATEGORY = {
     "sabnzbd": "downloaders", "nzbget": "downloaders",
     "plex": "media-servers", "jellyfin": "media-servers", "emby": "media-servers", "tautulli": "media-servers",
     "seerr": "media-servers", "immich": "media-servers",
-    "pihole": "network", "opnsense": "network", "pfsense": "network",
+    "pihole": "network", "opnsense": "network", "pfsense": "network", "unifi": "network",
     "vaultwarden": "security",
     "homeassistant": "home-automation",
 }
@@ -338,6 +338,56 @@ APP_META = [
                     "On a USB stick formatted FAT or FAT32, make a folder named config and put config.xml in it.",
                     "Install pfSense. Then plug in the stick and boot the firewall: pfSense copies the configuration from it.",
                     "Remove the stick once the firewall is up, or pfSense copies it again at every boot.",
+                ]},
+            ],
+        },
+    },
+    {
+        "id": "unifi",
+        "label": "UniFi",
+        "icon": "ubiquiti-unifi.svg",
+        # No documented backup API: UniFi OS's own backup (everything, a Super
+        # Admin) or the Network app's (Network only), signed in as a local
+        # admin; the standalone UniFi Network Server only has the Network
+        # one - see apps/unifi.py. The backups hold Wi-Fi passwords, VPN keys
+        # and admin logins. A Test connection finds the install type, which
+        # picks the options shown.
+        "key_required": False,
+        "no_api_key": True,
+        "url_placeholder": "https://192.168.1.1",
+        "extra_fields": [
+            {"name": "username", "label": "Username", "type": "text", "required": True,
+             "help": "a local admin - see the docs for its role"},
+            {"name": "password", "label": "Password", "type": "password", "required": True},
+            {"name": "backup", "label": "Backup", "type": "select", "default": "everything", "option": True,
+             "only_install": "unifi-os", "help": "everything needs a Super Admin",
+             "choices": [{"value": "everything", "label": "Everything"}, {"value": "network", "label": "Network only"}]},
+            {"name": "history", "label": "History", "type": "select", "default": "settings", "option": True,
+             "help": "statistics kept with the Network settings",
+             "show_if": [{"install_type": ["standalone"]}, {"install_type": ["unifi-os"], "backup": ["network"]}],
+             "choices": [{"value": "settings", "label": "Settings only"}, {"value": "7", "label": "Last 7 days"},
+                         {"value": "30", "label": "Last 30 days"}, {"value": "90", "label": "Last 90 days"},
+                         {"value": "365", "label": "Last 365 days"}, {"value": "all", "label": "Everything"}]},
+            {"name": "install_type", "type": "hidden", "option": True, "choices": ["unifi-os", "standalone"]},
+        ],
+        "multi_instance": True,
+        "max_extra_instances": MAX_EXTRA_INSTANCES,
+        "always_encrypted": True,
+        "pins_certificate": True,
+        "manual_restore": {
+            "docs": "https://rsaturns.github.io/backuparr/apps/unifi/",
+            "steps": [
+                {"title": "UniFi OS", "steps": [
+                    "Download the backup: a .unifi file holds everything, a .unf file UniFi Network only.",
+                    "On a new install, finish the setup first (Proceed Without a UI Account works) and update it to the backup's versions or newer.",
+                    "Open Settings > Control Plane > Backups and click Upload & Restore.",
+                    "Choose the downloaded file. For a .unifi file, leave Restore All Applications and Settings ticked.",
+                    "Click Restore. UniFi restarts with the backup's settings.",
+                ]},
+                {"title": "Standalone app", "steps": [
+                    "Download the backup.",
+                    "On a new install, click Restore Server from a Backup on the setup's first page, choose the downloaded file and click Confirm.",
+                    "Otherwise, open Settings > System > Backups, click Restore, choose the file and click Restore.",
                 ]},
             ],
         },
