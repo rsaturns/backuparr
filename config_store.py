@@ -22,7 +22,7 @@ class ConfigError(RuntimeError):
     truncated by a full disk, ...). The message says what to do about it."""
 
 
-APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr", "lazylibrarian", "pihole", "vaultwarden", "opnsense", "pfsense", "immich", "homeassistant", "unifi", "unraid"]
+APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr", "lazylibrarian", "pihole", "vaultwarden", "opnsense", "pfsense", "immich", "homeassistant", "unifi", "unraid", "bitwarden"]
 
 # encrypt: whether its backups are encrypted (#147) - on unless turned off,
 # and ignored for an app whose APP_META sets always_encrypted.
@@ -81,7 +81,7 @@ _APP_CATEGORY = {
     "plex": "media-servers", "jellyfin": "media-servers", "emby": "media-servers", "tautulli": "media-servers",
     "seerr": "media-servers", "immich": "media-servers",
     "pihole": "network", "opnsense": "network", "pfsense": "network", "unifi": "network",
-    "vaultwarden": "security",
+    "bitwarden": "security", "vaultwarden": "security",
     "homeassistant": "home-automation",
     "unraid": "server",
 }
@@ -391,6 +391,45 @@ APP_META = [
                     "Download the backup.",
                     "On a new install, click Restore Server from a Backup on the setup's first page, choose the downloaded file and click Confirm.",
                     "Otherwise, open Settings > System > Backups, click Restore, choose the file and click Restore.",
+                ]},
+            ],
+        },
+    },
+    {
+        "id": "bitwarden",
+        "label": "Bitwarden",
+        "icon": "bitwarden.svg",
+        # Bitwarden has no backup API (#194): the standard install's bwdata
+        # or lite's backups folder is mounted into this container, and the
+        # driver tells which it is - see apps/bitwarden.py. The URL only gives
+        # its version. The backup holds the database and certificate
+        # passwords and the data-protection keys. Bitwarden's installers
+        # offer a self-signed certificate, so it can be trusted (#153).
+        "key_required": False,
+        "no_api_key": True,
+        "url_placeholder": "https://bitwarden:8443",
+        "extra_fields": [
+            {"name": "data_dir", "label": "Folder", "type": "text", "required": True,
+             "placeholder": "/mnt/bitwarden",
+             "help": "Bitwarden's bwdata folder, or lite's backups folder, as mounted here"},
+        ],
+        "always_encrypted": True,
+        "pins_certificate": True,
+        "manual_restore": {
+            "docs": "https://rsaturns.github.io/backuparr/apps/bitwarden/",
+            "steps": [
+                {"title": "Standard install", "steps": [
+                    "Stop Bitwarden with ./bitwarden.sh stop. On a new server, download bitwarden.sh but don't run its install.",
+                    "Download the backup and unzip it into bwdata, replacing what's there (on a new server, an empty bwdata next to bitwarden.sh).",
+                    "Start Bitwarden with ./bitwarden.sh start and give it a minute.",
+                    "Restore the database from the .BAK file in mssql/backups with sqlcmd, as the Bitwarden page in Backuparr's docs shows.",
+                    "Restart Bitwarden with ./bitwarden.sh restart, then sign in and open an item to check.",
+                ]},
+                {"title": "Bitwarden lite", "steps": [
+                    "Download the backup and put it in lite's backups folder.",
+                    "Stop lite with docker compose stop bitwarden.",
+                    "Run docker compose run --rm --no-deps --entrypoint /restore-db.sh bitwarden /backups/<file> --clean --yes.",
+                    "Start lite with docker compose up -d, then sign in and open an item to check.",
                 ]},
             ],
         },

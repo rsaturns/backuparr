@@ -8,8 +8,9 @@ Where each app's archive keeps its version (checked against real backups):
 the *arrs' INFO file; Profilarr's data/INFO.json; Jellyfin's manifest.json;
 Tautulli's version_info table; LazyLibrarian's config.ini (a commit);
 Pi-hole's pihole.toml header (FTL's version, as apps/pihole.py records it); and
-for Plex, Emby, Seerr, NZBGet and Vaultwarden the backuparr-<app>.json
-Backuparr writes.
+for Plex, Emby, Seerr, NZBGet, Vaultwarden and a standard Bitwarden the
+backuparr-<app>.json Backuparr writes; lite Bitwarden's manifest.txt (its image
+tag, when lite knew it).
 Bazarr, SABnzbd and Tdarr archives hold none, so theirs is recorded as
 unknown. An encrypted archive (#147) is decrypted with this install's key to
 read it; one made with another key is recorded with its version unknown."""
@@ -30,7 +31,7 @@ import archive_crypto
 import destination_util
 import manifest
 import rclone_util
-from apps import homeassistant, unifi, unraid
+from apps import bitwarden, homeassistant, unifi, unraid
 from apps.base import AppError
 from config_store import enabled_destinations, instance_type, load_config
 
@@ -143,6 +144,11 @@ def read_version(app_type, archive):
             return unifi.read_backup(archive)
         if app_type == "unraid":
             return unraid.backup_version(archive)
+        if app_type == "bitwarden":
+            if zipfile.is_zipfile(archive):
+                text = _zip_text(archive, bitwarden.MANIFEST)
+                return json.loads(text).get("bitwarden_version") if text else None
+            return bitwarden.lite_image_tag(bitwarden.read_lite_manifest(archive))
         if app_type in _OWN_MANIFEST:
             text = _zip_text(archive, f"backuparr-{app_type}.json")
             return json.loads(text).get(f"{app_type}_version") if text else None
