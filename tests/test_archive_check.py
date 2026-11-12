@@ -11,6 +11,7 @@ import zipfile
 
 import pytest
 from ha_backup import make_ha_backup
+from unifi_backup import make_unf
 
 import archive_check
 import backup
@@ -84,8 +85,14 @@ def sound_archives(tmp_path):
                                                       "db.sqlite3": db, "rsa_key.pem": "-----BEGIN PRIVATE KEY-----",
                                                       "attachments/a1/f1": b"x"}),
         "immich-2": str(immich_dump(tmp_path / "immich.sql.gz")),
+        "unifi-site2": str(unifi_backup(tmp_path / "10.6.109.unf")),
         "homeassistant": make_ha_backup(tmp_path / "ha.tar", database=db, folders=["ssl", "share"], addons=["core_ssh"]),
     }
+
+
+def unifi_backup(path):
+    path.write_bytes(make_unf("10.6.109"))
+    return path
 
 
 def immich_dump(path, body=b"-- PostgreSQL database dump\n\nCREATE TABLE t ();\n\n-- PostgreSQL database dump complete\n"):

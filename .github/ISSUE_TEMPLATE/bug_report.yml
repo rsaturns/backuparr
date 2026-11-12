@@ -37,6 +37,7 @@ body:
         - Vaultwarden
         - OPNsense
         - pfSense
+        - UniFi Network
         - Home Assistant
         - Web UI / general
         - Not app-specific
