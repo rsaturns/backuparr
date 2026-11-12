@@ -8,16 +8,18 @@
 > from Claude (Anthropic) - code, documentation, and commit history
 > included. Reviewed and maintained by a human.
 
-Scheduled config/database backups for Radarr, Sonarr, Lidarr, Whisparr,
-Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, NZBGet, Tautulli, Jellyfin, Emby,
-Plex, Seerr, Immich, LazyLibrarian, Pi-hole, Vaultwarden, OPNsense, pfSense,
-UniFi, Home Assistant and Unraid, sent to every destination you enable: Local storage, Google Drive, OneDrive, and
-Dropbox. Everything - apps, destinations,
-schedule, retention and restores - is set up in the web UI, not env vars.
+Scheduled backups of the apps you host - media management, downloaders,
+media servers, network, security, home automation and server apps - sent to
+every destination you enable: Local storage, Google Drive, OneDrive and
+Dropbox. Backups are encrypted with your own key by default, and most apps
+restore from the web UI. Everything - apps, destinations, schedule, retention
+and restores - is set up in the web UI, not env vars. See the
+[full list of apps](https://rsaturns.github.io/backuparr/apps/).
 
-Most apps are backed up through their own API. Jellyfin, Emby, Plex, Seerr,
-LazyLibrarian and Vaultwarden also need a folder mounted into Backuparr - see
-the [app notes](https://rsaturns.github.io/backuparr/apps/).
+Most apps are backed up through their own API or web UI. Some apps also need
+their folder mounted into Backuparr - see the
+[app notes](https://rsaturns.github.io/backuparr/apps/). How your backups and
+credentials are kept safe: [Security principles](https://rsaturns.github.io/backuparr/security-principles/).
 
 **[Documentation](https://rsaturns.github.io/backuparr/)** · [Changelog](CHANGELOG.md)
 
@@ -27,7 +29,7 @@ If you like Backuparr, give it a ⭐ star - it helps the project grow.
 
 <table>
   <tr>
-    <td><img src="docs/screenshots/overview.png" alt="Overview tab: enabled services, destinations, schedule and retention, a line saying all 23 backups succeeded, and each app's last backup"><br><b>Overview</b></td>
+    <td><img src="docs/screenshots/overview.png" alt="Overview tab: enabled services, destinations, schedule and retention, a line saying all 36 backups succeeded, and each app's last backup"><br><b>Overview</b></td>
     <td><img src="docs/screenshots/settings.png" alt="Settings tab: apps grouped by category on the left, each category folding away under a header with its enabled count, Server open on Backuparr's own card, and destinations on the right"><br><b>Settings</b></td>
   </tr>
   <tr>
