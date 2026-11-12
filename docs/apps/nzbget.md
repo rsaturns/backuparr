@@ -14,7 +14,8 @@ Leave both blank only if NZBGet has no password.
 - **What's in the backup:** every setting in `nzbget.conf` - news servers with
   their passwords, categories, paths, RSS feeds, scheduler tasks, extension
   settings and NZBGet's own logins. The file uses NZBGet's **Backup settings**
-  format, so NZBGet's own **Restore settings** can load it too. The queue,
+  format, so NZBGet's own **Restore settings** can load it too (see NZBGet's
+  [Backup and Restore Settings](https://nzbget.com/documentation/backup-and-restore-settings/)). The queue,
   history and extension scripts aren't included.
 - **Restore** replaces every setting and reloads NZBGet; the queue and history
   are kept. Paths come back as they were, so keep NZBGet's volume mounts the

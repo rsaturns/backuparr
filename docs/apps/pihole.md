@@ -21,7 +21,8 @@ Teleporter:
 2. **Settings > Web interface / API > Configure app password**: click
    **Enable new app password** and copy it. Pi-hole shows it only once.
 3. **Settings > All settings > Webserver and API**: turn on
-   `webserver.api.app_sudo`, then **Save & Apply**. With Docker you can set
+   [`webserver.api.app_sudo`](https://docs.pi-hole.net/ftldns/configfile/#app_sudo),
+   then **Save & Apply**. With Docker you can set
    `FTLCONF_webserver_api_app_sudo: "true"` in its environment instead.
 4. On Backuparr's Pi-hole card, enter the URL (for example
    `http://192.168.1.2`, without `/admin`) and the app password, then

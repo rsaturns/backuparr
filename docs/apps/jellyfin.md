@@ -32,7 +32,8 @@ folder Jellyfin actually uses.
   archive after taking it, and a restore writes into the folder. Read-only,
   backups still work but restores don't.
 - **Restore** replaces Jellyfin's database and settings, then Jellyfin restarts
-  to apply them. The archive stays in Jellyfin's backups folder; delete it
+  to apply them, as in Jellyfin's guide,
+  [Restore from a Built-in Backup](https://jellyfin.org/docs/general/administration/backup-and-restore/#restore-from-a-built-in-backup). The archive stays in Jellyfin's backups folder; delete it
   there when you're done. API keys come back too: after rebuilding Jellyfin, enter the
   new install's key under **Restore to a different target**, not in Settings -
   the key from the backup works again afterwards.

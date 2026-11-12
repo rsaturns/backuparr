@@ -11,6 +11,13 @@ from the app's web UI, which doesn't accept the API key. If the app asks every
 address to log in, **Test connection** says so and shows **Username** and
 **Password** on the card. Restores go through the API and work either way.
 
+Each app's own guide to its backups and restores:
+[Radarr](https://wiki.servarr.com/radarr/faq#how-do-i-backuprestore-radarr),
+[Sonarr](https://wiki.servarr.com/sonarr/faq#how-do-i-backuprestore-my-sonarr),
+[Lidarr](https://wiki.servarr.com/lidarr/system#backup),
+[Whisparr](https://wiki.servarr.com/whisparr/faq#how-do-i-backuprestore-whisparr) and
+[Prowlarr](https://wiki.servarr.com/prowlarr/faq#how-do-i-backuprestore-prowlarr).
+
 Pick one of the two options below.
 
 ## Option 1: enter the app's login

@@ -27,3 +27,6 @@ A restore needs Bazarr's config/backup folder mounted into Backuparr:
 
 Enter it under **Bazarr backup folder** on the Restore tab, unless it's set in
 Settings.
+
+Bazarr's own guide: [Backups](https://wiki.bazarr.media/Additional-Configuration/Settings/Application/#backups)
+in its Application settings.
