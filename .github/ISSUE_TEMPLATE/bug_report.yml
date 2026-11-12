@@ -41,6 +41,7 @@ body:
         - UniFi
         - Home Assistant
         - Unraid
+        - Synology DSM
         - Web UI / general
         - Not app-specific
     validations:

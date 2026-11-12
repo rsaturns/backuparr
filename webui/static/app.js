@@ -942,7 +942,7 @@ function fillAppCard(appId, cfg) {
   if (encryptInput) encryptInput.checked = cfg.encrypt !== false; // absent on always-encrypted apps
   if (appMeta(appId)?.pins_certificate) card.dataset.trustedCert = cfg.trusted_cert ? JSON.stringify(cfg.trusted_cert) : "";
   card.querySelector(".cert-trust")?.remove();
-  showLoginFields(card, !!(cfg.username || cfg.password));
+  showLoginFields(card, Array.from(card.querySelectorAll(".login-field .f-extra")).some((input) => input.value));
   const nameInput = card.querySelector(".f-name");
   if (nameInput) {
     nameInput.value = cfg.name || "";
@@ -1013,13 +1013,21 @@ function renderAppList(list, chosen, installed) {
 function applyCardInfo(card, info) {
   const install = card.querySelector('.f-extra[data-field="install_type"]');
   if (install && typeof info.install === "string") install.value = info.install;
+  // Synology (#168): DSM remembered this device after a 2FA code - Save keeps
+  // it. The code worked once and is cleared.
+  const deviceToken = card.querySelector('.f-extra[data-field="device_token"]');
+  if (deviceToken && typeof info.device_token === "string") {
+    deviceToken.value = info.device_token;
+    const code = card.querySelector('.f-extra[data-field="otp_code"]');
+    if (code) code.value = "";
+  }
   card.querySelectorAll(".app-list").forEach((list) => renderAppList(list, readAppList(list), info.apps || []));
   showInstallOptions(card);
 }
 
 // Radarr, Sonarr, Lidarr, Whisparr and Prowlarr cards keep their username
 // and password hidden until a test finds the app asks for a login, or they
-// hold a value.
+// hold a value; Synology's card its 2FA code until DSM asks for one.
 function showLoginFields(card, show) {
   card.querySelectorAll(".login-field").forEach((field) => field.classList.toggle("hidden", !show));
 }
@@ -1027,7 +1035,7 @@ function showLoginFields(card, show) {
 function revealLoginFields(card) {
   const hidden = card.querySelector(".login-field.hidden");
   showLoginFields(card, true);
-  if (hidden) card.querySelector('.login-field .f-extra[data-field="username"]')?.focus();
+  if (hidden) card.querySelector(".login-field .f-extra")?.focus();
 }
 
 function prowlarrCredentials() {

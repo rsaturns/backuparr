@@ -161,7 +161,10 @@ Want to help? See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](C
 App icons (`webui/static/icons/`) are from the [selfh.st icon
 collection](https://selfh.st/icons/) ([selfhst/icons on
 GitHub](https://github.com/selfhst/icons)), licensed
-[CC BY 4.0](https://github.com/selfhst/icons/blob/main/LICENSE).
+[CC BY 4.0](https://github.com/selfhst/icons/blob/main/LICENSE), except
+Synology DSM's (`synology-dsm.svg`), from [Dashboard
+Icons](https://github.com/homarr-labs/dashboard-icons), licensed
+[Apache 2.0](https://github.com/homarr-labs/dashboard-icons/blob/main/LICENSE).
 
 The Server category's icons (`server-outline.png`, `server-filled.png`):
 <a href="https://www.flaticon.com/free-icons/server" title="server icons">Server icons created by Magnific - Flaticon</a>
