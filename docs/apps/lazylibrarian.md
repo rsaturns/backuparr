@@ -8,7 +8,9 @@ nav_order: 6
 
 Use the **full-access** API key (Config > Interface > API). Mount the folder
 LazyLibrarian has at `/config` into Backuparr and set it as the **Data
-folder**.
+folder**. It's LazyLibrarian's [datadir](https://lazylibrarian.gitlab.io/config_commandline/#-datadir),
+which holds its database and config; LazyLibrarian's docs have no page on
+backups.
 
 - **What's in the backup:** LazyLibrarian's own backup - its database,
   `config.ini`, and any `dicts.json`, `genres.json` and file/login templates.

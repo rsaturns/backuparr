@@ -17,4 +17,5 @@ nav_order: 15
   Tautulli restarts first, the staged config is lost; restore again.
 - **The database can't be restored over the API** (an upstream Tautulli bug):
   import `tautulli.db` by hand in Tautulli's **Settings > Import & Backup >
-  Import Database**.
+  Import Database**, as Tautulli's FAQ describes for
+  [moving or reinstalling Tautulli](https://docs.tautulli.com/support/frequently-asked-questions#general-q11).

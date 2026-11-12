@@ -1,6 +1,6 @@
 # GitHub Pages builds this site from the docs/ folder on main.
 title: Backuparr
-description: Scheduled backups and web-UI restores for your *arr stack and media servers.
+description: Scheduled, encrypted backups of the apps you host, to local storage and the cloud.
 url: https://rsaturns.github.io
 baseurl: /backuparr
 permalink: pretty

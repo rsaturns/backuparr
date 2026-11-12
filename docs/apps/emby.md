@@ -30,3 +30,4 @@ the folder belongs to this server.
   the original key in Settings.
 - **To restore by hand:** stop Emby, extract the archive into its `/config`
   folder, delete any `data/*.db-wal` and `data/*.db-shm` files, and start Emby.
+  Emby's own guide to the same files: [How to Backup Manually](https://emby.media/support/articles/Backup-Manual-Backups.html).
