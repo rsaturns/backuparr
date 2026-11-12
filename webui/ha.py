@@ -26,7 +26,7 @@ import secrets
 from flask import Blueprint, jsonify, request
 
 import runlog
-from config_store import app_meta, enabled_apps, instance_type, load_config, save_config
+from config_store import app_label, enabled_apps, load_config, save_config
 from webui import auth
 from webui.runs import RUN_STATE
 from webui.version import VERSION
@@ -83,13 +83,7 @@ def _refused(cfg):
 
 
 def _name(cfg, app_id):
-    if app_id == SELF_ID:
-        return "Backuparr"
-    meta = app_meta(app_id)
-    label = meta["label"] if meta else app_id
-    if instance_type(app_id) == app_id:
-        return label
-    return f"{label} ({cfg['apps'][app_id].get('name') or app_id[len(instance_type(app_id)) + 1:]})"
+    return app_label(app_id, cfg["apps"].get(app_id))
 
 
 def _when(run):

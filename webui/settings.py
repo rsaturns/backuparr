@@ -7,7 +7,7 @@ from flask import Blueprint, jsonify, request
 import destination_util
 from apps import cert_pin
 from apps.http_headers import headers_for_app, RequestHeadersError, validate_request_headers
-from backup import build_app, humanize_error, notify
+from backup import branded, build_app, humanize_error, notify
 from config_store import acknowledge_encryption_notice, app_meta, APP_NAMES, DEFAULT_APP, DEFAULT_INSTANCE, DEST_EDITABLE_FIELDS, DEST_NAMES, instance_ids, instance_type, key_required, load_config, MAX_EXTRA_INSTANCES, MULTI_INSTANCE_APPS, save_config, valid_schedule
 from webui import runs
 
@@ -286,7 +286,7 @@ def api_test(app_name):
     try:
         instance = build_app(app_name, app_cfg)
         message = instance.test_connection()
-        body = {"ok": True, "message": message}
+        body = {"ok": True, "message": branded(message)}
         # What the test found for the card to show, e.g. Home Assistant's
         # install type and its apps (#155).
         if getattr(instance, "card_info", None):

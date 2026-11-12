@@ -232,16 +232,31 @@ def test_rclone_errors_describe_themselves_by_their_cause():
 
 def test_the_apps_own_prefix_is_not_repeated_after_its_label():
     error = ServarrError("sonarr: unauthorized - check the API key")
-    assert backup.humanize_error(error) == "sonarr: unauthorized - check the API key"
+    assert backup.humanize_error(error) == "Sonarr: unauthorized - check the API key"
     assert backup.humanize_error(error, app="sonarr") == "unauthorized - check the API key"
-    assert backup.humanize_error(error, app="radarr") == "sonarr: unauthorized - check the API key"
+    assert backup.humanize_error(error, app="radarr") == "Sonarr: unauthorized - check the API key"
     assert backup.humanize_error(KeyError("k"), app="sonarr") == "'k'"
+
+
+def test_an_app_id_at_the_start_of_a_message_becomes_the_apps_own_name():
+    """#191: the web UI shows each product's own capitalisation."""
+    assert backup.branded("opnsense: the firewall's certificate isn't trusted") == \
+        "OPNsense: the firewall's certificate isn't trusted"
+    assert backup.branded("pfsense 2.7.2 reachable, signed in") == "pfSense 2.7.2 reachable, signed in"
+    assert backup.branded("sabnzbd reachable, API key OK") == "SABnzbd reachable, API key OK"
+    assert backup.branded("homeassistant: couldn't connect") == "Home Assistant: couldn't connect"
+    assert backup.branded("pihole-secondary restore complete") == "Pi-hole (secondary) restore complete"
+    assert backup.branded("pihole-secondary restore complete", {"name": "Secondary"}) == \
+        "Pi-hole (Secondary) restore complete"
+    # Anything else is left as it is.
+    for message in ("couldn't connect - check the URL", "radarr", "plexus: no", "Restored. Make a new token.", ""):
+        assert backup.branded(message) == message
 
 
 def test_an_instances_label_drops_its_drivers_app_prefix(caplog):
     error = ServarrError("radarr: unauthorized - check the API key")
     assert backup.humanize_error(error, app="radarr-4k") == "unauthorized - check the API key"
-    assert backup.humanize_error(error, app="sonarr-anime") == "radarr: unauthorized - check the API key"
+    assert backup.humanize_error(error, app="sonarr-anime") == "Radarr: unauthorized - check the API key"
     backup.log_failure(backup.log, "radarr-4k: backup failed", error, app="radarr-4k")
     assert "radarr-4k: backup failed - unauthorized - check the API key" in caplog.text
 

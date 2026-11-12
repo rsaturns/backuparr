@@ -6,11 +6,13 @@ function endsLikeASentence(text) {
   return /[.!?…]$/.test(text);
 }
 
-// A message shown on its own: a capital first letter and a full stop.
+// A message shown on its own: a capital first letter and a full stop. A
+// first word with a capital in it already is a name, kept as it's written:
+// "pfSense", "iOS" (#191).
 function sentence(text) {
   const s = String(text ?? "").trim();
   if (!s) return s;
-  const capped = s.charAt(0).toUpperCase() + s.slice(1);
+  const capped = /^\S*[A-Z]/.test(s) ? s : s.charAt(0).toUpperCase() + s.slice(1);
   return endsLikeASentence(capped) ? capped : `${capped}.`;
 }
 

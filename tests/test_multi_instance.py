@@ -318,7 +318,7 @@ def test_an_instance_restores_from_its_own_folder_with_its_own_connection(inline
 
     assert authed_client.post("/api/restore/local/radarr-4k", json={"confirm": True}).get_json() == {"started": True}
     state = authed_client.get("/api/restore/status").get_json()
-    assert state["ok"] is True and state["message"] == "radarr-4k restore uploaded, app is restarting"
+    assert state["ok"] is True and state["message"] == "Radarr (Radarr 4K) restore uploaded, app is restarting"
     assert calls == [("fetch", "radarr-4k"), ("restore", "radarr-4k", "http://radarr4k:7878")]
 
     missing = authed_client.post("/api/restore/local/radarr-gone", json={"confirm": True})

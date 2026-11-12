@@ -27,6 +27,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Messages in the web UI name each app as its card does, with the product's own capitalisation: "OPNsense: ...", "pfSense 2.8.1 reachable", "SABnzbd restore complete", and Run & Status's OK and Failed lists say "Radarr (4K)" in place of the app's id (#191).
 - Settings shows a certificate's SHA-256 fingerprint in a tooltip on the ? next to SHA-256, as four rows of 8 bytes, on the Backuparr card and on the cards of apps with a self-signed certificate (#189).
 - The Server category has its own icon in place of an emoji, outlined on the light theme and filled on the dark; the Run & Status and Restore pickers head each category with its name in bold, without an emoji (#189).
 - The Restore tab lists Profilarr too: picking it shows a Download button (decrypted), the steps for restoring it in Profilarr and a link to its docs page, in place of Restore (#151).

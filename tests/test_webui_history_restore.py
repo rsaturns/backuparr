@@ -313,13 +313,13 @@ def test_only_one_restore_runs_at_a_time(restore, authed_client, inline):
 # --- restore: running ------------------------------------------------------
 
 @pytest.mark.parametrize("app, message", [
-    ("radarr", "radarr restore uploaded, app is restarting"),
-    ("sonarr", "sonarr restore uploaded, app is restarting"),
-    ("lidarr", "lidarr restore uploaded, app is restarting"),
-    ("whisparr", "whisparr restore uploaded, app is restarting"),
-    ("prowlarr", "prowlarr restore uploaded, app is restarting"),
-    ("bazarr", "bazarr restore triggered, app is restarting"),
-    ("tdarr", "tdarr restore complete"),
+    ("radarr", "Radarr restore uploaded, app is restarting"),
+    ("sonarr", "Sonarr restore uploaded, app is restarting"),
+    ("lidarr", "Lidarr restore uploaded, app is restarting"),
+    ("whisparr", "Whisparr restore uploaded, app is restarting"),
+    ("prowlarr", "Prowlarr restore uploaded, app is restarting"),
+    ("bazarr", "Bazarr restore triggered, app is restarting"),
+    ("tdarr", "Tdarr restore complete"),
 ])
 def test_each_app_restores_and_reports_its_own_message(restore, authed_client, app, message):
     assert start(authed_client, app).get_json() == {"started": True}
@@ -351,7 +351,7 @@ def test_a_named_file_is_restored_instead_of_the_newest(restore, authed_client):
 def test_jellyfin_restore_uses_its_backups_folder_and_says_it_restarts(restore, authed_client):
     start(authed_client, "jellyfin")
     assert restore["calls"][-1][2]["backup_dir"] == "/mnt/jellyfin"
-    assert result(authed_client)["message"] == "jellyfin restore started, Jellyfin is restarting to apply it"
+    assert result(authed_client)["message"] == "Jellyfin restore started, Jellyfin is restarting to apply it"
 
 
 def test_jellyfin_restore_needs_its_backups_folder(restore, authed_client):
@@ -366,7 +366,7 @@ def test_nzbget_restore_uses_its_credentials_and_says_it_reloads(restore, authed
     restore["results"]["nzbget"] = {"kind": "nzbget", "reloaded": True}
     start(authed_client, "nzbget")
     assert restore["calls"][-1][2]["username"] == "nzbget" and restore["calls"][-1][2]["password"] == "nzbget-pass"
-    assert result(authed_client)["message"] == "nzbget restore complete, NZBGet is reloading to apply it"
+    assert result(authed_client)["message"] == "NZBGet restore complete, NZBGet is reloading to apply it"
 
 
 def test_nzbget_restore_says_to_restart_when_the_reload_isnt_confirmed(restore, authed_client):
@@ -379,13 +379,13 @@ def test_nzbget_restore_says_to_restart_when_the_reload_isnt_confirmed(restore, 
 def test_emby_restore_uses_its_data_folder_and_says_to_start_emby(restore, authed_client):
     start(authed_client, "emby")
     assert restore["calls"][-1][2]["data_dir"] == "/mnt/emby"
-    assert result(authed_client)["message"] == "emby restore complete, start Emby again to load it"
+    assert result(authed_client)["message"] == "Emby restore complete, start Emby again to load it"
 
 
 def test_plex_restore_uses_its_data_folder_and_says_to_start_plex(restore, authed_client):
     start(authed_client, "plex")
     assert restore["calls"][-1][2]["data_dir"] == "/mnt/plex"
-    assert result(authed_client)["message"] == "plex restore complete, start Plex again to load it"
+    assert result(authed_client)["message"] == "Plex restore complete, start Plex again to load it"
 
 
 def test_plex_restore_needs_its_data_folder(restore, authed_client):
@@ -407,9 +407,9 @@ def test_emby_restore_needs_its_data_folder(restore, authed_client):
 def test_tautulli_and_sabnzbd_restores_return_their_summary(restore, authed_client):
     restore["results"] = {"tautulli": {"summary": {"config": "started"}}, "sabnzbd": {"summary": {"servers_restored": ["news"]}}}
     start(authed_client, "tautulli")
-    assert result(authed_client)["summary"] == {"config": "started"} and result(authed_client)["message"] == "tautulli restore uploaded"
+    assert result(authed_client)["summary"] == {"config": "started"} and result(authed_client)["message"] == "Tautulli restore uploaded"
     start(authed_client, "sabnzbd", passwords={"news": "pw"})
-    assert result(authed_client)["summary"] == {"servers_restored": ["news"]} and result(authed_client)["message"] == "sabnzbd restore complete"
+    assert result(authed_client)["summary"] == {"servers_restored": ["news"]} and result(authed_client)["message"] == "SABnzbd restore complete"
 
 
 def test_a_staged_tautulli_config_is_reported_as_needing_a_step(restore, authed_client):
@@ -418,7 +418,7 @@ def test_a_staged_tautulli_config_is_reported_as_needing_a_step(restore, authed_
     start(authed_client, "tautulli")
     state = result(authed_client)
     assert state["ok"] is True and state["summary"]["config_staged"] == staged
-    assert state["message"] == "tautulli config staged, finish it in Tautulli"
+    assert state["message"] == "Tautulli config staged, finish it in Tautulli"
 
 
 def test_sabnzbd_passwords_come_from_the_request_and_blank_means_skip(restore, authed_client):
@@ -454,7 +454,7 @@ def test_a_restore_rejected_by_the_app_does_not_repeat_the_app_name_in_the_log(r
     restore["fail"] = ServarrError("radarr: unauthorized - check the API key")
     with caplog.at_level(logging.INFO):
         assert start(authed_client).status_code == 200
-    assert result(authed_client)["error"] == "radarr: unauthorized - check the API key"
+    assert result(authed_client)["error"] == "Radarr: unauthorized - check the API key"
     (line,) = [r for r in caplog.records if "restore failed" in r.getMessage()]
     assert line.getMessage() == "restore failed for radarr - unauthorized - check the API key"
 

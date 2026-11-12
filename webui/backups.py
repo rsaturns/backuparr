@@ -20,7 +20,7 @@ import runlog
 import restore_actions as ra
 import restore_version as rv
 from apps.http_headers import app_connection_config
-from backup import humanize_error, log_failure
+from backup import branded, humanize_error, log_failure
 from config_store import DEST_NAMES, app_meta, instance_ids, instance_type, key_required, load_config, restore_supported
 from webui import cookies
 from webui.jobs import OwnedJobs
@@ -492,7 +492,7 @@ def _restore_work(app_name, root, app_cfg, data, bazarr_backup_dir):
         result = ra.restore_app(app_name, app_cfg, tmp_dir, local_zip, bazarr_backup_dir=bazarr_backup_dir,
                                 sabnzbd_password_prompt=password_prompt)
         RESTORE_RUN_STATE["summary"] = result.get("summary")
-        RESTORE_RUN_STATE["message"] = ra.restore_message(app_name, result)
+        RESTORE_RUN_STATE["message"] = branded(ra.restore_message(app_name, result), app_cfg)
         RESTORE_RUN_STATE["warning"] = bool(result.get("attention"))
         if RESTORE_RUN_STATE["warning"]:
             log.warning("restore: %s", RESTORE_RUN_STATE["message"])

@@ -57,7 +57,7 @@ from apps.vaultwarden import VaultwardenApp
 from apps.whisparr import WhisparrApp
 from apps.unifi import UnifiApp
 from apps.unraid import UnraidApp
-from config_store import ConfigError, app_meta, enabled_apps, enabled_destinations, encrypts, instance_type, retention_days
+from config_store import ConfigError, app_label, app_meta, enabled_apps, enabled_destinations, encrypts, instance_type, retention_days
 from webui.version import VERSION
 
 LOG_DIR = os.environ.get("BACKUPARR_LOG_DIR", "/var/log/backuparr")
@@ -207,10 +207,24 @@ def _without_app_prefix(message, app):
     return message
 
 
+def branded(message, app_cfg=None):
+    """A message that opens with an app or instance id, log-style
+    ("opnsense: ...", "pfsense 2.7.2 reachable", "radarr-4k restore
+    uploaded"), opening with the name its card shows instead, for the web UI:
+    "OPNsense: ...", "pfSense 2.7.2 reachable", "Radarr (4K) restore
+    uploaded" (#191). app_cfg gives an instance its own name."""
+    first, space, rest = message.partition(" ")
+    name = first.removesuffix(":")
+    if not space or not instance_type(name):
+        return message
+    return f"{app_label(name, app_cfg)}{first[len(name):]} {rest}"
+
+
 def humanize_error(exc, url=None, app=None):
     """The describe_failure() line, or str(exc) for anything it doesn't know.
-    Pass `app` when the result goes after an "<app>: " label."""
-    return _without_app_prefix(describe_failure(exc, url) or str(exc), app)
+    Pass `app` when the result goes after an "<app>: " label. An app's id
+    left at the start becomes its name, as the web UI shows it (#191)."""
+    return branded(_without_app_prefix(describe_failure(exc, url) or str(exc), app))
 
 
 def log_failure(logger, summary, exc, url=None, app=None):
