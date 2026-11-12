@@ -13,13 +13,13 @@ docker compose pull backuparr && docker compose up -d backuparr
 ```
 
 On Unraid, click **Apply update** on the Docker tab. A pinned tag (such as
-`rsaturns/backuparr:3.0.0`) only changes when you edit it.
+`rsaturns/backuparr:3.0.0-beta`) only changes when you edit it.
 
 Updating keeps your settings, login and backups. A backup Backuparr makes of
 itself can only be restored on the same or a newer version, so don't downgrade
 and then restore one.
 
-## Updating to 3.0.0
+## Updating to 3.0.0-beta
 
 - **HTTPS on port 8991:** add `"8991:8991"` to the container's ports (on
   Unraid, add a port with container port 8991). Port 8990 keeps working. See
