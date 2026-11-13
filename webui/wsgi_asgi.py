@@ -99,10 +99,24 @@ async def _plain(send, status, text):
     await send({"type": "http.response.body", "body": text})
 
 
+def _declared_length(scope):
+    for name, value in scope.get("headers", []):
+        if name.lower() == b"content-length":
+            try:
+                return int(value)
+            except ValueError:
+                return None
+    return None
+
+
 class WsgiToAsgi:
+    """max_body: the biggest request body, in bytes, or a function of the
+    request's path that gives it. The body is read before the app (and its
+    login check) sees the request, so it's kept small where it can be."""
+
     def __init__(self, app, max_body, threads=16):
         self.app = app
-        self.max_body = max_body
+        self.max_body = max_body if callable(max_body) else (lambda _path: max_body)
         self.executor = ThreadPoolExecutor(max_workers=threads, thread_name_prefix="web")
 
     async def __call__(self, scope, receive, send):
@@ -116,6 +130,11 @@ class WsgiToAsgi:
                     return
         if scope["type"] != "http":
             return
+        limit = self.max_body(scope["path"])
+        declared = _declared_length(scope)
+        if declared is not None and declared > limit:
+            await _plain(send, 413, b"Request too large")  # refused before a byte of it is read
+            return
         body = SpooledTemporaryFile(max_size=SPOOL_IN_MEMORY)
         handed_over = False
         try:
@@ -126,7 +145,7 @@ class WsgiToAsgi:
                     return
                 chunk = message.get("body", b"")
                 size += len(chunk)
-                if size > self.max_body:
+                if size > limit:
                     await _plain(send, 413, b"Request too large")
                     return
                 body.write(chunk)

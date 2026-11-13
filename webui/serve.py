@@ -34,9 +34,18 @@ from webui.wsgi_asgi import WsgiToAsgi
 log = logging.getLogger("backuparr.webui")
 
 LISTENER_KEY = "backuparr.listener"
-# Biggest request body: Flask's own limit (64 MiB, Backuparr's own backup
-# uploaded as base64 to restore it) plus room for the form around it.
-MAX_BODY = 80 * 1024 * 1024
+# Request bodies are read before Flask, and its login check, sees the
+# request, so every route takes at most MAX_BODY - settings, tests and
+# restores send a few KB - except the two that upload Backuparr's own
+# backup, as base64, to restore it: Flask's own limit (64 MiB) plus room
+# for the JSON around it.
+MAX_BODY = 1024 * 1024
+MAX_UPLOAD = 80 * 1024 * 1024
+UPLOAD_PATHS = frozenset({"/api/setup/restore", "/api/backuparr/restore"})
+
+
+def body_limit(path):
+    return MAX_UPLOAD if path in UPLOAD_PATHS else MAX_BODY
 RENEW_CHECK_SECONDS = 12 * 3600
 
 _TRUE = ("1", "true", "yes", "on")
@@ -193,7 +202,7 @@ class Server:
     async def _run(self, name, port, ssl_context, stop):
         """Serves until stopped; a port that can't be opened (in use, say)
         is logged and ends it early."""
-        app = WsgiToAsgi(_tagged(self.app, "https" if ssl_context else "http"), MAX_BODY)
+        app = WsgiToAsgi(_tagged(self.app, "https" if ssl_context else "http"), body_limit)
         try:
             await serve(app, _config(port, ssl_context), mode="asgi", shutdown_trigger=lambda: self._either(stop))
         except OSError as exc:

@@ -117,6 +117,36 @@ def test_the_request_body_reaches_the_app_and_too_much_gets_413():
     assert sent[0]["status"] == 413 and seen == [b"123456789"]
 
 
+def test_the_body_limit_can_depend_on_the_path():
+    seen = []
+
+    def app(environ, start_response):
+        seen.append(environ["wsgi.input"].read())
+        start_response("200 OK", [])
+        return [b"ok"]
+    adapter = WsgiToAsgi(app, lambda path: 100 if path == "/upload" else 4)
+    assert run(call(adapter, chunks=[b"12345"], path="/upload"))[0]["status"] == 200
+    assert run(call(adapter, chunks=[b"12345"], path="/x"))[0]["status"] == 413
+    assert seen == [b"12345"]
+
+
+def test_a_declared_length_over_the_limit_is_refused_before_reading():
+    reads = []
+
+    async def main():
+        async def receive():
+            reads.append(1)
+            return {"type": "http.request", "body": b"x" * 10, "more_body": False}
+        sent = []
+
+        async def send(message):
+            sent.append(message)
+        await WsgiToAsgi(lambda e, s: [], 4)(scope(headers=[(b"content-length", b"999999")]), receive, send)
+        return sent
+    sent = run(main())
+    assert sent[0]["status"] == 413 and not reads
+
+
 def test_a_chunked_body_reaches_flask():
     # No Content-Length: a script streaming its body (Transfer-Encoding: chunked).
     from flask import Flask, request

@@ -306,6 +306,13 @@ def test_https_only_env_values(monkeypatch, value, expected):
     assert serve.https_only_env() is expected
 
 
+def test_only_the_self_restore_uploads_take_large_bodies():
+    from webui import serve
+    assert serve.body_limit("/api/setup/restore") == serve.body_limit("/api/backuparr/restore") > 64 * 1024 * 1024
+    for path in ("/api/config", "/api/login", "/api/restore/local/radarr", "/static/app.js"):
+        assert serve.body_limit(path) == 1024 * 1024
+
+
 def test_a_broken_config_doesnt_stop_the_server_starting(monkeypatch, caplog):
     import config_store
     from webui import serve
