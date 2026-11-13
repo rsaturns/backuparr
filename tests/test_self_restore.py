@@ -174,6 +174,25 @@ def test_remotes_that_cant_be_restored_are_a_warning(old_install, monkeypatch):
     assert "couldn't write rclone.conf" in warnings[0]
 
 
+def test_only_backuparrs_own_remotes_come_back(isolated_webui, rclone, caplog):
+    # A remote of another name or type isn't Backuparr's to restore: some
+    # rclone remotes (sftp's ssh option) run a command.
+    key = secrets_crypto.current_key()
+    remotes = {
+        "backuparr-dropbox": {"type": "dropbox", "token": "t"},
+        "backuparr-gdrive": {"type": "sftp", "ssh": "sh -c 'id'"},
+        "elsewhere": {"type": "sftp", "host": "example.com"},
+    }
+    config = json.dumps(json.loads(open(config_store.CONFIG_PATH).read()) if os.path.exists(config_store.CONFIG_PATH)
+                        else config_store.DEFAULTS)
+    archive = encrypted_zip({self_backup.META: META, "config.json": config, "auth.json": AUTH,
+                             self_backup.REMOTES: json.dumps(remotes)}, key)
+    self_restore.apply(self_restore.prepare(archive, key), key)
+    assert rclone == {"backuparr-dropbox": {"type": "dropbox", "token": "t"}}
+    assert "left out the rclone remote 'backuparr-gdrive' (sftp)" in caplog.text
+    assert "'elsewhere'" in caplog.text
+
+
 # --------------------------------------------------------------- web UI ----
 
 def upload(archive, key, **extra):

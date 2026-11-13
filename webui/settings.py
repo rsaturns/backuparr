@@ -8,7 +8,7 @@ import destination_util
 from apps import cert_pin
 from apps.http_headers import headers_for_app, RequestHeadersError, validate_request_headers
 from backup import branded, build_app, humanize_error, notify
-from config_store import acknowledge_encryption_notice, app_meta, APP_NAMES, DEFAULT_APP, DEFAULT_INSTANCE, DEST_EDITABLE_FIELDS, DEST_NAMES, instance_ids, instance_type, key_required, load_config, MAX_EXTRA_INSTANCES, MULTI_INSTANCE_APPS, save_config, valid_schedule
+from config_store import acknowledge_encryption_notice, app_meta, APP_NAMES, CONFIG_LOCK, DEFAULT_APP, DEFAULT_INSTANCE, DEST_EDITABLE_FIELDS, DEST_NAMES, instance_ids, instance_type, key_required, load_config, MAX_EXTRA_INSTANCES, MULTI_INSTANCE_APPS, save_config, valid_schedule
 from webui import runs
 
 
@@ -124,6 +124,15 @@ def _validate_instances(data, cfg):
     return None
 
 
+# Plain text fields: of Settings itself, and of every app's card.
+_TEXT_SETTINGS = ("notify_url", "bazarr_backup_dir")
+_TEXT_APP_FIELDS = ("url", "api_key", "username", "password")
+
+
+def _web_url(value):
+    return value.startswith(("http://", "https://"))
+
+
 def _retention_error(value, label):
     """Why value isn't a usable number of days, or None."""
     try:
@@ -164,6 +173,14 @@ def _validate_config(data, cfg):
             return error
     if "self_backup" in data and not isinstance(data["self_backup"], bool):
         return "self_backup must be true or false"
+    for key in _TEXT_SETTINGS:
+        if key in data and not isinstance(data[key], str):
+            return f"{key} must be text"
+    # Checked when it changes, so one saved before this check doesn't stop
+    # every other change being saved.
+    notify_url = data.get("notify_url")
+    if notify_url and notify_url != cfg.get("notify_url") and not _web_url(notify_url):
+        return "The Notify URL must start with http:// or https://"
     if "cron_schedule" in data:
         schedule = str(data["cron_schedule"])
         if len(schedule.split()) != 5:
@@ -176,6 +193,12 @@ def _validate_config(data, cfg):
         meta = app_meta(name)
         if "encrypt" in app_data and not isinstance(app_data["encrypt"], bool):
             return f"{name}: encrypt must be true or false"
+        for field in _TEXT_APP_FIELDS:
+            if field in app_data and not isinstance(app_data[field], str):
+                return f"{name}: {field} must be text"
+        # Every card comes with a save; only an enabled app's URL has to work.
+        if app_data.get("enabled") and app_data.get("url") and not _web_url(app_data["url"]):
+            return f"{name}: the URL must start with http:// or https://"
         error = _extra_field_error(name, meta, app_data)
         if error:
             return error
@@ -207,11 +230,19 @@ def _validate_config(data, cfg):
 @bp.post("/api/config")
 def api_set_config():
     data = request.get_json(force=True, silent=True)
-    cfg = load_config()
-    error = _validate_config(data, cfg)
-    if error:
-        return jsonify({"error": error}), 400
+    with CONFIG_LOCK:  # checked and changed against config.json as it is now
+        cfg = load_config()
+        error = _validate_config(data, cfg)
+        if error:
+            return jsonify({"error": error}), 400
+        _apply_config(data, cfg)
+        save_config(cfg)
+    destination_util.sync(cfg)
+    return jsonify({"ok": True})
 
+
+def _apply_config(data, cfg):
+    """A validated Settings save's changes, made to cfg."""
     for key in ("retention_days", "cron_schedule", "notify_url", "bazarr_backup_dir", "request_headers", "self_backup"):
         if key in data:
             cfg[key] = data[key]
@@ -235,10 +266,6 @@ def api_set_config():
             cfg["destinations"][name].update({k: v for k, v in incoming.items() if k in DEST_EDITABLE_FIELDS[name]})
             days = cfg["destinations"][name].get("retention_days")
             cfg["destinations"][name]["retention_days"] = None if days is None else int(days)
-
-    save_config(cfg)
-    destination_util.sync(cfg)
-    return jsonify({"ok": True})
 
 
 # The one-time "Backups are now encrypted" notice for an install that

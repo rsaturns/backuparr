@@ -268,6 +268,14 @@ def test_reset_removes_local_own_backups_and_starts_a_new_key(authed_client, iso
     assert secrets_crypto.decrypt(secrets_crypto.encrypt("x")) == "x"
 
 
+def test_reset_with_a_broken_config_still_resets_and_says_why_backups_stay(authed_client, isolated_webui, caplog):
+    with open(config_store.CONFIG_PATH, "w") as f:
+        f.write("{broken")
+    response = authed_client.post("/api/reset", json={"confirm": isolated_webui.auth.RESET_CONFIRM_PHRASE})
+    assert response.status_code == 200 and not os.path.exists(config_store.CONFIG_PATH)
+    assert "couldn't find the Local storage folder" in caplog.text and "isn't valid JSON" in caplog.text
+
+
 # ------------------------------------------------------------ key prompt ----
 
 @pytest.mark.key_prompt

@@ -12,27 +12,40 @@ Each server tags its requests with the port they came in on
 (environ["backuparr.listener"]), which HTTPS only checks: unlike
 request.is_secure, a proxy's X-Forwarded-Proto can't fake it.
 
+If the HTTPS port can't be opened, HTTP keeps serving when it's open; the
+process stops only when neither can.
+
 Run with `python -m webui.serve` (entrypoint.sh)."""
 import asyncio
 import logging
 import os
 import signal
 import ssl
+import sys
 
 from hypercorn.asyncio import serve
 from hypercorn.config import Config
 
 import tls
-from config_store import load_config
+from config_store import ConfigError, stored_setting
 from webui.forwarded import ForwardedHeaders
-from webui.wsgi_asgi import WsgiToAsgi
+from webui.wsgi_asgi import WsgiToAsgi, new_executor
 
 log = logging.getLogger("backuparr.webui")
 
 LISTENER_KEY = "backuparr.listener"
-# Biggest request body: Flask's own limit (64 MiB, Backuparr's own backup
-# uploaded as base64 to restore it) plus room for the form around it.
-MAX_BODY = 80 * 1024 * 1024
+# Request bodies are read before Flask, and its login check, sees the
+# request, so every route takes at most MAX_BODY - settings, tests and
+# restores send a few KB - except the two that upload Backuparr's own
+# backup, as base64, to restore it: Flask's own limit (64 MiB) plus room
+# for the JSON around it.
+MAX_BODY = 1024 * 1024
+MAX_UPLOAD = 80 * 1024 * 1024
+UPLOAD_PATHS = frozenset({"/api/setup/restore", "/api/backuparr/restore"})
+
+
+def body_limit(path):
+    return MAX_UPLOAD if path in UPLOAD_PATHS else MAX_BODY
 RENEW_CHECK_SECONDS = 12 * 3600
 
 _TRUE = ("1", "true", "yes", "on")
@@ -68,7 +81,18 @@ def https_only(cfg=None):
     env = https_only_env()
     if env is not None:
         return env
-    return bool((cfg if cfg is not None else load_config()).get("https_only"))
+    return (cfg.get("https_only") if cfg is not None else stored_setting("https_only")) is True
+
+
+def _https_only_at_start():
+    """https_only(), or off when config.json can't be read: the web UI then
+    opens on both ports and says what's wrong, as it did before #177."""
+    try:
+        return https_only()
+    except (ConfigError, OSError) as exc:
+        log.error("can't read the HTTPS only switch - %s. HTTP on port %s stays open until it's fixed.",
+                  exc, http_port())
+        return False
 
 
 def _bind(port):
@@ -108,12 +132,28 @@ def _config(port, ssl_context=None):
     return config
 
 
+def _load_chain(context, cert):
+    """Loads `cert` into `context` and returns the certificate it loaded. Your
+    own certificate that OpenSSL won't take, though tls.py could read it (a
+    1024-bit RSA key, say), gives way to Backuparr's own."""
+    try:
+        context.load_cert_chain(cert.cert_path, cert.key_path)
+        return cert
+    except (ssl.SSLError, OSError, ValueError) as exc:
+        if not cert.own:
+            raise
+        reason = getattr(exc, "reason", None) or getattr(exc, "strerror", None) or str(exc)
+        fallback = tls.refused(cert, reason)  # logs why, and the card shows it
+        context.load_cert_chain(fallback.cert_path, fallback.key_path)
+        return fallback
+
+
 def _ssl_context(cert):
+    """(the HTTPS server's SSL context, the certificate it serves)."""
     context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
     context.set_alpn_protocols(["http/1.1"])
-    context.load_cert_chain(cert.cert_path, cert.key_path)
-    return context
+    return context, _load_chain(context, cert)
 
 
 class Server:
@@ -121,10 +161,14 @@ class Server:
 
     def __init__(self, app):
         self.app = ForwardedHeaders(app)
+        # One pool of request threads for both servers, kept when HTTP is
+        # closed and opened again.
+        self.executor = new_executor()
         self.loop = None
         self.stopping = None
         self.http_stop = None
         self.http_task = None
+        self.http_wanted = False  # the latest switch, even while the old server is still closing
         self.ssl_context = None
         self.fingerprint = None
 
@@ -139,25 +183,33 @@ class Server:
 
     # In the loop.
     def _open_http(self):
+        self.http_wanted = True
         if self.http_open():
+            if self.http_stop.is_set():  # still closing: open again once it has
+                self.http_task.add_done_callback(self._reopen_http)
             return
         self.http_stop = asyncio.Event()
         self.http_task = self.loop.create_task(
             self._run("HTTP", http_port(), None, self.http_stop))
 
+    def _reopen_http(self, task):
+        if self.http_wanted and task is self.http_task and not self.stopping.is_set():
+            self._open_http()
+
     def _close_http(self):
-        if self.http_open():
+        self.http_wanted = False
+        if self.http_open() and not self.http_stop.is_set():
             log.info("HTTP on port %s closed: HTTPS only", http_port())
             self.http_stop.set()
 
     async def _run(self, name, port, ssl_context, stop):
-        app = WsgiToAsgi(_tagged(self.app, "https" if ssl_context else "http"), MAX_BODY)
+        """Serves until stopped; a port that can't be opened (in use, say)
+        is logged and ends it early."""
+        app = WsgiToAsgi(_tagged(self.app, "https" if ssl_context else "http"), body_limit, self.executor)
         try:
             await serve(app, _config(port, ssl_context), mode="asgi", shutdown_trigger=lambda: self._either(stop))
         except OSError as exc:
             log.error("can't serve %s on port %s: %s", name, port, exc)
-            if ssl_context is not None:
-                raise  # without HTTPS there may be no way in at all
 
     async def _either(self, stop):
         """Until the process stops, or `stop` is set."""
@@ -173,7 +225,9 @@ class Server:
     def _load(self, cert):
         if cert.fingerprint == self.fingerprint:
             return
-        self.ssl_context.load_cert_chain(cert.cert_path, cert.key_path)
+        cert = _load_chain(self.ssl_context, cert)
+        if cert.fingerprint == self.fingerprint:
+            return  # refused, and Backuparr's own was being served already
         self.fingerprint = cert.fingerprint
         log.info("HTTPS certificate loaded (SHA-256 %s)", cert.fingerprint)
 
@@ -195,21 +249,39 @@ class Server:
                 self.loop.add_signal_handler(sig, self.stopping.set)
             except (ValueError, RuntimeError):  # not the main thread (tests)
                 pass
-        cert = tls.ensure()
+        self.ssl_context, cert = _ssl_context(tls.ensure())
         self.fingerprint = cert.fingerprint
-        self.ssl_context = _ssl_context(cert)
         tls.on_change(self._use_certificate)
         https_task = asyncio.create_task(self._run("HTTPS", https_port(), self.ssl_context, asyncio.Event()))
-        if https_only():
+        if _https_only_at_start():
             log.info("HTTPS only: HTTP on port %s stays closed", http_port())
         else:
             self._open_http()
         renew = asyncio.create_task(self._renew())
-        await https_task
+        stopped = asyncio.create_task(self.stopping.wait())
+        await asyncio.wait([https_task, stopped], return_when=asyncio.FIRST_COMPLETED)
+        failed = not self.stopping.is_set() and not await self._http_alone(stopped)
         self.stopping.set()
         renew.cancel()
-        if self.http_task is not None:
-            await asyncio.gather(self.http_task, return_exceptions=True)
+        await asyncio.gather(https_task, *([self.http_task] if self.http_task else []), return_exceptions=True)
+        self.executor.shutdown(wait=False, cancel_futures=True)
+        return not failed
+
+    async def _http_alone(self, stopped):
+        """HTTPS couldn't start: keeps HTTP serving while it can, so the web UI
+        stays reachable. False when there's no way in at all."""
+        if self.http_task is None:
+            log.error("HTTPS only is on and HTTPS can't start, so the web UI can't be reached: stopping")
+            return False
+        log.error("HTTPS is off until port %s is free and Backuparr restarts; HTTP on port %s still answers",
+                  https_port(), http_port())
+        # HTTPS only can't be switched on from here (it needs a page that came
+        # in over HTTPS), so the HTTP server ends only if it couldn't start.
+        await asyncio.wait([self.http_task, stopped], return_when=asyncio.FIRST_COMPLETED)
+        if self.stopping.is_set():
+            return True
+        log.error("neither HTTPS nor HTTP can start: stopping")
+        return False
 
 
 SERVER = None
@@ -225,7 +297,8 @@ def main():
     tls.ensure()
     runs.start_upgrade_self_backup()
     SERVER = Server(app)
-    asyncio.run(SERVER.main())
+    if not asyncio.run(SERVER.main()):
+        sys.exit(1)
 
 
 def http_open():

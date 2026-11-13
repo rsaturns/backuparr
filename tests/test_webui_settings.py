@@ -532,3 +532,28 @@ def test_every_destination_card_has_a_retention_field(authed_client):
     for dest_id in DEST_NAMES:
         card = html.split(f'data-dest="{dest_id}"', 1)[1].split('class="app-card dest-card"', 1)[0]
         assert 'class="d-retention"' in card
+
+
+@pytest.mark.parametrize("body, message", [
+    ({"notify_url": ["https://x"]}, "notify_url must be text"),
+    ({"bazarr_backup_dir": 5}, "bazarr_backup_dir must be text"),
+    ({"apps": {"radarr": {"url": 7878}}}, "radarr: url must be text"),
+    ({"apps": {"radarr": {"api_key": {"k": 1}}}}, "radarr: api_key must be text"),
+    ({"notify_url": "discord.com/api/webhooks/1/x"}, "must start with http:// or https://"),
+    ({"apps": {"radarr": {"enabled": True, "url": "radarr:7878", "api_key": "k"}}}, "radarr: the URL must start with"),
+])
+def test_settings_fields_must_be_the_right_kind(authed_client, body, message):
+    authed_client.post("/api/secrets-key/acknowledge", json={"confirm": True})
+    response = authed_client.post("/api/config", json=body)
+    assert response.status_code == 400 and message in response.get_json()["error"]
+
+
+def test_a_url_left_on_a_disabled_card_or_an_unchanged_notify_url_doesnt_stop_a_save(authed_client, isolated_webui):
+    import config_store
+    authed_client.post("/api/secrets-key/acknowledge", json={"confirm": True})
+    cfg = config_store.load_config()
+    cfg["notify_url"] = "ntfy.example/backups"  # saved before the check existed
+    config_store.save_config(cfg)
+    response = authed_client.post("/api/config", json={"notify_url": "ntfy.example/backups", "retention_days": 9,
+                                                       "apps": {"sonarr": {"enabled": False, "url": "sonarr:8989"}}})
+    assert response.status_code == 200 and config_store.load_config()["retention_days"] == 9

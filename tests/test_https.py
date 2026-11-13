@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.asymmetric import ec, ed448, ed25519, rsa
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
 from conftest import PASSWORD
@@ -58,7 +58,8 @@ def test_renewal_keeps_the_key_so_the_pin_still_matches(monkeypatch):
     monkeypatch.setattr(tls, "_now", lambda: later)
     renewed = tls.ensure()
     assert renewed.fingerprint != tls.fingerprint(first)
-    assert tls.public_key_pin(_load(tls.CERT_PATH)) == tls.public_key_pin(first)
+    # Home Assistant pins the public key, which is the same.
+    assert tls._spki(_load(tls.CERT_PATH).public_key()) == tls._spki(first.public_key())
 
 
 def test_an_unreadable_certificate_is_made_again():
@@ -68,13 +69,14 @@ def test_an_unreadable_certificate_is_made_again():
     assert tls.ensure().fingerprint == tls.fingerprint(_load(tls.CERT_PATH))
 
 
-def _own_pair(tmp_path, days=365):
-    key = ec.generate_private_key(ec.SECP256R1())
+def _own_pair(tmp_path, days=365, key=None):
+    key = key or ec.generate_private_key(ec.SECP256R1())
+    algorithm = None if isinstance(key, (ed25519.Ed25519PrivateKey, ed448.Ed448PrivateKey)) else hashes.SHA256()
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "backuparr.example.com")])
     now = datetime.now(timezone.utc)
     cert = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())
             .serial_number(1).not_valid_before(now).not_valid_after(now + timedelta(days=days))
-            .sign(key, hashes.SHA256()))
+            .sign(key, algorithm))
     cert_path, key_path = tmp_path / "own.crt", tmp_path / "own.key"
     cert_path.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
     key_path.write_bytes(key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
@@ -114,6 +116,68 @@ def test_a_certificate_of_yours_that_cant_be_used_falls_back_and_says_why(tmp_pa
     cert = tls.ensure()
     assert not cert.own and message in cert.error
     assert cert.cert_path == tls.CERT_PATH and os.path.exists(tls.CERT_PATH)
+
+
+def test_why_your_certificate_isnt_used_is_logged_once_per_reason(tmp_path, monkeypatch, caplog):
+    _, cert_path, _ = _own_pair(tmp_path)
+    monkeypatch.setenv("BACKUPARR_TLS_CERT", cert_path)
+    monkeypatch.setenv("BACKUPARR_TLS_KEY", str(tmp_path / "nope.key"))
+    for _ in range(3):  # Settings checks the certificate on every load
+        tls.reload()
+    assert caplog.text.count("isn't used") == 1
+    monkeypatch.delenv("BACKUPARR_TLS_KEY")
+    tls.reload()  # a different reason is logged
+    assert caplog.text.count("isn't used") == 2
+
+
+def test_an_expired_certificate_of_yours_is_logged_once(tmp_path, monkeypatch, caplog):
+    _, cert_path, key_path = _own_pair(tmp_path, days=1)
+    monkeypatch.setenv("BACKUPARR_TLS_CERT", cert_path)
+    monkeypatch.setenv("BACKUPARR_TLS_KEY", key_path)
+    monkeypatch.setattr(tls, "_now", lambda: datetime.now(timezone.utc) + timedelta(days=2))
+    for _ in range(3):  # Settings checks the certificate on every load
+        assert tls.reload().own  # still served: it's yours to renew
+    assert caplog.text.count("expired on") == 1
+
+
+@pytest.mark.parametrize("make_key", [
+    lambda: ed25519.Ed25519PrivateKey.generate(),
+    lambda: ed448.Ed448PrivateKey.generate(),
+    lambda: rsa.generate_private_key(65537, 2048),
+], ids=["ed25519", "ed448", "rsa"])
+def test_your_own_certificate_can_have_any_key_type(tmp_path, monkeypatch, make_key):
+    own, cert_path, key_path = _own_pair(tmp_path, key=make_key())
+    monkeypatch.setenv("BACKUPARR_TLS_CERT", cert_path)
+    monkeypatch.setenv("BACKUPARR_TLS_KEY", key_path)
+    cert = tls.ensure()
+    assert cert.own and cert.error is None and cert.fingerprint == tls.fingerprint(own)
+
+
+def test_a_certificate_of_yours_that_cant_be_checked_still_falls_back(tmp_path, monkeypatch):
+    _, cert_path, key_path = _own_pair(tmp_path)
+    monkeypatch.setenv("BACKUPARR_TLS_CERT", cert_path)
+    monkeypatch.setenv("BACKUPARR_TLS_KEY", key_path)
+
+    def odd(*_):
+        raise RuntimeError("something new")
+    monkeypatch.setattr(tls, "_same_key", odd)
+    monkeypatch.setattr(tls, "_own_signed", lambda: tls._make_certificate(tls._load_key()))
+    cert = tls.ensure()
+    assert not cert.own and "can't be checked" in cert.error
+
+
+def test_a_certificate_of_yours_openssl_refuses_gives_way_to_backuparrs_own(tmp_path, monkeypatch):
+    from webui import serve
+    _, cert_path, key_path = _own_pair(tmp_path, key=rsa.generate_private_key(65537, 1024))
+    monkeypatch.setenv("BACKUPARR_TLS_CERT", cert_path)
+    monkeypatch.setenv("BACKUPARR_TLS_KEY", key_path)
+    assert tls.ensure().own  # it reads fine; OpenSSL won't serve a 1024-bit key
+    context, cert = serve._ssl_context(tls.ensure())
+    assert not cert.own and cert.cert_path == tls.CERT_PATH
+    assert "HTTPS can't use it" in cert.error and "KEY_TOO_SMALL" in cert.error
+    assert tls.ensure().error == cert.error  # the card keeps saying why
+    _, cert_path, key_path = _own_pair(tmp_path)  # replaced with a usable pair
+    assert tls.ensure().own
 
 
 def test_restore_files_needs_a_matching_pair_and_tells_the_server():
@@ -253,6 +317,27 @@ def test_https_only_env_values(monkeypatch, value, expected):
     assert serve.https_only_env() is expected
 
 
+def test_only_the_self_restore_uploads_take_large_bodies():
+    from webui import serve
+    assert serve.body_limit("/api/setup/restore") == serve.body_limit("/api/backuparr/restore") > 64 * 1024 * 1024
+    for path in ("/api/config", "/api/login", "/api/restore/local/radarr", "/static/app.js"):
+        assert serve.body_limit(path) == 1024 * 1024
+
+
+def test_a_broken_config_doesnt_stop_the_server_starting(monkeypatch, caplog):
+    import config_store
+    from webui import serve
+
+    def broken():
+        raise config_store.ConfigError("config.json isn't valid JSON - fix it, or delete the file")
+    monkeypatch.setattr(serve, "stored_setting", lambda key: broken())
+    monkeypatch.delenv("BACKUPARR_HTTPS_ONLY", raising=False)
+    assert serve._https_only_at_start() is False  # HTTP opens, so the UI can say what's wrong
+    assert "isn't valid JSON" in caplog.text
+    monkeypatch.setenv("BACKUPARR_HTTPS_ONLY", "true")
+    assert serve._https_only_at_start() is True  # the environment needs no config.json
+
+
 # ------------------------------------------------ Backuparr's own backup ----
 def test_own_backup_carries_the_certificate_and_restore_keeps_https_only(authed_client, monkeypatch):
     import config_store
@@ -370,6 +455,85 @@ def test_http_closes_and_opens_again_without_a_restart(running_server):
     assert server.http_open()
 
 
+def _wait_for_http(port, open_, tries=100):
+    for _ in range(tries):
+        try:
+            _get(port, False)
+            if open_:
+                return True
+        except OSError:
+            if not open_:
+                return True
+        time.sleep(0.05)
+    return False
+
+
+def test_http_turned_back_on_while_it_is_still_closing_opens_again(running_server):
+    server, http_port, _ = running_server
+    # Keep a request in flight so the old server takes a while to close.
+    busy = socket.create_connection(("127.0.0.1", http_port))
+    busy.sendall(b"GET / HTTP/1.1\r\nHost: x\r\n")
+    server.set_http_open(False)
+    server.set_http_open(True)
+    busy.close()
+    time.sleep(0.5)
+    assert _wait_for_http(http_port, True) and server.http_open()
+
+
+def test_http_turned_off_again_while_it_is_closing_stays_closed(running_server):
+    server, http_port, _ = running_server
+    for open_ in (False, True, False):
+        server.set_http_open(open_)
+    time.sleep(0.5)
+    assert _wait_for_http(http_port, False)
+    time.sleep(0.5)
+    assert _wait_for_http(http_port, False, tries=1) and not server.http_open()
+
+
+def _taken_port():
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    sock.listen()
+    return sock
+
+
+@pytest.mark.parametrize("https_only, http_taken, keeps_running", [
+    (False, False, True),  # HTTP is still a way in
+    (True, False, False),  # HTTPS only: no way in at all
+    (False, True, False),  # neither port opens
+])
+def test_https_that_cant_start_leaves_http_serving_when_it_can(monkeypatch, https_only, http_taken, keeps_running):
+    from webui import serve
+    taken = _taken_port()
+    other = _taken_port() if http_taken else None
+    http_port = other.getsockname()[1] if other else _free_port()
+    monkeypatch.setenv("WEBUI_HOST", "127.0.0.1")
+    monkeypatch.setenv("WEBUI_PORT", str(http_port))
+    monkeypatch.setenv("WEBUI_HTTPS_PORT", str(taken.getsockname()[1]))
+    monkeypatch.setattr(serve, "https_only", lambda cfg=None: https_only)
+
+    def app(environ, start_response):
+        start_response("200 OK", [])
+        return [environ["backuparr.listener"].encode()]
+
+    server = serve.Server(app)
+    result = {}
+    thread = threading.Thread(target=lambda: result.setdefault("ok", asyncio.run(server.main())), daemon=True)
+    thread.start()
+    try:
+        if keeps_running:
+            assert _wait_for_http(http_port, True) and _get(http_port, False) == (200, b"http")
+            thread.join(1)
+            assert thread.is_alive()
+            server.loop.call_soon_threadsafe(server.stopping.set)
+        thread.join(10)
+        assert not thread.is_alive() and result["ok"] is keeps_running
+    finally:
+        taken.close()
+        if other:
+            other.close()
+
+
 def _served_fingerprint(port):
     pem = ssl.get_server_certificate(("127.0.0.1", port))
     return tls.fingerprint(x509.load_pem_x509_certificate(pem.encode()))
@@ -387,3 +551,33 @@ def test_a_new_certificate_is_served_without_a_restart(running_server):
             break
         time.sleep(0.05)
     assert after != before and seen() == after
+
+
+def test_both_servers_share_one_thread_pool_kept_across_http_reopening(monkeypatch):
+    from webui import serve
+    monkeypatch.setattr(serve, "https_only", lambda cfg=None: False)
+    started = []
+
+    async def fake_serve(app, config, mode, shutdown_trigger):
+        started.append(app.executor)
+        await shutdown_trigger()
+    monkeypatch.setattr(serve, "serve", fake_serve)
+    server = serve.Server(lambda environ, start_response: [])
+    result = {}
+    thread = threading.Thread(target=lambda: result.setdefault("ok", asyncio.run(server.main())), daemon=True)
+    thread.start()
+    for _ in range(100):
+        if len(started) == 2:
+            break
+        time.sleep(0.02)
+    server.set_http_open(False)
+    time.sleep(0.2)
+    server.set_http_open(True)
+    for _ in range(100):
+        if len(started) == 3:
+            break
+        time.sleep(0.02)
+    server.loop.call_soon_threadsafe(server.stopping.set)
+    thread.join(5)
+    assert len(started) == 3 and all(e is server.executor for e in started)
+    assert result["ok"] and server.executor._shutdown

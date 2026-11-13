@@ -76,12 +76,10 @@ CORE_AGENT = "backup.local"
 SUPERVISOR_AGENT = "hassio.local"
 INSTALL_CORE = "core"
 INSTALL_SUPERVISOR = "supervisor"
-INSTALL_TYPES = (INSTALL_CORE, INSTALL_SUPERVISOR)
 # The card's folder options and the Home Assistant folder each one backs up.
 FOLDER_OPTIONS = {"media": "media", "share": "share", "local_apps": "addons/local"}
 FOLDERS = ("ssl", *FOLDER_OPTIONS.values())
 APPS_CHOICES = ("none", "all", "chosen")
-MAX_CHOSEN_APPS = 100
 _SLUG = re.compile(r"[a-z0-9_]{1,64}")
 _TOKEN_WHERE = "make a long-lived access token on your profile's Security tab in Home Assistant"
 # Generous on purpose: Home Assistant often runs on a Raspberry Pi's SD card

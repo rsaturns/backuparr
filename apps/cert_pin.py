@@ -120,8 +120,12 @@ def connect_socket(url, app, trusted=None, timeout=10):
         context.minimum_version = ssl.TLSVersion.TLSv1_2
         context.check_hostname = False
         context.verify_mode = ssl.CERT_NONE
-        tls = context.wrap_socket(socket.create_connection((host, port), timeout=timeout),
-                                  server_hostname=None if _is_ip(host) else host)
+        raw = socket.create_connection((host, port), timeout=timeout)
+        try:
+            tls = context.wrap_socket(raw, server_hostname=None if _is_ip(host) else host)
+        except BaseException:
+            raw.close()  # a failed handshake: the socket is ours to close
+            raise
         if _same_certificate(tls, trusted):
             return tls
         tls.close()  # Another certificate: fine if a CA vouches for it, else refused.

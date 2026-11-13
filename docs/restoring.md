@@ -24,7 +24,9 @@ restoring it by hand and a link to its page here, in place of **Restore**.
 
 **Restore to a different target** overrides the app's URL, key and other
 fields for that restore only, without changing Settings. Use it for a rebuilt
-or renamed instance, or for a trial restore on a throwaway copy.
+or renamed instance, or for a trial restore on a throwaway copy. With a
+different URL, enter that app's key too: the saved key, login and passwords
+only go to the app's own URL.
 
 ## The version check
 

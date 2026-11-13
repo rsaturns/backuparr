@@ -23,7 +23,8 @@ and then restore one.
 
 - **HTTPS on port 8991:** add `"8991:8991"` to the container's ports (on
   Unraid, add a port with container port 8991). Port 8990 keeps working. See
-  [HTTPS](../security.md#https).
+  [HTTPS](../security.md#https). With `BACKUPARR_DISABLE_AUTH`, block 8991
+  the same way you block 8990 (host networking or a firewall).
 - **Backups are encrypted** with your encryption key from the next run,
   including apps you set up before; Backuparr says so once. Turn it off for
   an app on its card in Settings. See

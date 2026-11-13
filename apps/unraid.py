@@ -30,7 +30,6 @@ Backuparr always encrypts it (#147). Restores are by hand (manual_restore,
 #151). A self-signed web UI certificate is trusted on the card and pinned
 (apps/cert_pin.py).
 """
-import json
 import logging
 import os
 import re

@@ -117,6 +117,46 @@ def test_the_request_body_reaches_the_app_and_too_much_gets_413():
     assert sent[0]["status"] == 413 and seen == [b"123456789"]
 
 
+def test_the_body_limit_can_depend_on_the_path():
+    seen = []
+
+    def app(environ, start_response):
+        seen.append(environ["wsgi.input"].read())
+        start_response("200 OK", [])
+        return [b"ok"]
+    adapter = WsgiToAsgi(app, lambda path: 100 if path == "/upload" else 4)
+    assert run(call(adapter, chunks=[b"12345"], path="/upload"))[0]["status"] == 200
+    assert run(call(adapter, chunks=[b"12345"], path="/x"))[0]["status"] == 413
+    assert seen == [b"12345"]
+
+
+def test_a_declared_length_over_the_limit_is_refused_before_reading():
+    reads = []
+
+    async def main():
+        async def receive():
+            reads.append(1)
+            return {"type": "http.request", "body": b"x" * 10, "more_body": False}
+        sent = []
+
+        async def send(message):
+            sent.append(message)
+        await WsgiToAsgi(lambda e, s: [], 4)(scope(headers=[(b"content-length", b"999999")]), receive, send)
+        return sent
+    sent = run(main())
+    assert sent[0]["status"] == 413 and not reads
+
+
+def test_a_chunked_body_reaches_flask():
+    # No Content-Length: a script streaming its body (Transfer-Encoding: chunked).
+    from flask import Flask, request
+    flask_app = Flask(__name__)
+    flask_app.post("/x")(lambda: request.get_data())
+    sent = run(call(WsgiToAsgi(flask_app.wsgi_app, 100), chunks=[b'{"a":', b"1}"], method="POST",
+                    headers=[(b"host", b"backuparr"), (b"transfer-encoding", b"chunked")]))
+    assert sent[0]["status"] == 200 and body_of(sent) == b'{"a":1}'
+
+
 def test_environ_follows_pep_3333():
     environ = build_environ(scope(headers=[(b"cookie", b"a=1"), (b"cookie", b"b=2"), (b"x-thing", b"1"),
                                            (b"x-thing", b"2"), (b"content-type", b"application/json"),
@@ -129,6 +169,29 @@ def test_environ_follows_pep_3333():
     assert build_environ(scope(path="/é"), None)["PATH_INFO"] == "/é".encode("utf-8").decode("latin-1")
 
 
+def test_a_file_download_goes_in_large_blocks(tmp_path):
+    # Flask's send_file asks wsgi.file_wrapper for 8 KB reads; each chunk is
+    # a trip between threads, so the adapter's wrapper reads 1 MiB.
+    from flask import Flask, send_file
+    path = tmp_path / "backup.zip"
+    path.write_bytes(b"x" * (3 * 1024 * 1024 + 5))
+    flask_app = Flask(__name__)
+    flask_app.get("/x")(lambda: send_file(path, as_attachment=True))
+    sent = run(call(WsgiToAsgi(flask_app.wsgi_app, 100)))
+    chunks = [m for m in sent if m["type"] == "http.response.body" and m.get("body")]
+    assert body_of(sent) == path.read_bytes()
+    assert len(chunks) == 4  # three full blocks and the last 5 bytes
+
+
+def test_headers_with_underscores_are_dropped():
+    # A Go proxy (Caddy, Traefik) sends X_Forwarded_For after its own
+    # X-Forwarded-For; it must not reach the same WSGI key.
+    environ = build_environ(scope(headers=[(b"x-forwarded-for", b"10.0.0.1"), (b"x_forwarded_for", b"1.2.3.4"),
+                                           (b"x_thing", b"1")]), None)
+    assert environ["HTTP_X_FORWARDED_FOR"] == "10.0.0.1"
+    assert "HTTP_X_THING" not in environ
+
+
 def test_a_download_stops_when_the_browser_goes_away():
     produced = []
 
@@ -139,6 +202,37 @@ def test_a_download_stops_when_the_browser_goes_away():
             yield b"x" * 1024
     run(call(WsgiToAsgi(app, 100), disconnect_after=5))
     assert len(produced) < 50
+
+
+def test_a_request_cancelled_at_shutdown_stops_and_can_still_read_its_body():
+    started, done = threading.Event(), threading.Event()
+    seen = {}
+
+    def app(environ, start_response):
+        started.set()
+        time.sleep(0.2)  # still running when the server gives up on it
+        seen["body"] = environ["wsgi.input"].read()
+        start_response("200 OK", [])
+
+        def chunks():
+            try:
+                for i in range(1000):
+                    seen["chunks"] = i
+                    yield b"x" * 1024
+            finally:
+                done.set()
+        return chunks()
+
+    async def main():
+        adapter = WsgiToAsgi(app, 100)
+        task = asyncio.create_task(call(adapter, body=b"upload"))
+        await asyncio.to_thread(started.wait, 5)
+        task.cancel()  # Hypercorn's graceful timeout ran out
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        await asyncio.to_thread(done.wait, 5)
+    run(main())
+    assert seen["body"] == b"upload" and seen["chunks"] == 0
 
 
 def test_requests_run_side_by_side():
@@ -176,3 +270,37 @@ def test_lifespan_is_answered():
         await WsgiToAsgi(lambda e, s: [], 100)({"type": "lifespan"}, receive, send)
         return sent
     assert run(go()) == ["lifespan.startup.complete", "lifespan.shutdown.complete"]
+
+
+def test_a_client_that_stops_reading_frees_its_worker():
+    # Hypercorn's send waits for the socket to drain; a client that never
+    # reads would hold the worker thread for good.
+    produced, closed = [], threading.Event()
+
+    def app(environ, start_response):
+        start_response("200 OK", [])
+
+        def chunks():
+            try:
+                for i in range(1000):
+                    produced.append(i)
+                    yield b"x" * 1024
+            finally:
+                closed.set()
+        return chunks()
+
+    async def main():
+        async def receive():
+            if not hasattr(receive, "done"):
+                receive.done = True
+                return {"type": "http.request", "body": b"", "more_body": False}
+            await asyncio.Event().wait()
+
+        async def send(message):
+            if message["type"] == "http.response.body":
+                await asyncio.Event().wait()  # never drains
+        started = time.monotonic()
+        await WsgiToAsgi(app, 100, send_timeout=0.2)(scope(), receive, send)
+        return time.monotonic() - started
+    took = run(main())
+    assert took < 3 and closed.wait(3) and len(produced) == 1

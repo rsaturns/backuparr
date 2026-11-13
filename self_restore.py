@@ -19,6 +19,7 @@ from cryptography.fernet import Fernet
 import atomic_file
 import auth_store
 import config_store
+import destination_util
 import manifest
 import rclone_util
 import runlog
@@ -104,9 +105,8 @@ def _write_or_remove(path, data):
 
 def _current_https_only():
     try:
-        with open(config_store.CONFIG_PATH, encoding="utf-8") as f:
-            return json.load(f).get("https_only") is True
-    except (OSError, ValueError, AttributeError):
+        return config_store.stored_setting("https_only") is True
+    except (config_store.ConfigError, OSError):
         return False
 
 
@@ -128,8 +128,9 @@ def apply(members, key):
     # server that hasn't published the HTTPS port, it would lock you out (#177).
     # Read and written as plain JSON: the secrets key already changed above.
     restored = json.loads(members["config.json"])
-    restored["https_only"] = _current_https_only()
-    atomic_file.write_private(config_store.CONFIG_PATH, json.dumps(restored, indent=2))
+    with config_store.CONFIG_LOCK:  # no Settings save in between can bring the old one back
+        restored["https_only"] = _current_https_only()
+        atomic_file.write_private(config_store.CONFIG_PATH, json.dumps(restored, indent=2))
     config_store.forget_secrets_key_acknowledged()
     atomic_file.write_private(auth_store.AUTH_PATH, members["auth.json"])
     _write_or_remove(manifest.path(), members.get("manifest.json"))
@@ -141,7 +142,15 @@ def apply(members, key):
             rclone_util.config_delete(name)
         for name, fields in remotes.items():
             fields = dict(fields)
-            rclone_util.config_set(name, fields.pop("type"), fields, force=True)
+            kind = fields.pop("type")
+            # Only the remotes Backuparr keeps, as the type each one is: some
+            # rclone remotes can run a command (sftp's ssh), and nothing else
+            # in rclone.conf is Backuparr's to bring back.
+            if destination_util.OWN_REMOTES.get(name) != kind:
+                log.warning("backuparr: left out the rclone remote %r (%s) from the backup - it isn't one of "
+                            "Backuparr's own", name, kind)
+                continue
+            rclone_util.config_set(name, kind, fields, force=True)
     except rclone_util.RcloneError as exc:
         warnings.append(f"The cloud connections couldn't all be restored ({exc.detail}); "
                         "the next backup sets them up again from the restored settings.")

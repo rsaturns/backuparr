@@ -16,13 +16,46 @@ hold up the whole web UI. This adapter follows PEP 3333 instead:
 import asyncio
 import sys
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as SendTimeout
 from tempfile import SpooledTemporaryFile
 
 SPOOL_IN_MEMORY = 1024 * 1024
+# A download's read size. Each chunk crosses from the worker thread to the
+# event loop and back, so Werkzeug's own 8 KB made a large download CPU-bound
+# (about 100 MB/s, against 3 GB/s at 1 MiB, on a desktop).
+FILE_BLOCK = 1024 * 1024
+# How long one chunk of a response may wait to go out. A client that stops
+# reading - or a connection that stalls - otherwise holds its worker thread
+# for good, and with every worker held the web UI stops answering.
+SEND_TIMEOUT = 300
 
 
 class ClientGone(Exception):
     pass
+
+
+def new_executor(threads=16):
+    return ThreadPoolExecutor(max_workers=threads, thread_name_prefix="web")
+
+
+class FileWrapper:
+    """PEP 3333's wsgi.file_wrapper, which Flask's send_file uses: the file
+    in FILE_BLOCK reads, whatever smaller size the app asks for."""
+
+    def __init__(self, file, block_size=FILE_BLOCK):
+        self.file = file
+        self.block_size = max(block_size, FILE_BLOCK)
+        if hasattr(file, "close"):
+            self.close = file.close
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        data = self.file.read(self.block_size)
+        if data:
+            return data
+        raise StopIteration
 
 
 def build_environ(scope, body):
@@ -42,6 +75,10 @@ def build_environ(scope, body):
         "wsgi.version": (1, 0),
         "wsgi.url_scheme": scope.get("scheme", "http"),
         "wsgi.input": body,
+        # The whole body is in `body` already, so reading to its end is
+        # safe: without this, Werkzeug reads a chunked body as empty.
+        "wsgi.input_terminated": True,
+        "wsgi.file_wrapper": FileWrapper,
         "wsgi.errors": sys.stderr,
         "wsgi.multithread": True,
         "wsgi.multiprocess": False,
@@ -51,6 +88,11 @@ def build_environ(scope, body):
         environ["REMOTE_ADDR"] = scope["client"][0]
     for raw_name, raw_value in scope.get("headers", []):
         name = raw_name.decode("latin-1").lower()
+        if "_" in name:
+            # X_Forwarded_For would land on X-Forwarded-For's key and, sent
+            # after it, pass for the proxy's value; dropped, as Waitress,
+            # nginx and Apache do.
+            continue
         key = {"content-length": "CONTENT_LENGTH", "content-type": "CONTENT_TYPE"}.get(
             name, "HTTP_" + name.upper().replace("-", "_"))
         value = raw_value.decode("latin-1")
@@ -66,11 +108,28 @@ async def _plain(send, status, text):
     await send({"type": "http.response.body", "body": text})
 
 
+def _declared_length(scope):
+    for name, value in scope.get("headers", []):
+        if name.lower() == b"content-length":
+            try:
+                return int(value)
+            except ValueError:
+                return None
+    return None
+
+
 class WsgiToAsgi:
-    def __init__(self, app, max_body, threads=16):
+    """max_body: the biggest request body, in bytes, or a function of the
+    request's path that gives it. The body is read before the app (and its
+    login check) sees the request, so it's kept small where it can be.
+    executor: the thread pool requests run in, shared by the servers that
+    pass the same one; without it this adapter makes its own."""
+
+    def __init__(self, app, max_body, executor=None, send_timeout=SEND_TIMEOUT):
         self.app = app
-        self.max_body = max_body
-        self.executor = ThreadPoolExecutor(max_workers=threads, thread_name_prefix="web")
+        self.send_timeout = send_timeout
+        self.max_body = max_body if callable(max_body) else (lambda _path: max_body)
+        self.executor = executor or new_executor()
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "lifespan":
@@ -83,7 +142,14 @@ class WsgiToAsgi:
                     return
         if scope["type"] != "http":
             return
-        with SpooledTemporaryFile(max_size=SPOOL_IN_MEMORY) as body:
+        limit = self.max_body(scope["path"])
+        declared = _declared_length(scope)
+        if declared is not None and declared > limit:
+            await _plain(send, 413, b"Request too large")  # refused before a byte of it is read
+            return
+        body = SpooledTemporaryFile(max_size=SPOOL_IN_MEMORY)
+        handed_over = False
+        try:
             size = 0
             while True:
                 message = await receive()
@@ -91,7 +157,7 @@ class WsgiToAsgi:
                     return
                 chunk = message.get("body", b"")
                 size += len(chunk)
-                if size > self.max_body:
+                if size > limit:
                     await _plain(send, 413, b"Request too large")
                     return
                 body.write(chunk)
@@ -107,10 +173,18 @@ class WsgiToAsgi:
 
             watcher = asyncio.create_task(watch())
             loop = asyncio.get_running_loop()
+            # From here the worker owns the body and closes it when it's done:
+            # cancelled at shutdown, this coroutine stops waiting, but the app
+            # may still be reading it.
+            handed_over = True
             try:
                 await loop.run_in_executor(self.executor, self._run, build_environ(scope, body), send, loop, gone)
             finally:
+                gone.set()  # cancelled: the worker stops at its next chunk
                 watcher.cancel()
+        finally:
+            if not handed_over:
+                body.close()
 
     def _run(self, environ, send, loop, gone):
         """Runs the app in a pool thread."""
@@ -119,8 +193,12 @@ class WsgiToAsgi:
         def blocking_send(message):
             if gone.is_set():
                 raise ClientGone
+            future = asyncio.run_coroutine_threadsafe(send(message), loop)
             try:
-                asyncio.run_coroutine_threadsafe(send(message), loop).result()
+                future.result(timeout=self.send_timeout)
+            except SendTimeout:
+                future.cancel()  # nothing more goes to a client that isn't reading
+                raise ClientGone from None
             except Exception as exc:  # the connection closed under us
                 raise ClientGone from exc
 
@@ -149,15 +227,18 @@ class WsgiToAsgi:
                               "headers": [(k.lower().encode("latin-1"), v.encode("latin-1")) for k, v in headers]}
             return write
 
-        result = self.app(environ, start_response)
         try:
-            for chunk in result:
-                write(chunk)
-            send_headers()
-            blocking_send({"type": "http.response.body", "body": b"", "more_body": False})
-        except ClientGone:
-            pass
+            result = self.app(environ, start_response)
+            try:
+                for chunk in result:
+                    write(chunk)
+                send_headers()
+                blocking_send({"type": "http.response.body", "body": b"", "more_body": False})
+            except ClientGone:
+                pass
+            finally:
+                close = getattr(result, "close", None)
+                if close is not None:
+                    close()
         finally:
-            close = getattr(result, "close", None)
-            if close is not None:
-                close()
+            environ["wsgi.input"].close()

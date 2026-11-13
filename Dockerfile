@@ -29,7 +29,10 @@ RUN pip install --no-cache-dir -r requirements.txt \
 COPY *.py entrypoint.sh VERSION /app/
 COPY apps /app/apps
 COPY webui /app/webui
-RUN chmod +x /app/entrypoint.sh
+# Compiled here: the web server runs as PUID, which can't write /app, so it
+# would otherwise compile every module again on each start.
+RUN chmod +x /app/entrypoint.sh \
+    && python -m compileall -q /app
 
 ENV RCLONE_CONFIG=/config/backuparr/rclone.conf \
     BACKUPARR_CONFIG=/config/backuparr/config.json \
