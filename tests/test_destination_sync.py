@@ -45,6 +45,19 @@ def test_nothing_connected_costs_one_dump(rclone):
     assert rclone["calls"] == [["config", "dump"]]
 
 
+def test_deletes_are_permanent_on_google_drive_and_onedrive(rclone):
+    # Remotes from before, without the setting: the next sync adds it, and
+    # keeps the OneDrive token rclone has rotated since.
+    rclone["remotes"] = {"backuparr-onedrive": {"type": "onedrive", "token": "rotated", "drive_id": "d",
+                                                "drive_type": "personal", "root_folder_id": "i"}}
+    destination_util.sync(config(gdrive={"client_id": "c", "client_secret": "s", "refresh_token": "rt"},
+                                 onedrive={"token": '{"refresh_token":"o"}', "drive_id": "d", "drive_type": "personal",
+                                           "item_id": "i"}))
+    onedrive = rclone["remotes"]["backuparr-onedrive"]
+    assert onedrive["hard_delete"] == "true" and onedrive["token"] == "rotated"
+    assert rclone["remotes"]["backuparr-gdrive"]["use_trash"] == "false"
+
+
 def test_an_unchanged_setup_costs_one_dump(rclone):
     cfg = config(gdrive={"client_id": "c", "client_secret": "s", "refresh_token": "rt"},
                  onedrive={"token": '{"refresh_token":"o"}', "drive_id": "d", "drive_type": "personal", "item_id": "i"},
