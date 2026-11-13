@@ -50,6 +50,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - New tagline: "Everything you host, backed up.", as Backuparr covers more than media apps.
 - rclone 1.76.0 (from 1.75.0, taking the security fixes in 1.75.1 and 1.75.2), croniter 7.0.0, and the release workflow's docker/login-action 4.8.0 and softprops/action-gh-release 3.0.4 (#166).
 - With croniter 7.0, a hand-typed schedule step that starts at a field's maximum, such as `59/15`, means only that value; schedules made with the picker are unchanged (#166).
+- Deleting on Google Drive and OneDrive (retention, History) is now permanent, so deleted backups no longer fill your cloud storage from the trash or recycle bin, which both count against it.
 
 ### Fixed
 
@@ -58,7 +59,6 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - On a phone, Run & Status no longer scrolls sideways during a run: its buttons wrap onto a second line.
 - The footer says "Update Available" only when the latest release is newer, not for a newer build or a beta.
 - A full Dropbox or OneDrive now gets the "the destination is out of space" hint.
-- Backups deleted from Google Drive or OneDrive (retention, History) are deleted permanently instead of going to the trash or recycle bin, which still counts against your storage.
 - An app answering HTTP 401 or 403 now also points at the Service Authentication headers when some are set: a proxy refusing a request looks the same as a wrong API key.
 
 ## [2.5.6] - 2026-11-07
