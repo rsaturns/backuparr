@@ -99,7 +99,7 @@ Good to know:
   cloud logins read as blank.
 - A backup from a newer Backuparr isn't restored; update Backuparr first.
 - A backup from before 3.0 isn't restored either: restore it with
-  Backuparr 2.5.6 (`rsaturns/backuparr:2.5.6`), then update.
+  Backuparr 2.5.7 (`rsaturns/backuparr:2.5.7`), then update.
 - A wrong key or a damaged file is refused before anything changes.
 
 Then restore your apps from the Restore tab as usual.

@@ -4,7 +4,7 @@ after losing the server, encrypted with its existing secrets key.
 The archive is a zip made in memory, encrypted with archive_crypto like
 an encrypted app backup (authenticated, so a wrong key or a damaged or
 altered file is refused). Backups made before 3.0 (one Fernet token) are
-recognised but no longer open: restore them with 2.5.6 (#162). It holds:
+recognised but no longer open: restore them with 2.5.7 (#162). It holds:
 
 - config.json as stored (its secret fields stay encrypted with the same key)
 - auth.json: the admin username and password hash

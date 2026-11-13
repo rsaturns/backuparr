@@ -57,7 +57,7 @@ class WrongKeyError(ArchiveCryptoError):
 # still zero, which base64 writes as "gAAAAA" - enough to name the file
 # without any code that could decrypt it (#162).
 _PRE_3_PREFIX = b"gAAAAA"
-PRE_3_SELF_BACKUP = "this backup is from before Backuparr 3.0. Restore it with Backuparr 2.5.6, then update."
+PRE_3_SELF_BACKUP = "this backup is from before Backuparr 3.0. Restore it with Backuparr 2.5.7, then update."
 
 _WRONG_KEY = "this backup was encrypted with a different encryption key - enter that key to use it"
 _DAMAGED = "the encrypted backup is damaged or incomplete"

@@ -5,6 +5,20 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+**"You get a backup! And YOU get a backup! Everything you host gets a backup!"** 3.0.0-beta is the biggest Backuparr yet: it grows past the media apps to the rest of what you host.
+
+**More of your stack:** your network, passwords, smart home, photos and servers join the party - Pi-hole, OPNsense, pfSense, UniFi, Vaultwarden, self-hosted Bitwarden, Home Assistant, Immich, Unraid, Synology DSM and QNAP QuTS hero.
+
+**Locked down:** every backup is encrypted with your key before it's uploaded, and the web UI gets HTTPS on port 8991 with a certificate Backuparr makes itself.
+
+**Friends with Home Assistant:** an integration with a sensor for every app that lights up when its backup fails.
+
+**Tidier:** apps grouped by category, a ? on every card that opens its setup guide, an At a Glance line on the Overview, and History picks several backups at once.
+
+**Beta testers wanted:** 3.0 has been through a small army of test VMs, but your setup is weirder than ours (that's a compliment). Take it for a spin with `rsaturns/backuparr:3.0.0-beta`, especially if you run one of the new apps, and tell us what breaks: https://github.com/rsaturns/backuparr/issues
+
+**Not sure? Stay on 2.5.7.** 3.0 changes a lot - a new port, encrypted backups, everyone signs in once more - so if you'd rather not be first through the door, wait until 3.x is out of beta. `latest` stays on 2.5.7 until then, so automatic updates won't move you. Updating? Read this first: https://rsaturns.github.io/backuparr/getting-started/updating/#updating-to-300-beta
+
 ### Added
 
 - Include metadata on the Jellyfin, Emby and Plex cards, off by default: backups also take the server's metadata - posters, artwork and people images, artwork set by hand, and Jellyfin's and Emby's saved metadata - so a restored server doesn't download it all again. Jellyfin's comes from its own backup's Metadata option (Jellyfin 10.11.7 and newer); Emby's metadata folder and Plex's Metadata folder are read from their mounted data folder (Plex's Media folder of preview thumbnails stays out). History and the Restore tab show which backups have it. Thanks to @zenmaster14 for the suggestion (#196). See https://rsaturns.github.io/backuparr/apps/jellyfin/
@@ -42,7 +56,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The Restore tab lists Profilarr too: picking it shows a Download button (decrypted), the steps for restoring it in Profilarr and a link to its docs page, in place of Restore (#151).
 - The web server is now Hypercorn instead of Waitress, to serve HTTP and HTTPS from one process (#177).
 - Over HTTPS the login cookie is Secure and has its own name, so signing in over HTTP and HTTPS works side by side (#177).
-- Backuparr's own backup uses the same encryption format (#147). Its backups from before 3.0 no longer restore: the first start of 3.0 makes a new one straight away when it has a destination, and restoring an old one (or the decrypt command) says to use Backuparr 2.5.6. Old ones stay until retention removes them (#162).
+- Backuparr's own backup uses the same encryption format (#147). Its backups from before 3.0 no longer restore: the first start of 3.0 makes a new one straight away when it has a destination, and restoring an old one (or the decrypt command) says to use Backuparr 2.5.7. Old ones stay until retention removes them (#162).
 - Error and result messages in the web UI start with a capital letter and end with a full stop.
 - Settings groups the apps by category, each folding away under a header with its enabled count and last-run status; categories open once an app in them is set up and are remembered per browser. Destinations folds too, its header showing the destinations' icons; History (where Backuparr's own backups are now listed as Backuparr) and the Run & Status and Restore app lists use the same categories (#148).
 - Backuparr's own backup has its own Backuparr card under Server, in place of the checkbox in Schedule & Notifications; Run & Status can back it up on its own, a full run lists it with the apps, and History shows its backups under Server (#165).
@@ -51,6 +65,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - rclone 1.76.0 (from 1.75.0, taking the security fixes in 1.75.1 and 1.75.2), croniter 7.0.0, and the release workflow's docker/login-action 4.8.0 and softprops/action-gh-release 3.0.4 (#166).
 - With croniter 7.0, a hand-typed schedule step that starts at a field's maximum, such as `59/15`, means only that value; schedules made with the picker are unchanged (#166).
 - Deleting on Google Drive and OneDrive (retention, History) is now permanent, so deleted backups no longer fill your cloud storage from the trash or recycle bin, which both count against it.
+- The `latest` image tag follows full releases only: a beta such as 3.0.0-beta is published under its own tag, so containers that update from `latest` stay on the last full release.
 
 ### Fixed
 
