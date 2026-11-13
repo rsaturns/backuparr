@@ -61,9 +61,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Every run is a vX.Y.Z(-…) tag push (see the `on:` trigger above),
-      # so each release produces both the version tag and an updated
-      # :latest, on Docker Hub and GHCR alike. The image's
+      # Every run is a vX.Y.Z(-…) tag push (see the `on:` trigger above):
+      # each release gets its version tag, on Docker Hub and GHCR alike, and
+      # a full release (no "-beta" or other suffix) also moves :latest, so a
+      # beta never reaches containers that update themselves from :latest.
+      # The image's
       # org.opencontainers.image.source label links the GHCR package to
       # this repository.
       - name: Extract Docker image metadata
@@ -74,7 +76,7 @@ jobs:
             ${{ secrets.DOCKERHUB_USERNAME }}/backuparr
             ghcr.io/${{ github.repository_owner }}/backuparr
           tags: |
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
             type=match,pattern=v(.*),group=1
 
       - name: Build and push Docker image
