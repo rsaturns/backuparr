@@ -47,7 +47,7 @@ def _clean_stderr(stderr):
 _HINTS = (
     (re.compile(r"read-only file system", re.I), "the destination is read-only"),
     (re.compile(r"permission denied", re.I), "the folder isn't writable by Backuparr's user (PUID:PGID)"),
-    (re.compile(r"no space left|disk quota|insufficient storage|insufficient[ _]space|storagequotaexceeded|out of space|quota.*exceeded", re.I), "the destination is out of space"),
+    (re.compile(r"no space left|disk quota|insufficient storage|insufficient[ _]space|quota ?limit ?reached|storagequotaexceeded|out of space|quota.*exceeded", re.I), "the destination is out of space"),
     (re.compile(r"invalid_grant|expired or revoked|couldn't fetch token|unauthorized_client|401 unauthorized", re.I), "the connection to this destination has expired or been revoked - reconnect it in Settings"),
     (re.compile(r"no such host|lookup .* on .*:", re.I), "the destination's hostname couldn't be resolved - check this container's network and DNS"),
 )
