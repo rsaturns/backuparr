@@ -42,6 +42,9 @@ def build_environ(scope, body):
         "wsgi.version": (1, 0),
         "wsgi.url_scheme": scope.get("scheme", "http"),
         "wsgi.input": body,
+        # The whole body is in `body` already, so reading to its end is
+        # safe: without this, Werkzeug reads a chunked body as empty.
+        "wsgi.input_terminated": True,
         "wsgi.errors": sys.stderr,
         "wsgi.multithread": True,
         "wsgi.multiprocess": False,

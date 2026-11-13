@@ -117,6 +117,16 @@ def test_the_request_body_reaches_the_app_and_too_much_gets_413():
     assert sent[0]["status"] == 413 and seen == [b"123456789"]
 
 
+def test_a_chunked_body_reaches_flask():
+    # No Content-Length: a script streaming its body (Transfer-Encoding: chunked).
+    from flask import Flask, request
+    flask_app = Flask(__name__)
+    flask_app.post("/x")(lambda: request.get_data())
+    sent = run(call(WsgiToAsgi(flask_app.wsgi_app, 100), chunks=[b'{"a":', b"1}"], method="POST",
+                    headers=[(b"host", b"backuparr"), (b"transfer-encoding", b"chunked")]))
+    assert sent[0]["status"] == 200 and body_of(sent) == b'{"a":1}'
+
+
 def test_environ_follows_pep_3333():
     environ = build_environ(scope(headers=[(b"cookie", b"a=1"), (b"cookie", b"b=2"), (b"x-thing", b"1"),
                                            (b"x-thing", b"2"), (b"content-type", b"application/json"),
