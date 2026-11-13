@@ -1,5 +1,6 @@
 """Destinations: their test, Google Drive's OAuth flow, and connecting or
 disconnecting OneDrive and Dropbox."""
+import hmac
 import logging
 import os
 import secrets
@@ -7,7 +8,7 @@ import threading
 import time
 import urllib.parse
 
-from flask import Blueprint, jsonify, redirect, request
+from flask import Blueprint, jsonify, redirect, request, session
 
 import destination_util
 import dropbox_oauth
@@ -24,8 +25,12 @@ log = logging.getLogger("backuparr.webui")
 
 
 # CSRF state for the OAuth callback: state -> time.monotonic() it was
-# issued. Requests run on several threads (webui/wsgi_asgi.py), so it's
-# only touched under its lock.
+# issued, so each is used once and expires. Requests run on several threads
+# (webui/wsgi_asgi.py), so it's only touched under its lock. The browser
+# that started the sign-in keeps it in its session too (its last few, for a
+# second click on Connect): the callback must come back to that browser.
+_OAUTH_SESSION_KEY = "gdrive_oauth_states"
+_OAUTH_SESSION_KEEP = 3
 _OAUTH_STATE = {}
 _OAUTH_STATE_LOCK = threading.Lock()
 _OAUTH_STATE_TTL = 600
@@ -89,13 +94,20 @@ def _oauth_state_new():
             if now - ts > _OAUTH_STATE_TTL:
                 del _OAUTH_STATE[s]
         _OAUTH_STATE[state] = now
+    mine = session.get(_OAUTH_SESSION_KEY)
+    session[_OAUTH_SESSION_KEY] = [*(mine if isinstance(mine, list) else [])][-(_OAUTH_SESSION_KEEP - 1):] + [state]
     return state
 
 
 def _oauth_state_consume(state):
+    mine = session.get(_OAUTH_SESSION_KEY)
+    mine = [s for s in mine if isinstance(s, str)] if isinstance(mine, list) else []
+    started_here = any(hmac.compare_digest(s.encode("utf-8"), state.encode("utf-8")) for s in mine)
+    if started_here:
+        session[_OAUTH_SESSION_KEY] = [s for s in mine if s != state]
     with _OAUTH_STATE_LOCK:
         ts = _OAUTH_STATE.pop(state, None)
-    return ts is not None and (time.monotonic() - ts) <= _OAUTH_STATE_TTL
+    return started_here and ts is not None and (time.monotonic() - ts) <= _OAUTH_STATE_TTL
 
 
 @bp.get("/api/destinations/gdrive/oauth/start")
