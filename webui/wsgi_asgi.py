@@ -93,7 +93,7 @@ def build_environ(scope, body):
             # after it, pass for the proxy's value; dropped, as Waitress,
             # nginx and Apache do.
             continue
-        key ={"content-length": "CONTENT_LENGTH", "content-type": "CONTENT_TYPE"}.get(
+        key = {"content-length": "CONTENT_LENGTH", "content-type": "CONTENT_TYPE"}.get(
             name, "HTTP_" + name.upper().replace("-", "_"))
         value = raw_value.decode("latin-1")
         if key in environ:

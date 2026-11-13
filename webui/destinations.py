@@ -23,9 +23,9 @@ bp = Blueprint("destinations", __name__)
 log = logging.getLogger("backuparr.webui")
 
 
-# CSRF state for the OAuth callback, no session store needed. state ->
-# time.monotonic() it was issued. Waitress serves requests on several
-# threads, so these dicts are only touched under their lock.
+# CSRF state for the OAuth callback: state -> time.monotonic() it was
+# issued. Requests run on several threads (webui/wsgi_asgi.py), so it's
+# only touched under its lock.
 _OAUTH_STATE = {}
 _OAUTH_STATE_LOCK = threading.Lock()
 _OAUTH_STATE_TTL = 600
