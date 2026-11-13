@@ -117,6 +117,18 @@ def test_a_certificate_of_yours_that_cant_be_used_falls_back_and_says_why(tmp_pa
     assert cert.cert_path == tls.CERT_PATH and os.path.exists(tls.CERT_PATH)
 
 
+def test_why_your_certificate_isnt_used_is_logged_once_per_reason(tmp_path, monkeypatch, caplog):
+    _, cert_path, _ = _own_pair(tmp_path)
+    monkeypatch.setenv("BACKUPARR_TLS_CERT", cert_path)
+    monkeypatch.setenv("BACKUPARR_TLS_KEY", str(tmp_path / "nope.key"))
+    for _ in range(3):  # Settings checks the certificate on every load
+        tls.reload()
+    assert caplog.text.count("isn't used") == 1
+    monkeypatch.delenv("BACKUPARR_TLS_KEY")
+    tls.reload()  # a different reason is logged
+    assert caplog.text.count("isn't used") == 2
+
+
 @pytest.mark.parametrize("make_key", [
     lambda: ed25519.Ed25519PrivateKey.generate(),
     lambda: ed448.Ed448PrivateKey.generate(),

@@ -45,6 +45,7 @@ _UNREADABLE = (ValueError, TypeError, UnsupportedAlgorithm)
 _lock = threading.Lock()
 _listeners = []
 _refused = {}  # _files_id() of your files -> why the TLS library won't serve them
+_logged = {"error": None}  # the last reason your certificate isn't used, as logged
 
 
 class Certificate(NamedTuple):
@@ -192,8 +193,11 @@ def ensure():
                 log.exception("tls: checking your certificate failed")
                 cert, error = None, f"it can't be checked ({type(exc).__name__})"
             if cert is not None:
+                _logged["error"] = None
                 return Certificate(own[0], own[1], True, fingerprint(cert), cert.not_valid_after_utc, None)
-            log.error("tls: your certificate isn't used - %s. Serving Backuparr's own meanwhile.", error)
+            if error != _logged["error"]:  # once, not on every Settings page load
+                log.error("tls: your certificate isn't used - %s. Serving Backuparr's own meanwhile.", error)
+                _logged["error"] = error
         cert = _own_signed()
         return Certificate(CERT_PATH, KEY_PATH, False, fingerprint(cert), cert.not_valid_after_utc, error)
 
