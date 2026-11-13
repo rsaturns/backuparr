@@ -362,10 +362,9 @@ def api_change_password():
 @bp.post("/api/logout")
 def api_logout():
     session.clear()
-    PLEX_LOGINS.discard_owner(request.cookies.get(PLEX_LOGINS.cookie))
     response = jsonify({"ok": True})
-    response.delete_cookie(DISCOVERY_JOBS.cookie)
-    response.delete_cookie(PLEX_LOGINS.cookie)
+    PLEX_LOGINS.forget_browser(response)
+    DISCOVERY_JOBS.forget_browser(response)
     return response
 
 

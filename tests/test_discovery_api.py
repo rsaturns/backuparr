@@ -111,6 +111,22 @@ def test_logout_discards_discovery_cookie(webui):
     assert client.get_cookie(webui.services.DISCOVERY_JOBS.cookie) is None
 
 
+def test_logout_over_https_discards_the_https_cookie_and_its_jobs(webui):
+    https = {"base_url": "https://localhost"}
+    client = webui.app.test_client()
+    with client.session_transaction(**https) as session:
+        session["authed"] = True
+    name = "__Host-" + webui.services.DISCOVERY_JOBS.cookie
+    client.post("/api/discovery/prowlarr", json={"url": "http://prowlarr:9696", "api_key": "key"}, **https)
+    assert client.get_cookie(name, domain="localhost") and webui.services.DISCOVERY_JOBS.jobs
+    response = client.post("/api/logout", json={}, **https)
+    assert response.status_code == 200
+    assert client.get_cookie(name, domain="localhost") is None and not webui.services.DISCOVERY_JOBS.jobs
+    # A browser only takes the deletion of a __Host- cookie when it's Secure.
+    deleted = [c for c in response.headers.getlist("Set-Cookie") if c.startswith(name + "=")]
+    assert deleted and "Secure" in deleted[0]
+
+
 def test_remote_errors_do_not_expose_secrets_and_allow_retry(webui, monkeypatch, caplog):
     def fail(instance, progress):
         raise requests.HTTPError("http://server?apikey=do-not-leak-key")

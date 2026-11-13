@@ -62,6 +62,12 @@ class OwnedJobs:
                 if job_owner == owner:
                     self.drop_locked(job_id)
 
+    def forget_browser(self, response):
+        """Signing out: drops this browser's jobs and its owner cookie, under
+        the name it has on this port (webui/cookies.py)."""
+        self.discard_owner(request.cookies.get(cookies.name(self.cookie)))
+        response.delete_cookie(cookies.name(self.cookie), httponly=True, secure=cookies.secure(), samesite="Strict")
+
     def set_cookie(self, response, new_owner, secure):
         # Set only when new, so a browser's own cookie is never echoed back.
         if new_owner:
