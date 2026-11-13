@@ -21,16 +21,16 @@ and then restore one.
 
 ## Updating to 3.0.0-beta
 
-3.0 changes a lot. If you'd rather wait until 3.x is out of beta, pin
-`rsaturns/backuparr:2.5.6` (on Unraid, set **Repository** to it) and stay on
-2.5.6.
+3.0 changes a lot, and while it's in beta `latest` stays on 2.5.7: if you'd
+rather wait until 3.x is out of beta, do nothing. To try the beta, set the
+image to `rsaturns/backuparr:3.0.0-beta` (on Unraid, set **Repository** to it).
 
 ### Before you update
 
 - **Find your encryption key.** From 3.0 every backup is encrypted with it,
   and restoring one on another install needs it. See
   [Your encryption key](../security.md#your-encryption-key).
-- **Run a full backup on 2.5.6.** Should you go back, those are backups 2.5.6
+- **Run a full backup on 2.5.7.** Should you go back, those are backups 2.5.7
   can restore, Backuparr's own included.
 
 ### Your container
@@ -62,17 +62,17 @@ and then restore one.
   retention or History removes no longer go to the trash or recycle bin,
   which counts against your storage.
 
-### Going back to 2.5.6
+### Going back to 2.5.7
 
-Set the image to `rsaturns/backuparr:2.5.6`. Your settings, login and backups
-stay, with two limits:
+Set the image back to `rsaturns/backuparr:2.5.7` (or `latest`, while 3.0 is
+in beta). Your settings, login and backups stay, with two limits:
 
-- **Backups 3.0 made are encrypted**, and 2.5.6 can't restore them. Restore
+- **Backups 3.0 made are encrypted**, and 2.5.7 can't restore them. Restore
   them with 3.0, or decrypt one with the 3.0.0-beta image's `decrypt` command
   (see [Decrypting without Backuparr](../security.md#decrypting-without-backuparr))
   and restore it in the app.
 - **Apps only 3.0 backs up**, such as OPNsense or Pi-hole, don't show in
-  2.5.6, and saving Settings there removes them.
+  2.5.7, and saving Settings there removes them.
 
 ## Updating to 2.5.0
 

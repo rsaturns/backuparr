@@ -5,6 +5,20 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+**"You get a backup! And YOU get a backup! Everything you host gets a backup!"** 3.0.0-beta is the biggest Backuparr yet: it grows past the media apps to the rest of what you host.
+
+**More of your stack:** your network, passwords, smart home, photos and servers join the party - Pi-hole, OPNsense, pfSense, UniFi, Vaultwarden, self-hosted Bitwarden, Home Assistant, Immich, Unraid, Synology DSM and QNAP QuTS hero.
+
+**Locked down:** every backup is encrypted with your key before it's uploaded, and the web UI gets HTTPS on port 8991 with a certificate Backuparr makes itself.
+
+**Friends with Home Assistant:** an integration with a sensor for every app that lights up when its backup fails.
+
+**Tidier:** apps grouped by category, a ? on every card that opens its setup guide, an At a Glance line on the Overview, and History picks several backups at once.
+
+**Beta testers wanted:** 3.0 has been through a small army of test VMs, but your setup is weirder than ours (that's a compliment). Take it for a spin with `rsaturns/backuparr:3.0.0-beta`, especially if you run one of the new apps, and tell us what breaks: https://github.com/rsaturns/backuparr/issues
+
+**Not sure? Stay on 2.5.7.** 3.0 changes a lot - a new port, encrypted backups, everyone signs in once more - so if you'd rather not be first through the door, wait until 3.x is out of beta. `latest` stays on 2.5.7 until then, so automatic updates won't move you. Updating? Read this first: https://rsaturns.github.io/backuparr/getting-started/updating/#updating-to-300-beta
+
 ### Added
 
 - Include metadata on the Jellyfin, Emby and Plex cards, off by default: backups also take the server's metadata - posters, artwork and people images, artwork set by hand, and Jellyfin's and Emby's saved metadata - so a restored server doesn't download it all again. Jellyfin's comes from its own backup's Metadata option (Jellyfin 10.11.7 and newer); Emby's metadata folder and Plex's Metadata folder are read from their mounted data folder (Plex's Media folder of preview thumbnails stays out). History and the Restore tab show which backups have it. Thanks to @zenmaster14 for the suggestion (#196). See https://rsaturns.github.io/backuparr/apps/jellyfin/
