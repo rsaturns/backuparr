@@ -31,7 +31,9 @@ nav_order: 13
 | `apps.unraid.password` | Unraid's root password (encrypted at rest) - required |
 | `apps.synology.username/password` | The DSM administrator's login (the password encrypted at rest) - required |
 | `apps.synology.device_token` | DSM's token for a trusted device after a 2-factor code (encrypted at rest), set by **Test connection** - don't edit |
-| `apps.<opnsense\|pfsense\|unifi\|unraid\|synology>.trusted_cert` | The self-signed certificate trusted on the card: `{"sha256", "subject", "not_after"}`; set by **Trust** |
+| `apps.qnap.username/password` | The login of a QuTS hero administrator or an account with the System Management role (the password encrypted at rest) - required |
+| `apps.qnap.device_token` | QuTS hero's remembered sign-in after a 2-step verification code (encrypted at rest), set by **Test connection** - don't edit |
+| `apps.<opnsense\|pfsense\|unifi\|unraid\|synology\|qnap>.trusted_cert` | The self-signed certificate trusted on the card: `{"sha256", "subject", "not_after"}`; set by **Trust** |
 | `bazarr_backup_dir` | Bazarr's mounted config/backup folder, for restores |
 | `request_headers` | [Service authentication headers](settings.md#service-authentication-headers): `[{"name": "Proxy-Authorization", "value": "Basic …", "apps": ["radarr"]}]`; omit `apps` for every app |
 | `destinations.local.enabled/path` | Local Storage; the path defaults to `/config/backuparr/backups` |

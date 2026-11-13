@@ -18,7 +18,7 @@ The restore shows live progress and a log.
 
 ![Restore tab: Radarr and a backup picked, with the check saying the backup is from the installed Radarr version]({{ '/screenshots/restore.png' | relative_url }})
 
-An app Backuparr can't restore itself (Profilarr, OPNsense, pfSense, UniFi, Unraid, Synology DSM, Bitwarden) is listed too: picking it
+An app Backuparr can't restore itself (Profilarr, OPNsense, pfSense, UniFi, Unraid, Synology DSM, QNAP QuTS hero, Bitwarden) is listed too: picking it
 shows a **Download** button (decrypted, like History's), the steps for
 restoring it by hand and a link to its page here, in place of **Restore**.
 
@@ -60,6 +60,7 @@ restore never leaves an app half-migrated.
 | Bitwarden | By hand: Bitwarden's database restore for a standard install, or lite's own restore script: the Restore tab gives the download and the steps - see the [Bitwarden note](apps/bitwarden.md) |
 | Unraid | By hand, with the Unraid USB Flash Creator's **Use custom** (a new drive or internal boot) or by copying single files: the Restore tab gives the download and the steps - see the [Unraid note](apps/unraid.md) |
 | Synology DSM | By hand, in DSM's Control Panel (Configuration Backup), on DSM 7 or 6.2: the Restore tab gives the download and the steps - see the [Synology DSM note](apps/synology.md) |
+| QNAP QuTS hero | By hand, in the Control Panel (Backup/Restore Settings), on QuTS hero the same version or newer; the NAS restarts. The Restore tab gives the download and the steps - see the [QNAP QuTS hero note](apps/qnap.md) |
 | Bazarr | Needs Bazarr's config/backup folder mounted into Backuparr. Enter it under "Bazarr backup folder" unless it's set in Settings |
 | Tdarr | Wipes each database collection before refilling it; you're asked to confirm |
 | SABnzbd | Asks for each Usenet server's password. Leave any blank and set it in SABnzbd later |

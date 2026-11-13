@@ -11,6 +11,7 @@ import zipfile
 
 import pytest
 from ha_backup import make_ha_backup
+from qnap_backup import make_bin
 from synology_backup import make_dss
 from unifi_backup import make_unf, make_unifi
 
@@ -96,11 +97,17 @@ def sound_archives(tmp_path):
         "unraid-2": make_zip(tmp_path / "unraid.zip", {"changes.txt": "# Version 7.4.0 2026-11-09\n",
                                                         "config/super.dat": b"\0" * 64, "bzimage": b"k"}),
         "synology-nas2": synology_backup(tmp_path / "synology-configuration.dss"),
+        "qnap-hero": qnap_backup(tmp_path / "qnap-settings.bin"),
     }
 
 
 def synology_backup(path, **kwargs):
     path.write_bytes(make_dss(**kwargs))
+    return str(path)
+
+
+def qnap_backup(path):
+    path.write_bytes(make_bin(size=2 * 1024 * 1024, encrypted=1024 * 1024))
     return str(path)
 
 

@@ -184,7 +184,7 @@ def test_prowlarr_and_discovered_apps_lead_their_category(webui):
         "pihole", "opnsense", "pfsense", "unifi",
         "bitwarden", "vaultwarden",
         "homeassistant",
-        "synology", "unraid"]
+        "qnap", "synology", "unraid"]
     assert html.count('id="discover-btn"') == 1
     assert html.index('data-app="prowlarr"') < html.index('id="discover-btn"') < html.index('class="help-tip"') < html.index('data-app="profilarr"')
     assert html.count('class="help-tip"') == 1

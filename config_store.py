@@ -22,7 +22,7 @@ class ConfigError(RuntimeError):
     truncated by a full disk, ...). The message says what to do about it."""
 
 
-APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr", "lazylibrarian", "pihole", "vaultwarden", "opnsense", "pfsense", "immich", "homeassistant", "unifi", "unraid", "bitwarden", "synology"]
+APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr", "lazylibrarian", "pihole", "vaultwarden", "opnsense", "pfsense", "immich", "homeassistant", "unifi", "unraid", "bitwarden", "synology", "qnap"]
 
 # encrypt: whether its backups are encrypted (#147) - on unless turned off,
 # and ignored for an app whose APP_META sets always_encrypted.
@@ -33,7 +33,7 @@ DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "pass
 # archive names never change; each extra one is "<app>-<suffix>" (radarr-4k),
 # an id fixed when it's added because it names the instance's backup folder.
 # Only its display name can change later.
-MULTI_INSTANCE_APPS = ("radarr", "sonarr", "lidarr", "whisparr", "pihole", "opnsense", "pfsense", "immich", "homeassistant", "unifi", "unraid", "synology")
+MULTI_INSTANCE_APPS = ("radarr", "sonarr", "lidarr", "whisparr", "pihole", "opnsense", "pfsense", "immich", "homeassistant", "unifi", "unraid", "synology", "qnap")
 MAX_EXTRA_INSTANCES = 10
 _EXTRA_INSTANCE_ID = re.compile(rf"({'|'.join(MULTI_INSTANCE_APPS)})-([a-z0-9]+(?:-[a-z0-9]+)*)")
 _MAX_INSTANCE_ID_LENGTH = 40
@@ -54,9 +54,9 @@ SERVARR_LOGIN_FIELDS = [
      "help": "the app's own login"},
 ]
 # Apps whose "password" extra field is encrypted at rest.
-PASSWORD_APPS = ("bazarr", "nzbget", "radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "pfsense", "unifi", "unraid", "synology")
+PASSWORD_APPS = ("bazarr", "nzbget", "radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "pfsense", "unifi", "unraid", "synology", "qnap")
 # Other extra fields encrypted at rest, by app type.
-SECRET_EXTRA_FIELDS = {"opnsense": ("api_secret",), "synology": ("device_token",)}
+SECRET_EXTRA_FIELDS = {"opnsense": ("api_secret",), "synology": ("device_token",), "qnap": ("device_token",)}
 
 # Settings, History and the Restore and Run & Status pickers group the apps
 # under these, in this order (#148). A category with no apps isn't shown, so
@@ -83,7 +83,7 @@ _APP_CATEGORY = {
     "pihole": "network", "opnsense": "network", "pfsense": "network", "unifi": "network",
     "bitwarden": "security", "vaultwarden": "security",
     "homeassistant": "home-automation",
-    "synology": "server", "unraid": "server",
+    "qnap": "server", "synology": "server", "unraid": "server",
 }
 
 # Drives the web UI's forms generically. restore_warning is shown on the
@@ -504,6 +504,44 @@ APP_META = [
         "always_encrypted": True,
         "pins_certificate": True,
         "restore_warning": {"lead": "Home Assistant restarts", "text": "and is offline for a few minutes. The backup replaces its settings, and its history if the backup has it - on HA OS its apps and folders too. A token made after the backup stops working."},
+    },
+    {
+        "id": "qnap",
+        "label": "QNAP QuTS hero",
+        "icon": "qnap.svg",
+        # QuTS hero's system configuration file (.bin) - its settings, not the
+        # data in its shared folders - from the Control Panel's own export
+        # (/qmigrate/v1/backup/download), signed in as an administrator or an
+        # account with the System Management role: see apps/qnap.py. A 2FA code
+        # is asked for once; QNAP's remembered sign-in (set by Test connection)
+        # signs in after.
+        "key_required": False,
+        "no_api_key": True,
+        "url_placeholder": "https://192.168.1.30",
+        "extra_fields": [
+            {"name": "username", "label": "Username", "type": "text", "required": True,
+             "help": "an administrator, or an account with the System Management role"},
+            {"name": "password", "label": "Password", "type": "password", "required": True},
+            {"name": "otp_code", "label": "2FA code", "type": "text", "login_only": True, "not_saved": True,
+             "help": "from the account's authenticator app, asked for once"},
+            {"name": "device_token", "type": "hidden"},
+        ],
+        "multi_instance": True,
+        "max_extra_instances": MAX_EXTRA_INSTANCES,
+        "always_encrypted": True,
+        "pins_certificate": True,
+        "manual_restore": {
+            "docs": "https://rsaturns.github.io/backuparr/apps/qnap/",
+            "steps": [
+                {"title": "QuTS hero h5.2 or later", "steps": [
+                    "Download the backup: QNAP's .bin system configuration file. It holds the NAS's settings, not the data in its shared folders.",
+                    "On a NAS running QuTS hero, the same version or newer, open Control Panel > System > Backup / Restore > Backup/Restore Settings. Under Restore System Settings, click Restore.",
+                    "Choose Upload file from computer, browse to the .bin and click Next.",
+                    "Choose what to restore on each page (General, Users / Groups, Shared Folders, Network, Apps), or click Skip to keep the NAS's own. Shared folders and apps that aren't in the backup are removed.",
+                    "On Summary, click Restore, confirm with your password and click OK: the NAS restarts.",
+                ]},
+            ],
+        },
     },
     {
         "id": "synology",
