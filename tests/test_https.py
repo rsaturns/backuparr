@@ -129,6 +129,16 @@ def test_why_your_certificate_isnt_used_is_logged_once_per_reason(tmp_path, monk
     assert caplog.text.count("isn't used") == 2
 
 
+def test_an_expired_certificate_of_yours_is_logged_once(tmp_path, monkeypatch, caplog):
+    _, cert_path, key_path = _own_pair(tmp_path, days=1)
+    monkeypatch.setenv("BACKUPARR_TLS_CERT", cert_path)
+    monkeypatch.setenv("BACKUPARR_TLS_KEY", key_path)
+    monkeypatch.setattr(tls, "_now", lambda: datetime.now(timezone.utc) + timedelta(days=2))
+    for _ in range(3):  # Settings checks the certificate on every load
+        assert tls.reload().own  # still served: it's yours to renew
+    assert caplog.text.count("expired on") == 1
+
+
 @pytest.mark.parametrize("make_key", [
     lambda: ed25519.Ed25519PrivateKey.generate(),
     lambda: ed448.Ed448PrivateKey.generate(),

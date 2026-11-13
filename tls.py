@@ -45,7 +45,9 @@ _UNREADABLE = (ValueError, TypeError, UnsupportedAlgorithm)
 _lock = threading.Lock()
 _listeners = []
 _refused = {}  # _files_id() of your files -> why the TLS library won't serve them
-_logged = {"error": None}  # the last reason your certificate isn't used, as logged
+# What was last logged about your certificate: why it isn't used, and the
+# fingerprint of an expired one.
+_logged = {"error": None, "expired": None}
 
 
 class Certificate(NamedTuple):
@@ -162,7 +164,10 @@ def _check_own(cert_path, key_path):
     if refused:
         return None, refused
     if certs[0].not_valid_after_utc <= _now():
-        log.warning("tls: your certificate %s expired on %s", cert_path, certs[0].not_valid_after_utc.date())
+        expired = fingerprint(certs[0])
+        if _logged.get("expired") != expired:  # once, not on every Settings page load
+            log.warning("tls: your certificate %s expired on %s", cert_path, certs[0].not_valid_after_utc.date())
+            _logged["expired"] = expired
     return certs[0], None
 
 

@@ -56,7 +56,7 @@ def tls_in_tmp(tmp_path, monkeypatch):
     monkeypatch.setattr(tls, "KEY_PATH", str(tmp_path / "tls" / "key.pem"))
     monkeypatch.setattr(tls, "_listeners", [])
     monkeypatch.setattr(tls, "_refused", {})
-    monkeypatch.setattr(tls, "_logged", {"error": None})
+    monkeypatch.setattr(tls, "_logged", {"error": None, "expired": None})
 
 
 @pytest.fixture(autouse=True)
