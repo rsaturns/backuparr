@@ -39,7 +39,8 @@ remove in Backuparr follow. See the
 ## Turning it on
 
 1. On the **Settings** tab, open **Server** and switch on **Enable Home
-   Assistant integration** on the Backuparr card.
+   Assistant integration** on the Backuparr card. The **?** beside it opens
+   the [Backuparr integration](#the-backuparr-integration)'s page.
 2. Copy the **token** it shows. It's shown only this once; Backuparr keeps
    just a hash of it.
 3. Give the token to Home Assistant: in the [Backuparr integration](#the-backuparr-integration),
