@@ -55,6 +55,7 @@ def tls_in_tmp(tmp_path, monkeypatch):
     monkeypatch.setattr(tls, "CERT_PATH", str(tmp_path / "tls" / "cert.pem"))
     monkeypatch.setattr(tls, "KEY_PATH", str(tmp_path / "tls" / "key.pem"))
     monkeypatch.setattr(tls, "_listeners", [])
+    monkeypatch.setattr(tls, "_refused", {})
 
 
 @pytest.fixture(autouse=True)

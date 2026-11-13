@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.asymmetric import ec, ed448, ed25519, rsa
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
 from conftest import PASSWORD
@@ -68,13 +68,14 @@ def test_an_unreadable_certificate_is_made_again():
     assert tls.ensure().fingerprint == tls.fingerprint(_load(tls.CERT_PATH))
 
 
-def _own_pair(tmp_path, days=365):
-    key = ec.generate_private_key(ec.SECP256R1())
+def _own_pair(tmp_path, days=365, key=None):
+    key = key or ec.generate_private_key(ec.SECP256R1())
+    algorithm = None if isinstance(key, (ed25519.Ed25519PrivateKey, ed448.Ed448PrivateKey)) else hashes.SHA256()
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "backuparr.example.com")])
     now = datetime.now(timezone.utc)
     cert = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())
             .serial_number(1).not_valid_before(now).not_valid_after(now + timedelta(days=days))
-            .sign(key, hashes.SHA256()))
+            .sign(key, algorithm))
     cert_path, key_path = tmp_path / "own.crt", tmp_path / "own.key"
     cert_path.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
     key_path.write_bytes(key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
@@ -114,6 +115,46 @@ def test_a_certificate_of_yours_that_cant_be_used_falls_back_and_says_why(tmp_pa
     cert = tls.ensure()
     assert not cert.own and message in cert.error
     assert cert.cert_path == tls.CERT_PATH and os.path.exists(tls.CERT_PATH)
+
+
+@pytest.mark.parametrize("make_key", [
+    lambda: ed25519.Ed25519PrivateKey.generate(),
+    lambda: ed448.Ed448PrivateKey.generate(),
+    lambda: rsa.generate_private_key(65537, 2048),
+], ids=["ed25519", "ed448", "rsa"])
+def test_your_own_certificate_can_have_any_key_type(tmp_path, monkeypatch, make_key):
+    own, cert_path, key_path = _own_pair(tmp_path, key=make_key())
+    monkeypatch.setenv("BACKUPARR_TLS_CERT", cert_path)
+    monkeypatch.setenv("BACKUPARR_TLS_KEY", key_path)
+    cert = tls.ensure()
+    assert cert.own and cert.error is None and cert.fingerprint == tls.fingerprint(own)
+
+
+def test_a_certificate_of_yours_that_cant_be_checked_still_falls_back(tmp_path, monkeypatch):
+    _, cert_path, key_path = _own_pair(tmp_path)
+    monkeypatch.setenv("BACKUPARR_TLS_CERT", cert_path)
+    monkeypatch.setenv("BACKUPARR_TLS_KEY", key_path)
+
+    def odd(*_):
+        raise RuntimeError("something new")
+    monkeypatch.setattr(tls, "_same_key", odd)
+    monkeypatch.setattr(tls, "_own_signed", lambda: tls._make_certificate(tls._load_key()))
+    cert = tls.ensure()
+    assert not cert.own and "can't be checked" in cert.error
+
+
+def test_a_certificate_of_yours_openssl_refuses_gives_way_to_backuparrs_own(tmp_path, monkeypatch):
+    from webui import serve
+    _, cert_path, key_path = _own_pair(tmp_path, key=rsa.generate_private_key(65537, 1024))
+    monkeypatch.setenv("BACKUPARR_TLS_CERT", cert_path)
+    monkeypatch.setenv("BACKUPARR_TLS_KEY", key_path)
+    assert tls.ensure().own  # it reads fine; OpenSSL won't serve a 1024-bit key
+    context, cert = serve._ssl_context(tls.ensure())
+    assert not cert.own and cert.cert_path == tls.CERT_PATH
+    assert "HTTPS can't use it" in cert.error and "KEY_TOO_SMALL" in cert.error
+    assert tls.ensure().error == cert.error  # the card keeps saying why
+    _, cert_path, key_path = _own_pair(tmp_path)  # replaced with a usable pair
+    assert tls.ensure().own
 
 
 def test_restore_files_needs_a_matching_pair_and_tells_the_server():

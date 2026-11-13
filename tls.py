@@ -22,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 from typing import NamedTuple
 
 from cryptography import x509
+from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
@@ -37,8 +38,13 @@ KEY_PATH = os.path.join(TLS_DIR, "key.pem")
 VALIDITY = timedelta(days=825)
 RENEW_BEFORE = timedelta(days=30)
 
+# What parsing a PEM certificate or key raises; UnsupportedAlgorithm is a key
+# type the library doesn't know.
+_UNREADABLE = (ValueError, TypeError, UnsupportedAlgorithm)
+
 _lock = threading.Lock()
 _listeners = []
+_refused = {}  # _files_id() of your files -> why the TLS library won't serve them
 
 
 class Certificate(NamedTuple):
@@ -58,10 +64,13 @@ def fingerprint(cert):
     return ":".join(f"{b:02X}" for b in cert.fingerprint(hashes.SHA256()))
 
 
+def _spki(public_key):
+    return public_key.public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
+
+
 def public_key_pin(cert):
     """SHA-256 of the certificate's public key, as hex: what Home Assistant pins."""
-    der = cert.public_key().public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
-    return hashlib.sha256(der).hexdigest()
+    return hashlib.sha256(_spki(cert.public_key())).hexdigest()
 
 
 def _read(path):
@@ -74,7 +83,7 @@ def _load_key():
         return serialization.load_pem_private_key(_read(KEY_PATH), password=None)
     except FileNotFoundError:
         pass
-    except (ValueError, TypeError) as exc:
+    except _UNREADABLE as exc:
         log.warning("tls: %s can't be read (%s); making a new key", KEY_PATH, exc)
     key = ec.generate_private_key(ec.SECP256R1())
     write_private(KEY_PATH, key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
@@ -115,8 +124,14 @@ def _make_certificate(key):
     return cert
 
 
+def _files_id(cert_pem, key_pem):
+    return hashlib.sha256(cert_pem + b"\0" + key_pem).hexdigest()
+
+
 def _same_key(cert, key):
-    return cert.public_key().public_numbers() == key.public_key().public_numbers()
+    """Whether `key` is the certificate's key, for any key type (Ed25519
+    keys have no public_numbers())."""
+    return _spki(cert.public_key()) == _spki(key.public_key())
 
 
 def _own_files():
@@ -130,14 +145,21 @@ def _check_own(cert_path, key_path):
     if not cert_path or not key_path:
         return None, "set both BACKUPARR_TLS_CERT and BACKUPARR_TLS_KEY"
     try:
-        certs = x509.load_pem_x509_certificates(_read(cert_path))
-        key = serialization.load_pem_private_key(_read(key_path), password=None)
+        cert_pem, key_pem = _read(cert_path), _read(key_path)
+        certs = x509.load_pem_x509_certificates(cert_pem)
+        key = serialization.load_pem_private_key(key_pem, password=None)
+        same = _same_key(certs[0], key)
     except OSError as exc:
         return None, f"couldn't read {exc.filename}: {exc.strerror}"
-    except (ValueError, TypeError):
+    except UnsupportedAlgorithm:
+        return None, "its key type isn't supported"
+    except _UNREADABLE:
         return None, "the files aren't a PEM certificate and an unencrypted PEM key"
-    if not _same_key(certs[0], key):
+    if not same:
         return None, "the key doesn't belong to the certificate"
+    refused = _refused.get(_files_id(cert_pem, key_pem))
+    if refused:
+        return None, refused
     if certs[0].not_valid_after_utc <= _now():
         log.warning("tls: your certificate %s expired on %s", cert_path, certs[0].not_valid_after_utc.date())
     return certs[0], None
@@ -150,7 +172,7 @@ def _own_signed():
         cert = x509.load_pem_x509_certificate(_read(CERT_PATH))
     except FileNotFoundError:
         cert = None
-    except ValueError:
+    except _UNREADABLE:
         log.warning("tls: %s can't be read; making a new certificate", CERT_PATH)
         cert = None
     if cert is None or not _same_key(cert, key) or cert.not_valid_after_utc - _now() < RENEW_BEFORE:
@@ -164,7 +186,11 @@ def ensure():
         error = None
         own = _own_files()
         if own:
-            cert, error = _check_own(*own)
+            try:
+                cert, error = _check_own(*own)
+            except Exception as exc:  # the files are yours: anything odd falls back
+                log.exception("tls: checking your certificate failed")
+                cert, error = None, f"it can't be checked ({type(exc).__name__})"
             if cert is not None:
                 return Certificate(own[0], own[1], True, fingerprint(cert), cert.not_valid_after_utc, None)
             log.error("tls: your certificate isn't used - %s. Serving Backuparr's own meanwhile.", error)
@@ -193,10 +219,11 @@ def restore_files(key_pem, cert_pem):
     try:
         key = serialization.load_pem_private_key(key_pem, password=None)
         cert = x509.load_pem_x509_certificate(cert_pem)
-    except (ValueError, TypeError):
+        same = _same_key(cert, key)
+    except _UNREADABLE:
         log.warning("tls: the backup's certificate can't be read; keeping this one")
         return False
-    if not _same_key(cert, key):
+    if not same:
         log.warning("tls: the backup's certificate and key don't match; keeping this one")
         return False
     with _lock:
@@ -204,6 +231,17 @@ def restore_files(key_pem, cert_pem):
         write_private(CERT_PATH, cert_pem)
     reload()
     return True
+
+
+def refused(cert, reason):
+    """The server's TLS library wouldn't load your certificate `cert` (a key
+    it won't use, say): Backuparr's own is served instead, and the card says
+    why, until either file changes."""
+    try:
+        _refused[_files_id(_read(cert.cert_path), _read(cert.key_path))] = f"HTTPS can't use it ({reason})"
+    except OSError:
+        pass  # gone already: ensure() says so
+    return ensure()
 
 
 # --------------------------------------------------------- listeners ----

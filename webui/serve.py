@@ -123,12 +123,28 @@ def _config(port, ssl_context=None):
     return config
 
 
+def _load_chain(context, cert):
+    """Loads `cert` into `context` and returns the certificate it loaded. Your
+    own certificate that OpenSSL won't take, though tls.py could read it (a
+    1024-bit RSA key, say), gives way to Backuparr's own."""
+    try:
+        context.load_cert_chain(cert.cert_path, cert.key_path)
+        return cert
+    except (ssl.SSLError, OSError, ValueError) as exc:
+        if not cert.own:
+            raise
+        reason = getattr(exc, "reason", None) or getattr(exc, "strerror", None) or str(exc)
+        fallback = tls.refused(cert, reason)  # logs why, and the card shows it
+        context.load_cert_chain(fallback.cert_path, fallback.key_path)
+        return fallback
+
+
 def _ssl_context(cert):
+    """(the HTTPS server's SSL context, the certificate it serves)."""
     context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
     context.set_alpn_protocols(["http/1.1"])
-    context.load_cert_chain(cert.cert_path, cert.key_path)
-    return context
+    return context, _load_chain(context, cert)
 
 
 class Server:
@@ -197,7 +213,9 @@ class Server:
     def _load(self, cert):
         if cert.fingerprint == self.fingerprint:
             return
-        self.ssl_context.load_cert_chain(cert.cert_path, cert.key_path)
+        cert = _load_chain(self.ssl_context, cert)
+        if cert.fingerprint == self.fingerprint:
+            return  # refused, and Backuparr's own was being served already
         self.fingerprint = cert.fingerprint
         log.info("HTTPS certificate loaded (SHA-256 %s)", cert.fingerprint)
 
@@ -219,9 +237,8 @@ class Server:
                 self.loop.add_signal_handler(sig, self.stopping.set)
             except (ValueError, RuntimeError):  # not the main thread (tests)
                 pass
-        cert = tls.ensure()
+        self.ssl_context, cert = _ssl_context(tls.ensure())
         self.fingerprint = cert.fingerprint
-        self.ssl_context = _ssl_context(cert)
         tls.on_change(self._use_certificate)
         https_task = asyncio.create_task(self._run("HTTPS", https_port(), self.ssl_context, asyncio.Event()))
         if _https_only_at_start():
