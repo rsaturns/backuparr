@@ -55,7 +55,7 @@ image to `rsaturns/backuparr:3.0.0-beta` (on Unraid, set **Repository** to it).
 - **Backups made before stay as they are** and still restore.
 - **Backuparr backs itself up** in the background on the first start of 3.0
   (if its own backup is on and a destination is set up). Its backups from
-  before 3.0 can't be restored any more: restore one with Backuparr 2.5.6,
+  before 3.0 can't be restored any more: restore one with Backuparr 2.5.7,
   then update. They stay until retention removes them. See
   [Restoring Backuparr itself](../restoring.md#restoring-backuparr-itself).
 - **Deleting on Google Drive and OneDrive is permanent:** backups that
