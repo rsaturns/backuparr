@@ -78,6 +78,17 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A full Dropbox or OneDrive now gets the "the destination is out of space" hint.
 - An app answering HTTP 401 or 403 now also points at the Service Authentication headers when some are set: a proxy refusing a request looks the same as a wrong API key.
 
+## [2.5.7] - 2026-11-13
+
+### Security
+
+- rclone 1.76.0 (from 1.75.0), with the security fixes from rclone 1.75.1 and 1.75.2 and its updated Go libraries: the image scan's 2 critical and 20 high findings in rclone are gone.
+- The image no longer has pip, which Backuparr doesn't use once its packages are in: pip's own copies of urllib3, msgpack and setuptools were the scan's other 5 high findings.
+
+### Changed
+
+- The release workflow's docker/login-action 4.8.0 and softprops/action-gh-release 3.0.4, as Dependabot proposed (#159, #160).
+
 ## [2.5.6] - 2026-11-07
 
 ### Changed
