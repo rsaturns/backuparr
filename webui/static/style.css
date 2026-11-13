@@ -925,6 +925,8 @@ input:focus, select:focus, textarea:focus {
 
 @media (max-width: 560px) {
   .run-head { flex-wrap: wrap; gap: 10px; }
+  /* Cancel, the app picker and "Running..." don't fit on one line. */
+  .run-head-actions { flex-wrap: wrap; }
 }
 
 .run-summary {
