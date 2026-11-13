@@ -4,7 +4,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-from conftest import PASSWORD
+from conftest import PASSWORD, sign_in
 import requests
 
 from webui.plex_auth import PlexLogin
@@ -117,7 +117,7 @@ def test_another_browser_cannot_read_or_cancel_login(authed_client, isolated_web
     _, path = start(authed_client)
     other = isolated_webui.app.test_client()
     with other.session_transaction() as session:
-        session["authed"] = True
+        sign_in(session)
     assert other.get(path).status_code == 404
     assert other.delete(path).status_code == 404
     assert authed_client.get(path).json == {"state": "pending"}

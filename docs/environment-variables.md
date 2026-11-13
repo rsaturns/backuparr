@@ -46,4 +46,5 @@ live by default.
 | `BACKUPARR_SECRETS_KEY_PATH` | `/config/backuparr/secrets.key` | Generated config-encryption key (ignored if `BACKUPARR_SECRETS_KEY` is set) |
 | `BACKUPARR_SECRET_KEY_PATH` | `/config/backuparr/secret_key` | Session-signing key - not the same as `secrets.key` |
 | `BACKUPARR_AUTH` | `/config/backuparr/auth.json` | Admin username and password hash |
+| `BACKUPARR_SESSIONS` | `/config/backuparr/sessions.json` | The signed-in browsers, so signing out ends a session on the server |
 | `BACKUPARR_LOG_DIR` | `/var/log/backuparr` | Where `backup.log` (shown on Run & Status) is written |

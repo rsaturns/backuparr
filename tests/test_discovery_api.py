@@ -6,7 +6,7 @@ import copy
 import pytest
 import requests
 
-from conftest import load_webui
+from conftest import load_webui, sign_in
 
 
 @pytest.fixture
@@ -38,7 +38,7 @@ def webui(tmp_path, monkeypatch):
 def client_for(webui):
     client = webui.app.test_client()
     with client.session_transaction() as session:
-        session["authed"] = True
+        sign_in(session)
     return client
 
 
@@ -115,7 +115,7 @@ def test_logout_over_https_discards_the_https_cookie_and_its_jobs(webui):
     https = {"base_url": "https://localhost"}
     client = webui.app.test_client()
     with client.session_transaction(**https) as session:
-        session["authed"] = True
+        sign_in(session)
     name = "__Host-" + webui.services.DISCOVERY_JOBS.cookie
     client.post("/api/discovery/prowlarr", json={"url": "http://prowlarr:9696", "api_key": "key"}, **https)
     assert client.get_cookie(name, domain="localhost") and webui.services.DISCOVERY_JOBS.jobs

@@ -33,6 +33,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Signing out ends the session on the server too, so a copy of its cookie stops working; the server keeps the list of signed-in browsers in sessions.json. Sign in again once after updating. See https://rsaturns.github.io/backuparr/security/#login
 - Restore to a different target needs that app's key when its URL isn't the app's own: the saved key, login and passwords only go to the app's own URL. See https://rsaturns.github.io/backuparr/restoring/
 - Settings checks what it saves: an enabled app's URL and a changed Notify URL must start with http:// or https://, and an app's URL, key, username and password must be text.
 - Messages in the web UI name each app as its card does, with the product's own capitalisation: "OPNsense: ...", "pfSense 2.8.1 reachable", "SABnzbd restore complete", and Run & Status's OK and Failed lists say "Radarr (4K)" in place of the app's id (#191).
