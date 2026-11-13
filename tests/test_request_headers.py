@@ -21,7 +21,7 @@ from apps.lazylibrarian import LazyLibrarianError
 from apps.seerr import SeerrError
 from apps.nzbget import NzbgetError
 from apps.plex import PlexError
-from apps.http_headers import RequestHeadersError, configure_app_headers, validate_request_headers
+from apps.http_headers import REFUSAL_HINT, RequestHeadersError, configure_app_headers, validate_request_headers
 
 
 SECRET = "Basic c2VydmljZTpmaXh0dXJlLXBhc3N3b3Jk"
@@ -547,3 +547,43 @@ def test_discovery_sends_only_headers_scoped_to_prowlarr(authed_client, isolated
     response = authed_client.post("/api/discovery/prowlarr", json={"url": "https://app.example", "api_key": "native-key", "request_headers": rows})
     assert authed_client.get("/api/discovery/prowlarr/" + response.json["job_id"]).json["state"] == "completed"
     assert ("Proxy-Authorization" in wire[-1].headers) is sent
+
+
+# A header gate in front of Sonarr whose header is set up for Radarr only:
+# the proxy answers Sonarr's requests with 401, as Sonarr does a wrong key.
+SONARR = {"url": "https://sonarr.example", "api_key": "native-key"}
+RADARR_ONLY = [{**HEADERS[0], "apps": ["radarr"]}]
+
+
+@pytest.fixture
+def answers(monkeypatch):
+    status = [401]
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send",
+                        lambda _adapter, request, **kwargs: reply(request, {}, status=status[0]))
+    return status
+
+
+def test_a_refusal_points_at_the_headers_when_some_are_set(authed_client, answers):
+    authed_client.post("/api/config", json={"request_headers": RADARR_ONLY})
+    message = authed_client.post("/api/test/sonarr", json=SONARR).json["message"]
+    assert message == "Sonarr: unauthorized - check the API key" + REFUSAL_HINT
+
+
+def test_no_hint_without_headers_or_without_a_refusal(authed_client, answers):
+    assert authed_client.post("/api/test/sonarr", json=SONARR).json["message"] == (
+        "Sonarr: unauthorized - check the API key")
+    authed_client.post("/api/config", json={"request_headers": RADARR_ONLY})
+    answers[0] = 500
+    assert REFUSAL_HINT not in authed_client.post("/api/test/sonarr", json=SONARR).json["message"]
+
+
+def test_a_backup_refused_by_a_proxy_points_at_the_headers(monkeypatch, caplog, answers):
+    monkeypatch.setattr(backup, "enabled_apps", lambda cfg: ["sonarr"])
+    monkeypatch.setattr(backup, "enabled_destinations", lambda cfg: ["local"])
+    monkeypatch.setattr(backup.destination_util, "sync", lambda cfg: None)
+    monkeypatch.setattr(backup.destination_util, "remote_root", lambda dest_id, cfg: "/dest")
+    monkeypatch.setattr(backup, "apply_retention", lambda *args, **kwargs: None)
+    ok, failed = backup.run_backup({"apps": {"sonarr": SONARR}, "destinations": {"local": {}},
+                                    "request_headers": RADARR_ONLY})
+    assert not ok and len(failed) == 1 and failed[0].endswith(REFUSAL_HINT)
+    assert "backup failed" in caplog.text and REFUSAL_HINT in caplog.text

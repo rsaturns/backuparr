@@ -35,7 +35,7 @@ from apps.base import AppError
 from apps.bazarr import BazarrApp
 from apps.emby import EmbyApp
 from apps.homeassistant import HomeAssistantApp
-from apps.http_headers import RequestHeadersError, app_connection_config, configure_app_headers
+from apps.http_headers import RequestHeadersError, app_connection_config, configure_app_headers, note_refusals, refusal_hint
 from apps.immich import ImmichApp
 from apps.jellyfin import JellyfinApp
 from apps.lazylibrarian import LazyLibrarianApp
@@ -231,7 +231,7 @@ def humanize_error(exc, url=None, app=None):
     return branded(_without_app_prefix(describe_failure(exc, url) or str(exc), app))
 
 
-def log_failure(logger, summary, exc, url=None, app=None):
+def log_failure(logger, summary, exc, url=None, app=None, hint=""):
     """Logs a failure as one readable ERROR line when describe_failure()
     recognises it, otherwise with the full traceback - unexpected errors
     are bugs, and a bug report needs the stack."""
@@ -239,12 +239,13 @@ def log_failure(logger, summary, exc, url=None, app=None):
     if message is None:
         logger.error("%s", summary, exc_info=exc)
     else:
-        logger.error("%s - %s", summary, _without_app_prefix(message, app))
+        logger.error("%s - %s%s", summary, _without_app_prefix(message, app), hint)
 
 
 def build_app(name, app_cfg):
     """`name` is an app or an instance id - radarr-4k builds a Radarr."""
-    return configure_app_headers(_build_app(instance_type(name), app_cfg), app_cfg.get("request_headers", []))
+    return note_refusals(configure_app_headers(_build_app(instance_type(name), app_cfg),
+                                               app_cfg.get("request_headers", [])))
 
 
 # Every app type's driver. Each takes (url, api_key, **extra fields) - the
@@ -528,6 +529,7 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
                    "ok": False, "error": None, "app_version": None, "destinations": {d: None for d in dest_roots}}
             capture = runlog.Capture().start()
 
+            app = None
             try:
                 os.makedirs(work_dir, exist_ok=True)
                 app = build_app(name, app_cfg)
@@ -593,8 +595,9 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
                 run["error"] = "the run was cancelled"
                 raise
             except Exception as exc:
-                log_failure(log, f"{name}: backup failed", exc, app_cfg.get("url"), app=name)
-                run["error"] = humanize_error(exc, app_cfg.get("url"), app=name)
+                hint = refusal_hint(app, exc, cfg.get("request_headers"))
+                log_failure(log, f"{name}: backup failed", exc, app_cfg.get("url"), app=name, hint=hint)
+                run["error"] = humanize_error(exc, app_cfg.get("url"), app=name) + hint
                 failed.append(f"{name}: {run['error']}")
             finally:
                 capture.stop()

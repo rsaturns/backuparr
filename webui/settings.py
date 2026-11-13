@@ -6,7 +6,7 @@ from flask import Blueprint, jsonify, request
 
 import destination_util
 from apps import cert_pin
-from apps.http_headers import headers_for_app, RequestHeadersError, validate_request_headers
+from apps.http_headers import headers_for_app, refusal_hint, RequestHeadersError, validate_request_headers
 from backup import branded, build_app, humanize_error, notify
 from config_store import acknowledge_encryption_notice, app_meta, APP_NAMES, CONFIG_LOCK, DEFAULT_APP, DEFAULT_INSTANCE, DEST_EDITABLE_FIELDS, DEST_NAMES, instance_ids, instance_type, key_required, load_config, MAX_EXTRA_INSTANCES, MULTI_INSTANCE_APPS, save_config, valid_schedule
 from webui import runs
@@ -314,6 +314,7 @@ def api_test(app_name):
     except RequestHeadersError as exc:
         return jsonify({"ok": False, "message": str(exc)}), 400
     app_cfg["request_headers"] = headers_for_app(headers, app_name)
+    instance = None
     try:
         instance = build_app(app_name, app_cfg)
         message = instance.test_connection()
@@ -324,7 +325,7 @@ def api_test(app_name):
             body["card"] = instance.card_info
         return jsonify(body)
     except Exception as exc:
-        body = {"ok": False, "message": humanize_error(exc)}
+        body = {"ok": False, "message": humanize_error(exc) + refusal_hint(instance, exc, headers)}
         if getattr(exc, "needs_login", False):
             body["needs_login"] = True  # the card shows its username and password
         if isinstance(exc, cert_pin.CertificateUntrusted):
