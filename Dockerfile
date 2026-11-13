@@ -21,7 +21,10 @@ RUN apk add --no-cache bash tzdata su-exec \
 
 WORKDIR /app
 COPY requirements.txt /app/
-RUN pip install --no-cache-dir -r requirements.txt
+# pip isn't needed once the requirements are in, and it carries its own
+# vendored copies of urllib3, msgpack and setuptools that scanners flag.
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip uninstall -y pip
 
 COPY *.py entrypoint.sh VERSION /app/
 COPY apps /app/apps
