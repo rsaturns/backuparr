@@ -4,7 +4,6 @@ docker-compose env vars by hand. The routes live in the blueprint modules
 next to this one; this module builds the app around them.
 """
 import logging
-import os
 from datetime import timedelta
 
 from flask import Flask, jsonify, render_template, request
@@ -126,11 +125,3 @@ def create_app():
     runs.start_scheduler()
     manifest_backfill.start(should_pause=runs.busy)
     return app
-
-
-if __name__ == "__main__":
-    create_app().run(
-        host=os.environ.get("WEBUI_HOST") or "0.0.0.0",
-        port=int(os.environ.get("WEBUI_PORT", 8990)),
-        debug=False,
-    )

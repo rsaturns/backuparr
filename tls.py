@@ -71,11 +71,6 @@ def _spki(public_key):
     return public_key.public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
 
 
-def public_key_pin(cert):
-    """SHA-256 of the certificate's public key, as hex: what Home Assistant pins."""
-    return hashlib.sha256(_spki(cert.public_key())).hexdigest()
-
-
 def _read(path):
     with open(path, "rb") as f:
         return f.read()

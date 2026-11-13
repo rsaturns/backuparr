@@ -58,7 +58,8 @@ def test_renewal_keeps_the_key_so_the_pin_still_matches(monkeypatch):
     monkeypatch.setattr(tls, "_now", lambda: later)
     renewed = tls.ensure()
     assert renewed.fingerprint != tls.fingerprint(first)
-    assert tls.public_key_pin(_load(tls.CERT_PATH)) == tls.public_key_pin(first)
+    # Home Assistant pins the public key, which is the same.
+    assert tls._spki(_load(tls.CERT_PATH).public_key()) == tls._spki(first.public_key())
 
 
 def test_an_unreadable_certificate_is_made_again():

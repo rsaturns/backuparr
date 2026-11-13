@@ -54,8 +54,6 @@ from apps.servarr import SameHostSession
 
 logger = logging.getLogger(f"backuparr.{__name__}")
 
-TOML = "etc/pihole/pihole.toml"
-GRAVITY = "etc/pihole/gravity.db"
 _APP_SESSION = "app-password correct"  # session.message for an app password (src/api/auth.c)
 _APP_PASSWORD_WHERE = "Settings > Web interface / API > Configure app password, in Expert mode"
 _APP_SUDO_WHERE = "Settings > All settings > Webserver and API > webserver.api.app_sudo, in Expert mode"
