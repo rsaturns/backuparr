@@ -540,3 +540,33 @@ def test_a_new_certificate_is_served_without_a_restart(running_server):
             break
         time.sleep(0.05)
     assert after != before and seen() == after
+
+
+def test_both_servers_share_one_thread_pool_kept_across_http_reopening(monkeypatch):
+    from webui import serve
+    monkeypatch.setattr(serve, "https_only", lambda cfg=None: False)
+    started = []
+
+    async def fake_serve(app, config, mode, shutdown_trigger):
+        started.append(app.executor)
+        await shutdown_trigger()
+    monkeypatch.setattr(serve, "serve", fake_serve)
+    server = serve.Server(lambda environ, start_response: [])
+    result = {}
+    thread = threading.Thread(target=lambda: result.setdefault("ok", asyncio.run(server.main())), daemon=True)
+    thread.start()
+    for _ in range(100):
+        if len(started) == 2:
+            break
+        time.sleep(0.02)
+    server.set_http_open(False)
+    time.sleep(0.2)
+    server.set_http_open(True)
+    for _ in range(100):
+        if len(started) == 3:
+            break
+        time.sleep(0.02)
+    server.loop.call_soon_threadsafe(server.stopping.set)
+    thread.join(5)
+    assert len(started) == 3 and all(e is server.executor for e in started)
+    assert result["ok"] and server.executor._shutdown

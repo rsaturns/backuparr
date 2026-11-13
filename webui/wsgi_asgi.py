@@ -34,6 +34,10 @@ class ClientGone(Exception):
     pass
 
 
+def new_executor(threads=16):
+    return ThreadPoolExecutor(max_workers=threads, thread_name_prefix="web")
+
+
 class FileWrapper:
     """PEP 3333's wsgi.file_wrapper, which Flask's send_file uses: the file
     in FILE_BLOCK reads, whatever smaller size the app asks for."""
@@ -117,13 +121,15 @@ def _declared_length(scope):
 class WsgiToAsgi:
     """max_body: the biggest request body, in bytes, or a function of the
     request's path that gives it. The body is read before the app (and its
-    login check) sees the request, so it's kept small where it can be."""
+    login check) sees the request, so it's kept small where it can be.
+    executor: the thread pool requests run in, shared by the servers that
+    pass the same one; without it this adapter makes its own."""
 
-    def __init__(self, app, max_body, threads=16, send_timeout=SEND_TIMEOUT):
+    def __init__(self, app, max_body, executor=None, send_timeout=SEND_TIMEOUT):
         self.app = app
         self.send_timeout = send_timeout
         self.max_body = max_body if callable(max_body) else (lambda _path: max_body)
-        self.executor = ThreadPoolExecutor(max_workers=threads, thread_name_prefix="web")
+        self.executor = executor or new_executor()
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "lifespan":

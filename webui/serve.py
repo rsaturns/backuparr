@@ -29,7 +29,7 @@ from hypercorn.config import Config
 import tls
 from config_store import ConfigError, load_config
 from webui.forwarded import ForwardedHeaders
-from webui.wsgi_asgi import WsgiToAsgi
+from webui.wsgi_asgi import WsgiToAsgi, new_executor
 
 log = logging.getLogger("backuparr.webui")
 
@@ -161,6 +161,9 @@ class Server:
 
     def __init__(self, app):
         self.app = ForwardedHeaders(app)
+        # One pool of request threads for both servers, kept when HTTP is
+        # closed and opened again.
+        self.executor = new_executor()
         self.loop = None
         self.stopping = None
         self.http_stop = None
@@ -202,7 +205,7 @@ class Server:
     async def _run(self, name, port, ssl_context, stop):
         """Serves until stopped; a port that can't be opened (in use, say)
         is logged and ends it early."""
-        app = WsgiToAsgi(_tagged(self.app, "https" if ssl_context else "http"), body_limit)
+        app = WsgiToAsgi(_tagged(self.app, "https" if ssl_context else "http"), body_limit, self.executor)
         try:
             await serve(app, _config(port, ssl_context), mode="asgi", shutdown_trigger=lambda: self._either(stop))
         except OSError as exc:
@@ -261,6 +264,7 @@ class Server:
         self.stopping.set()
         renew.cancel()
         await asyncio.gather(https_task, *([self.http_task] if self.http_task else []), return_exceptions=True)
+        self.executor.shutdown(wait=False, cancel_futures=True)
         return not failed
 
     async def _http_alone(self, stopped):
