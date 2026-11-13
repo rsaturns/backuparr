@@ -21,8 +21,8 @@ import restore_actions as ra
 import restore_version as rv
 from apps.http_headers import app_connection_config
 from backup import branded, humanize_error, log_failure
-from config_store import (DEST_NAMES, app_meta, instance_ids, instance_type, key_required, load_config, recorded_metadata,
-                          restore_supported)
+from config_store import (DEST_NAMES, SECRET_EXTRA_FIELDS, app_meta, instance_ids, instance_type, key_required, load_config,
+                          recorded_metadata, restore_supported)
 from webui import cookies
 from webui.jobs import OwnedJobs
 from webui.runs import _start_tracked_run, RESTORE_RUN_STATE, RUN_LOCK, RUN_STATE
@@ -635,6 +635,14 @@ def api_restore_check(dest_id, app_name):
     return jsonify(result)
 
 
+def _saved_secrets(app_name):
+    """The fields of an app's saved connection that only its own URL gets:
+    the key, the web login (login_only) and any password or other secret."""
+    meta = app_meta(app_name) or {}
+    return ({"api_key"} | set(SECRET_EXTRA_FIELDS.get(instance_type(app_name), ()))
+            | {f["name"] for f in meta.get("extra_fields", []) if f.get("login_only") or f.get("type") == "password"})
+
+
 def _restore_target(dest_id, app_name, data):
     """(cfg, destination root, app connection, None) for a restore or its
     check, with the request's one-off override applied, or
@@ -655,20 +663,25 @@ def _restore_target(dest_id, app_name, data):
     override = data.get("override")
     if override and not isinstance(override, dict):
         return None, None, None, (jsonify({"error": "override must be an object"}), 400)
+    elsewhere = False
     if override:
         allowed = _restore_override_fields(app_name)
         app_cfg = dict(app_cfg)
-        if override.get("url"):
-            # The saved web login belongs to the configured app: never take
-            # it to another one (a restore doesn't need it anyway).
-            for field in (app_meta(app_name) or {}).get("extra_fields", []):
-                if field.get("login_only"):
-                    app_cfg[field["name"]] = ""
+        if override.get("url") and override["url"] != app_cfg.get("url"):
+            # The saved key, login and passwords belong to the configured app:
+            # never take them to another address. The override gives its own.
+            elsewhere = True
+            for field in _saved_secrets(app_name):
+                app_cfg[field] = ""
         for field in allowed:
             value = override.get(field)
             if value:
                 app_cfg[field] = value
 
+    if elsewhere and key_required(app_name) and not app_cfg.get("api_key"):
+        label = (app_meta(app_name) or {}).get("key_label") or "API key"
+        return None, None, None, (jsonify({"error": f"{app_name}: enter the {label} for that URL - the saved one "
+                                                    "only goes to the app's own URL"}), 400)
     if not app_cfg.get("url") or (key_required(app_name) and not app_cfg.get("api_key")):
         return None, None, None, (jsonify({"error": f"{app_name} is not configured"}), 400)
     missing = _missing_required_field(app_name, app_cfg)

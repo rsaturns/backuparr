@@ -410,7 +410,9 @@ def test_scheduled_backup_and_web_restore_send_headers_at_every_phase(authed_cli
     def send(adapter, request, **kwargs):
         sent.append(request.copy())
         assert request.headers["Proxy-Authorization"] == SECRET
-        assert request.headers["X-Api-Key"] == "native-key"
+        # The override's own key goes to the override's URL, never the saved one.
+        expected_key = "target-key" if request.url.startswith("https://target.example") else "native-key"
+        assert request.headers["X-Api-Key"] == expected_key
         path = urlsplit(request.url).path
         if path == "/api/v3/command":
             return reply(request, {"id": 1})
@@ -441,7 +443,7 @@ def test_scheduled_backup_and_web_restore_send_headers_at_every_phase(authed_cli
     assert backup.run_backup(cfg) == (["radarr"], [])
     assert len(uploaded) == 1
     assert any(r.url.endswith("/backup/manual/config.zip") for r in sent)
-    response = authed_client.post("/api/restore/local/radarr", json={"confirm": True, "file": "backup.zip", "override": {"url": "https://target.example"}})
+    response = authed_client.post("/api/restore/local/radarr", json={"confirm": True, "file": "backup.zip", "override": {"url": "https://target.example", "api_key": "target-key"}})
     assert response.status_code == 200 and response.json["started"]
     assert isolated_webui.runs.RESTORE_RUN_STATE["ok"]
     assert any(r.url == "https://target.example/api/v3/system/backup/restore/upload" for r in sent)
