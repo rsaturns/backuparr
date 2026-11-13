@@ -5,6 +5,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Security
+
+- rclone 1.76.0 (from 1.75.0), with the security fixes from rclone 1.75.1 and 1.75.2 and its updated Go libraries: the image scan's 2 critical and 20 high findings in rclone are gone.
+
 ## [2.5.6] - 2026-11-07
 
 ### Changed
