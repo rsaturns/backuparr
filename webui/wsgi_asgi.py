@@ -19,10 +19,34 @@ from concurrent.futures import ThreadPoolExecutor
 from tempfile import SpooledTemporaryFile
 
 SPOOL_IN_MEMORY = 1024 * 1024
+# A download's read size. Each chunk crosses from the worker thread to the
+# event loop and back, so Werkzeug's own 8 KB made a large download CPU-bound
+# (about 100 MB/s, against 3 GB/s at 1 MiB, on a desktop).
+FILE_BLOCK = 1024 * 1024
 
 
 class ClientGone(Exception):
     pass
+
+
+class FileWrapper:
+    """PEP 3333's wsgi.file_wrapper, which Flask's send_file uses: the file
+    in FILE_BLOCK reads, whatever smaller size the app asks for."""
+
+    def __init__(self, file, block_size=FILE_BLOCK):
+        self.file = file
+        self.block_size = max(block_size, FILE_BLOCK)
+        if hasattr(file, "close"):
+            self.close = file.close
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        data = self.file.read(self.block_size)
+        if data:
+            return data
+        raise StopIteration
 
 
 def build_environ(scope, body):
@@ -45,6 +69,7 @@ def build_environ(scope, body):
         # The whole body is in `body` already, so reading to its end is
         # safe: without this, Werkzeug reads a chunked body as empty.
         "wsgi.input_terminated": True,
+        "wsgi.file_wrapper": FileWrapper,
         "wsgi.errors": sys.stderr,
         "wsgi.multithread": True,
         "wsgi.multiprocess": False,

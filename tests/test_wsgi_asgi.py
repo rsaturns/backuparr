@@ -139,6 +139,20 @@ def test_environ_follows_pep_3333():
     assert build_environ(scope(path="/é"), None)["PATH_INFO"] == "/é".encode("utf-8").decode("latin-1")
 
 
+def test_a_file_download_goes_in_large_blocks(tmp_path):
+    # Flask's send_file asks wsgi.file_wrapper for 8 KB reads; each chunk is
+    # a trip between threads, so the adapter's wrapper reads 1 MiB.
+    from flask import Flask, send_file
+    path = tmp_path / "backup.zip"
+    path.write_bytes(b"x" * (3 * 1024 * 1024 + 5))
+    flask_app = Flask(__name__)
+    flask_app.get("/x")(lambda: send_file(path, as_attachment=True))
+    sent = run(call(WsgiToAsgi(flask_app.wsgi_app, 100)))
+    chunks = [m for m in sent if m["type"] == "http.response.body" and m.get("body")]
+    assert body_of(sent) == path.read_bytes()
+    assert len(chunks) == 4  # three full blocks and the last 5 bytes
+
+
 def test_headers_with_underscores_are_dropped():
     # A Go proxy (Caddy, Traefik) sends X_Forwarded_For after its own
     # X-Forwarded-For; it must not reach the same WSGI key.
