@@ -58,6 +58,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - On a phone, Prowlarr's card no longer runs off the screen: its buttons wrap onto a second line.
 - On a phone, Run & Status no longer scrolls sideways during a run: its buttons wrap onto a second line.
 - Leaving Settings without saving now discards the edits: before, they stayed on the page, looking saved, and the next Save saved them.
+- Google Drive's Choose folder opens its picker in the middle of the window; on a scrolled page it could open off screen.
 - The footer says "Update Available" only when the latest release is newer, not for a newer build or a beta.
 - A full Dropbox or OneDrive now gets the "the destination is out of space" hint.
 - An app answering HTTP 401 or 403 now also points at the Service Authentication headers when some are set: a proxy refusing a request looks the same as a wrong API key.

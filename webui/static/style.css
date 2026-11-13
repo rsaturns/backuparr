@@ -1704,3 +1704,21 @@ code {
 }
 .user-menu-item + .user-menu-item { border-top: 1px solid var(--border); }
 .user-menu-item:hover, .user-menu-item:focus-visible { background: var(--bg); color: var(--accent); }
+
+/* Google's folder picker places itself on the page (position: absolute) for
+   the scroll position it opened at, and the page can scroll on after, leaving
+   it off screen. Keep it in the middle of the window instead - on a narrow
+   screen at the left edge, where its Select button is. */
+.picker-dialog {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%);
+}
+
+@media (max-width: 600px) {
+  .picker-dialog {
+    left: 0 !important;
+    transform: translateY(-50%);
+  }
+}

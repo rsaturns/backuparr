@@ -2433,8 +2433,12 @@ async function openGooglePicker() {
     const view = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
       .setSelectFolderEnabled(true)
       .setIncludeFolders(true);
+    // As large as fits the window, within Google's limits (566x350 to 1051x650).
+    const width = Math.max(566, Math.min(1051, window.innerWidth - 32));
+    const height = Math.max(350, Math.min(650, window.innerHeight - 32));
     const builder = new google.picker.PickerBuilder()
       .addView(view)
+      .setSize(width, height)
       .setTitle("Choose a folder for Backuparr's backups")
       .setOAuthToken(accessToken)
       .setDeveloperKey(gdriveCfg.developer_key)
