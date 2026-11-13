@@ -14,7 +14,7 @@ import backup
 import manifest_backfill
 from backup import describe_failure
 from config_store import APP_CATEGORIES, APP_META, ConfigError, DESTINATION_META, DISCOVERABLE_APPS, SELF_APP
-from webui import auth, backups, cookies, destinations, ha, https, runs, services, settings
+from webui import auth, backups, cookies, destinations, ha, https, runs, serve, services, settings
 from webui.version import VERSION
 
 app = Flask(__name__)
@@ -119,8 +119,9 @@ def create_app():
     backup.configure_logging()
     if auth._AUTH_DISABLED:
         log.warning("BACKUPARR_DISABLE_AUTH is set: local authentication is DISABLED. "
-                    "Anyone who can reach this port has full access - make sure an "
-                    "authenticating reverse proxy protects it and direct access is blocked.")
+                    "Anyone who can reach port %s or %s has full access - make sure an "
+                    "authenticating reverse proxy protects them and direct access to both is blocked.",
+                    serve.http_port(), serve.https_port())
     app.secret_key = auth._load_or_create_secret_key()
     runs.start_scheduler()
     manifest_backfill.start(should_pause=runs.busy)
