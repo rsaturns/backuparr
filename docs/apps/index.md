@@ -13,7 +13,7 @@ has_toc: false
 | Profilarr | The app's own backup (`POST /api/v1/backups`), downloaded and then deleted on the server | By hand: the Restore tab gives the download and the steps - see the [Profilarr note](profilarr.md) |
 | Bazarr | The app's own backup (`POST /api/system/backups`), downloaded and then deleted on the server | Written into Bazarr's mounted backup folder, then restored over the API. Downloads depend on Bazarr's web auth - see the [Bazarr note](bazarr.md) |
 | Tdarr | Every internal database collection, read over `/api/v2/cruddb` | Destructive: each collection is wiped, then refilled - see the [Tdarr note](tdarr.md) |
-| SABnzbd | `get_config` over the API. SABnzbd masks every password as `**********` | Settings and Usenet servers over `set_config`; you're asked for each server's password. Categories, RSS feeds and sorters aren't restored |
+| SABnzbd | `get_config` over the API. SABnzbd masks every password as `**********` - see the [SABnzbd note](sabnzbd.md) | Settings and Usenet servers over `set_config`; you're asked for each server's password. Categories, RSS feeds and sorters aren't restored |
 | NZBGet | Every setting, real passwords included, over JSON-RPC `loadconfig` | `saveconfig`, then NZBGet reloads - see the [NZBGet note](nzbget.md) |
 | Tautulli | `download_database` and `download_config` | Config only, via `import_config` - see the [Tautulli note](tautulli.md) |
 | Jellyfin (10.11+) | Jellyfin's own backup (`POST /Backup/Create`), picked up from its mounted backups folder | Over `POST /Backup/Restore`; Jellyfin restarts - see the [Jellyfin note](jellyfin.md) |

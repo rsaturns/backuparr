@@ -1,7 +1,7 @@
 ---
 title: Synology DSM
 parent: Apps
-nav_order: 17
+nav_order: 18
 ---
 
 # Synology DSM

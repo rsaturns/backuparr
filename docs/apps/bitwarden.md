@@ -9,6 +9,8 @@ nav_order: 2
 This is the official self-hosted Bitwarden server. For Vaultwarden, see the
 [Vaultwarden note](vaultwarden.md).
 
+## Setting it up
+
 Bitwarden has no backup API. Backuparr reads a folder you mount into it
 instead, and works out from that folder which kind of install you have:
 

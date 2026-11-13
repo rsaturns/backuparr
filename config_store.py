@@ -86,6 +86,8 @@ _APP_CATEGORY = {
     "qnap": "server", "synology": "server", "unraid": "server",
 }
 
+# An app's "icon_dark", if any, replaces its "icon" in the dark theme: the
+# card, the Overview and the status bar follow the theme toggle.
 # Drives the web UI's forms generically. restore_warning is shown on the
 # Restore tab before an app's restore. manual_restore: an app Backuparr can't
 # restore itself - the Restore tab offers the backup's download, its "steps"
@@ -509,6 +511,7 @@ APP_META = [
         "id": "qnap",
         "label": "QNAP QuTS hero",
         "icon": "qnap.svg",
+        "icon_dark": "qnap-light.svg",
         # QuTS hero's system configuration file (.bin) - its settings, not the
         # data in its shared folders - from the Control Panel's own export
         # (/qmigrate/v1/backup/download), signed in as an administrator or an
@@ -628,9 +631,24 @@ APP_META = [
 # its backups are always encrypted (self_backup.py).
 SELF_APP = {"id": "backuparr", "label": "Backuparr", "icon": "logo.png", "category": "server", "always_encrypted": True}
 
+# Each card's "?" opens its app's page on the docs site at "Setting it up".
+# Radarr, Sonarr, Lidarr and Prowlarr share one page; every other app's page
+# is named after its id. Backuparr's card links to its own backup's section.
+DOCS_URL = "https://rsaturns.github.io/backuparr/"
+SETUP_SECTION = "setting-it-up"
+_DOCS_PAGE = {"radarr": "servarr", "sonarr": "servarr", "lidarr": "servarr", "prowlarr": "servarr"}
+
+
+def docs_page(app_type):
+    """The docs page (docs/apps/<page>.md) an app's card links to."""
+    return _DOCS_PAGE.get(app_type, app_type)
+
+
+SELF_APP["help_url"] = f"{DOCS_URL}security/#backuparrs-own-backup"
 for _meta in APP_META:
     _meta["discoverable"] = _meta["id"] in DISCOVERABLE_APPS
     _meta["category"] = _APP_CATEGORY[_meta["id"]]
+    _meta["help_url"] = f"{DOCS_URL}apps/{docs_page(_meta['id'])}/#{SETUP_SECTION}"
 
 DEST_NAMES = ["local", "gdrive", "onedrive", "dropbox"]
 

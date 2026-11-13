@@ -6,6 +6,22 @@ nav_order: 13
 
 # Profilarr
 
+## Setting it up
+
+On Profilarr's card, enter its URL - for example `http://profilarr:6868` - and
+an API key. Make one in Profilarr's **Settings > Security > API Keys > New**:
+
+- **Name:** something like `Backuparr`.
+- **Expires After:** **Never** - a key stops working when it expires (the
+  default is 90 days), and backups with it.
+- **Access:** only what Backuparr uses - **System: Read**, **Jobs: Read** and
+  **Backups: Read & write** - or **Full access**.
+
+Profilarr shows the key once: copy it onto the card, then click **Test
+connection**.
+
+## What's in a backup
+
 Profilarr strips secrets from its backups: Arr instances (their URLs, API keys
 and sync settings), notification services, accounts and sessions, API keys,
 linked database credentials, and AI and TMDB keys. Re-add them after a

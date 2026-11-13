@@ -19,6 +19,8 @@ A Plex backup has two parts:
 Images, caches, codecs and plugins are left out; a library scan brings the
 images back.
 
+## Setting it up
+
 Mount Plex's data folder - `Library/Application Support/Plex Media Server`
 inside its `/config`, in both the official and linuxserver images:
 
@@ -42,6 +44,8 @@ folder** = `/mnt/plex`.
   `plex.direct` address when the URL is empty or points at the same machine.
   If the popup is blocked, use the **Open Plex sign-in** link. You can also
   [find a token by hand](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/).
+## Backups and restores
+
 - **The archive is sensitive:** `Preferences.xml` holds the server's plex.tv
   sign-in token.
 - **Restore needs Plex stopped** (`docker stop plex`); Backuparr refuses while

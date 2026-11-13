@@ -6,6 +6,8 @@ nav_order: 3
 
 # Emby
 
+## Setting it up
+
 Emby has no backup API, so Backuparr reads **Emby's data folder** (its
 `/config`, in both the official and linuxserver images):
 
@@ -17,6 +19,8 @@ Emby has no backup API, so Backuparr reads **Emby's data folder** (its
 Then fill in the card: the URL, an API key from **Settings > Advanced > API
 Keys**, and **Data folder** = `/mnt/emby`. **Test connection** also checks that
 the folder belongs to this server.
+
+## Backups and restores
 
 - **What's in the backup:** the databases (users, watched state, favourites,
   playlists, collections, libraries, API keys), server and user settings,
