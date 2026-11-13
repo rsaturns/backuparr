@@ -122,6 +122,8 @@
                   <label class="field toggle-field">
                     <span class="switch"><input type="checkbox" id="ha-enabled"><span class="slider"></span></span>
                     <span>Enable Home Assistant integration</span>
+                    {# A link inside the label: following it doesn't flip the switch. #}
+                    <a class="help-tip help-tip-link" href="https://github.com/rsaturns/ha-backuparr" target="_blank" rel="noopener noreferrer" aria-label="The Backuparr integration for Home Assistant, on GitHub" data-tip="Needs the Backuparr integration in Home Assistant. Click to open it.">?</a>
                   </label>
                   <div id="ha-token-field" class="field hidden">
                     <span class="field-label">Token <span class="muted">(shown once - copy it into Home Assistant)</span></span>

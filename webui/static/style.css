@@ -753,6 +753,11 @@ input:focus, select:focus, textarea:focus {
 
 .help-tip:hover,
 .help-tip:focus { color: var(--accent); border-color: var(--accent); outline: none; }
+/* A "?" that's also a link (the Home Assistant integration's). It ends its
+   line, so its tooltip opens to the left, within the card on a phone. */
+a.help-tip-link { cursor: pointer; text-decoration: none; }
+a.help-tip-link:hover::after,
+a.help-tip-link:focus::after { left: auto; right: -6px; transform: none; }
 
 /* A card's "?": its app's page in the docs, at "Setting it up". */
 .card-help {
