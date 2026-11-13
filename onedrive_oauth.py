@@ -10,6 +10,7 @@ import requests
 import rclone_util
 
 REMOTE_NAME = "backuparr-onedrive"
+RCLONE_TYPE = "onedrive"
 TOKEN_FIELD = "token"
 
 
@@ -67,4 +68,4 @@ def sync_rclone_remote(dest_cfg, force=False, remotes=None):
         return
     if force or remote is None:
         fields["token"] = dest_cfg["token"]
-    rclone_util.config_set(REMOTE_NAME, "onedrive", fields, force=force)
+    rclone_util.config_set(REMOTE_NAME, RCLONE_TYPE, fields, force=force)

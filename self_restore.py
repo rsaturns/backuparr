@@ -19,6 +19,7 @@ from cryptography.fernet import Fernet
 import atomic_file
 import auth_store
 import config_store
+import destination_util
 import manifest
 import rclone_util
 import runlog
@@ -142,7 +143,15 @@ def apply(members, key):
             rclone_util.config_delete(name)
         for name, fields in remotes.items():
             fields = dict(fields)
-            rclone_util.config_set(name, fields.pop("type"), fields, force=True)
+            kind = fields.pop("type")
+            # Only the remotes Backuparr keeps, as the type each one is: some
+            # rclone remotes can run a command (sftp's ssh), and nothing else
+            # in rclone.conf is Backuparr's to bring back.
+            if destination_util.OWN_REMOTES.get(name) != kind:
+                log.warning("backuparr: left out the rclone remote %r (%s) from the backup - it isn't one of "
+                            "Backuparr's own", name, kind)
+                continue
+            rclone_util.config_set(name, kind, fields, force=True)
     except rclone_util.RcloneError as exc:
         warnings.append(f"The cloud connections couldn't all be restored ({exc.detail}); "
                         "the next backup sets them up again from the restored settings.")
