@@ -3,7 +3,7 @@
 All notable changes to this project are documented in this file. The
 format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [3.0.0-beta] - 2026-11-13
 
 **"You get a backup! And YOU get a backup! Everything you host gets a backup!"** 3.0.0-beta is the biggest Backuparr yet: it grows past the media apps to the rest of what you host.
 
