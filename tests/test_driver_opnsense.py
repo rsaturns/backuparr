@@ -73,7 +73,7 @@ def test_connection_reports_the_version_and_history_with_basic_auth(app, server)
 @pytest.mark.parametrize("status, fragment", [
     (401, "the API key or secret is wrong"),
     (403, "needs the \"Diagnostics: Configuration History\" and \"Lobby: Dashboard\" privileges"),
-    (404, "update OPNsense to 24.1 or newer"),
+    (404, "update OPNsense to 24.7 or newer"),
 ])
 def test_refusals_say_what_to_fix(app, server, status, fragment):
     server.routes["GET /api/core/backup/backups/this"] = (status, {})
@@ -84,6 +84,14 @@ def test_refusals_say_what_to_fix(app, server, status, fragment):
 def test_the_version_needs_lobby_dashboard(app, server):
     server.routes["GET /api/diagnostics/system/system_information"] = (403, {"status": 403})
     with pytest.raises(OpnsenseError, match='give it the "Lobby: Dashboard" privilege too'):
+        app.test_connection()
+
+
+def test_a_firewall_older_than_24_7_is_told_to_update(app, server):
+    # What OPNsense 24.1 answers: system_information arrived in 24.7.
+    server.routes["GET /api/diagnostics/system/system_information"] = (
+        400, {"message": "action system_information not found", "status": 400})
+    with pytest.raises(OpnsenseError, match="opnsense: 24.7 or newer is needed - update the firewall"):
         app.test_connection()
 
 

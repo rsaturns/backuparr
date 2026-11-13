@@ -6,7 +6,7 @@ nav_order: 9
 
 # OPNsense
 
-OPNsense 24.1 or newer is backed up over its API: Backuparr downloads the
+OPNsense 24.7 or newer is backed up over its API: Backuparr downloads the
 firewall's current `config.xml`, the file that holds its whole setup (rules,
 interfaces, VLANs, DHCP, VPNs, users and their keys). OPNsense's backups are
 always encrypted, because `config.xml` holds private keys and password hashes.

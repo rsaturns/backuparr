@@ -15,7 +15,9 @@ OPNsense/Core/Api/BackupController) serves it:
 Both need the "Diagnostics: Configuration History" privilege
 (ui/core/backup/history*, api/core/backup/*). The version recorded with
 each backup comes from GET /api/diagnostics/system/system_information
-("versions": ["OPNsense 26.7-amd64", ...]), which needs "Lobby: Dashboard"
+("versions": ["OPNsense 26.7-amd64", ...]; added in 24.7, so 24.7 is the
+oldest OPNsense supported - 24.1 answers 400 "action system_information
+not found"), which needs "Lobby: Dashboard"
 (read-only system information; it can't change settings or update
 firmware) - firmware/info would need "System: Firmware", which can, and
 config.xml has had no <version> since 26.7. A dedicated user with just
@@ -69,7 +71,7 @@ class OpnsenseApp:
         if res.status_code == 403:
             raise OpnsenseError(f"opnsense: the API key's user needs the {PRIVILEGES} privileges")
         if res.status_code == 404:
-            raise OpnsenseError("opnsense: no backup API at this URL - check it, and update OPNsense to 24.1 or newer")
+            raise OpnsenseError("opnsense: no backup API at this URL - check it, and update OPNsense to 24.7 or newer")
         if 300 <= res.status_code < 400:
             raise OpnsenseError("opnsense: the URL redirects - use the firewall's https:// address")
         res.raise_for_status()
@@ -91,6 +93,8 @@ class OpnsenseApp:
         if res.status_code == 403:
             raise OpnsenseError("opnsense: the API key's user can't read the firmware version - give it the "
                                 "\"Lobby: Dashboard\" privilege too")
+        if res.status_code in (400, 404):
+            raise OpnsenseError("opnsense: 24.7 or newer is needed - update the firewall")
         res.raise_for_status()
         try:
             first = res.json()["versions"][0]
