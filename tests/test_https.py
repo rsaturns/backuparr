@@ -419,6 +419,50 @@ def test_http_turned_off_again_while_it_is_closing_stays_closed(running_server):
     assert _wait_for_http(http_port, False, tries=1) and not server.http_open()
 
 
+def _taken_port():
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    sock.listen()
+    return sock
+
+
+@pytest.mark.parametrize("https_only, http_taken, keeps_running", [
+    (False, False, True),  # HTTP is still a way in
+    (True, False, False),  # HTTPS only: no way in at all
+    (False, True, False),  # neither port opens
+])
+def test_https_that_cant_start_leaves_http_serving_when_it_can(monkeypatch, https_only, http_taken, keeps_running):
+    from webui import serve
+    taken = _taken_port()
+    other = _taken_port() if http_taken else None
+    http_port = other.getsockname()[1] if other else _free_port()
+    monkeypatch.setenv("WEBUI_HOST", "127.0.0.1")
+    monkeypatch.setenv("WEBUI_PORT", str(http_port))
+    monkeypatch.setenv("WEBUI_HTTPS_PORT", str(taken.getsockname()[1]))
+    monkeypatch.setattr(serve, "https_only", lambda cfg=None: https_only)
+
+    def app(environ, start_response):
+        start_response("200 OK", [])
+        return [environ["backuparr.listener"].encode()]
+
+    server = serve.Server(app)
+    result = {}
+    thread = threading.Thread(target=lambda: result.setdefault("ok", asyncio.run(server.main())), daemon=True)
+    thread.start()
+    try:
+        if keeps_running:
+            assert _wait_for_http(http_port, True) and _get(http_port, False) == (200, b"http")
+            thread.join(1)
+            assert thread.is_alive()
+            server.loop.call_soon_threadsafe(server.stopping.set)
+        thread.join(10)
+        assert not thread.is_alive() and result["ok"] is keeps_running
+    finally:
+        taken.close()
+        if other:
+            other.close()
+
+
 def _served_fingerprint(port):
     pem = ssl.get_server_certificate(("127.0.0.1", port))
     return tls.fingerprint(x509.load_pem_x509_certificate(pem.encode()))
