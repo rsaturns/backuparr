@@ -11,11 +11,9 @@ on:
       - "release-*"
     paths:
       - "docs/**"
-  push:
-    branches:
-      - main
-    paths:
-      - "docs/**"
+  # While 3.0 is in beta the site is published from release-3.0.0 (its copy
+  # of this workflow), so main doesn't deploy: a 2.5.x release would put
+  # 2.5's docs over the beta's. 3.0.0 brings the main trigger back.
   workflow_dispatch:
 
 # One deploy at a time, and never cancel one mid-way.
