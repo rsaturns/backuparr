@@ -44,6 +44,22 @@ def secrets_key_in_tmp(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def sessions_in_tmp(tmp_path, monkeypatch):
+    """Every test's list of signed-in sessions lives in its own tmp_path."""
+    import session_store
+    monkeypatch.setattr(session_store, "SESSIONS_PATH", str(tmp_path / "sessions.json"))
+    monkeypatch.setattr(session_store, "_sessions", None)
+
+
+def sign_in(session):
+    """Marks a test client's session (from session_transaction()) signed in,
+    as a real login does: authed, with an id the server lists."""
+    import session_store
+    session["authed"] = True
+    session["sid"] = session_store.start()
+
+
+@pytest.fixture(autouse=True)
 def tls_in_tmp(tmp_path, monkeypatch):
     """Every test's HTTPS key and certificate live in its own tmp_path (#177),
     with no certificate of the user's, HTTPS only unset, and no server

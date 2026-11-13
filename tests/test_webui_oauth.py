@@ -10,6 +10,7 @@ import dropbox_oauth
 import gdrive_oauth
 import onedrive_oauth
 import rclone_token
+from conftest import sign_in
 
 
 def gdrive(webui):
@@ -101,7 +102,7 @@ def test_a_state_only_works_in_the_browser_that_started_the_sign_in(authed_clien
     state = start_flow(authed_client, isolated_webui)
     other = isolated_webui.app.test_client()  # another signed-in browser
     with other.session_transaction() as session:
-        session["authed"] = True
+        sign_in(session)
     assert "invalid or expired" in query(callback(other, state=state, code="c"))["gdrive_error"][0]
 
 

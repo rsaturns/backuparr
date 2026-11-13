@@ -98,7 +98,8 @@ destination. They're kept like this:
 ## The web UI
 
 - **A login by default**, with a lockout after repeated wrong passwords.
-  Changing the password signs out every other browser.
+  Signing out ends the session on the server, so a copied cookie stops
+  working, and changing the password signs out every other browser.
 - **HTTPS on its own port** (8991), with a self-signed certificate Backuparr
   makes, or your own. **HTTPS only** closes plain HTTP. See
   [HTTPS](security.md#https).

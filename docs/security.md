@@ -13,6 +13,10 @@ enter the current password and the new one twice (at least 8 characters).
 Every other signed-in browser is signed out, and wrong current passwords count
 towards the login lockout.
 
+**Signing out** ends the session on the server too, so a copy of its cookie
+stops working. Backuparr keeps the list of signed-in browsers in
+`sessions.json`, as hashes, never the session ids themselves.
+
 **Authentication at a reverse proxy:** if your proxy (e.g. Authelia) already
 protects every request, set `BACKUPARR_DISABLE_AUTH=true` and recreate the
 container. The UI and API then need no local login, and the setup, login,
