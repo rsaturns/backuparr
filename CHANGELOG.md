@@ -55,6 +55,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - A saved schedule that isn't valid no longer just stops backups without a word: the Overview and Run & Status say "Your backup schedule isn't valid any more. Check it in Settings.", and the log says so once (#166).
 - On a phone, Prowlarr's card no longer runs off the screen: its buttons wrap onto a second line.
+- On a phone, Run & Status no longer scrolls sideways during a run: its buttons wrap onto a second line.
+- The footer says "Update Available" only when the latest release is newer, not for a newer build or a beta.
+- A full Dropbox now gets the "the destination is out of space" hint.
+- An app answering HTTP 401 or 403 now also points at the Service Authentication headers when some are set: a proxy refusing a request looks the same as a wrong API key.
 
 ## [2.5.6] - 2026-11-07
 
