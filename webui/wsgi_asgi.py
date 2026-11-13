@@ -51,7 +51,12 @@ def build_environ(scope, body):
         environ["REMOTE_ADDR"] = scope["client"][0]
     for raw_name, raw_value in scope.get("headers", []):
         name = raw_name.decode("latin-1").lower()
-        key = {"content-length": "CONTENT_LENGTH", "content-type": "CONTENT_TYPE"}.get(
+        if "_" in name:
+            # X_Forwarded_For would land on X-Forwarded-For's key and, sent
+            # after it, pass for the proxy's value; dropped, as Waitress,
+            # nginx and Apache do.
+            continue
+        key ={"content-length": "CONTENT_LENGTH", "content-type": "CONTENT_TYPE"}.get(
             name, "HTTP_" + name.upper().replace("-", "_"))
         value = raw_value.decode("latin-1")
         if key in environ:

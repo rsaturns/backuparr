@@ -129,6 +129,15 @@ def test_environ_follows_pep_3333():
     assert build_environ(scope(path="/é"), None)["PATH_INFO"] == "/é".encode("utf-8").decode("latin-1")
 
 
+def test_headers_with_underscores_are_dropped():
+    # A Go proxy (Caddy, Traefik) sends X_Forwarded_For after its own
+    # X-Forwarded-For; it must not reach the same WSGI key.
+    environ = build_environ(scope(headers=[(b"x-forwarded-for", b"10.0.0.1"), (b"x_forwarded_for", b"1.2.3.4"),
+                                           (b"x_thing", b"1")]), None)
+    assert environ["HTTP_X_FORWARDED_FOR"] == "10.0.0.1"
+    assert "HTTP_X_THING" not in environ
+
+
 def test_a_download_stops_when_the_browser_goes_away():
     produced = []
 
