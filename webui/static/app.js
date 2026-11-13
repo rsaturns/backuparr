@@ -3849,6 +3849,23 @@ function handleGdriveRedirect() {
   document.querySelector('.tab-btn[data-tab="settings"]').click();
 }
 
+// Whether release `latest` ("2.5.6") is newer than `current` ("3.0.0-beta"):
+// numbers compared in turn, and a release is newer than its own pre-release.
+// A beta, or a build newer than the latest release, isn't told to update.
+function isNewerVersion(latest, current) {
+  const parts = (v) => {
+    const [core, ...pre] = String(v || "").split("-");
+    return { nums: core.split(".").map((n) => parseInt(n, 10) || 0), pre: pre.length > 0 };
+  };
+  const a = parts(latest);
+  const b = parts(current);
+  for (let i = 0; i < Math.max(a.nums.length, b.nums.length); i++) {
+    const diff = (a.nums[i] || 0) - (b.nums[i] || 0);
+    if (diff !== 0) return diff > 0;
+  }
+  return !a.pre && b.pre;
+}
+
 // Compares the running version against GitHub's latest published Release.
 // Plain fetch (not apiFetch) - this is an external, unauthenticated call,
 // not one of Backuparr's own API routes. Fails silently (leaves the
@@ -3869,7 +3886,7 @@ async function checkForUpdate() {
 
   const dot = document.getElementById("version-check-dot");
   const text = document.getElementById("version-check-text");
-  if (latest === versionEl.dataset.version) {
+  if (!isNewerVersion(latest, versionEl.dataset.version)) {
     dot.dataset.state = "ok";
     text.className = "version-check-text ok";
     text.textContent = "Current Version";
