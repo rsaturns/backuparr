@@ -161,3 +161,24 @@ def test_a_plain_socket_for_http(server):
     sock = cert_pin.connect_socket(server["url"].replace("https://", "http://"), "homeassistant", None, timeout=5)
     assert not hasattr(sock, "getpeercert")
     sock.close()
+
+
+def test_a_failed_handshake_to_a_pinned_certificate_closes_its_socket(monkeypatch):
+    closed = []
+
+    class Raw:
+        def close(self):
+            closed.append(True)
+
+    class Context:
+        minimum_version = check_hostname = verify_mode = None
+
+        def wrap_socket(self, sock, server_hostname=None):
+            raise ssl.SSLError("handshake failed")
+
+    monkeypatch.setattr(cert_pin.socket, "create_connection", lambda address, timeout=None: Raw())
+    monkeypatch.setattr(cert_pin.ssl, "create_default_context", lambda *a, **k: Context())
+    pinned = {"sha256": "a" * 64, "subject": "x", "not_after": "2030-01-01T00:00:00+00:00"}
+    with pytest.raises(ssl.SSLError):
+        cert_pin.connect_socket("https://ha.lab:8123", "homeassistant", pinned, timeout=1)
+    assert closed == [True]
