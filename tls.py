@@ -242,9 +242,12 @@ def refused(cert, reason):
     it won't use, say): Backuparr's own is served instead, and the card says
     why, until either file changes."""
     try:
-        _refused[_files_id(_read(cert.cert_path), _read(cert.key_path))] = f"HTTPS can't use it ({reason})"
+        files_id = _files_id(_read(cert.cert_path), _read(cert.key_path))
     except OSError:
-        pass  # gone already: ensure() says so
+        files_id = None  # gone already: ensure() says so
+    if files_id is not None:
+        with _lock:  # ensure() reads it under the lock, from request threads
+            _refused[files_id] = f"HTTPS can't use it ({reason})"
     return ensure()
 
 
