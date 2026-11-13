@@ -6,6 +6,8 @@ nav_order: 5
 
 # Updating
 
+> **These docs cover Backuparr 3.0.0-beta.** On 2.5.7? Its docs are [on GitHub](https://github.com/rsaturns/backuparr/tree/v2.5.7/docs).
+
 With Compose:
 
 ```sh
@@ -13,11 +15,66 @@ docker compose pull backuparr && docker compose up -d backuparr
 ```
 
 On Unraid, click **Apply update** on the Docker tab. A pinned tag (such as
-`rsaturns/backuparr:2.5.7`) only changes when you edit it.
+`rsaturns/backuparr:3.0.0-beta`) only changes when you edit it.
 
 Updating keeps your settings, login and backups. A backup Backuparr makes of
 itself can only be restored on the same or a newer version, so don't downgrade
 and then restore one.
+
+## Updating to 3.0.0-beta
+
+3.0 changes a lot, and while it's in beta `latest` stays on 2.5.7: if you'd
+rather wait until 3.x is out of beta, do nothing. To try the beta, set the
+image to `rsaturns/backuparr:3.0.0-beta` (on Unraid, set **Repository** to it).
+
+### Before you update
+
+- **Find your encryption key.** From 3.0 every backup is encrypted with it,
+  and restoring one on another install needs it. See
+  [Your encryption key](../security.md#your-encryption-key).
+- **Run a full backup on 2.5.7.** Should you go back, those are backups 2.5.7
+  can restore, Backuparr's own included.
+
+### Your container
+
+- **Publish port 8991** for HTTPS: add `"8991:8991"` to the container's ports
+  (on Unraid, add a port with container port 8991). Port 8990 keeps working;
+  the [Home Assistant integration](../home-assistant.md) needs 8991. See
+  [HTTPS](../security.md#https).
+- **With `BACKUPARR_DISABLE_AUTH`**, block 8991 the same way you block 8990
+  (host networking or a firewall).
+- **Behind a reverse proxy**, nothing changes: keep `BACKUPARR_FORCE_HTTPS` and
+  `BACKUPARR_TRUSTED_PROXY`. To switch on HTTPS only, point the proxy at 8991.
+
+### After you update
+
+- **Sign in again** once: signing out now ends a session on the server too,
+  and sessions from before 3.0 don't have what that needs.
+- **Backups are encrypted** with your encryption key from the next run,
+  including apps you set up before; Backuparr says so once. Turn it off for
+  an app on its card in Settings. See
+  [Encrypted backups](../security.md#encrypted-backups).
+- **Backups made before stay as they are** and still restore.
+- **Backuparr backs itself up** in the background on the first start of 3.0
+  (if its own backup is on and a destination is set up). Its backups from
+  before 3.0 can't be restored any more: restore one with Backuparr 2.5.7,
+  then update. They stay until retention removes them. See
+  [Restoring Backuparr itself](../restoring.md#restoring-backuparr-itself).
+- **Deleting on Google Drive and OneDrive is permanent:** backups that
+  retention or History removes no longer go to the trash or recycle bin,
+  which counts against your storage.
+
+### Going back to 2.5.7
+
+Set the image back to `rsaturns/backuparr:2.5.7` (or `latest`, while 3.0 is
+in beta). Your settings, login and backups stay, with two limits:
+
+- **Backups 3.0 made are encrypted**, and 2.5.7 can't restore them. Restore
+  them with 3.0, or decrypt one with the 3.0.0-beta image's `decrypt` command
+  (see [Decrypting without Backuparr](../security.md#decrypting-without-backuparr))
+  and restore it in the app.
+- **Apps only 3.0 backs up**, such as OPNsense or Pi-hole, don't show in
+  2.5.7, and saving Settings there removes them.
 
 ## Updating to 2.5.0
 

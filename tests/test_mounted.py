@@ -71,3 +71,123 @@ def test_remove_journal_files(tmp_path):
     mounted.remove_journal_files(str(tmp_path / "app.db"))  # nothing left to remove
     assert list(tmp_path.iterdir()) == []
 
+
+
+# --- write_archive (#196) -----------------------------------------------------
+
+JPEG = b"\xff\xd8\xff\xe0" + b"\0" * 300
+PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 300
+WEBP = b"RIFF\0\0\0\0WEBP" + b"\0" * 300
+
+
+def app_folder(root):
+    (root / "metadata/library/aa").mkdir(parents=True)
+    (root / "metadata/library/aa/poster.jpg").write_bytes(JPEG)
+    (root / "metadata/library/aa/logo.png").write_bytes(PNG)
+    (root / "metadata/library/aa/backdrop").write_bytes(WEBP)  # Plex's images have no extension.
+    (root / "metadata/library/aa/item.nfo").write_text("<nfo>" + "x" * 300 + "</nfo>")
+    (root / "config").mkdir()
+    (root / "config/system.xml").write_text("<cfg/>")
+    return root
+
+
+def test_write_archive_takes_staged_files_then_the_apps_files_read_where_they_are(tmp_path):
+    root = app_folder(tmp_path / "app")
+    (tmp_path / "stage/data").mkdir(parents=True)
+    (tmp_path / "stage/data/library.db").write_bytes(b"snapshot")
+    (tmp_path / "stage/backuparr-app.json").write_text("{}")
+    added = mounted.write_archive(str(tmp_path / "out.zip"), str(tmp_path / "stage"),
+                                  [(str(root / "metadata"), "metadata"), (str(root / "config/system.xml"), "config/system.xml"),
+                                   (str(root / "missing"), "missing")], str(root), Boom, "app", "App")
+    with zipfile.ZipFile(tmp_path / "out.zip") as zf:
+        assert zf.testzip() is None
+        assert zf.namelist() == ["backuparr-app.json", "data/library.db", "metadata/library/aa/backdrop",
+                                 "metadata/library/aa/item.nfo", "metadata/library/aa/logo.png",
+                                 "metadata/library/aa/poster.jpg", "config/system.xml"]
+        assert zf.read("metadata/library/aa/poster.jpg") == JPEG
+        kinds = {i.filename: i.compress_type for i in zf.infolist()}
+    assert added == 5
+    # Images are compressed already: stored as they are; anything else is deflated.
+    assert {n: kinds[n] for n in kinds if n.startswith("metadata/")} == {
+        "metadata/library/aa/backdrop": zipfile.ZIP_STORED, "metadata/library/aa/logo.png": zipfile.ZIP_STORED,
+        "metadata/library/aa/poster.jpg": zipfile.ZIP_STORED, "metadata/library/aa/item.nfo": zipfile.ZIP_DEFLATED}
+
+
+def test_write_archive_follows_symlinks_only_inside_the_mounted_folder(tmp_path):
+    root = app_folder(tmp_path / "app")
+    (tmp_path / "secret").write_text("Backuparr's own file")
+    links = root / "metadata/links"
+    links.mkdir()
+    (links / "inside").symlink_to(root / "metadata/library/aa/poster.jpg")
+    (links / "outside").symlink_to(tmp_path / "secret")
+    (links / "dangling").symlink_to(root / "gone")
+    (root / "metadata/out-dir").symlink_to(tmp_path, target_is_directory=True)
+    (tmp_path / "stage").mkdir()
+    mounted.write_archive(str(tmp_path / "out.zip"), str(tmp_path / "stage"), [(str(root / "metadata"), "metadata")],
+                          str(root), Boom, "app", "App")
+    with zipfile.ZipFile(tmp_path / "out.zip") as zf:
+        names = zf.namelist()
+        assert zf.read("metadata/links/inside") == JPEG
+    assert "metadata/links/outside" not in names and "metadata/links/dangling" not in names
+    assert not any("secret" in n or n.startswith("metadata/out-dir") for n in names)
+
+
+def test_write_archive_skips_a_file_the_app_removed_meanwhile(tmp_path, monkeypatch):
+    root = app_folder(tmp_path / "app")
+    (tmp_path / "stage").mkdir()
+    real = zipfile.ZipFile.write
+
+    def write(self, filename, *args, **kwargs):
+        if filename.endswith("logo.png"):
+            raise FileNotFoundError(2, "No such file or directory", filename)
+        return real(self, filename, *args, **kwargs)
+
+    monkeypatch.setattr(zipfile.ZipFile, "write", write)
+    added = mounted.write_archive(str(tmp_path / "out.zip"), str(tmp_path / "stage"), [(str(root / "metadata"), "metadata")],
+                                  str(root), Boom, "app", "App")
+    with zipfile.ZipFile(tmp_path / "out.zip") as zf:
+        assert "metadata/library/aa/logo.png" not in zf.namelist()
+    assert added == 3
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads any file")
+def test_write_archive_stops_at_a_file_or_folder_it_cant_read(tmp_path):
+    root = app_folder(tmp_path / "app")
+    (tmp_path / "stage").mkdir()
+    poster = root / "metadata/library/aa/poster.jpg"
+    poster.chmod(0)
+    try:
+        with pytest.raises(Boom, match=r"^app: can't read metadata/library/aa/poster.jpg in .* run Backuparr with App's PUID:PGID"):
+            mounted.write_archive(str(tmp_path / "out.zip"), str(tmp_path / "stage"), [(str(root / "metadata"), "metadata")],
+                                  str(root), Boom, "app", "App")
+    finally:
+        poster.chmod(0o644)
+    folder = root / "metadata/library"
+    folder.chmod(0)
+    try:
+        with pytest.raises(Boom, match=r"^app: can't read metadata/library in "):
+            mounted.write_archive(str(tmp_path / "out.zip"), str(tmp_path / "stage"), [(str(root / "metadata"), "metadata")],
+                                  str(root), Boom, "app", "App")
+    finally:
+        folder.chmod(0o755)
+
+
+def test_write_files_makes_folders_readable_and_check_writable_refuses_first(tmp_path, monkeypatch):
+    archive = tmp_path / "b.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("metadata/library/aa/poster.jpg", JPEG)
+    root = tmp_path / "app"
+    root.mkdir()
+    with zipfile.ZipFile(archive) as zf:
+        members = zf.infolist()
+        old_umask = os.umask(0o077)
+        try:
+            mounted.check_writable(members, str(root), Boom, "app", "App")
+            mounted.write_files(zf, members, str(root))
+        finally:
+            os.umask(old_umask)
+        assert (root / "metadata/library/aa/poster.jpg").read_bytes() == JPEG
+        assert stat.S_IMODE((root / "metadata/library").stat().st_mode) == 0o755
+        monkeypatch.setattr(mounted.os, "access", lambda path, mode: False)
+        with pytest.raises(Boom, match=r"^app: can't write metadata/library/aa/poster.jpg in .* give it write access to App's files$"):
+            mounted.check_writable(members, str(root), Boom, "app", "App")

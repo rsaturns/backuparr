@@ -13,7 +13,7 @@ import backup
 import config_store
 import runlog
 from backup import describe_failure, format_run_message, log_failure, notify, run_backup
-from config_store import enabled_apps, load_config
+from config_store import enabled_apps, load_config, valid_schedule
 
 
 bp = Blueprint("runs", __name__)
@@ -46,6 +46,9 @@ RESTORE_RUN_STATE = {
     "ok": False,
     "message": None,
     "summary": None,
+    # The restore ran, but something needs the user's attention (a Pi-hole
+    # backup brought back another app password, say): shown as a warning.
+    "warning": False,
     "error": None,
     "log": [],
 }
@@ -131,10 +134,11 @@ def _backup_work(only=None):
         log_failure(backup_logger, "backup run stopped", exc)
 
 
-def _start_backup_run(only=None):
+def _start_backup_run(only=None, work=_backup_work):
     """Starts a backup run unless one's already in progress - of every
     enabled app, or of just the `only` app or instance id. Returns whether
-    it started. Shared by the manual endpoint and the scheduler."""
+    it started. Shared by the manual endpoint, the scheduler and the first
+    start of 3.0."""
     return _start_tracked_run(
         RUN_STATE,
         RUN_LOCK,
@@ -147,7 +151,7 @@ def _start_backup_run(only=None):
             "total_apps": 0,
             "cancel_requested": False,
         },
-        _backup_work,
+        work,
         only,
         before_start=RUN_CANCEL_EVENT.clear,
         blocked_by=RESTORE_RUN_STATE,
@@ -165,11 +169,55 @@ def _cancel_backup_run():
     return True
 
 
+# ---------------------------------------------- first start of 3.0 -----
+# Backuparr's own backups from before 3.0 no longer restore (#162), so the
+# first start makes a new one straight away. "running" lets the encryption
+# notice wait for it, to say whether it was made.
+UPGRADE_SELF_BACKUP = {"running": False}
+
+
+def _upgrade_self_backup_work(only):
+    try:
+        _backup_work(only)
+        made = only in RUN_STATE["ok"]
+        if made:
+            log.info("backuparr: made a new backup of itself for 3.0 - its backups from before 3.0 can't be restored any more")
+        config_store.mark_upgrade_self_backup(made=made)
+    except Exception as exc:
+        log_failure(log, "couldn't record the first 3.0 backup of Backuparr", exc)
+    finally:
+        UPGRADE_SELF_BACKUP["running"] = False
+
+
+def start_upgrade_self_backup():
+    """On the first start of 3.0, Backuparr backs itself up in the background
+    when its own backup is on and a destination is set up. Tried once: if it
+    fails, the next full run makes one as usual. Returns whether it started."""
+    try:
+        cfg = load_config()
+        if cfg.get("upgrade_self_backup_tried") is True:
+            return False
+        if cfg.get("self_backup", True) is False or not config_store.enabled_destinations(cfg):
+            config_store.mark_upgrade_self_backup()
+            return False
+    except Exception as exc:  # an unreadable config.json: the UI says why
+        log_failure(log, "couldn't check for the first 3.0 backup of Backuparr", exc)
+        return False
+    UPGRADE_SELF_BACKUP["running"] = True
+    if _start_backup_run("backuparr", work=_upgrade_self_backup_work):
+        return True
+    UPGRADE_SELF_BACKUP["running"] = False
+    return False
+
+
 # ------------------------------------------------------------ scheduler ----
 # In-process, not an external cron daemon - re-reads cron_schedule whenever
 # config.json changes, so a Settings change applies on the next tick.
 _SCHEDULER_INTERVAL_SECONDS = 20
-_scheduler_state = {"last_run_minute": None, "last_error": None, "config_stamp": None, "schedule": None}
+# "schedule" is (config stamp, cron_schedule), replaced as one so a status
+# request reading it beside the scheduler thread never pairs a stamp with
+# another config's schedule.
+_scheduler_state = {"last_run_minute": None, "last_error": None, "schedule": (None, None), "invalid_schedule": None}
 
 
 def _config_stamp():
@@ -184,21 +232,34 @@ def _config_stamp():
 def _scheduled_cron():
     """cron_schedule, without decrypting the whole config every tick."""
     stamp = _config_stamp()
-    if stamp is None or stamp != _scheduler_state["config_stamp"]:
-        _scheduler_state["schedule"] = load_config().get("cron_schedule", "0 3 * * *")
-        _scheduler_state["config_stamp"] = stamp
-    return _scheduler_state["schedule"]
+    cached_stamp, schedule = _scheduler_state["schedule"]
+    if stamp is None or stamp != cached_stamp:
+        schedule = load_config().get("cron_schedule", "0 3 * * *")
+        _scheduler_state["schedule"] = (stamp, schedule)
+    return schedule
+
+
+def _report_invalid_schedule(schedule, valid):
+    """Log a saved schedule that isn't valid once, not every tick - and again
+    if it's fixed and later broken the same way."""
+    if valid:
+        _scheduler_state["invalid_schedule"] = None
+    elif _scheduler_state["invalid_schedule"] != schedule:
+        _scheduler_state["invalid_schedule"] = schedule
+        log.warning("scheduler: the backup schedule %r isn't valid - no scheduled backups run until it's fixed in Settings", schedule)
 
 
 def _scheduler_loop():
     while True:
         try:
             schedule = _scheduled_cron()
+            valid = valid_schedule(schedule)
+            _report_invalid_schedule(schedule, valid)
             now = datetime.now().replace(second=0, microsecond=0)
             # Dedup: a matching minute is seen on more than one ~20s tick.
             if (
-                _scheduler_state["last_run_minute"] != now
-                and croniter.is_valid(schedule)
+                valid
+                and _scheduler_state["last_run_minute"] != now
                 and croniter.match(schedule, now)
             ):
                 _scheduler_state["last_run_minute"] = now
@@ -223,12 +284,18 @@ def start_scheduler():
 
 
 # ------------------------------------------------------------- backups ----
+def _runnable(cfg):
+    """What /api/backup/run can back up on its own: each enabled app, and
+    Backuparr itself while its card is on (#165)."""
+    return [*enabled_apps(cfg), *(["backuparr"] if cfg.get("self_backup", True) is not False else [])]
+
+
 @bp.post("/api/backup/run")
 def api_backup_run():
     data = request.get_json(force=True, silent=True)
     # No "app" (or null) backs up every enabled app; otherwise just that one.
     only = data.get("app") if isinstance(data, dict) else None
-    if only is not None and (not isinstance(only, str) or only not in enabled_apps(load_config())):
+    if only is not None and (not isinstance(only, str) or only not in _runnable(load_config())):
         return jsonify({"error": "that app isn't enabled - pick an enabled app, or All apps"}), 400
     if not _start_backup_run(only):
         if RESTORE_RUN_STATE["running"]:
@@ -279,6 +346,7 @@ def api_runlog(app_name, run_id):
 @bp.get("/api/backup/status")
 def api_backup_status():
     state = dict(RUN_STATE)
+    state["schedule_valid"] = valid_schedule(_scheduled_cron())
     # The UI shows the run's own log while it runs, backup.log's tail after.
     state["log_tail"] = []
     if not state["running"]:

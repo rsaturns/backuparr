@@ -4,6 +4,8 @@ import logging
 import os
 
 import pytest
+
+from conftest import PASSWORD
 import requests
 
 import restore_actions
@@ -41,7 +43,8 @@ def test_history_groups_files_by_app_newest_first(authed_client, rclone):
     history = authed_client.get("/api/history/local").get_json()
     assert [f["name"] for f in history["radarr"]] == ["radarr_3.zip", "radarr_1.zip"]
     assert history["radarr"][0] == {"name": "radarr_3.zip", "size": 7, "mod_time": "2026-01-03T00:00:00Z",
-                                    "app_version": None, "recorded": False, "run_id": None}
+                                    "app_version": None, "recorded": False, "run_id": None, "encrypted": False,
+                                    "metadata": None}
     assert [f["name"] for f in history["sonarr"]] == ["sonarr_2.zip"]
     assert "stranger" not in history and "lonely.zip" not in history
     assert set(history) == set(APP_NAMES)
@@ -137,7 +140,7 @@ def test_a_local_download_never_follows_a_link_out_of_the_folder(authed_client, 
     os.symlink(tmp_path / "secret.txt", os.path.join(folder, "radarr_2.zip"))
     for name in ("radarr_2.zip", "radarr_3.zip"):  # a link out, and a file that's gone
         response = authed_client.get(f"/api/history/local/radarr/{name}/download")
-        assert response.status_code == 404 and "isn't on Local storage" in response.get_json()["error"]
+        assert response.status_code == 404 and "isn't on Local Storage" in response.get_json()["error"]
 
 
 def test_download_streams_the_file_and_removes_its_temporary_copy(authed_client, rclone, dropbox):
@@ -214,7 +217,8 @@ def test_sabnzbd_preview_failure_is_explained_and_cleaned_up(authed_client, monk
 def configure(client, **apps):
     body = {"bazarr_backup_dir": "/mnt/bazarr", "apps": {}}
     defaults = {name: {"enabled": True, "url": f"http://{name}:1", "api_key": f"{name}-key"} for name in
-                ("radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "bazarr", "tdarr", "tautulli", "sabnzbd", "profilarr")}
+                ("radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "bazarr", "tdarr", "tautulli", "sabnzbd", "profilarr",
+                 "pihole")}
     defaults["jellyfin"] = {"enabled": True, "url": "http://jellyfin:1", "api_key": "jellyfin-key", "backup_dir": "/mnt/jellyfin"}
     defaults["emby"] = {"enabled": True, "url": "http://emby:1", "api_key": "emby-key", "data_dir": "/mnt/emby"}
     defaults["plex"] = {"enabled": True, "url": "http://plex:1", "api_key": "plex-key", "data_dir": "/mnt/plex"}
@@ -310,13 +314,13 @@ def test_only_one_restore_runs_at_a_time(restore, authed_client, inline):
 # --- restore: running ------------------------------------------------------
 
 @pytest.mark.parametrize("app, message", [
-    ("radarr", "radarr restore uploaded, app is restarting"),
-    ("sonarr", "sonarr restore uploaded, app is restarting"),
-    ("lidarr", "lidarr restore uploaded, app is restarting"),
-    ("whisparr", "whisparr restore uploaded, app is restarting"),
-    ("prowlarr", "prowlarr restore uploaded, app is restarting"),
-    ("bazarr", "bazarr restore triggered, app is restarting"),
-    ("tdarr", "tdarr restore complete"),
+    ("radarr", "Radarr restore uploaded, app is restarting"),
+    ("sonarr", "Sonarr restore uploaded, app is restarting"),
+    ("lidarr", "Lidarr restore uploaded, app is restarting"),
+    ("whisparr", "Whisparr restore uploaded, app is restarting"),
+    ("prowlarr", "Prowlarr restore uploaded, app is restarting"),
+    ("bazarr", "Bazarr restore triggered, app is restarting"),
+    ("tdarr", "Tdarr restore complete"),
 ])
 def test_each_app_restores_and_reports_its_own_message(restore, authed_client, app, message):
     assert start(authed_client, app).get_json() == {"started": True}
@@ -327,6 +331,19 @@ def test_each_app_restores_and_reports_its_own_message(restore, authed_client, a
     assert not restore["tmp"].exists(), "the downloaded backup must be removed afterwards"
 
 
+@pytest.mark.parametrize("outcome, warning, fragment", [
+    ({"back": True, "password_ok": True, "sudo_ok": True, "attention": False}, False, "Pi-hole restarted to apply it"),
+    ({"back": True, "password_ok": False, "sudo_ok": None, "attention": True}, True, "the app password in Settings no longer works"),
+])
+def test_a_restore_that_needs_attention_finishes_as_a_warning(restore, authed_client, outcome, warning, fragment):
+    restore["results"]["pihole"] = outcome
+    start(authed_client, "pihole")
+    state = result(authed_client)
+    assert state["ok"] is True and state["warning"] is warning and fragment in state["message"]
+    start(authed_client, "radarr")
+    assert result(authed_client)["warning"] is False  # reset for the next run
+
+
 def test_a_named_file_is_restored_instead_of_the_newest(restore, authed_client):
     start(authed_client, "radarr", file="radarr_20260101_000000.zip")
     assert restore["calls"][0][3] == "radarr_20260101_000000.zip" and result(authed_client)["file"] == "radarr_20260101_000000.zip"
@@ -335,7 +352,7 @@ def test_a_named_file_is_restored_instead_of_the_newest(restore, authed_client):
 def test_jellyfin_restore_uses_its_backups_folder_and_says_it_restarts(restore, authed_client):
     start(authed_client, "jellyfin")
     assert restore["calls"][-1][2]["backup_dir"] == "/mnt/jellyfin"
-    assert result(authed_client)["message"] == "jellyfin restore started, Jellyfin is restarting to apply it"
+    assert result(authed_client)["message"] == "Jellyfin restore started, Jellyfin is restarting to apply it"
 
 
 def test_jellyfin_restore_needs_its_backups_folder(restore, authed_client):
@@ -350,7 +367,7 @@ def test_nzbget_restore_uses_its_credentials_and_says_it_reloads(restore, authed
     restore["results"]["nzbget"] = {"kind": "nzbget", "reloaded": True}
     start(authed_client, "nzbget")
     assert restore["calls"][-1][2]["username"] == "nzbget" and restore["calls"][-1][2]["password"] == "nzbget-pass"
-    assert result(authed_client)["message"] == "nzbget restore complete, NZBGet is reloading to apply it"
+    assert result(authed_client)["message"] == "NZBGet restore complete, NZBGet is reloading to apply it"
 
 
 def test_nzbget_restore_says_to_restart_when_the_reload_isnt_confirmed(restore, authed_client):
@@ -363,13 +380,13 @@ def test_nzbget_restore_says_to_restart_when_the_reload_isnt_confirmed(restore, 
 def test_emby_restore_uses_its_data_folder_and_says_to_start_emby(restore, authed_client):
     start(authed_client, "emby")
     assert restore["calls"][-1][2]["data_dir"] == "/mnt/emby"
-    assert result(authed_client)["message"] == "emby restore complete, start Emby again to load it"
+    assert result(authed_client)["message"] == "Emby restore complete, start Emby again to load it"
 
 
 def test_plex_restore_uses_its_data_folder_and_says_to_start_plex(restore, authed_client):
     start(authed_client, "plex")
     assert restore["calls"][-1][2]["data_dir"] == "/mnt/plex"
-    assert result(authed_client)["message"] == "plex restore complete, start Plex again to load it"
+    assert result(authed_client)["message"] == "Plex restore complete, start Plex again to load it"
 
 
 def test_plex_restore_needs_its_data_folder(restore, authed_client):
@@ -391,9 +408,9 @@ def test_emby_restore_needs_its_data_folder(restore, authed_client):
 def test_tautulli_and_sabnzbd_restores_return_their_summary(restore, authed_client):
     restore["results"] = {"tautulli": {"summary": {"config": "started"}}, "sabnzbd": {"summary": {"servers_restored": ["news"]}}}
     start(authed_client, "tautulli")
-    assert result(authed_client)["summary"] == {"config": "started"} and result(authed_client)["message"] == "tautulli restore uploaded"
+    assert result(authed_client)["summary"] == {"config": "started"} and result(authed_client)["message"] == "Tautulli restore uploaded"
     start(authed_client, "sabnzbd", passwords={"news": "pw"})
-    assert result(authed_client)["summary"] == {"servers_restored": ["news"]} and result(authed_client)["message"] == "sabnzbd restore complete"
+    assert result(authed_client)["summary"] == {"servers_restored": ["news"]} and result(authed_client)["message"] == "SABnzbd restore complete"
 
 
 def test_a_staged_tautulli_config_is_reported_as_needing_a_step(restore, authed_client):
@@ -402,7 +419,7 @@ def test_a_staged_tautulli_config_is_reported_as_needing_a_step(restore, authed_
     start(authed_client, "tautulli")
     state = result(authed_client)
     assert state["ok"] is True and state["summary"]["config_staged"] == staged
-    assert state["message"] == "tautulli config staged, finish it in Tautulli"
+    assert state["message"] == "Tautulli config staged, finish it in Tautulli"
 
 
 def test_sabnzbd_passwords_come_from_the_request_and_blank_means_skip(restore, authed_client):
@@ -438,7 +455,7 @@ def test_a_restore_rejected_by_the_app_does_not_repeat_the_app_name_in_the_log(r
     restore["fail"] = ServarrError("radarr: unauthorized - check the API key")
     with caplog.at_level(logging.INFO):
         assert start(authed_client).status_code == 200
-    assert result(authed_client)["error"] == "radarr: unauthorized - check the API key"
+    assert result(authed_client)["error"] == "Radarr: unauthorized - check the API key"
     (line,) = [r for r in caplog.records if "restore failed" in r.getMessage()]
     assert line.getMessage() == "restore failed for radarr - unauthorized - check the API key"
 
@@ -473,7 +490,7 @@ def test_override_redirects_one_restore_without_touching_settings(restore, authe
 def test_an_override_url_never_gets_the_saved_web_login(restore, authed_client):
     authed_client.post("/api/config", json={"apps": {"radarr": {"enabled": True, "url": "http://radarr:7878", "api_key": "k",
                                                                   "username": "admin", "password": "web-pass"}}})
-    start(authed_client, "radarr", override={"url": "http://other:7878", "username": "x", "password": "y"})
+    start(authed_client, "radarr", override={"url": "http://other:7878", "api_key": "k2", "username": "x", "password": "y"})
     _, _, app_cfg, _ = restore["calls"][-1]
     assert (app_cfg["url"], app_cfg["username"], app_cfg["password"]) == ("http://other:7878", "", "")
     start(authed_client, "radarr")
@@ -498,3 +515,214 @@ def test_a_restore_waits_for_a_running_backup(restore, authed_client, isolated_w
     response = start(authed_client)
     assert response.status_code == 409 and "a backup is running" in response.get_json()["error"]
     assert not [c for c in restore["calls"] if c[0] == "restore"]
+
+
+# --- several backups at once (#148) -------------------------------------------
+
+def test_bulk_delete_removes_the_picked_backups_and_failed_runs(authed_client, rclone, isolated_webui):
+    runlog = isolated_webui.backups.runlog
+    runlog.save({"id": "radarr_20260101_030000", "app": "radarr", "file": None, "ok": False, "error": "refused",
+                 "destinations": {"local": None, "dropbox": None}, "lines": []})
+    response = authed_client.post("/api/history/local/delete", json={
+        "backups": [{"app": "radarr", "file": "radarr_1.zip"}, {"app": "sonarr", "file": "sonarr_2.zip.enc"}],
+        "runs": [{"app": "radarr", "run_id": "radarr_20260101_030000"}]})
+    body = response.get_json()
+    assert response.status_code == 200 and body["failed"] == []
+    assert len(body["deleted"]) == 3
+    assert [p.rsplit("/", 2)[-2:] for p in rclone["delete"]] == [["radarr", "radarr_1.zip"], ["sonarr", "sonarr_2.zip.enc"]]
+    # The failed run is gone from this destination's History, still listed on the other one.
+    assert runlog.get("radarr", "radarr_20260101_030000")["destinations"] == {"dropbox": None}
+
+
+def test_bulk_delete_reports_what_it_couldnt_delete(authed_client, isolated_webui, monkeypatch):
+    def refuse(path):
+        raise isolated_webui.backups.rclone_util.RcloneError("delete failed", "permission denied")
+
+    monkeypatch.setattr(isolated_webui.backups.rclone_util, "delete_file", refuse)
+    body = authed_client.post("/api/history/local/delete", json={
+        "backups": [{"app": "radarr", "file": "radarr_1.zip"}], "runs": [{"app": "radarr", "run_id": "radarr_9"}]}).get_json()
+    assert body["deleted"] == []
+    assert [f.get("file") or f.get("run_id") for f in body["failed"]] == ["radarr_1.zip", "radarr_9"]
+    assert "permission denied" in body["failed"][0]["error"]
+
+
+def test_bulk_delete_counts_a_backup_already_gone_as_deleted(authed_client, rclone, monkeypatch, isolated_webui):
+    def gone(path):
+        raise isolated_webui.backups.rclone_util.RcloneError(
+            "rclone deletefile ...", "Failed to deletefile: radarr_1.zip is a directory or doesn't exist: object not found")
+    monkeypatch.setattr(isolated_webui.backups.rclone_util, "delete_file", gone)
+    body = authed_client.post("/api/history/local/delete", json={"backups": [{"app": "radarr", "file": "radarr_1.zip"}]}).get_json()
+    assert body == {"deleted": [{"app": "radarr", "file": "radarr_1.zip"}], "failed": []}
+
+
+@pytest.mark.parametrize("body", [
+    {"backups": [{"app": "radarr", "file": "../x.zip"}]},
+    {"backups": [{"app": "stranger", "file": "a.zip"}]},
+    {"backups": "radarr/a.zip"},
+    {"runs": [{"app": "radarr", "run_id": "a/b"}]},
+    {},
+])
+def test_bulk_delete_refuses_anything_that_isnt_a_listed_backup(authed_client, rclone, body):
+    assert authed_client.post("/api/history/local/delete", json=body).status_code == 400
+    assert rclone["delete"] == []
+
+
+def bulk_download(client, dest, *items):
+    """Starts a bulk download job and waits until it's ready or failed:
+    (status, job url)."""
+    import time
+    backups = [dict(zip(("app", "file"), item.split("/"))) for item in items]
+    response = client.post(f"/api/history/{dest}/download", json={"backups": backups})
+    assert response.status_code == 202, response.get_json()
+    job = f"/api/history/{dest}/download/{response.get_json()['job_id']}"
+    for _ in range(200):
+        status = client.get(job).get_json()
+        if status["state"] != "preparing":
+            return status, job
+        time.sleep(0.02)
+    raise AssertionError("the download never finished")
+
+
+def test_a_bulk_download_is_one_zip_of_the_backups_as_single_downloads_give_them(authed_client, isolated_webui):
+    import io
+    import zipfile as zf
+    import archive_crypto
+    local_backup(isolated_webui, "radarr_1.zip", b"PK radarr")
+    local_backup(isolated_webui, "radarr_2.zip.enc", archive_crypto.encrypt_bytes(b"PK secret"))
+    own = os.path.join(isolated_webui.backups.destination_util.DEFAULT_LOCAL_DIR, "backuparr")
+    os.makedirs(own, exist_ok=True)
+    sealed = archive_crypto.encrypt_bytes(b"PK self")
+    with open(os.path.join(own, "backuparr_1.enc"), "wb") as f:
+        f.write(sealed)
+    status, job = bulk_download(authed_client, "local", "radarr/radarr_1.zip", "radarr/radarr_2.zip.enc",
+                                "backuparr/backuparr_1.enc")
+    assert status == {"state": "ready", "done": 3, "total": 3}
+    response = authed_client.get(f"{job}/file")
+    assert response.status_code == 200 and "backuparr-local-" in response.headers["Content-Disposition"]
+    with zf.ZipFile(io.BytesIO(response.data)) as z:
+        assert sorted(z.namelist()) == ["backuparr/backuparr_1.enc", "radarr/radarr_1.zip", "radarr/radarr_2.zip"]
+        assert z.read("radarr/radarr_2.zip") == b"PK secret" and z.read("backuparr/backuparr_1.enc") == sealed
+    response.close()
+    # Fetched once: then it's gone from the server.
+    assert authed_client.get(f"{job}/file").status_code == 404
+    assert authed_client.get(job).status_code == 404
+
+
+def test_a_bulk_download_names_a_backup_that_isnt_there(authed_client, isolated_webui):
+    local_backup(isolated_webui, "radarr_1.zip")
+    status, job = bulk_download(authed_client, "local", "radarr/radarr_1.zip", "radarr/radarr_9.zip")
+    assert status["state"] == "failed" and "radarr_9.zip" in status["message"]
+    assert authed_client.get(f"{job}/file").status_code == 409
+
+
+def test_a_bulk_download_from_the_cloud_leaves_no_copies(authed_client, rclone, dropbox):
+    status, job = bulk_download(authed_client, "dropbox", "radarr/radarr_1.zip", "sonarr/sonarr_1.zip")
+    assert status["state"] == "ready"
+    tmp_dir = os.path.dirname(rclone["copyto"][0][1])
+    assert os.path.isdir(tmp_dir)
+    response = authed_client.get(f"{job}/file")
+    assert response.status_code == 200
+    response.close()
+    assert not os.path.exists(tmp_dir)
+
+
+def test_a_bulk_download_needs_backups_picked(authed_client, rclone):
+    assert authed_client.post("/api/history/local/download", json={}).status_code == 400
+    assert authed_client.post("/api/history/local/download", json={"backups": [{"app": "stranger", "file": "a.zip"}]}).status_code == 400
+
+
+def test_a_bulk_download_is_only_for_the_browser_that_started_it(authed_client, isolated_webui):
+    local_backup(isolated_webui, "radarr_1.zip")
+    _, job = bulk_download(authed_client, "local", "radarr/radarr_1.zip")
+    other = isolated_webui.app.test_client()
+    assert other.post("/api/login", json={"username": "admin", "password": PASSWORD}).status_code == 200
+    assert other.get(job).status_code == 404 and other.get(f"{job}/file").status_code == 404
+    # Nor under another destination's address.
+    assert authed_client.get(job.replace("/local/", "/dropbox/")).status_code == 404
+
+
+def test_an_unfetched_bulk_download_is_removed(authed_client, isolated_webui, monkeypatch):
+    local_backup(isolated_webui, "radarr_1.zip")
+    status, job = bulk_download(authed_client, "local", "radarr/radarr_1.zip")
+    jobs = isolated_webui.backups.DOWNLOAD_JOBS
+    (_, prepared), = jobs.jobs.values()
+    assert os.path.isdir(prepared["tmp_dir"])
+    prepared["finished"] -= isolated_webui.backups.DOWNLOAD_TTL + 1
+    isolated_webui.backups._expire_downloads()
+    assert not os.path.exists(prepared["tmp_dir"]) and not jobs.jobs
+    assert authed_client.get(job).status_code == 404
+
+
+def test_only_a_few_bulk_downloads_are_prepared_at_once(authed_client, isolated_webui):
+    jobs = isolated_webui.backups.DOWNLOAD_JOBS
+    for _ in range(isolated_webui.backups.MAX_DOWNLOADS_PREPARING):
+        jobs.add("someone", {"state": "preparing", "tmp_dir": "/nonexistent", "dest": "local"})
+    response = authed_client.post("/api/history/local/download", json={"backups": [{"app": "radarr", "file": "radarr_1.zip"}]})
+    assert response.status_code == 429
+    jobs.jobs.clear()
+
+
+def test_a_bulk_download_counts_up_as_it_prepares(authed_client, isolated_webui, monkeypatch):
+    import threading
+    import time
+    local_backup(isolated_webui, "radarr_1.zip")
+    local_backup(isolated_webui, "radarr_2.zip")
+    gate = threading.Event()
+    real = isolated_webui.backups._plain_copy
+
+    def held(dest_id, root, app_name, filename, tmp_dir):
+        if filename == "radarr_2.zip":
+            gate.wait(5)
+        return real(dest_id, root, app_name, filename, tmp_dir)
+    monkeypatch.setattr(isolated_webui.backups, "_plain_copy", held)
+    response = authed_client.post("/api/history/local/download", json={"backups": [
+        {"app": "radarr", "file": "radarr_1.zip"}, {"app": "radarr", "file": "radarr_2.zip"}]})
+    job = f"/api/history/local/download/{response.get_json()['job_id']}"
+    for _ in range(200):
+        status = authed_client.get(job).get_json()
+        if status["done"] == 1:
+            break
+        time.sleep(0.01)
+    assert status == {"state": "preparing", "done": 1, "total": 2}
+    gate.set()
+    for _ in range(200):
+        if authed_client.get(job).get_json()["state"] == "ready":
+            break
+        time.sleep(0.01)
+    assert authed_client.get(job).get_json() == {"state": "ready", "done": 2, "total": 2}
+
+
+# --- apps restored by hand (#151) ---------------------------------------------
+
+def test_every_manual_restore_has_steps_and_a_docs_page():
+    from config_store import APP_META, restore_supported
+    from restore_actions import RESTORES
+    manual = [m for m in APP_META if m.get("manual_restore")]
+    assert [m["id"] for m in manual] == ["profilarr", "opnsense", "pfsense", "unifi", "bitwarden", "qnap", "synology", "unraid"]
+    for meta in manual:
+        info = meta["manual_restore"]
+        assert info["docs"].startswith("https://rsaturns.github.io/backuparr/apps/")
+        assert info["steps"] and all(group["title"] and group["steps"] for group in info["steps"])
+        assert all(isinstance(step, str) and step.endswith((".", '."')) for group in info["steps"] for step in group["steps"])
+        # Backuparr itself never restores it.
+        assert not restore_supported(meta["id"]) and meta["id"] not in RESTORES
+
+
+def test_a_manual_restore_apps_backup_downloads_decrypted(authed_client, rclone, isolated_webui):
+    import archive_crypto
+    folder = os.path.join(isolated_webui.backups.destination_util.DEFAULT_LOCAL_DIR, "profilarr")
+    os.makedirs(folder, exist_ok=True)
+    with open(os.path.join(folder, "profilarr_20261111_030000.tar.gz.enc"), "wb") as f:
+        f.write(archive_crypto.encrypt_bytes(b"profilarr tar"))
+    response = authed_client.get("/api/history/local/profilarr/profilarr_20261111_030000.tar.gz.enc/download")
+    assert response.status_code == 200 and response.data == b"profilarr tar"
+    assert "profilarr_20261111_030000.tar.gz" in response.headers["Content-Disposition"]
+    assert ".enc" not in response.headers["Content-Disposition"]
+
+
+def test_the_restore_tab_has_the_manual_panel_and_the_steps_reach_the_page(authed_client):
+    from test_webui_settings import ui_meta
+    page = authed_client.get("/").get_data(as_text=True)
+    assert 'id="r-manual"' in page and 'id="r-auto"' in page
+    profilarr = next(m for m in ui_meta(authed_client)["apps"] if m["id"] == "profilarr")
+    assert profilarr["manual_restore"]["steps"][0]["title"] == "Restore in Profilarr"

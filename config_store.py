@@ -1,10 +1,14 @@
 """Persistent config for Backuparr - a single JSON file on a volume,
 shared by backup.py and the web UI."""
+import contextlib
 import copy
 import json
 import logging
 import os
 import re
+import threading
+
+from croniter import croniter
 
 import atomic_file
 import secrets_crypto
@@ -14,22 +18,30 @@ log = logging.getLogger("backuparr.config_store")
 
 CONFIG_PATH = os.environ.get("BACKUPARR_CONFIG", "/config/backuparr/config.json")
 
+# A change to config.json is load, change, save. They run one at a time, so
+# two at once - a Settings save while the first start's backup of Backuparr
+# records itself, say - can't undo each other: change it with
+# editing_config(), which holds this lock, and save_config() takes it too.
+CONFIG_LOCK = threading.RLock()
+
 
 class ConfigError(RuntimeError):
     """config.json exists but can't be used (hand-edited into invalid JSON,
     truncated by a full disk, ...). The message says what to do about it."""
 
 
-APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr", "lazylibrarian"]
+APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr", "lazylibrarian", "pihole", "vaultwarden", "opnsense", "pfsense", "immich", "homeassistant", "unifi", "unraid", "bitwarden", "synology", "qnap"]
 
-DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "password": ""}
+# encrypt: whether its backups are encrypted (#147) - on unless turned off,
+# and ignored for an app whose APP_META sets always_encrypted.
+DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "password": "", "encrypt": True}
 
 # Apps that can run more than once - e.g. a 4K Radarr beside the HD one. The
 # first instance keeps the bare app id, so its config, remote folder and
 # archive names never change; each extra one is "<app>-<suffix>" (radarr-4k),
 # an id fixed when it's added because it names the instance's backup folder.
 # Only its display name can change later.
-MULTI_INSTANCE_APPS = ("radarr", "sonarr", "lidarr", "whisparr")
+MULTI_INSTANCE_APPS = ("radarr", "sonarr", "lidarr", "whisparr", "pihole", "opnsense", "pfsense", "immich", "homeassistant", "unifi", "unraid", "synology", "qnap")
 MAX_EXTRA_INSTANCES = 10
 _EXTRA_INSTANCE_ID = re.compile(rf"({'|'.join(MULTI_INSTANCE_APPS)})-([a-z0-9]+(?:-[a-z0-9]+)*)")
 _MAX_INSTANCE_ID_LENGTH = 40
@@ -50,10 +62,59 @@ SERVARR_LOGIN_FIELDS = [
      "help": "the app's own login"},
 ]
 # Apps whose "password" extra field is encrypted at rest.
-PASSWORD_APPS = ("bazarr", "nzbget", "radarr", "sonarr", "lidarr", "whisparr", "prowlarr")
+PASSWORD_APPS = ("bazarr", "nzbget", "radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "pfsense", "unifi", "unraid", "synology", "qnap")
+# Other extra fields encrypted at rest, by app type.
+SECRET_EXTRA_FIELDS = {"opnsense": ("api_secret",), "synology": ("device_token",), "qnap": ("device_token",)}
 
+# Settings, History and the Restore and Run & Status pickers group the apps
+# under these, in this order (#148). A category with no apps isn't shown, so
+# the later ones wait for their apps. A category with an "icon" shows that
+# image (style.css picks it per theme) in place of an emoji (#189). The
+# pickers' group labels show just the name.
+APP_CATEGORIES = [
+    {"id": "media-management", "label": "Media Management", "emoji": "🎬"},
+    {"id": "downloaders", "label": "Downloaders", "emoji": "⬇️"},
+    {"id": "media-servers", "label": "Media Servers", "emoji": "▶️"},
+    {"id": "network", "label": "Network", "emoji": "🌐"},
+    {"id": "security", "label": "Security", "emoji": "🛡️"},
+    {"id": "home-automation", "label": "Home Automation", "emoji": "🏠"},
+    {"id": "server", "label": "Server", "icon": "server"},
+]
+# Each app's category: a new app adds one line here.
+_APP_CATEGORY = {
+    "prowlarr": "media-management", "radarr": "media-management", "sonarr": "media-management",
+    "lidarr": "media-management", "whisparr": "media-management", "profilarr": "media-management",
+    "bazarr": "media-management", "tdarr": "media-management", "lazylibrarian": "media-management",
+    "sabnzbd": "downloaders", "nzbget": "downloaders",
+    "plex": "media-servers", "jellyfin": "media-servers", "emby": "media-servers", "tautulli": "media-servers",
+    "seerr": "media-servers", "immich": "media-servers",
+    "pihole": "network", "opnsense": "network", "pfsense": "network", "unifi": "network",
+    "bitwarden": "security", "vaultwarden": "security",
+    "homeassistant": "home-automation",
+    "qnap": "server", "synology": "server", "unraid": "server",
+}
+
+# An app's "icon_dark", if any, replaces its "icon" in the dark theme: the
+# card, the Overview and the status bar follow the theme toggle.
 # Drives the web UI's forms generically. restore_warning is shown on the
-# Restore tab before an app's restore.
+# Restore tab before an app's restore. manual_restore: an app Backuparr can't
+# restore itself - the Restore tab offers the backup's download, its "steps"
+# (one or more titled lists) and a link to its "docs" page (#151).
+# always_encrypted: True for an app whose backups hold secrets that must never
+# sit readable on a destination (#147) - its card has no "Encrypt backup"
+# toggle. pins_certificate: its self-signed HTTPS certificate can be trusted
+# on the card and is then pinned (trusted_cert, apps/cert_pin.py, #153).
+#
+# extra_fields are text or password inputs, unless "type" says otherwise
+# (#155): "switch" (on/off, "default"), "select" ("choices", "default"),
+# "app_list" (the apps a Test connection listed, [{"slug", "name"}], shown
+# while the select before it is "chosen") or "hidden" (set by a Test
+# connection: one of "choices", or any short text without them, e.g.
+# Synology's 2FA device token). A "locked" switch is shown on and saves
+# nothing; a "not_saved" field is sent with a Test connection only (a 2FA
+# code). "option": a backup option, never asked for by the Restore tab.
+# "only_install": shown once a Test connection (install_type) found that
+# kind of install.
 APP_META = [
     {"id": "radarr", "label": "Radarr", "icon": "radarr.svg", "key_required": True, "url_placeholder": "http://radarr:7878", "extra_fields": SERVARR_LOGIN_FIELDS, "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
     {"id": "sonarr", "label": "Sonarr", "icon": "sonarr.svg", "key_required": True, "url_placeholder": "http://sonarr:8989", "extra_fields": SERVARR_LOGIN_FIELDS, "multi_instance": True, "max_extra_instances": MAX_EXTRA_INSTANCES},
@@ -67,8 +128,21 @@ APP_META = [
         "key_required": True,
         "url_placeholder": "http://profilarr:6868",
         "extra_fields": [],
-        # Profilarr's restore has no public API - see docs/apps/profilarr.md.
-        "restore_supported": False,
+        # Profilarr's restore is a form on its own Backups page, applied when
+        # it restarts - no API. The Restore tab offers the download and these
+        # steps instead (#151), from https://profilarr.com/installation/backups.
+        "manual_restore": {
+            "docs": "https://rsaturns.github.io/backuparr/apps/profilarr/",
+            "steps": [
+                {"title": "Restore in Profilarr", "steps": [
+                    "Download the backup.",
+                    "In Profilarr, open Settings > Backups. The restore replaces all of Profilarr's data, so click Create Backup first if you might need it.",
+                    "Click Upload Backup and pick the downloaded file.",
+                    "Click Restore on its row, then restart Profilarr (for example docker restart profilarr).",
+                    "If Profilarr asks, create an account on its setup page. Then add back what its backups leave out: the Arr instances, notification services and API keys.",
+                ]},
+            ],
+        },
     },
     {
         "id": "bazarr",
@@ -120,13 +194,17 @@ APP_META = [
         "url_placeholder": "http://jellyfin:8096",
         "key_help": "Dashboard > API Keys",
         # Jellyfin's API can't download a backup, so its backups folder is
-        # mounted into this container - see apps/jellyfin.py.
+        # mounted into this container - see apps/jellyfin.py. Include
+        # metadata (#196) asks for Jellyfin's Metadata option, and for Emby
+        # and Plex adds their metadata folder.
         "extra_fields": [
             {"name": "backup_dir", "label": "Backups folder", "type": "text", "required": True,
              "placeholder": "/mnt/jellyfin-backups",
              "help": "Jellyfin's backups folder as mounted here; read-write to restore"},
+            {"name": "metadata", "label": "Include metadata", "type": "switch", "default": False, "option": True,
+             "help": "posters and artwork; can make backups many times larger"},
         ],
-        "restore_warning": {"lead": "Replaces Jellyfin's database and settings", "text": "with the backup's - users, watch history, libraries and API keys. Anything added since is lost. Jellyfin restarts to apply it."},
+        "restore_warning": {"lead": "Replaces Jellyfin's database and settings", "text": "with the backup's - users, watch history, libraries and API keys. A backup with metadata puts it back too. Anything added since is lost. Jellyfin restarts to apply it."},
     },
     {
         "id": "emby",
@@ -141,8 +219,10 @@ APP_META = [
             {"name": "data_dir", "label": "Data folder", "type": "text", "required": True,
              "placeholder": "/mnt/emby",
              "help": "Emby's /config folder as mounted here; read-write to restore"},
+            {"name": "metadata", "label": "Include metadata", "type": "switch", "default": False, "option": True,
+             "help": "posters and artwork; can make backups many times larger"},
         ],
-        "restore_warning": {"lead": "Stop Emby first", "text": "- the restore is refused while it's running. It replaces Emby's databases and settings with the backup's - users, watch history, playlists, collections and API keys. Anything added since is lost. Start Emby again afterwards."},
+        "restore_warning": {"lead": "Stop Emby first", "text": "- the restore is refused while it's running. It replaces Emby's databases and settings with the backup's - users, watch history, playlists, collections and API keys. A backup with metadata puts it back too. Anything added since is lost. Start Emby again afterwards."},
     },
     {
         "id": "plex",
@@ -158,8 +238,10 @@ APP_META = [
             {"name": "data_dir", "label": "Data folder", "type": "text", "required": True,
              "placeholder": "/mnt/plex",
              "help": "Plex's \"Plex Media Server\" folder as mounted here; read-write to restore"},
+            {"name": "metadata", "label": "Include metadata", "type": "switch", "default": False, "option": True,
+             "help": "posters and artwork; can make backups many times larger"},
         ],
-        "restore_warning": {"lead": "Stop Plex first", "text": "- the restore is refused while it's running. It replaces Plex's library database and settings with the backup's - libraries, playlists, collections, every user's watched state, and the server's identity, so a rebuilt server comes back as the same server with its shared users. Anything added since is lost. Never run the original server at the same time. Start Plex again afterwards."},
+        "restore_warning": {"lead": "Stop Plex first", "text": "- the restore is refused while it's running. It replaces Plex's library database and settings with the backup's - libraries, playlists, collections, every user's watched state, and the server's identity, so a rebuilt server comes back as the same server with its shared users. A backup with metadata puts it back too. Anything added since is lost. Never run the original server at the same time. Start Plex again afterwards."},
     },
     {
         "id": "seerr",
@@ -193,9 +275,396 @@ APP_META = [
         ],
         "restore_warning": {"lead": "Stop LazyLibrarian first", "text": "- the restore is refused while it's running. It replaces LazyLibrarian's database and settings with the backup's, its API key included. Anything added since is lost. Start LazyLibrarian again afterwards."},
     },
+    {
+        "id": "pihole",
+        "label": "Pi-hole",
+        "icon": "pi-hole.svg",
+        "key_required": True,
+        # Pi-hole v6's Teleporter, over its API - see apps/pihole.py. The
+        # archive holds its password hashes and 2FA secret.
+        "key_label": "App password",
+        "key_help": "Settings > Web interface / API > Configure app password (Expert mode)",
+        "url_placeholder": "http://pihole",
+        "extra_fields": [],
+        "multi_instance": True,
+        "max_extra_instances": MAX_EXTRA_INSTANCES,
+        "always_encrypted": True,
+        "restore_warning": {"lead": "Replaces Pi-hole's settings", "text": "with the backup's - DNS and DHCP settings, local DNS records, adlists, domains, groups and clients, DHCP leases, and its web password, app password and 2FA. Settings set by environment variables (FTLCONF_...) are kept. Pi-hole restarts to apply it. If the backup's app password differs from the one in Settings, update it there afterwards."},
+    },
+    {
+        "id": "opnsense",
+        "label": "OPNsense",
+        "icon": "opnsense.svg",
+        "key_required": True,
+        # GET /api/core/backup/download/this with an API key and secret of a
+        # user holding only "Diagnostics: Configuration History" and "Lobby:
+        # Dashboard" (the version) - see apps/opnsense.py. config.xml holds
+        # private keys and password hashes.
+        "key_help": "a user with Diagnostics: Configuration History and Lobby: Dashboard - see the docs",
+        "url_placeholder": "https://192.168.1.1",
+        "extra_fields": [
+            {"name": "api_secret", "label": "API secret", "type": "password", "required": True,
+             "help": "from the same API key file"},
+        ],
+        "multi_instance": True,
+        "max_extra_instances": MAX_EXTRA_INSTANCES,
+        "always_encrypted": True,
+        "pins_certificate": True,
+        "manual_restore": {
+            "docs": "https://rsaturns.github.io/backuparr/apps/opnsense/",
+            "steps": [
+                {"title": "Firewall still running", "steps": [
+                    "Download the backup.",
+                    "In OPNsense, open System > Configuration > Backups.",
+                    "Under Restore, leave Restore areas at All and Reboot after a successful restore ticked.",
+                    "Choose the downloaded file and click Restore configuration. The firewall reboots.",
+                    "If OPNsense asks you to assign the interfaces again, do so.",
+                ]},
+                {"title": "New install", "steps": [
+                    "Download the backup and rename it config.xml.",
+                    "On a second USB stick formatted FAT32, make a folder named conf and put config.xml in it.",
+                    "Boot the OPNsense installer with both sticks plugged in.",
+                    "At \"Press any key to start the configuration importer\", press a key and enter the second stick's device name (for example da1).",
+                    "Log in as installer with the backup's root password and install.",
+                ]},
+            ],
+        },
+    },
+    {
+        "id": "pfsense",
+        "label": "pfSense",
+        "icon": "pfsense.svg",
+        # No official API: the web UI's own backup page, signed in the way
+        # Netgate documents for scripted backups - see apps/pfsense.py.
+        "key_required": False,
+        "no_api_key": True,
+        "url_placeholder": "https://192.168.1.1",
+        "extra_fields": [
+            {"name": "username", "label": "Username", "type": "text", "required": True,
+             "help": "a user with WebCfg - Diagnostics: Backup & Restore and WebCfg - System: Login / Logout / Dashboard - see the docs"},
+            {"name": "password", "label": "Password", "type": "password", "required": True},
+        ],
+        "multi_instance": True,
+        "max_extra_instances": MAX_EXTRA_INSTANCES,
+        "always_encrypted": True,
+        "pins_certificate": True,
+        "manual_restore": {
+            "docs": "https://rsaturns.github.io/backuparr/apps/pfsense/",
+            "steps": [
+                {"title": "Firewall still running", "steps": [
+                    "Download the backup.",
+                    "In pfSense, open Diagnostics > Backup & Restore.",
+                    "Under Restore Backup, leave Restore area at All, choose the downloaded file and click Restore Configuration. The firewall reboots.",
+                ]},
+                {"title": "New install", "steps": [
+                    "Download the backup and rename it config.xml.",
+                    "On a USB stick formatted FAT or FAT32, make a folder named config and put config.xml in it.",
+                    "Install pfSense. Then plug in the stick and boot the firewall: pfSense copies the configuration from it.",
+                    "Remove the stick once the firewall is up, or pfSense copies it again at every boot.",
+                ]},
+            ],
+        },
+    },
+    {
+        "id": "unifi",
+        "label": "UniFi",
+        "icon": "ubiquiti-unifi.svg",
+        # No documented backup API: UniFi OS's own backup (everything, a Super
+        # Admin) or the Network app's (Network only), signed in as a local
+        # admin; the standalone UniFi Network Server only has the Network
+        # one - see apps/unifi.py. The backups hold Wi-Fi passwords, VPN keys
+        # and admin logins. A Test connection finds the install type, which
+        # picks the options shown.
+        "key_required": False,
+        "no_api_key": True,
+        "url_placeholder": "https://192.168.1.1",
+        "extra_fields": [
+            {"name": "username", "label": "Username", "type": "text", "required": True,
+             "help": "a local admin - see the docs for its role"},
+            {"name": "password", "label": "Password", "type": "password", "required": True},
+            {"name": "backup", "label": "Backup", "type": "select", "default": "everything", "option": True,
+             "only_install": "unifi-os", "help": "everything needs a Super Admin",
+             "choices": [{"value": "everything", "label": "Everything"}, {"value": "network", "label": "Network only"}]},
+            {"name": "history", "label": "History", "type": "select", "default": "settings", "option": True,
+             "help": "statistics kept with the Network settings",
+             "show_if": [{"install_type": ["standalone"]}, {"install_type": ["unifi-os"], "backup": ["network"]}],
+             "choices": [{"value": "settings", "label": "Settings only"}, {"value": "7", "label": "Last 7 days"},
+                         {"value": "30", "label": "Last 30 days"}, {"value": "90", "label": "Last 90 days"},
+                         {"value": "365", "label": "Last 365 days"}, {"value": "all", "label": "Everything"}]},
+            {"name": "install_type", "type": "hidden", "option": True, "choices": ["unifi-os", "standalone"]},
+        ],
+        "multi_instance": True,
+        "max_extra_instances": MAX_EXTRA_INSTANCES,
+        "always_encrypted": True,
+        "pins_certificate": True,
+        "manual_restore": {
+            "docs": "https://rsaturns.github.io/backuparr/apps/unifi/",
+            "steps": [
+                {"title": "UniFi OS", "steps": [
+                    "Download the backup: a .unifi file holds everything, a .unf file UniFi Network only.",
+                    "On a new install, finish the setup first (Proceed Without a UI Account works) and update it to the backup's versions or newer.",
+                    "Open Settings > Control Plane > Backups and click Upload & Restore.",
+                    "Choose the downloaded file. For a .unifi file, leave Restore All Applications and Settings ticked.",
+                    "Click Restore. UniFi restarts with the backup's settings.",
+                ]},
+                {"title": "Standalone app", "steps": [
+                    "Download the backup.",
+                    "On a new install, click Restore Server from a Backup on the setup's first page, choose the downloaded file and click Confirm.",
+                    "Otherwise, open Settings > System > Backups, click Restore, choose the file and click Restore.",
+                ]},
+            ],
+        },
+    },
+    {
+        "id": "bitwarden",
+        "label": "Bitwarden",
+        "icon": "bitwarden.svg",
+        # Bitwarden has no backup API (#194): the standard install's bwdata
+        # or lite's backups folder is mounted into this container, and the
+        # driver tells which it is - see apps/bitwarden.py. The URL only gives
+        # its version. The backup holds the database and certificate
+        # passwords and the data-protection keys. Bitwarden's installers
+        # offer a self-signed certificate, so it can be trusted (#153).
+        "key_required": False,
+        "no_api_key": True,
+        "url_placeholder": "https://bitwarden:8443",
+        "extra_fields": [
+            {"name": "data_dir", "label": "Folder", "type": "text", "required": True,
+             "placeholder": "/mnt/bitwarden",
+             "help": "Bitwarden's bwdata folder, or lite's backups folder, as mounted here"},
+        ],
+        "always_encrypted": True,
+        "pins_certificate": True,
+        "manual_restore": {
+            "docs": "https://rsaturns.github.io/backuparr/apps/bitwarden/",
+            "steps": [
+                {"title": "Standard install", "steps": [
+                    "Stop Bitwarden with ./bitwarden.sh stop. On a new server, download bitwarden.sh but don't run its install.",
+                    "Download the backup and unzip it into bwdata, replacing what's there (on a new server, an empty bwdata next to bitwarden.sh).",
+                    "Start Bitwarden with ./bitwarden.sh start and give it a minute.",
+                    "Restore the database from the .BAK file in mssql/backups with sqlcmd, as the Bitwarden page in Backuparr's docs shows.",
+                    "Restart Bitwarden with ./bitwarden.sh restart, then sign in and open an item to check.",
+                ]},
+                {"title": "Bitwarden lite", "steps": [
+                    "Download the backup and put it in lite's backups folder.",
+                    "Stop lite with docker compose stop bitwarden.",
+                    "Run docker compose run --rm --no-deps --entrypoint /restore-db.sh bitwarden /backups/<file> --clean --yes.",
+                    "Start lite with docker compose up -d, then sign in and open an item to check.",
+                ]},
+            ],
+        },
+    },
+    {
+        "id": "vaultwarden",
+        "label": "Vaultwarden",
+        "icon": "vaultwarden.svg",
+        # Vaultwarden has no backup API, so its data folder is mounted into
+        # this container; the URL only gives its version and whether it's
+        # running - see apps/vaultwarden.py. The backup holds its RSA key and
+        # config.json (admin token, SMTP password) in plain text.
+        "key_required": False,
+        "no_api_key": True,
+        "url_placeholder": "http://vaultwarden",
+        "extra_fields": [
+            {"name": "data_dir", "label": "Data folder", "type": "text", "required": True,
+             "placeholder": "/mnt/vaultwarden",
+             "help": "Vaultwarden's /data folder as mounted here; read-write to restore"},
+        ],
+        "always_encrypted": True,
+        "restore_warning": {"lead": "Stop Vaultwarden first", "text": "- the restore is refused while it's running. It replaces Vaultwarden's database with the backup's - users, organisations, every vault item, devices and 2FA - and writes back its RSA key, admin page settings, attachments and Send files. Anything added since is lost. Start Vaultwarden again afterwards."},
+    },
+    {
+        "id": "immich",
+        "label": "Immich",
+        "icon": "immich.svg",
+        "key_required": True,
+        # Immich's database backup API (2.5.0 and newer) - see apps/immich.py.
+        # The database only: photos and videos are files, not in the backup.
+        "key_help": "an admin's key with job.create, queue.read, maintenance, backup.download, backup.upload and backup.delete",
+        "url_placeholder": "http://immich:2283",
+        "extra_fields": [],
+        "multi_instance": True,
+        "max_extra_instances": MAX_EXTRA_INSTANCES,
+        "restore_warning": {"lead": "Replaces Immich's database", "text": "with the backup's - users, albums, people and faces, shared links, settings and API keys. Photos and videos aren't in the backup and stay where they are; ones uploaded since the backup won't be in the restored library. Immich goes into maintenance mode while it restores, then restarts."},
+    },
+    {
+        "id": "homeassistant",
+        "label": "Home Assistant",
+        "icon": "home-assistant.svg",
+        # Home Assistant's own backup API (2025.5 and newer) over its
+        # WebSocket - see apps/homeassistant.py. The options mirror its own
+        # backup page; the ones only HA OS and Supervised have show once a
+        # Test connection found such an install.
+        "key_required": True,
+        "key_label": "Access token",
+        "key_help": "a long-lived access token of an administrator, from your profile's Security tab",
+        "url_placeholder": "http://homeassistant:8123",
+        "extra_fields": [
+            {"name": "settings", "label": "Settings", "type": "switch", "locked": True, "option": True},
+            {"name": "history", "label": "History", "type": "switch", "default": True, "option": True,
+             "help": "history, statistics and energy"},
+            {"name": "media", "label": "Media", "type": "switch", "default": False, "option": True,
+             "only_install": "supervisor"},
+            {"name": "share", "label": "Share folder", "type": "switch", "default": False, "option": True,
+             "only_install": "supervisor"},
+            {"name": "local_apps", "label": "Local apps folder", "type": "switch", "default": False, "option": True,
+             "only_install": "supervisor", "help": "apps you built"},
+            {"name": "apps", "label": "Apps", "type": "select", "default": "none", "option": True,
+             "only_install": "supervisor",
+             "choices": [{"value": "none", "label": "None"}, {"value": "all", "label": "All"},
+                         {"value": "chosen", "label": "Chosen apps"}]},
+            {"name": "chosen_apps", "label": "Chosen apps", "type": "app_list", "option": True,
+             "only_install": "supervisor"},
+            {"name": "install_type", "type": "hidden", "option": True, "choices": ["core", "supervisor"]},
+        ],
+        "multi_instance": True,
+        "max_extra_instances": MAX_EXTRA_INSTANCES,
+        "always_encrypted": True,
+        "pins_certificate": True,
+        "restore_warning": {"lead": "Home Assistant restarts", "text": "and is offline for a few minutes. The backup replaces its settings, and its history if the backup has it - on HA OS its apps and folders too. A token made after the backup stops working."},
+    },
+    {
+        "id": "qnap",
+        "label": "QNAP QuTS hero",
+        "icon": "qnap.svg",
+        "icon_dark": "qnap-light.svg",
+        # QuTS hero's system configuration file (.bin) - its settings, not the
+        # data in its shared folders - from the Control Panel's own export
+        # (/qmigrate/v1/backup/download), signed in as an administrator or an
+        # account with the System Management role: see apps/qnap.py. A 2FA code
+        # is asked for once; QNAP's remembered sign-in (set by Test connection)
+        # signs in after.
+        "key_required": False,
+        "no_api_key": True,
+        "url_placeholder": "https://192.168.1.30",
+        "extra_fields": [
+            {"name": "username", "label": "Username", "type": "text", "required": True,
+             "help": "an administrator, or an account with the System Management role"},
+            {"name": "password", "label": "Password", "type": "password", "required": True},
+            {"name": "otp_code", "label": "2FA code", "type": "text", "login_only": True, "not_saved": True,
+             "help": "from the account's authenticator app, asked for once"},
+            {"name": "device_token", "type": "hidden"},
+        ],
+        "multi_instance": True,
+        "max_extra_instances": MAX_EXTRA_INSTANCES,
+        "always_encrypted": True,
+        "pins_certificate": True,
+        "manual_restore": {
+            "docs": "https://rsaturns.github.io/backuparr/apps/qnap/",
+            "steps": [
+                {"title": "QuTS hero h5.2 or later", "steps": [
+                    "Download the backup: QNAP's .bin system configuration file. It holds the NAS's settings, not the data in its shared folders.",
+                    "On a NAS running QuTS hero, the same version or newer, open Control Panel > System > Backup / Restore > Backup/Restore Settings. Under Restore System Settings, click Restore.",
+                    "Choose Upload file from computer, browse to the .bin and click Next.",
+                    "Choose what to restore on each page (General, Users / Groups, Shared Folders, Network, Apps), or click Skip to keep the NAS's own. Shared folders and apps that aren't in the backup are removed.",
+                    "On Summary, click Restore, confirm with your password and click OK: the NAS restarts.",
+                ]},
+            ],
+        },
+    },
+    {
+        "id": "synology",
+        "label": "Synology DSM",
+        "icon": "synology-dsm.svg",
+        # DSM's own Configuration Backup (.dss) - its settings, not the data in
+        # its shared folders - over the Control Panel's Web API calls, signed
+        # in as an administrator: see apps/synology.py. A 2FA code is asked
+        # for once; DSM's device token (set by Test connection) signs in after.
+        "key_required": False,
+        "no_api_key": True,
+        "url_placeholder": "https://192.168.1.20:5001",
+        "extra_fields": [
+            {"name": "username", "label": "Username", "type": "text", "required": True,
+             "help": "an account in the administrators group"},
+            {"name": "password", "label": "Password", "type": "password", "required": True},
+            {"name": "otp_code", "label": "2FA code", "type": "text", "login_only": True, "not_saved": True,
+             "help": "from the account's authenticator app, asked for once"},
+            {"name": "device_token", "type": "hidden"},
+        ],
+        "multi_instance": True,
+        "max_extra_instances": MAX_EXTRA_INSTANCES,
+        "always_encrypted": True,
+        "pins_certificate": True,
+        "manual_restore": {
+            "docs": "https://rsaturns.github.io/backuparr/apps/synology/",
+            "steps": [
+                {"title": "DSM 7", "steps": [
+                    "Download the backup: DSM's .dss configuration file. It holds DSM's settings, not the files in its shared folders.",
+                    "In DSM, open Control Panel > Update & Restore > Configuration Backup. Under Restore DSM Configurations, click Restore.",
+                    "Choose Restore from a configuration file on your computer, browse to the .dss and click Next.",
+                    "Tick the settings to restore, and Overwrite conflicting settings to replace ones that exist now. Click Done, then Yes: DSM stops its services while it restores.",
+                ]},
+                {"title": "DSM 6.2", "steps": [
+                    "Download the backup: DSM's .dss configuration file.",
+                    "In DSM, open Control Panel > Update & Restore > Configuration Backup and click Restore configuration.",
+                    "Browse to the .dss, tick the settings to restore, and Overwrite conflicting settings to replace ones that exist now. Click OK, then Yes: DSM stops its services while it restores.",
+                ]},
+            ],
+        },
+    },
+    {
+        "id": "unraid",
+        "label": "Unraid",
+        "icon": "unraid.svg",
+        # The web UI's own Boot Device Backup, signed in as root: Unraid's web
+        # UI has only that user, its API has no boot backup, and /boot is
+        # root-only - see apps/unraid.py. The zip is kept as Unraid makes it,
+        # so the USB Flash Creator restores it in one step.
+        "key_required": False,
+        "no_api_key": True,
+        "url_placeholder": "http://192.168.1.10",
+        "extra_fields": [
+            {"name": "password", "label": "Root password", "type": "password", "required": True,
+             "help": "Unraid's web UI has only the root user"},
+        ],
+        "multi_instance": True,
+        "max_extra_instances": MAX_EXTRA_INSTANCES,
+        "always_encrypted": True,
+        "pins_certificate": True,
+        "manual_restore": {
+            "docs": "https://rsaturns.github.io/backuparr/apps/unraid/",
+            "steps": [
+                {"title": "New or replacement drive", "steps": [
+                    "Download the backup: a .zip of the whole boot device.",
+                    "In the Unraid USB Flash Creator, choose Use custom, pick the downloaded .zip and write it to the USB flash drive.",
+                    "Boot the server from it. On a new drive, move the license to it with Tools > Registration > Replace Key.",
+                    "Check the disk assignments on Main before starting the array.",
+                ]},
+                {"title": "Internal boot", "steps": [
+                    "Restore the backup to a USB flash drive as above and boot from it.",
+                    "Switch to internal boot again (Tools > Internal Boot): Unraid copies the restored setup to the internal drive.",
+                ]},
+                {"title": "Single files", "steps": [
+                    "Download the backup and open the .zip.",
+                    "Copy the files you need from its config folder back to the same place on the boot device (the flash share, or /boot/config), then reboot.",
+                ]},
+            ],
+        },
+    },
 ]
+# Backuparr's own backup, shown as an app card in Server (#165). Not an
+# APP_META app: it has no URL or key, its switch is cfg["self_backup"], and
+# its backups are always encrypted (self_backup.py).
+SELF_APP = {"id": "backuparr", "label": "Backuparr", "icon": "logo.png", "category": "server", "always_encrypted": True}
+
+# Each card's "?" opens its app's page on the docs site at "Setting it up".
+# Radarr, Sonarr, Lidarr and Prowlarr share one page; every other app's page
+# is named after its id. Backuparr's card links to its own backup's section.
+DOCS_URL = "https://rsaturns.github.io/backuparr/"
+SETUP_SECTION = "setting-it-up"
+_DOCS_PAGE = {"radarr": "servarr", "sonarr": "servarr", "lidarr": "servarr", "prowlarr": "servarr"}
+
+
+def docs_page(app_type):
+    """The docs page (docs/apps/<page>.md) an app's card links to."""
+    return _DOCS_PAGE.get(app_type, app_type)
+
+
+SELF_APP["help_url"] = f"{DOCS_URL}security/#backuparrs-own-backup"
 for _meta in APP_META:
     _meta["discoverable"] = _meta["id"] in DISCOVERABLE_APPS
+    _meta["category"] = _APP_CATEGORY[_meta["id"]]
+    _meta["help_url"] = f"{DOCS_URL}apps/{docs_page(_meta['id'])}/#{SETUP_SECTION}"
 
 DEST_NAMES = ["local", "gdrive", "onedrive", "dropbox"]
 
@@ -239,11 +708,11 @@ DEST_EDITABLE_FIELDS = {
 DESTINATION_META = [
     {
         "id": "local",
-        "label": "Local storage",
+        "label": "Local Storage",
         "icon": "local.svg",
         "description": "Written straight to this container's own volume - nothing to connect. Download any backup from the History tab.",
         "setup_help": {
-            "title": "Local storage",
+            "title": "Local Storage",
             "intro": "No setup needed - this works out of the box.",
             "steps": [
                 {
@@ -400,6 +869,13 @@ DESTINATION_META = [
     },
 ]
 
+def valid_schedule(schedule):
+    """Whether cron_schedule is the 5-field cron schedule Settings accepts. One
+    saved before an update can stop being one: croniter 7.0 rejects some forms
+    6.x took, such as non-ASCII digits (#166)."""
+    return isinstance(schedule, str) and len(schedule.split()) == 5 and croniter.is_valid(schedule)
+
+
 DEFAULTS = {
     "request_headers": [],
     "retention_days": 7,
@@ -411,9 +887,26 @@ DEFAULTS = {
     "removed_instances": [],
     # Back up Backuparr's own configuration at the end of each full run (#110).
     "self_backup": True,
+    # Home Assistant's read-only status routes (#170): on, and the SHA-256 of
+    # their bearer token. Set only by /api/ha/token and /api/ha/disable.
+    "ha_enabled": False,
+    "ha_token_hash": "",
+    # Plain HTTP closed, HTTPS only (#177). Set only by /api/https/only;
+    # BACKUPARR_HTTPS_ONLY overrides it.
+    "https_only": False,
     # Whether the user has confirmed saving the encryption key; until then
     # the web UI shows it and allows nothing else. Set by Backuparr only.
     "secrets_key_acknowledged": False,
+    # Whether the "Backups are now encrypted" notice has been seen (#147). A
+    # config from before 3.0 has no value, so it shows once; a new install
+    # starts with it seen.
+    "encryption_notice_acknowledged": False,
+    # The first start of 3.0 makes Backuparr's own backup once, as those from
+    # before 3.0 no longer restore (#162): whether that's been tried (a config
+    # from before 3.0 has no value; a new install starts with it tried), and
+    # whether it worked (the notice above then says so). Set by Backuparr only.
+    "upgrade_self_backup_tried": False,
+    "upgrade_self_backup_made": False,
     "apps": {name: dict(DEFAULT_APP) for name in APP_NAMES},
     "destinations": {name: dict(DEFAULT_DEST[name]) for name in DEST_NAMES},
 }
@@ -457,9 +950,8 @@ def holds_settings():
 
 def acknowledge_secrets_key():
     global _key_acknowledged
-    cfg = load_config()
-    cfg["secrets_key_acknowledged"] = True
-    save_config(cfg)
+    with editing_config() as cfg:
+        cfg["secrets_key_acknowledged"] = True
     _key_acknowledged = True
 
 
@@ -501,6 +993,9 @@ def _secret_fields(cfg):
         fields.append((("apps", instance_id, "api_key"), app, "api_key"))
         if instance_type(instance_id) in PASSWORD_APPS:
             fields.append((("apps", instance_id, "password"), app, "password"))
+        for key in SECRET_EXTRA_FIELDS.get(instance_type(instance_id), ()):
+            if key in app:  # extra fields aren't in DEFAULT_APP until a card saves one
+                fields.append((("apps", instance_id, key), app, key))
     for dest, key in (("gdrive", "client_secret"), ("gdrive", "developer_key"), ("gdrive", "refresh_token"),
                       ("onedrive", "token"), ("dropbox", "token")):
         fields.append((("destinations", dest, key), cfg["destinations"][dest], key))
@@ -542,12 +1037,9 @@ def _stored_secret_fields():
         return {}
 
 
-def load_config():
-    if not os.path.exists(CONFIG_PATH):
-        cfg = copy.deepcopy(DEFAULTS)
-        save_config(cfg)
-        return cfg
-
+def _read_stored():
+    """config.json as it's stored: its secrets still encrypted, no defaults
+    filled in. Raises FileNotFoundError, or ConfigError saying what to do."""
     try:
         with open(CONFIG_PATH) as f:
             data = json.load(f)
@@ -557,7 +1049,35 @@ def load_config():
         ) from exc
     if not isinstance(data, dict):
         raise ConfigError(f"{CONFIG_PATH} should hold a JSON object - fix it, or delete the file to start over with defaults")
+    return data
 
+
+def stored_setting(key):
+    """One plain setting as config.json holds it, or None when it or the file
+    isn't there - without decrypting every secret, as load_config() does.
+    Raises ConfigError (or OSError) like load_config() for a file that can't
+    be used."""
+    try:
+        return _read_stored().get(key)
+    except FileNotFoundError:
+        return None
+
+
+def load_config():
+    # Under the lock: a first start, or a legacy plaintext secret, saves.
+    with CONFIG_LOCK:
+        return _load_config()
+
+
+def _load_config():
+    if not os.path.exists(CONFIG_PATH):
+        cfg = copy.deepcopy(DEFAULTS)
+        cfg["encryption_notice_acknowledged"] = True  # new: there's no change to tell about
+        cfg["upgrade_self_backup_tried"] = True  # nor old backups of itself
+        save_config(cfg)
+        return cfg
+
+    data = _read_stored()
     merged = _merge_defaults(data)
 
     # Decrypt in place; a legacy plaintext value gets re-saved encrypted.
@@ -578,7 +1098,22 @@ def load_config():
     return merged
 
 
+@contextlib.contextmanager
+def editing_config():
+    """The config to change in the with block, saved at its end (not if it
+    raises), with no other change to config.json in between."""
+    with CONFIG_LOCK:
+        cfg = load_config()
+        yield cfg
+        save_config(cfg)
+
+
 def save_config(cfg):
+    with CONFIG_LOCK:
+        _save_config(cfg)
+
+
+def _save_config(cfg):
     try:
         validate_request_headers(cfg.get("request_headers", []), instance_ids(cfg))
     except RequestHeadersError as exc:
@@ -614,12 +1149,66 @@ def app_meta(name):
     return next((m for m in APP_META if m["id"] == instance_type(name)), None)
 
 
+def has_metadata_option(name):
+    """Whether the app's card has Include metadata (#196): Jellyfin, Emby, Plex."""
+    return any(f["name"] == "metadata" for f in (app_meta(name) or {}).get("extra_fields", []))
+
+
+def recorded_metadata(name, entry):
+    """Whether a backup holds the app's metadata, from its manifest entry: a
+    Jellyfin, Emby or Plex backup recorded before the switch existed holds
+    none; None for an unrecorded backup or any other app."""
+    if entry is None or not has_metadata_option(name):
+        return None
+    return entry.get("metadata", False)
+
+
+def app_label(app_id, app_cfg=None):
+    """An app or instance id's name as its card shows it: "Pi-hole",
+    "Radarr (4K)" - an instance's own name from its settings, or the end of
+    its id."""
+    if app_id == SELF_APP["id"]:
+        return SELF_APP["label"]
+    meta = app_meta(app_id)
+    if not meta:
+        return app_id
+    if instance_type(app_id) == app_id:
+        return meta["label"]
+    return f"{meta['label']} ({(app_cfg or {}).get('name') or app_id[len(meta['id']) + 1:]})"
+
+
 def key_required(name):
     return (app_meta(name) or {}).get("key_required", True)
 
 
 def restore_supported(name):
-    return (app_meta(name) or {}).get("restore_supported", True)
+    """Whether Backuparr restores the app itself. An app with manual_restore
+    gets a download and steps on the Restore tab instead (#151)."""
+    meta = app_meta(name) or {}
+    return not meta.get("manual_restore") and meta.get("restore_supported", True)
+
+
+def always_encrypted(name):
+    return bool((app_meta(name) or {}).get("always_encrypted"))
+
+
+def encrypts(cfg, name):
+    """Whether an app or instance's backups are encrypted (#147): always for an
+    always_encrypted app, otherwise unless its card turned it off."""
+    return always_encrypted(name) or cfg["apps"].get(name, {}).get("encrypt", True) is not False
+
+
+def acknowledge_encryption_notice():
+    with editing_config() as cfg:
+        cfg["encryption_notice_acknowledged"] = True
+
+
+def mark_upgrade_self_backup(made=False):
+    """Records that the first start of 3.0 tried its self-backup (#162), and
+    that it worked when made."""
+    with editing_config() as cfg:
+        cfg["upgrade_self_backup_tried"] = True
+        cfg["upgrade_self_backup_made"] = cfg.get("upgrade_self_backup_made") is True or made
 
 
 def enabled_destinations(cfg):

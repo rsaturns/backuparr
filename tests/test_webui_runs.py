@@ -97,6 +97,16 @@ def test_a_run_can_back_up_just_one_enabled_app(inline, authed_client, monkeypat
     assert seen == ["radarr", None, None]
 
 
+def test_backuparr_can_be_run_on_its_own_while_its_card_is_on(inline, authed_client, monkeypatch):
+    seen = []
+    monkeypatch.setattr(inline.runs, "run_backup", lambda cfg, only=None, **kw: seen.append(only) or ([only], []))
+    assert authed_client.post("/api/backup/run", json={"app": "backuparr"}).get_json() == {"started": True}
+    assert authed_client.post("/api/config", json={"self_backup": False}).status_code == 200
+    response = authed_client.post("/api/backup/run", json={"app": "backuparr"})
+    assert response.status_code == 400 and "isn't enabled" in response.get_json()["error"]
+    assert seen == ["backuparr"]
+
+
 @pytest.mark.parametrize("target", ["sonarr", "radarr-4k", "nope", "", 7, ["radarr"]])
 def test_a_one_app_run_needs_an_enabled_app(inline, authed_client, monkeypatch, target):
     started = []
@@ -302,7 +312,7 @@ def test_the_scheduler_re_reads_the_schedule_every_tick(clock):
 def test_the_scheduler_reads_the_config_only_when_it_changes(isolated_webui, monkeypatch):
     loads = []
     monkeypatch.setattr(isolated_webui.runs, "load_config", lambda: loads.append(1) or {"cron_schedule": "0 4 * * *"})
-    monkeypatch.setitem(isolated_webui.runs._scheduler_state, "config_stamp", None)
+    monkeypatch.setitem(isolated_webui.runs._scheduler_state, "schedule", (None, None))
     path = isolated_webui.runs.config_store.CONFIG_PATH
     with open(path, "w") as f:
         f.write("{}")
@@ -428,3 +438,24 @@ def test_the_scheduler_skips_its_run_during_a_restore(inline, monkeypatch, caplo
     with pytest.raises(SystemExit):
         inline.runs._scheduler_loop()
     assert "a restore is in progress" in caplog.text and inline.runs.RUN_STATE["running"] is False
+
+
+def test_an_invalid_saved_schedule_is_logged_once_and_again_if_it_breaks_again(clock, caplog):
+    schedules = iter(["1 2 * * 1#7", "1 2 * * 1#7", "0 3 * * *", "1 2 * * 1#7"])
+    with caplog.at_level(logging.INFO):
+        starts = clock(None, [at(5, 3, 0), at(5, 3, 1), at(6, 3, 0), at(6, 3, 1)], load=lambda: {"cron_schedule": next(schedules)})
+    assert starts == [at(6, 3, 0)]
+    lines = [r for r in caplog.records if "isn't valid" in r.getMessage()]
+    assert len(lines) == 2 and all(r.levelno == logging.WARNING for r in lines)
+    assert lines[0].getMessage() == "scheduler: the backup schedule '1 2 * * 1#7' isn't valid - no scheduled backups run until it's fixed in Settings"
+
+
+def test_the_scheduler_skips_a_six_field_schedule_settings_would_refuse(clock):
+    assert clock("0 0 3 * * *", [at(5, 3, 0), at(5, 0, 0)]) == []
+
+
+@pytest.mark.parametrize("schedule, valid", [("0 3 * * *", True), ("٥ * * * *", False), (None, False)])
+def test_run_status_says_whether_the_saved_schedule_is_valid(authed_client, isolated_webui, monkeypatch, schedule, valid):
+    monkeypatch.setattr(isolated_webui.runs, "load_config", lambda: {"cron_schedule": schedule})
+    monkeypatch.setitem(isolated_webui.runs._scheduler_state, "schedule", (None, None))
+    assert status(authed_client)["schedule_valid"] is valid

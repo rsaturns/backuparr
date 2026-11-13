@@ -11,6 +11,7 @@ import zipfile
 from dataclasses import dataclass
 from typing import Callable
 
+import archive_crypto
 import rclone_util
 from apps.sabnzbd import MASKED
 from backup import build_app
@@ -53,6 +54,22 @@ def fetch_backup(rclone_remote, app_name, filename=None):
     local_zip = os.path.join(tmp_dir, filename)
     rclone_util.copyto(f"{remote_dir}{filename}", local_zip)
     return tmp_dir, local_zip, filename
+
+
+def decrypted(tmp_dir, local_path, key=None):
+    """The plain archive to restore from: local_path itself, or for an
+    encrypted backup (#147) its decrypted copy in tmp_dir, the encrypted one
+    removed. key is the key's text for a backup made with another key; None
+    uses this install's. Raises archive_crypto.WrongKeyError for a key that
+    doesn't open it."""
+    if not archive_crypto.is_encrypted(local_path):
+        return local_path
+    plain_path = os.path.join(tmp_dir, archive_crypto.plain_name(os.path.basename(local_path)))
+    if plain_path == local_path:
+        plain_path += ".plain"
+    archive_crypto.decrypt_file(local_path, plain_path, key)
+    os.remove(local_path)
+    return plain_path
 
 
 def extract_zip(local_zip, dest_dir):
@@ -106,6 +123,48 @@ def _nzbget(app, tmp_dir, local_zip, options):
     return {"reloaded": app.restore_from_file(local_zip)}
 
 
+def _pihole(app, tmp_dir, local_zip, options):
+    result = app.restore_from_file(local_zip)
+    # Restored, but the card or Pi-hole needs a change before the next backup.
+    return {**result, "attention": not all(result.get(k) for k in ("back", "password_ok", "sudo_ok"))}
+
+
+def _pihole_done(result):
+    if not result.get("back"):
+        return "pihole restore imported, but Pi-hole didn't come back from its restart within 2 minutes - check it's running"
+    if result.get("password_ok") is False:
+        return ("pihole restore complete, but the app password in Settings no longer works: the backup brought back "
+                "the app password it was made with. Enter that one in Settings, or configure a new one in Pi-hole")
+    if result.get("sudo_ok") is False:
+        return ("pihole restore complete, but the backup turned webserver.api.app_sudo off, so backups will fail - "
+                "turn it on again under Settings > All settings > Webserver and API (Expert mode)")
+    return "pihole restore complete, Pi-hole restarted to apply it"
+
+
+def _immich(app, tmp_dir, local_zip, options):
+    result = app.restore_from_file(local_zip)
+    return {**result, "attention": not result.get("key_ok")}
+
+
+def _immich_done(result):
+    if not result.get("key_ok"):
+        return ("immich restore complete, but the API key in Settings no longer works: the restored database has the "
+                "API keys it was backed up with. Enter that one in Settings, or create a new one in Immich")
+    return "immich restore complete, Immich restarted with the restored database"
+
+
+def _homeassistant(app, tmp_dir, local_zip, options):
+    result = app.restore_from_file(local_zip)
+    return {**result, "attention": not result.get("token_ok")}
+
+
+def _homeassistant_done(result):
+    if not result.get("token_ok"):
+        # Its tokens are the backup's now, so the one in Settings is gone.
+        return "Restored. Make a new token."
+    return "homeassistant restore complete, Home Assistant restarted with the restored settings"
+
+
 def _tautulli(app, tmp_dir, local_zip, options):
     return {"summary": _extracted(app, tmp_dir, local_zip, options)}
 
@@ -122,8 +181,9 @@ def _sabnzbd(app, tmp_dir, local_zip, options):
 @dataclass(frozen=True)
 class Restore:
     """How one app restores. run(app, tmp_dir, local_zip, options) returns
-    None or extra result fields; done is the finished message, or a
-    function of the result. {name} is the app or instance id."""
+    None or extra result fields ("attention": True shows the finished
+    message as a warning); done is the finished message, or a function of
+    the result. {name} is the app or instance id."""
     doing: str
     run: Callable
     done: str | Callable
@@ -149,6 +209,7 @@ RESTORES = {
     "plex": _mounted("Plex"),
     "seerr": _mounted("Seerr"),
     "lazylibrarian": _mounted("LazyLibrarian"),
+    "vaultwarden": _mounted("Vaultwarden"),
     "nzbget": Restore("restoring nzbget settings", _nzbget, lambda result: (
         "nzbget restore complete, NZBGet is reloading to apply it" if result.get("reloaded")
         else "nzbget settings restored, but NZBGet didn't confirm the reload - restart NZBGet to apply them")),
@@ -156,6 +217,10 @@ RESTORES = {
         "tautulli config staged, finish it in Tautulli" if (result.get("summary") or {}).get("config_staged")
         else "tautulli restore uploaded")),
     "sabnzbd": Restore("restoring sabnzbd config", _sabnzbd, "sabnzbd restore complete"),
+    "pihole": Restore("importing the backup into {name} with Teleporter", _pihole, _pihole_done),
+    "immich": Restore("restoring {name}'s database, Immich is in maintenance mode", _immich, _immich_done),
+    "homeassistant": Restore("restoring {name}, Home Assistant restarts to finish it", _homeassistant,
+                             _homeassistant_done),
 }
 
 

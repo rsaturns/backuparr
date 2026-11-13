@@ -21,7 +21,7 @@ from apps.lazylibrarian import LazyLibrarianError
 from apps.seerr import SeerrError
 from apps.nzbget import NzbgetError
 from apps.plex import PlexError
-from apps.http_headers import RequestHeadersError, configure_app_headers, validate_request_headers
+from apps.http_headers import REFUSAL_HINT, RequestHeadersError, configure_app_headers, validate_request_headers
 
 
 SECRET = "Basic c2VydmljZTpmaXh0dXJlLXBhc3N3b3Jk"
@@ -410,7 +410,9 @@ def test_scheduled_backup_and_web_restore_send_headers_at_every_phase(authed_cli
     def send(adapter, request, **kwargs):
         sent.append(request.copy())
         assert request.headers["Proxy-Authorization"] == SECRET
-        assert request.headers["X-Api-Key"] == "native-key"
+        # The override's own key goes to the override's URL, never the saved one.
+        expected_key = "target-key" if request.url.startswith("https://target.example") else "native-key"
+        assert request.headers["X-Api-Key"] == expected_key
         path = urlsplit(request.url).path
         if path == "/api/v3/command":
             return reply(request, {"id": 1})
@@ -441,7 +443,7 @@ def test_scheduled_backup_and_web_restore_send_headers_at_every_phase(authed_cli
     assert backup.run_backup(cfg) == (["radarr"], [])
     assert len(uploaded) == 1
     assert any(r.url.endswith("/backup/manual/config.zip") for r in sent)
-    response = authed_client.post("/api/restore/local/radarr", json={"confirm": True, "file": "backup.zip", "override": {"url": "https://target.example"}})
+    response = authed_client.post("/api/restore/local/radarr", json={"confirm": True, "file": "backup.zip", "override": {"url": "https://target.example", "api_key": "target-key"}})
     assert response.status_code == 200 and response.json["started"]
     assert isolated_webui.runs.RESTORE_RUN_STATE["ok"]
     assert any(r.url == "https://target.example/api/v3/system/backup/restore/upload" for r in sent)
@@ -452,12 +454,15 @@ def test_scheduled_backup_and_web_restore_send_headers_at_every_phase(authed_cli
 @pytest.mark.parametrize("name, method", [("bazarr", "restore_from_file"), ("tdarr", "restore"), ("tautulli", "restore"), ("sabnzbd", "restore"),
                                           ("jellyfin", "restore_from_file"), ("emby", "restore_from_file"), ("plex", "restore_from_file"),
                                           ("seerr", "restore_from_file"), ("nzbget", "restore_from_file"),
-                                          ("lazylibrarian", "restore_from_file")])
+                                          ("lazylibrarian", "restore_from_file"), ("pihole", "restore_from_file"),
+                                          ("vaultwarden", "restore_from_file"), ("immich", "restore_from_file")])
 def test_other_restore_drivers_receive_global_headers(name, method, monkeypatch, tmp_path, wire):
     classes = {"bazarr": backup.BazarrApp, "tdarr": backup.TdarrApp,
                "tautulli": backup.TautulliApp, "sabnzbd": backup.SabnzbdApp,
                "jellyfin": backup.JellyfinApp, "emby": backup.EmbyApp, "plex": backup.PlexApp,
-               "seerr": backup.SeerrApp, "nzbget": backup.NzbgetApp, "lazylibrarian": backup.LazyLibrarianApp}
+               "seerr": backup.SeerrApp, "nzbget": backup.NzbgetApp, "lazylibrarian": backup.LazyLibrarianApp,
+               "pihole": backup.PiholeApp, "vaultwarden": backup.VaultwardenApp,
+               "immich": backup.ImmichApp}
     def restore(app, *args):
         app.session.post(app.url + "/restore")
         return {}
@@ -542,3 +547,43 @@ def test_discovery_sends_only_headers_scoped_to_prowlarr(authed_client, isolated
     response = authed_client.post("/api/discovery/prowlarr", json={"url": "https://app.example", "api_key": "native-key", "request_headers": rows})
     assert authed_client.get("/api/discovery/prowlarr/" + response.json["job_id"]).json["state"] == "completed"
     assert ("Proxy-Authorization" in wire[-1].headers) is sent
+
+
+# A header gate in front of Sonarr whose header is set up for Radarr only:
+# the proxy answers Sonarr's requests with 401, as Sonarr does a wrong key.
+SONARR = {"url": "https://sonarr.example", "api_key": "native-key"}
+RADARR_ONLY = [{**HEADERS[0], "apps": ["radarr"]}]
+
+
+@pytest.fixture
+def answers(monkeypatch):
+    status = [401]
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send",
+                        lambda _adapter, request, **kwargs: reply(request, {}, status=status[0]))
+    return status
+
+
+def test_a_refusal_points_at_the_headers_when_some_are_set(authed_client, answers):
+    authed_client.post("/api/config", json={"request_headers": RADARR_ONLY})
+    message = authed_client.post("/api/test/sonarr", json=SONARR).json["message"]
+    assert message == "Sonarr: unauthorized - check the API key" + REFUSAL_HINT
+
+
+def test_no_hint_without_headers_or_without_a_refusal(authed_client, answers):
+    assert authed_client.post("/api/test/sonarr", json=SONARR).json["message"] == (
+        "Sonarr: unauthorized - check the API key")
+    authed_client.post("/api/config", json={"request_headers": RADARR_ONLY})
+    answers[0] = 500
+    assert REFUSAL_HINT not in authed_client.post("/api/test/sonarr", json=SONARR).json["message"]
+
+
+def test_a_backup_refused_by_a_proxy_points_at_the_headers(monkeypatch, caplog, answers):
+    monkeypatch.setattr(backup, "enabled_apps", lambda cfg: ["sonarr"])
+    monkeypatch.setattr(backup, "enabled_destinations", lambda cfg: ["local"])
+    monkeypatch.setattr(backup.destination_util, "sync", lambda cfg: None)
+    monkeypatch.setattr(backup.destination_util, "remote_root", lambda dest_id, cfg: "/dest")
+    monkeypatch.setattr(backup, "apply_retention", lambda *args, **kwargs: None)
+    ok, failed = backup.run_backup({"apps": {"sonarr": SONARR}, "destinations": {"local": {}},
+                                    "request_headers": RADARR_ONLY})
+    assert not ok and len(failed) == 1 and failed[0].endswith(REFUSAL_HINT)
+    assert "backup failed" in caplog.text and REFUSAL_HINT in caplog.text

@@ -47,6 +47,12 @@
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.35);
 }
 
+/* Black, one-colour app icons turn white on the dark theme. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) img[src$="/vaultwarden.svg"] { filter: invert(1); }
+}
+:root[data-theme="dark"] img[src$="/vaultwarden.svg"] { filter: invert(1); }
+
 * { box-sizing: border-box; }
 
 /* !important since it must win over any element's base display value. */
@@ -160,12 +166,29 @@ body {
   .brand-mark { width: 32px; height: 32px; }
   .brand-name { font-size: 20px; }
   .brand-tagline { font-size: 13px; }
+  /* The account button is just its icon, so brand, account and theme keep
+     one row beside the tagline. */
+  .user-name { display: none; }
   .tabs { gap: 2px; }
   .tab-btn { font-size: 14px; padding: 6px 4px; }
 }
 
 @media (max-width: 360px) {
-  .user-name { display: none; }
+  .topbar { gap: 8px; }
+  .brand-tagline { font-size: 12px; }
+}
+
+/* Phones under 360px: a little smaller still, so the header keeps one row. */
+@media (max-width: 359px) {
+  .topbar { padding: 10px 8px; gap: 6px; }
+  .brand { gap: 8px; }
+  .brand-mark { width: 28px; height: 28px; }
+  .brand-name { font-size: 18px; }
+  .brand-tagline { font-size: 11px; letter-spacing: 0; }
+  .theme-toggle { width: 30px; height: 30px; font-size: 16px; }
+}
+
+@media (max-width: 360px) {
   .tab-btn { font-size: 13px; padding: 5px 3px; }
 }
 
@@ -191,6 +214,16 @@ body {
   object-fit: contain;
   flex-shrink: 0;
 }
+
+/* An app with a second icon for the dark theme (APP_META icon_dark): the
+   one that fits the theme shows - the toggle's choice, else the system's. */
+.app-icon.icon-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .app-icon.icon-light { display: none; }
+  :root:not([data-theme="light"]) .app-icon.icon-dark { display: inline; }
+}
+:root[data-theme="dark"] .app-icon.icon-light { display: none; }
+:root[data-theme="dark"] .app-icon.icon-dark { display: inline; }
 
 .content {
   width: 100%;
@@ -378,19 +411,117 @@ body {
 .app-card:last-child { margin-bottom: 0; }
 
 /* "Enabled" / "Not enabled" dividers between the grouped app cards. */
-.app-group-heading {
+/* ---------------------------------------------------- app categories --- */
+/* A collapsible group of app cards (#148), on Settings and History. */
+.app-category + .app-category, .history-category + .history-category { margin-top: 10px; }
+.category-head {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 20px 0 10px;
-  font-size: 12.5px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
-.app-group-heading::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
-#app-list > .app-group-heading:first-child { margin-top: 0; }
+.category-head:hover, .category-head:focus-visible { border-color: var(--accent); }
+.category-emoji { font-size: 18px; line-height: 1; }
+/* The pickers' category headings: bold, upright (Firefox slants them). */
+optgroup { font-weight: 700; font-style: normal; }
+/* A category's own icon (#189), drawn in the text colour: the outline one on
+   the light theme, the filled one on the dark. As wide as an emoji, so every
+   category's name starts in line. */
+.category-icon {
+  flex: none;
+  width: 22.5px;
+  height: 20px;
+  background-color: var(--text);
+  -webkit-mask: var(--category-icon) center / contain no-repeat;
+  mask: var(--category-icon) center / contain no-repeat;
+}
+.category-icon-server { --category-icon: url("icons/server-outline.png"); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .category-icon-server { --category-icon: url("icons/server-filled.png"); }
+}
+:root[data-theme="dark"] .category-icon-server { --category-icon: url("icons/server-filled.png"); }
+.category-name { font-size: 15.5px; font-weight: 600; flex: 1; }
+.category-count { color: var(--text-muted); font-size: 13.5px; white-space: nowrap; }
+.category-chevron {
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  transform: rotate(45deg);
+  margin: 0 4px 4px 2px;
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+[aria-expanded="false"] > .category-chevron { transform: rotate(-45deg); margin: 0 4px 0 0; }
+.category-body { padding-top: 10px; }
+.history-category > .category-body { padding: 12px 4px 0; }
+
+/* Destinations folds the same way, its h2 the button. */
+/* Spaced like any card's h2 (.card h2); folded, the card is just its title. */
+.section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.section-toggle > span:first-child { flex: 1; }
+.dest-head-icons { display: flex; align-items: center; gap: 6px; }
+.dest-head-icons .app-icon { width: 18px; height: 18px; }
+.section-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
+
+/* -------------------------------------------- picking several backups --- */
+.history-select { display: none; width: auto; margin: 0 8px 0 0; vertical-align: middle; cursor: pointer; }
+#history-root.selecting .history-select { display: inline-block; }
+#history-root.selecting .history-app h3 { display: flex; align-items: center; }
+#history-select-btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.btn-icon-text { display: inline-flex; align-items: center; gap: 6px; }
+.btn-icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+/* Room below the last row so the bar never covers it. */
+#history-root.selecting { padding-bottom: 72px; }
+.bulk-bar {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+}
+.bulk-bar.hidden { display: none; }
+.bulk-count { font-weight: 600; font-size: 14.5px; margin-right: 4px; white-space: nowrap; }
+.bulk-bar .btn { white-space: nowrap; }
+/* Why some couldn't be deleted (#164): its own line, wrapping, under the rest. */
+.bulk-bar:has(.bulk-error:not(.hidden)) { flex-wrap: wrap; max-width: min(640px, calc(100vw - 32px)); }
+.bulk-error { flex-basis: 100%; color: var(--danger); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.bulk-error.hidden { display: none; }
+/* On a phone the bar spans the width, clear of the feedback button: the
+   count on one line, the three buttons on the next. */
+@media (max-width: 560px) {
+  .bulk-bar { left: 12px; right: 76px; transform: none; flex-wrap: wrap; gap: 8px; }
+  .bulk-count { flex-basis: 100%; text-align: center; margin-right: 0; }
+  .bulk-bar { justify-content: center; }
+}
 
 .discovery-badge {
   color: var(--accent);
@@ -594,6 +725,11 @@ input:focus, select:focus, textarea:focus {
 
 /* A long test result wraps beside the buttons; the buttons never do. */
 .app-card-actions .btn { flex: none; white-space: nowrap; }
+/* On a phone a row of buttons (Prowlarr's three) is wider than the card:
+   the row wraps instead, each button still on one line. */
+@media (max-width: 480px) {
+  .app-card-actions { flex-wrap: wrap; }
+}
 
 .field-actions-spaced { margin-top: 10px; }
 
@@ -617,6 +753,31 @@ input:focus, select:focus, textarea:focus {
 
 .help-tip:hover,
 .help-tip:focus { color: var(--accent); border-color: var(--accent); outline: none; }
+/* A "?" that's also a link (the Home Assistant integration's). It ends its
+   line, so its tooltip opens to the left, within the card on a phone. */
+a.help-tip-link { cursor: pointer; text-decoration: none; }
+a.help-tip-link:hover::after,
+a.help-tip-link:focus::after { left: auto; right: -6px; transform: none; }
+
+/* A card's "?": its app's page in the docs, at "Setting it up". */
+.card-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--text-muted);
+  border-radius: 50%;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.card-help:hover,
+.card-help:focus-visible { color: var(--accent); border-color: var(--accent); outline: none; }
 
 .help-tip:hover::after,
 .help-tip:focus::after {
@@ -637,6 +798,21 @@ input:focus, select:focus, textarea:focus {
   font-weight: 400;
   line-height: 1.4;
   text-align: left;
+}
+
+/* A certificate fingerprint's tooltip (#189): its "?" sits near the start of
+   a line, so the tooltip lines up with that line, within the card. */
+.cert-fingerprint, .https-fingerprint { position: relative; }
+.help-tip-fingerprint { position: static; }
+.help-tip-fingerprint:hover::after,
+.help-tip-fingerprint:focus::after {
+  left: 0;
+  transform: none;
+  width: max-content;
+  max-width: 100%;
+  white-space: pre;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
 }
 
 .test-result {
@@ -692,6 +868,36 @@ input:focus, select:focus, textarea:focus {
 
 .switch input:checked + .slider { background: var(--accent); }
 .switch input:checked + .slider::before { transform: translateX(15px); }
+.switch input:focus-visible + .slider { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* A setting switched like the app itself: the same toggle, then its label. */
+.toggle-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+/* An option that's always on (Home Assistant's Settings, #155). */
+.switch input:disabled + .slider { opacity: 0.6; cursor: default; }
+.toggle-field:has(input:disabled) { cursor: default; }
+
+/* Home Assistant's chosen apps (#155): one switch per installed app. */
+.app-list {
+  border: 0;
+  margin: 0 0 12px;
+  padding: 0;
+  min-width: 0;
+}
+.app-list .field-label { padding: 0; margin-bottom: 6px; }
+.app-list-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.app-list-item { margin: 0; overflow-wrap: anywhere; }
 
 .save-row {
   display: flex;
@@ -724,6 +930,8 @@ input:focus, select:focus, textarea:focus {
 
 @media (max-width: 560px) {
   .run-head { flex-wrap: wrap; gap: 10px; }
+  /* Cancel, the app picker and "Running..." don't fit on one line. */
+  .run-head-actions { flex-wrap: wrap; }
 }
 
 .run-summary {
@@ -737,6 +945,10 @@ input:focus, select:focus, textarea:focus {
 }
 
 .run-summary strong { color: var(--text); }
+
+/* A saved schedule that stopped being valid (#166), on Overview and Run & Status. */
+.schedule-warning { color: var(--warn); font-weight: 600; margin: 12px 0 0; }
+#run-schedule-warning { margin: 0 0 12px; }
 
 .spinner {
   display: inline-block;
@@ -849,6 +1061,20 @@ input:focus, select:focus, textarea:focus {
 .restore-version.fail { color: var(--danger); }
 .restore-version .btn { margin-left: 6px; }
 
+/* A self-signed certificate to trust (#153), and links to a card from a failure. */
+.cert-trust { margin-top: 10px; display: grid; gap: 10px; }
+.cert-details { display: grid; gap: 2px; font-size: 14px; overflow-wrap: anywhere; }
+.cert-details .cert-fingerprint { display: flex; align-items: center; gap: 6px; }
+.card-link { margin-left: 8px; }
+
+/* An app restored by hand (#151): its download and steps on the Restore tab. */
+.restore-manual { margin: 4px 0 8px; }
+.restore-manual a.btn { display: inline-block; text-decoration: none; }
+.restore-steps-title { font-size: 15px; margin: 16px 0 6px; }
+.restore-steps { margin: 0 0 8px; padding-left: 22px; }
+.restore-steps li { margin: 4px 0; line-height: 1.45; }
+.restore-manual a:not(.btn) { color: var(--accent); }
+
 .server-pw-row {
   display: flex;
   align-items: center;
@@ -885,6 +1111,7 @@ input:focus, select:focus, textarea:focus {
 
 .toast.ok { border-color: var(--ok); }
 .toast.fail { border-color: var(--danger); }
+.toast.warn { border-color: var(--warn); }
 
 code {
   background: var(--bg);
@@ -975,6 +1202,65 @@ code {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 14px;
+}
+
+/* Home Assistant's switch on Backuparr's card (#170). */
+.ha-integration { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.https-settings { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.https-settings .hint { margin: 0 0 8px; }
+.https-settings .hint.warn { color: var(--warn); }
+.https-settings .toggle-field { margin: 4px 0 4px; }
+.https-fingerprint { display: flex; align-items: center; gap: 6px; }
+.ha-integration .toggle-field { margin-bottom: 0; }
+.ha-integration #ha-token-field { margin-top: 12px; }
+.ha-integration #ha-token { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+.ha-integration .app-card-actions { margin-top: 10px; }
+
+/* The status bar over the app cards (#167). */
+.overview-status-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 16px;
+}
+.overview-status-text { font-weight: 600; }
+.overview-status-extra { color: var(--text-muted); }
+.overview-status-extra::before { content: "\00b7"; margin-right: 10px; }
+.status-icon { width: 24px; height: 24px; flex: none; fill: currentColor; stroke: var(--bg-elevated); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.overview-status[data-state="ok"] .status-icon { color: var(--ok); }
+.overview-status[data-state="fail"] .status-icon { color: var(--danger); }
+.overview-status-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.overview-status-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.overview-status-item:hover, .overview-status-item:focus-visible { background: var(--bg); }
+.overview-status-item .app-icon { width: 20px; height: 20px; flex: none; margin-top: 1px; }
+.overview-status-line { min-width: 0; overflow-wrap: anywhere; line-height: 1.45; }
+.overview-status-error { color: var(--text-muted); }
+@media (max-width: 480px) {
+  /* "n not backed up yet" on its own line, under the text, without the dot. */
+  .overview-status-extra { flex-basis: 100%; padding-left: 34px; }
+  .overview-status-extra::before { content: none; }
+}
+.overview-app-card.flash, .app-card.flash { animation: card-flash 1.6s ease-out; }
+@keyframes card-flash {
+  from { box-shadow: 0 0 0 3px var(--accent); }
+  to { box-shadow: var(--shadow); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .overview-app-card.flash, .app-card.flash { animation: none; outline: 3px solid var(--accent); }
 }
 
 .overview-app-card {
@@ -1328,6 +1614,44 @@ code {
   .history-table td.actions-cell { margin-left: auto; width: auto; }
 }
 
+/* ---------------------------------------------------- encrypted backups --- */
+/* A padlock and a word (#147): closed and filled in green, open and outlined
+   in amber, so the two never look alike. */
+.enc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 1px 8px 1px 6px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.enc-badge.enc-on { color: var(--ok); }
+.enc-badge.enc-off { color: var(--warn); }
+.enc-icon { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.enc-icon .enc-icon-fill { fill: currentColor; }
+.overview-app-last .enc-badge { margin: 6px 0 0; }
+/* A Jellyfin, Emby or Plex backup with the app's metadata (#196). */
+.meta-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.encrypt-note { margin: 4px 0 10px; }
+
 /* ------------------------------------------------------ encryption key --- */
 .key-box {
   display: flex;
@@ -1385,3 +1709,21 @@ code {
 }
 .user-menu-item + .user-menu-item { border-top: 1px solid var(--border); }
 .user-menu-item:hover, .user-menu-item:focus-visible { background: var(--bg); color: var(--accent); }
+
+/* Google's folder picker places itself on the page (position: absolute) for
+   the scroll position it opened at, and the page can scroll on after, leaving
+   it off screen. Keep it in the middle of the window instead - on a narrow
+   screen at the left edge, where its Select button is. */
+.picker-dialog {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%);
+}
+
+@media (max-width: 600px) {
+  .picker-dialog {
+    left: 0 !important;
+    transform: translateY(-50%);
+  }
+}

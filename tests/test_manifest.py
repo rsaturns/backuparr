@@ -129,8 +129,9 @@ def run(monkeypatch):
         state.uploads.append(dst)
 
     monkeypatch.setattr(rclone_util, "copyto", copyto)
-    cfg = {"apps": {"radarr": {"url": "http://radarr:7878", "api_key": "k"}}, "destinations": {"local": {}, "gdrive": {}}}
-    state.go = lambda: backup.run_backup(cfg)
+    state.cfg = {"apps": {"radarr": {"url": "http://radarr:7878", "api_key": "k", "encrypt": False}},
+                 "destinations": {"local": {}, "gdrive": {}}}
+    state.go = lambda: backup.run_backup(state.cfg)
     return state
 
 
@@ -143,6 +144,35 @@ def test_a_run_records_version_checksum_and_destinations(run):
     assert entry["app_version"] == "6.4.4.10685"
     assert entry["sha256"] == sha(b"archive") and entry["size"] == len(b"archive")
     assert entry["backuparr_version"] == backup.VERSION
+    assert entry["encrypted"] is False
+
+
+def test_a_run_records_whether_a_media_servers_backup_holds_metadata(run, monkeypatch):
+    class Emby(FakeApp):
+        def backup(self, dest_dir):
+            path = os.path.join(dest_dir, "emby.zip")
+            with zipfile.ZipFile(path, "w") as zf:
+                zf.writestr("backuparr-emby.json", json.dumps({"emby_version": "4.10.2.0", "metadata": True}))
+            return path
+
+    run.app = Emby("4.10.2.0")
+    monkeypatch.setattr(backup, "enabled_apps", lambda cfg: ["emby"])
+    run.cfg["apps"] = {"emby": {"url": "http://emby:8096", "api_key": "k", "encrypt": True}}
+    ok, failed = run.go()
+    assert ok == ["emby"] and failed == []
+    [entry] = manifest.backups().values()
+    assert entry["metadata"] is True and entry["encrypted"] is True
+
+
+def test_an_encrypted_backup_is_recorded_as_encrypted_with_the_stored_files_checksum(run, monkeypatch):
+    stored = {}
+    monkeypatch.setattr(rclone_util, "copyto", lambda src, dst: stored.setdefault("data", open(src, "rb").read()))
+    run.cfg["apps"]["radarr"]["encrypt"] = True
+    ok, failed = run.go()
+    assert ok == ["radarr"] and failed == []
+    [entry] = manifest.backups().values()
+    assert entry["file"].endswith(".zip.enc") and entry["encrypted"] is True
+    assert entry["sha256"] == sha(stored["data"]) and entry["size"] == len(stored["data"])
 
 
 def test_only_destinations_that_got_the_upload_are_recorded(run):
@@ -236,13 +266,36 @@ def test_the_version_is_read_from_inside_each_apps_archive(tmp_path):
         "emby": make_zip(tmp_path / "e.zip", {"backuparr-emby.json": json.dumps({"emby_version": "4.10.2.0"})}),
         "seerr": make_zip(tmp_path / "s.zip", {"backuparr-seerr.json": json.dumps({"seerr_version": "3.5.1"})}),
         "nzbget": make_zip(tmp_path / "n.zip", {"backuparr-nzbget.json": json.dumps({"nzbget_version": "26.3"})}),
+        "vaultwarden": make_zip(tmp_path / "vw.zip", {"backuparr-vaultwarden.json": json.dumps({"vaultwarden_version": "1.37.5"})}),
+        # Pi-hole's own Teleporter zip, first lines as FTL v6.8 writes them (lab, 2026-11-10).
+        "pihole": make_zip(tmp_path / "ph.zip", {"etc/pihole/pihole.toml": "# Pi-hole configuration file (v6.8)\n# Encoding: UTF-8\n"}),
     }
     found = {app: manifest_backfill.read_version(app, path) for app, path in cases.items()}
     assert found == {
         "radarr": "v6.4.4.10685", "whisparr": "v3.6.5.1886", "profilarr": "2.3.1", "jellyfin": "12.4.0.0",
         "tautulli": "v2.18.2", "lazylibrarian": "228abd29", "plex": "1.43.5.11079-b3b13e506",
-        "emby": "4.10.2.0", "seerr": "3.5.1", "nzbget": "26.3",
+        "emby": "4.10.2.0", "seerr": "3.5.1", "nzbget": "26.3", "pihole": "FTL v6.8", "vaultwarden": "1.37.5",
     }
+
+
+# Jellyfin's manifest.json as 12.4 writes it (lab, 2026-11-12); Backuparr's own for Emby and Plex (#196).
+def test_whether_a_media_servers_backup_holds_metadata_is_read_from_inside_it(tmp_path):
+    def jellyfin(name, options):
+        return make_zip(tmp_path / name, {"manifest.json": json.dumps({"ServerVersion": "12.4.0.0", "Options": options})})
+    with_metadata = {"Metadata": True, "Trickplay": False, "Subtitles": False, "Database": True}
+    assert manifest_backfill.read_metadata("jellyfin", jellyfin("j1.zip", with_metadata)) is True
+    assert manifest_backfill.read_metadata("jellyfin", jellyfin("j2.zip", {**with_metadata, "Metadata": False})) is False
+    assert manifest_backfill.read_metadata("jellyfin", make_zip(tmp_path / "j3.zip", {"manifest.json": "{}"})) is False
+    for app in ("emby", "plex"):
+        own = f"backuparr-{app}.json"
+        assert manifest_backfill.read_metadata(app, make_zip(tmp_path / f"{app}1.zip", {own: json.dumps({"metadata": True})})) is True
+        # Made before the switch: no "metadata" in it.
+        assert manifest_backfill.read_metadata(app, make_zip(tmp_path / f"{app}2.zip", {own: json.dumps({})})) is False
+        assert manifest_backfill.read_metadata(app, make_zip(tmp_path / f"{app}3.zip", {"other": "x"})) is None
+    assert manifest_backfill.read_metadata("radarr", make_zip(tmp_path / "r.zip", {"INFO": "v6\n"})) is None
+    broken = tmp_path / "broken.zip"
+    broken.write_bytes(b"not a zip")
+    assert manifest_backfill.read_metadata("plex", str(broken)) is None
 
 
 def test_apps_whose_archives_hold_no_version_and_broken_archives_give_none(tmp_path):
@@ -250,6 +303,7 @@ def test_apps_whose_archives_hold_no_version_and_broken_archives_give_none(tmp_p
     assert manifest_backfill.read_version("sabnzbd", make_zip(tmp_path / "s.zip", {"sabnzbd_config.json": "{}"})) is None
     assert manifest_backfill.read_version("tdarr", make_zip(tmp_path / "t.zip", {"FlowsJSONDB.json": "[]"})) is None
     assert manifest_backfill.read_version("radarr", make_zip(tmp_path / "r.zip", {"radarr.db": ""})) is None
+    assert manifest_backfill.read_version("pihole", make_zip(tmp_path / "ph.zip", {"etc/pihole/pihole.toml": "[dns]\n"})) is None
     assert manifest_backfill.read_version("tautulli", make_zip(tmp_path / "t2.zip", {"tautulli.db": tautulli_db(tmp_path, None)})) is None
     broken = tmp_path / "broken.zip"
     broken.write_bytes(b"not a zip")
@@ -330,6 +384,15 @@ def test_backfill_skips_what_is_recorded_so_an_interrupted_pass_resumes(destinat
     manifest_backfill.backfill(destinations.cfg)
     assert len(manifest.backups()) == 2
     assert destinations.downloads == ["radarr/radarr_20261101_030000.zip", "radarr/radarr_20261102_030000.zip"]
+
+
+def test_backfill_records_whether_a_media_server_backup_holds_metadata(destinations, tmp_path):
+    plain = make_zip(tmp_path / "jellyfin.zip", {"manifest.json": json.dumps({"ServerVersion": "12.4.0.0", "Options": {"Metadata": True}})})
+    data = open(plain, "rb").read()
+    destinations.remote["jellyfin/jellyfin_20261101_030000.zip"] = data
+    manifest_backfill.backfill(destinations.cfg)
+    entry = manifest.get("jellyfin", "jellyfin_20261101_030000.zip")
+    assert entry["metadata"] is True and entry["app_version"] == "12.4.0"
 
 
 def test_a_run_record_is_kept_over_what_the_backfill_reads(destinations):
@@ -446,6 +509,28 @@ def test_history_shows_each_backups_version_and_delete_updates_the_manifest(auth
     response = authed_client.delete("/api/history/local/radarr/radarr_20261102_030000.zip")
     assert response.status_code == 200 and len(deleted) == 1
     assert manifest.get("radarr", "radarr_20261102_030000.zip") is None
+
+
+def test_history_says_which_backups_hold_metadata(authed_client, isolated_webui, monkeypatch):
+    files = ["plex/plex_20261101_030000.zip", "plex/plex_20261102_030000.zip", "plex/plex_20261031_030000.zip",
+             "plex/plex_20261030_030000.zip", "radarr/radarr_20261101_030000.zip"]
+    monkeypatch.setattr(rclone_util, "lsjson", lambda root, recursive=False, include=(): [
+        {"Path": p, "Name": p.rsplit("/", 1)[-1], "IsDir": False, "Size": 1, "ModTime": p[-19:-4]} for p in files])
+    authed_client.put("/api/config", json={"destinations": {"local": {"enabled": True}}})
+    manifest.record("plex", "plex_20261102_030000.zip", ["local"], app_version="1.43", sha256="a", size=1,
+                    backuparr_version="3.0.0", metadata=True)
+    manifest.record("plex", "plex_20261101_030000.zip", ["local"], app_version="1.43", sha256="b", size=1,
+                    backuparr_version="3.0.0", metadata=False)
+    manifest.record("plex", "plex_20261031_030000.zip", ["local"], app_version="1.43", sha256="d", size=1,
+                    backuparr_version="3.0.0-beta")  # recorded before the switch existed
+    manifest.record("radarr", "radarr_20261101_030000.zip", ["local"], app_version="6.4", sha256="c", size=1,
+                    backuparr_version="3.0.0")
+    history = authed_client.get("/api/history/local").get_json()
+    assert [(e["name"], e["metadata"]) for e in history["plex"]] == [
+        ("plex_20261102_030000.zip", True), ("plex_20261101_030000.zip", False),
+        ("plex_20261031_030000.zip", False), ("plex_20261030_030000.zip", None)]  # the last not read yet
+    assert history["radarr"][0]["metadata"] is None
+    assert "metadata" not in manifest.get("radarr", "radarr_20261101_030000.zip")
 
 
 def test_reset_deletes_the_manifest(authed_client, isolated_webui, manifest_in_tmp):

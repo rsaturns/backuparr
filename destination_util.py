@@ -160,6 +160,8 @@ def local_root(dest_cfg):
 # Each module has TOKEN_FIELD (the destination field set once connected),
 # remote_root(), backup_target() and sync_rclone_remote().
 REMOTES = {"gdrive": gdrive_oauth, "onedrive": onedrive_oauth, "dropbox": dropbox_oauth}
+# The rclone remotes Backuparr keeps, by name, and the type each one is.
+OWN_REMOTES = {module.REMOTE_NAME: module.RCLONE_TYPE for module in REMOTES.values()}
 _REMOTE_ERRORS = (gdrive_oauth.GDriveOAuthError, onedrive_oauth.OneDriveOAuthError, dropbox_oauth.DropboxOAuthError)
 
 

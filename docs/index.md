@@ -1,27 +1,33 @@
 ---
 title: Home
 nav_order: 1
-description: Scheduled backups and web-UI restores for your *arr stack and media servers.
+description: Scheduled, encrypted backups of the apps you host, to local storage and the cloud.
 permalink: /
 ---
 
 # Backuparr
 
-**Backup your Arrs.**
+> **These docs cover Backuparr 3.0.0-beta.** On 2.5.7? Its docs are [on GitHub](https://github.com/rsaturns/backuparr/tree/v2.5.7/docs).
 
-Scheduled config/database backups for Radarr, Sonarr, Lidarr, Whisparr,
-Prowlarr, Profilarr, Bazarr, Tdarr, SABnzbd, NZBGet, Tautulli, Jellyfin, Emby,
-Plex, Seerr, and LazyLibrarian, sent to every destination you enable: Local
-storage, Google Drive, OneDrive, and Dropbox. Everything - apps, destinations,
-schedule, retention and restores - is set up in the web UI, not env vars.
+**Everything you host, backed up.**
 
-Most apps are backed up through their own API. Jellyfin, Emby, Plex, Seerr and
-LazyLibrarian also need a folder mounted into Backuparr - see [Apps](apps/index.md).
+Scheduled backups of the apps you host - media management, downloaders,
+media servers, network, security, home automation and server apps - sent to
+every destination you enable: Local storage, Google Drive, OneDrive and
+Dropbox. Backups are encrypted with your own key by default, and most apps
+restore from the web UI. Everything - apps, destinations, schedule, retention
+and restores - is set up in the web UI, not env vars. See the [full list of apps](apps/index.md).
+
+Most apps are backed up through their own API or web UI. Some apps also need
+their folder mounted into Backuparr - see [Apps](apps/index.md).
+
+How safe are your backups and credentials? [Security principles](security-principles.md)
+explains what Backuparr protects, how, and what it leaves to you.
 
 [Get started](getting-started.md){: .btn .btn-primary }
 [View on GitHub](https://github.com/rsaturns/backuparr){: .btn }
 
-![Overview tab: enabled services, destinations, schedule and retention, and each app's last backup](screenshots/overview.png)
+![Overview tab: enabled services, destinations, schedule and retention, a line saying all 36 backups succeeded, and each app's last backup](screenshots/overview.png)
 
 ## Where to find things
 
@@ -32,7 +38,7 @@ LazyLibrarian also need a folder mounted into Backuparr - see [Apps](apps/index.
   [first run](getting-started/first-run.md) and [updating](getting-started/updating.md).
 - [Apps](apps/index.md) - how each app is backed up and restored, with notes
   for the apps that need extra setup.
-- [Destinations](destinations.md) - Local storage, Google Drive, OneDrive and
+- [Destinations](destinations.md) - Local Storage, Google Drive, OneDrive and
   Dropbox.
 - [Backups and history](backups.md) - the schedule, retention, the check
   before upload, run logs and the History tab.
@@ -40,6 +46,8 @@ LazyLibrarian also need a folder mounted into Backuparr - see [Apps](apps/index.
   restoring Backuparr itself.
 - [Settings](settings.md) - Prowlarr discovery, more than one instance of an
   app, and authentication headers for apps behind a reverse proxy.
+- [Security principles](security-principles.md) - how Backuparr protects your
+  backups and credentials, and what it leaves to you.
 - [Login and security](security.md) - the admin login, password recovery, your
   encryption key and Backuparr's own backup.
 - [Notifications](notifications.md) - Discord, Slack, Telegram, Gotify, ntfy and

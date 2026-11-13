@@ -120,7 +120,36 @@ def configure_app_headers(app, rows):
         origin = _origin(requests.Request("GET", app.url).prepare().url)
         for prefix, adapter in list(app.session.adapters.items()):
             app.session.mount(prefix, _HeadersAdapter(adapter, origin, headers))
+        # A driver that also talks over something other than its session
+        # (Home Assistant's WebSocket) sends them there too.
+        if hasattr(app, "set_request_headers"):
+            app.set_request_headers(headers)
     return app
+
+
+# A reverse proxy refuses a request without the headers it wants with 401 or
+# 403 - just as the app refuses a wrong API key - so the app's own "check
+# the API key" alone can point the wrong way.
+REFUSAL_HINT = ", or the Service Authentication headers if a proxy in front needs them"
+
+
+def note_refusals(app):
+    """Notes on the app when a request it sent was answered 401 or 403."""
+    session = getattr(app, "session", None)
+    if isinstance(session, requests.Session):
+        def note(response, *args, **kwargs):
+            if response.status_code in (401, 403):
+                app.refused_by_server = True
+        session.hooks["response"].append(note)
+    return app
+
+
+def refusal_hint(app, exc, rows):
+    """REFUSAL_HINT for a failure after a 401/403 when headers are set up -
+    not for a Servarr web UI asking for the app's own login (needs_login)."""
+    if rows and getattr(app, "refused_by_server", False) and not getattr(exc, "needs_login", False):
+        return REFUSAL_HINT
+    return ""
 
 
 def app_connection_config(cfg, name):

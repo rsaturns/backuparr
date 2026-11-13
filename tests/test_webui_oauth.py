@@ -10,6 +10,7 @@ import dropbox_oauth
 import gdrive_oauth
 import onedrive_oauth
 import rclone_token
+from conftest import sign_in
 
 
 def gdrive(webui):
@@ -96,6 +97,15 @@ def test_the_redirect_uri_sent_to_google_matches_the_one_used_to_exchange(authed
     assert seen == sent_to_google
 
 
+def test_a_state_only_works_in_the_browser_that_started_the_sign_in(authed_client, isolated_webui, monkeypatch):
+    monkeypatch.setattr(gdrive_oauth, "exchange_code", lambda *a: pytest.fail("must not exchange"))
+    state = start_flow(authed_client, isolated_webui)
+    other = isolated_webui.app.test_client()  # another signed-in browser
+    with other.session_transaction() as session:
+        sign_in(session)
+    assert "invalid or expired" in query(callback(other, state=state, code="c"))["gdrive_error"][0]
+
+
 def test_a_state_can_only_be_used_once(authed_client, isolated_webui, monkeypatch):
     calls = []
     monkeypatch.setattr(gdrive_oauth, "exchange_code", lambda *a: calls.append(a) or {"refresh_token": "rt"})
@@ -136,7 +146,8 @@ def test_google_refusing_the_code_shows_googles_reason(authed_client, isolated_w
 def test_expired_states_are_swept_when_a_new_one_is_made(isolated_webui):
     isolated_webui.destinations._OAUTH_STATE["old"] = time.monotonic() - isolated_webui.destinations._OAUTH_STATE_TTL - 5
     isolated_webui.destinations._OAUTH_STATE["recent"] = time.monotonic()
-    fresh = isolated_webui.destinations._oauth_state_new()
+    with isolated_webui.app.test_request_context():
+        fresh = isolated_webui.destinations._oauth_state_new()
     assert set(isolated_webui.destinations._OAUTH_STATE) == {"recent", fresh}
 
 

@@ -18,13 +18,14 @@ def feedback_links(html):
     return re.findall(r'<a [^>]*href="([^"]+)"[^>]*>([^<]+)</a>', menu, re.S)
 
 
-def test_menu_offers_bug_report_and_feature_request(index_html):
+def test_menu_offers_the_docs_then_bug_report_and_feature_request(index_html):
     labels = [label.strip() for _href, label in feedback_links(index_html)]
-    assert labels == ["Report a bug", "Request a feature"]
+    assert labels == ["Documentation", "Report a bug", "Request a feature"]
+    assert feedback_links(index_html)[0][0] == "https://rsaturns.github.io/backuparr/"  # #199
 
 
 def test_links_point_at_templates_that_exist(index_html):
-    links = feedback_links(index_html)
+    links = feedback_links(index_html)[1:]
     assert len(links) == 2
     for href, _label in links:
         assert href.startswith(REPO_PREFIX)
@@ -34,5 +35,5 @@ def test_links_point_at_templates_that_exist(index_html):
 
 def test_links_open_safely_in_a_new_tab(index_html):
     menu = re.search(r'id="feedback-menu".*?</div>', index_html, re.S).group(0)
-    assert menu.count('target="_blank"') == 2
-    assert menu.count('rel="noopener noreferrer"') == 2
+    assert menu.count('target="_blank"') == 3
+    assert menu.count('rel="noopener noreferrer"') == 3

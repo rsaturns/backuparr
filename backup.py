@@ -1,10 +1,10 @@
 """Trigger each configured app's own backup mechanism, zip the result if
 needed, and upload it to the configured rclone remote. Most apps are backed
-up over their HTTP API. A few need their folder mounted into this container:
+up over their HTTP API (Home Assistant over its WebSocket API). A few need their folder mounted into this container:
 Jellyfin's and LazyLibrarian's APIs can't download the backup they create, so
-it's picked up from the mounted folder; Emby and Seerr have no backup API, so
-their files are read from their mounted data folders; and Plex's settings
-and server identity come from its mounted data folder.
+it's picked up from the mounted folder; Emby, Seerr and Vaultwarden have no
+backup API, so their files are read from their mounted data folders; and
+Plex's settings and server identity come from its mounted data folder.
 Settings come from config_store, not environment variables.
 """
 import errno
@@ -24,19 +24,26 @@ from urllib.parse import parse_qs, urlparse
 import requests
 
 import archive_check
+import archive_crypto
 import destination_util
 import manifest
+import manifest_backfill
 import rclone_util
 import runlog
 import self_backup
 from apps.base import AppError
 from apps.bazarr import BazarrApp
 from apps.emby import EmbyApp
-from apps.http_headers import RequestHeadersError, app_connection_config, configure_app_headers
+from apps.homeassistant import HomeAssistantApp
+from apps.http_headers import RequestHeadersError, app_connection_config, configure_app_headers, note_refusals, refusal_hint
+from apps.immich import ImmichApp
 from apps.jellyfin import JellyfinApp
 from apps.lazylibrarian import LazyLibrarianApp
 from apps.lidarr import LidarrApp
 from apps.nzbget import NzbgetApp
+from apps.opnsense import OpnsenseApp
+from apps.pfsense import PfsenseApp
+from apps.pihole import PiholeApp
 from apps.plex import PlexApp
 from apps.profilarr import ProfilarrApp
 from apps.prowlarr import ProwlarrApp
@@ -47,8 +54,14 @@ from apps.servarr import UnsafeRedirectError
 from apps.sonarr import SonarrApp
 from apps.tautulli import TautulliApp
 from apps.tdarr import TdarrApp
+from apps.vaultwarden import VaultwardenApp
+from apps.bitwarden import BitwardenApp
 from apps.whisparr import WhisparrApp
-from config_store import ConfigError, app_meta, enabled_apps, enabled_destinations, instance_type, retention_days
+from apps.unifi import UnifiApp
+from apps.synology import SynologyApp
+from apps.qnap import QnapApp
+from apps.unraid import UnraidApp
+from config_store import ConfigError, app_label, app_meta, enabled_apps, enabled_destinations, encrypts, instance_type, retention_days
 from webui.version import VERSION
 
 LOG_DIR = os.environ.get("BACKUPARR_LOG_DIR", "/var/log/backuparr")
@@ -198,13 +211,27 @@ def _without_app_prefix(message, app):
     return message
 
 
+def branded(message, app_cfg=None):
+    """A message that opens with an app or instance id, log-style
+    ("opnsense: ...", "pfsense 2.7.2 reachable", "radarr-4k restore
+    uploaded"), opening with the name its card shows instead, for the web UI:
+    "OPNsense: ...", "pfSense 2.7.2 reachable", "Radarr (4K) restore
+    uploaded" (#191). app_cfg gives an instance its own name."""
+    first, space, rest = message.partition(" ")
+    name = first.removesuffix(":")
+    if not space or not instance_type(name):
+        return message
+    return f"{app_label(name, app_cfg)}{first[len(name):]} {rest}"
+
+
 def humanize_error(exc, url=None, app=None):
     """The describe_failure() line, or str(exc) for anything it doesn't know.
-    Pass `app` when the result goes after an "<app>: " label."""
-    return _without_app_prefix(describe_failure(exc, url) or str(exc), app)
+    Pass `app` when the result goes after an "<app>: " label. An app's id
+    left at the start becomes its name, as the web UI shows it (#191)."""
+    return branded(_without_app_prefix(describe_failure(exc, url) or str(exc), app))
 
 
-def log_failure(logger, summary, exc, url=None, app=None):
+def log_failure(logger, summary, exc, url=None, app=None, hint=""):
     """Logs a failure as one readable ERROR line when describe_failure()
     recognises it, otherwise with the full traceback - unexpected errors
     are bugs, and a bug report needs the stack."""
@@ -212,12 +239,13 @@ def log_failure(logger, summary, exc, url=None, app=None):
     if message is None:
         logger.error("%s", summary, exc_info=exc)
     else:
-        logger.error("%s - %s", summary, _without_app_prefix(message, app))
+        logger.error("%s - %s%s", summary, _without_app_prefix(message, app), hint)
 
 
 def build_app(name, app_cfg):
     """`name` is an app or an instance id - radarr-4k builds a Radarr."""
-    return configure_app_headers(_build_app(instance_type(name), app_cfg), app_cfg.get("request_headers", []))
+    return note_refusals(configure_app_headers(_build_app(instance_type(name), app_cfg),
+                                               app_cfg.get("request_headers", [])))
 
 
 # Every app type's driver. Each takes (url, api_key, **extra fields) - the
@@ -240,29 +268,49 @@ DRIVERS = {
     "plex": PlexApp,
     "seerr": SeerrApp,
     "lazylibrarian": LazyLibrarianApp,
+    "pihole": PiholeApp,
+    "bitwarden": BitwardenApp,
+    "vaultwarden": VaultwardenApp,
+    "opnsense": OpnsenseApp,
+    "pfsense": PfsenseApp,
+    "immich": ImmichApp,
+    "homeassistant": HomeAssistantApp,
+    "unifi": UnifiApp,
+    "unraid": UnraidApp,
+    "synology": SynologyApp,
+    "qnap": QnapApp,
 }
+
+
+def _field_value(value):
+    return value if isinstance(value, bool) else value or None
 
 
 def _build_app(name, app_cfg):
     meta = app_meta(name)
     if name not in DRIVERS or meta is None:
         raise ValueError(f"Unknown app: {name}")
-    extras = {field["name"]: app_cfg.get(field["name"]) or None for field in meta["extra_fields"]}
+    # An unset field is None; a switch that's off stays False (#155).
+    extras = {field["name"]: _field_value(app_cfg.get(field["name"]))
+              for field in meta["extra_fields"] if not field.get("locked")}
+    if meta.get("pins_certificate"):
+        extras["trusted_cert"] = app_cfg.get("trusted_cert") or None
     if meta.get("no_api_key"):
         return DRIVERS[name](app_cfg["url"], **extras)
     return DRIVERS[name](app_cfg["url"], app_cfg.get("api_key", ""), **extras)
 
 
-_TAR_SUFFIX = re.compile(r"\.tar\.(?:gz|bz2|xz|zst)$")
+_DOUBLE_SUFFIX = re.compile(r"\.(?:tar|sql)\.(?:gz|bz2|xz|zst)$")
 
 
 def archive_suffix(path):
     """.zip for a real zip; an app's own non-zip archive (e.g. Profilarr's
-    .tar.gz) keeps its extension rather than being renamed to .zip."""
+    .tar.gz, Immich's .sql.gz) keeps its extension rather than being renamed
+    to .zip."""
     if zipfile.is_zipfile(path):
         return ".zip"
     name = Path(path).name
-    match = _TAR_SUFFIX.search(name)
+    match = _DOUBLE_SUFFIX.search(name)
     return match.group(0) if match else Path(name).suffix or ".bin"
 
 
@@ -385,13 +433,31 @@ def _app_version(app, name, url):
         return None
 
 
+def encrypt_archive(name, archive_path):
+    """Encrypts a checked archive with the install's key (#147), checks the
+    encrypted file decrypts back to it, and removes the plain one. Returns
+    the encrypted file's path."""
+    log.info("%s: encrypting the backup...", name)
+    encrypted_path = archive_crypto.encrypted_name(archive_path)
+    plain_sha256 = archive_crypto.encrypt_file(archive_path, encrypted_path)
+    try:
+        archive_crypto.check_file(encrypted_path, plain_sha256)
+    except BaseException:
+        os.remove(encrypted_path)
+        raise
+    os.remove(archive_path)
+    return encrypted_path
+
+
 def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
     """Run one backup pass for every enabled app instance, uploading to
     every enabled destination. Returns (ok, failed) - failed entries are
     "<instance id>: <message>" strings.
 
     only, if given, is one enabled app or instance id: back up just that
-    one, and apply retention to its backups alone.
+    one, and apply retention to its backups alone. "backuparr" backs up
+    Backuparr's own configuration alone (#165); a full run backs it up
+    last, after the apps, while self_backup is on.
 
     on_progress(index, total, name), if given, is called right before each
     app starts - lets a caller (e.g. the web UI) show "app N of M".
@@ -405,15 +471,22 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
         if should_cancel and should_cancel():
             raise RunCancelled()
 
+    backs_up_self = cfg.get("self_backup", True) is not False and only in (None, self_backup.FOLDER)
     apps = enabled_apps(cfg)
-    if only is not None:
+    if only == self_backup.FOLDER:
+        if not backs_up_self:
+            log.error("Backuparr's own backup is turned off - nothing to do")
+            return [], ["backuparr: its own backup is turned off in Settings"]
+        apps = []
+    elif only is not None:
         if only not in apps:
             log.error("%s is not enabled - nothing to do", only)
             return [], [f"{only}: not enabled in config"]
         apps = [only]
-    if not apps:
+    if not apps and not backs_up_self:
         log.error("No apps enabled - nothing to do")
         return [], ["no apps enabled in config"]
+    total = len(apps) + backs_up_self
 
     destinations = enabled_destinations(cfg)
     if not destinations:
@@ -445,7 +518,7 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
         for i, name in enumerate(apps, start=1):
             check_cancel()
             if on_progress:
-                on_progress(i, len(apps), name)
+                on_progress(i, total, name)
             log.info("=== %s ===", name)
             app_cfg = app_connection_config(cfg, name)
 
@@ -456,6 +529,7 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
                    "ok": False, "error": None, "app_version": None, "destinations": {d: None for d in dest_roots}}
             capture = runlog.Capture().start()
 
+            app = None
             try:
                 os.makedirs(work_dir, exist_ok=True)
                 app = build_app(name, app_cfg)
@@ -477,6 +551,11 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
                 # app's newest, so its last good backup stays.
                 log.info("%s: checking the backup...", name)
                 archive_check.check(name, archive_path)
+                metadata = manifest_backfill.read_metadata(instance_type(name), archive_path)
+                encrypted = encrypts(cfg, name)
+                if encrypted:
+                    archive_path = encrypt_archive(name, archive_path)
+                    archive_name = run["file"] = os.path.basename(archive_path)
                 size = os.path.getsize(archive_path)
                 sha256 = manifest.file_sha256(archive_path)
                 app_version = run["app_version"] = _app_version(app, name, app_cfg.get("url"))
@@ -501,7 +580,8 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
                 if uploaded:
                     try:
                         manifest.record(name, archive_name, uploaded, app_version=app_version, sha256=sha256,
-                                        size=size, backuparr_version=VERSION)
+                                        size=size, backuparr_version=VERSION, encrypted=encrypted,
+                                        metadata=metadata)
                     except OSError as exc:
                         # The backup itself is uploaded; only its record is missing.
                         log.warning("%s: couldn't write the backup record: %s", name, exc.strerror or type(exc).__name__)
@@ -515,8 +595,9 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
                 run["error"] = "the run was cancelled"
                 raise
             except Exception as exc:
-                log_failure(log, f"{name}: backup failed", exc, app_cfg.get("url"), app=name)
-                run["error"] = humanize_error(exc, app_cfg.get("url"), app=name)
+                hint = refusal_hint(app, exc, cfg.get("request_headers"))
+                log_failure(log, f"{name}: backup failed", exc, app_cfg.get("url"), app=name, hint=hint)
+                run["error"] = humanize_error(exc, app_cfg.get("url"), app=name) + hint
                 failed.append(f"{name}: {run['error']}")
             finally:
                 capture.stop()
@@ -543,11 +624,21 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
     # A run's log stays while any destination still keeps its backup.
     runlog.prune(max(keep.values()))
 
-    # Last, so its manifest and run logs include this run. Only a full run
-    # makes one: a single app's run leaves Backuparr's backup as it was.
-    if only is None and cfg.get("self_backup", True):
-        problem = self_backup.run(dest_roots, timestamp)
-        if problem:
-            failed.append(f"backuparr: {problem}")
+    # Last, so its manifest and run logs include this run. A single app's run
+    # leaves Backuparr's backup as it was.
+    if backs_up_self:
+        _self_backup_step(dest_roots, timestamp, ok, failed, on_progress, total)
 
     return ok, failed
+
+
+def _self_backup_step(dest_roots, timestamp, ok, failed, on_progress=None, total=None):
+    """Backuparr's own backup, the last step of a run (#110), reported like
+    an app's (#165)."""
+    if on_progress:
+        on_progress(total, total, self_backup.FOLDER)
+    problem = self_backup.run(dest_roots, timestamp)
+    if problem:
+        failed.append(f"{self_backup.FOLDER}: {problem}")
+    else:
+        ok.append(self_backup.FOLDER)

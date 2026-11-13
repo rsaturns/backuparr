@@ -20,6 +20,7 @@ AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 SCOPE = "https://www.googleapis.com/auth/drive.file"
 REMOTE_NAME = "backuparr-gdrive"
+RCLONE_TYPE = "drive"
 TOKEN_FIELD = "refresh_token"
 
 
@@ -100,7 +101,7 @@ def _remote_matches(remote, fields, refresh_token):
     """Whether rclone.conf's remote already holds these settings. rclone
     rewrites the token's access_token and expiry itself; only the refresh
     token inside it is ours."""
-    if not remote or remote.get("type") != "drive":
+    if not remote or remote.get("type") != RCLONE_TYPE:
         return False
     try:
         stored_refresh = json.loads(remote.get("token", "")).get("refresh_token")
@@ -133,9 +134,12 @@ def sync_rclone_remote(dest_cfg, remotes=None):
         "client_secret": dest_cfg.get("client_secret", ""),
         "scope": "drive.file",
         "token": token_json,
+        # Deletes (retention, History) are permanent: Drive's trash counts
+        # against storage for 30 days, so a removed backup would still fill it.
+        "use_trash": "false",
     }
     if dest_cfg.get("folder_id"):
         fields["root_folder_id"] = dest_cfg["folder_id"]
     if _remote_matches(remote, {**fields, "root_folder_id": dest_cfg.get("folder_id", "")}, dest_cfg["refresh_token"]):
         return
-    rclone_util.config_set(REMOTE_NAME, "drive", fields, force=True)
+    rclone_util.config_set(REMOTE_NAME, RCLONE_TYPE, fields, force=True)

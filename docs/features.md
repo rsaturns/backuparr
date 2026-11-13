@@ -7,13 +7,18 @@ nav_order: 2
 
 ## Apps
 
-- Backs up 16 apps: Radarr, Sonarr, Lidarr, Whisparr (v2 and v3), Prowlarr,
+- Backs up 27 apps: Radarr, Sonarr, Lidarr, Whisparr (v2 and v3), Prowlarr,
   Profilarr, Bazarr, Tdarr (2 and 3), SABnzbd, NZBGet, Tautulli, Jellyfin,
-  Emby, Plex, Seerr and LazyLibrarian. See [Apps](apps/index.md).
-- Most apps are backed up through their own API. Jellyfin, Emby, Plex, Seerr
-  and LazyLibrarian also need a folder mounted into Backuparr.
-- Up to 10 extra instances each of Radarr, Sonarr, Lidarr and Whisparr, such as
-  a 4K Radarr. See [More than one instance](settings.md#more-than-one-instance).
+  Emby, Plex, Seerr, Immich (its database), LazyLibrarian, Pi-hole (v6),
+  Bitwarden (self-hosted), Vaultwarden, OPNsense, pfSense, UniFi, Home Assistant, Unraid (its boot
+  device), Synology DSM and QNAP QuTS hero (their settings, not the NAS's data). See [Apps](apps/index.md).
+- Most apps are backed up through their own API. Jellyfin, Emby, Plex, Seerr,
+  LazyLibrarian, Bitwarden and Vaultwarden also need a folder mounted into
+  Backuparr.
+- **Include metadata** on Jellyfin, Emby and Plex adds their posters, artwork
+  and saved metadata, custom artwork too. History shows which backups have it.
+- Up to 10 extra instances each of Radarr, Sonarr, Lidarr, Whisparr, Pi-hole,
+  OPNsense, pfSense, UniFi, Immich, Home Assistant, Unraid, Synology DSM and QNAP QuTS hero, such as a 4K Radarr or a second firewall. See [More than one instance](settings.md#more-than-one-instance).
 - **Prowlarr discovery** fills in the apps Prowlarr already knows, API keys
   included. See [Prowlarr discovery](settings.md#prowlarr-discovery).
 - **Test connection** on every app card.
@@ -24,7 +29,7 @@ nav_order: 2
 
 ## Destinations
 
-- Local storage, Google Drive, OneDrive and Dropbox. Every run uploads to each
+- Local Storage, Google Drive, OneDrive and Dropbox. Every run uploads to each
   one you enable. See [Destinations](destinations.md).
 - Cloud connections are made in the web UI, with no rclone config.
 - An optional bandwidth cap for uploads and downloads (`RCLONE_BWLIMIT`).
@@ -50,7 +55,8 @@ See [Backups and history](backups.md).
 
 - Restore from the web UI, with live progress and a log. Every app can be
   restored this way except Profilarr and Tautulli's database, which are
-  restored by hand.
+  restored by hand; for Profilarr the Restore tab gives the download and the
+  steps.
 - A backup is only restored onto the exact app version it came from. When the
   versions differ, the message names the version to install.
 - Each download is checked against the checksum recorded when the backup was
@@ -60,11 +66,20 @@ See [Backups and history](backups.md).
 
 See [Restoring](restoring.md).
 
+## Home Assistant
+
+- A read-only status for Home Assistant, opened by a token of its own. See
+  [Home Assistant](home-assistant.md).
+- The [Backuparr integration](https://github.com/rsaturns/ha-backuparr) for
+  Home Assistant: a problem sensor for every app's backups, set up from Home
+  Assistant's UI.
+
 ## Backuparr's own backup
 
 - At the end of each full run, Backuparr backs up its own settings, cloud
   connections, login, backup record and run logs to every destination,
-  encrypted with your encryption key.
+  encrypted with your encryption key. It has its own card under Server, and
+  Run & Status can back it up on its own.
 - On a new install, restore it from the setup screen. On a running install,
   restore it from Settings.
 
@@ -76,6 +91,9 @@ See [Restoring Backuparr itself](restoring.md#restoring-backuparr-itself).
   change from the user menu.
 - A forgotten password can be replaced with your encryption key, keeping your
   settings. See [Forgot your password?](security.md#forgot-your-password).
+- Backups are encrypted with your encryption key before upload; turn it off
+  per app, except for apps that are always encrypted. See
+  [Encrypted backups](security.md#encrypted-backups).
 - API keys, passwords and cloud tokens are encrypted at rest.
 - Local login can be turned off behind an authenticating reverse proxy.
 

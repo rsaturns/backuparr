@@ -7,14 +7,24 @@ nav_order: 8
 
 The **Settings** tab holds, from top to bottom:
 
-- **Apps** - a card per app: switch it on, enter its URL and API key, and
-  click **Test connection**. See [Apps](apps/index.md).
+- **Apps** - grouped by category (Media Management, Downloaders, Media
+  Servers, ...); click a category to open or close it. Its header counts the
+  enabled apps and shows a dot that turns red when one of them failed its last
+  backup. A category starts closed and opens once one of its apps is set up;
+  after that it stays as you left it, in this browser. Within a category,
+  enabled apps come first. A card per app: switch it on, enter its URL and API
+  key, and click **Test connection**. The **?** next to an app's name opens its
+  page in these docs, at **Setting it up**: where its key comes from and what
+  else it needs. **Encrypt backup** is on unless you turn it off
+  (see [Encrypted backups](security.md#encrypted-backups)). See
+  [Apps](apps/index.md). **Server** starts with Backuparr's own card: its
+  switch turns [Backuparr's own backup](security.md#backuparrs-own-backup)
+  on or off.
 - **Destinations** - see [Destinations](destinations.md). Each card can set
-  its own [retention](backups.md#retention).
-- **Schedule & notifications** - the default retention, the schedule, the
-  [Notify URL](notifications.md), and whether Backuparr
-  [backs itself up](security.md#backuparrs-own-backup).
-- **Service authentication** - see [below](#service-authentication-headers).
+  its own [retention](backups.md#retention). Click its heading to fold it.
+- **Schedule & Notifications** - the default retention, the schedule and the
+  [Notify URL](notifications.md).
+- **Service Authentication** - see [below](#service-authentication-headers).
 - **Restore Backuparr** - see [Restoring Backuparr itself](restoring.md#restoring-backuparr-itself).
 
 App, destination and schedule changes apply when you click **Save settings**.
@@ -39,7 +49,7 @@ added with **Add as instance**.
 
 ## More than one instance
 
-Radarr, Sonarr, Lidarr and Whisparr can each run more than once. Click **Add
+Radarr, Sonarr, Lidarr, Whisparr, Pi-hole, OPNsense, pfSense, UniFi, Immich, Home Assistant, Unraid, Synology DSM and QNAP QuTS hero can each run more than once. Click **Add
 another** under the app's card and name the instance, such as `4K` or `Anime`.
 Each instance has its own settings, backups, History and Restore entry, and can
 get its own [authentication headers](#service-authentication-headers).
@@ -54,7 +64,7 @@ get its own [authentication headers](#service-authentication-headers).
 ## Service authentication headers
 
 For apps behind an authenticating reverse proxy, add headers under **Settings
-→ Service authentication**. They're sent with every request to the apps -
+→ Service Authentication**. They're sent with every request to the apps -
 tests, discovery, backups and restores - but never to cloud destinations,
 OAuth providers or notification webhooks. Values are encrypted like API keys.
 
@@ -69,6 +79,9 @@ OAuth providers or notification webhooks. Values are encrypted like API keys.
 - Requests to an app with headers must stay on its configured scheme, host and
   port, redirects included, so use its final URL.
   `BACKUPARR_ALLOW_CROSS_HOST_REDIRECTS` doesn't override this.
+- When an app's answer is HTTP 401 or 403 and headers are set, the error
+  also points here: a proxy refusing a request looks the same as the app
+  refusing a wrong API key.
 - **Generate Basic authentication** turns a username and password into a
   `Basic …` value for the header you choose, in your browser; only the header
   is saved.

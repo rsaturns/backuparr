@@ -46,7 +46,21 @@ def test_matching_versions_pass(installed):
     record("radarr", "radarr_1.zip", "6.4.4.10685")
     result = rv.check("radarr", "radarr_1.zip", {"url": "http://radarr:7878"})
     assert result == {"status": "match", "backup_version": "6.4.4.10685", "installed_version": "6.4.4.10685",
-                      "message": "This backup is from Radarr 6.4.4.10685, the installed version."}
+                      "message": "This backup is from Radarr 6.4.4.10685, the installed version.", "metadata": None}
+
+
+def test_the_check_says_whether_a_media_servers_backup_holds_metadata(installed):
+    installed["emby"] = "4.10.2.0"
+    manifest.record("emby", "emby_1.zip", ["local"], app_version="4.10.2.0", sha256="a", size=1,
+                    backuparr_version="3.0.0", metadata=True)
+    manifest.record("emby", "emby_2.zip", ["local"], app_version="4.10.2.0", sha256="b", size=1,
+                    backuparr_version="3.0.0", metadata=False)
+    assert rv.check("emby", "emby_1.zip", {})["metadata"] is True
+    assert rv.check("emby", "emby_2.zip", {})["metadata"] is False
+    assert rv.check("emby", "emby_3.zip", {})["metadata"] is None  # not read yet
+    manifest.record("emby", "emby_4.zip", ["local"], app_version="4.10.2.0", sha256="c", size=1,
+                    backuparr_version="3.0.0-beta")  # recorded before the switch existed
+    assert rv.check("emby", "emby_4.zip", {})["metadata"] is False
 
 
 def test_versions_are_compared_normalised(installed):

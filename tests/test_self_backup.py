@@ -170,22 +170,54 @@ def cfg(**extra):
     return {"apps": {"radarr": {"url": "http://radarr:7878"}}, "destinations": {"local": {}}, **extra}
 
 
+@pytest.mark.self_backup
 def test_a_full_run_ends_with_backuparrs_own_backup(full_run):
-    ok, failed = backup.run_backup(cfg())
-    assert ok == ["radarr"] and failed == [] and len(full_run.calls) == 1
+    progress = []
+    ok, failed = backup.run_backup(cfg(), on_progress=lambda *step: progress.append(step))
+    # Reported like an app (#165): the last step, and in the OK list.
+    assert ok == ["radarr", "backuparr"] and failed == [] and len(full_run.calls) == 1
     assert full_run.calls[0][0] == {"local": "local:"}
+    assert progress == [(1, 2, "radarr"), (2, 2, "backuparr")]
 
 
+@pytest.mark.self_backup
 def test_a_single_app_run_or_the_setting_turned_off_skips_it(full_run):
-    backup.run_backup(cfg(), only="radarr")
-    backup.run_backup(cfg(self_backup=False))
-    assert full_run.calls == []
+    progress = []
+    assert backup.run_backup(cfg(), only="radarr") == (["radarr"], [])
+    assert backup.run_backup(cfg(self_backup=False), on_progress=lambda *step: progress.append(step)) == (["radarr"], [])
+    assert full_run.calls == [] and progress == [(1, 1, "radarr")]
 
 
+@pytest.mark.self_backup
 def test_a_failed_own_backup_is_a_failed_item(full_run):
     full_run.result[0] = "failed on local: disk full"
     ok, failed = backup.run_backup(cfg())
     assert ok == ["radarr"] and failed == ["backuparr: failed on local: disk full"]
+
+
+@pytest.mark.self_backup
+def test_backuparr_can_be_backed_up_on_its_own(full_run, monkeypatch):
+    """Run & Status's picker (#165): no app is backed up, and retention only
+    touches Backuparr's own backups."""
+    retained = []
+    monkeypatch.setattr(backup, "apply_retention", lambda root, days, only=None, dest_id=None: retained.append(only))
+    monkeypatch.setattr(backup, "build_app", lambda *a: pytest.fail("no app is backed up"))
+    assert backup.run_backup(cfg(), only="backuparr") == (["backuparr"], [])
+    assert len(full_run.calls) == 1 and retained == ["backuparr"]
+
+
+@pytest.mark.self_backup
+def test_backuparr_on_its_own_needs_its_card_on(full_run):
+    assert backup.run_backup(cfg(self_backup=False), only="backuparr") == (
+        [], ["backuparr: its own backup is turned off in Settings"])
+    assert full_run.calls == []
+
+
+@pytest.mark.self_backup
+def test_with_no_app_enabled_a_run_still_backs_up_backuparr(full_run, monkeypatch):
+    monkeypatch.setattr(backup, "enabled_apps", lambda cfg: [])
+    assert backup.run_backup(cfg()) == (["backuparr"], [])
+    assert backup.run_backup(cfg(self_backup=False)) == ([], ["no apps enabled in config"])
 
 
 def test_retention_keeps_backuparrs_newest_and_drops_old_ones(monkeypatch):
@@ -234,6 +266,14 @@ def test_reset_removes_local_own_backups_and_starts_a_new_key(authed_client, iso
     new_key = secrets_crypto.current_key()
     assert new_key != old_key and open(secrets_crypto.KEY_PATH).read().strip() == new_key
     assert secrets_crypto.decrypt(secrets_crypto.encrypt("x")) == "x"
+
+
+def test_reset_with_a_broken_config_still_resets_and_says_why_backups_stay(authed_client, isolated_webui, caplog):
+    with open(config_store.CONFIG_PATH, "w") as f:
+        f.write("{broken")
+    response = authed_client.post("/api/reset", json={"confirm": isolated_webui.auth.RESET_CONFIRM_PHRASE})
+    assert response.status_code == 200 and not os.path.exists(config_store.CONFIG_PATH)
+    assert "couldn't find the Local storage folder" in caplog.text and "isn't valid JSON" in caplog.text
 
 
 # ------------------------------------------------------------ key prompt ----

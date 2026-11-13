@@ -1,11 +1,12 @@
 import re
+import re
 import threading
 import copy
 
 import pytest
 import requests
 
-from conftest import load_webui
+from conftest import load_webui, sign_in
 
 
 @pytest.fixture
@@ -37,7 +38,7 @@ def webui(tmp_path, monkeypatch):
 def client_for(webui):
     client = webui.app.test_client()
     with client.session_transaction() as session:
-        session["authed"] = True
+        sign_in(session)
     return client
 
 
@@ -110,6 +111,22 @@ def test_logout_discards_discovery_cookie(webui):
     assert client.get_cookie(webui.services.DISCOVERY_JOBS.cookie) is None
 
 
+def test_logout_over_https_discards_the_https_cookie_and_its_jobs(webui):
+    https = {"base_url": "https://localhost"}
+    client = webui.app.test_client()
+    with client.session_transaction(**https) as session:
+        sign_in(session)
+    name = "__Host-" + webui.services.DISCOVERY_JOBS.cookie
+    client.post("/api/discovery/prowlarr", json={"url": "http://prowlarr:9696", "api_key": "key"}, **https)
+    assert client.get_cookie(name, domain="localhost") and webui.services.DISCOVERY_JOBS.jobs
+    response = client.post("/api/logout", json={}, **https)
+    assert response.status_code == 200
+    assert client.get_cookie(name, domain="localhost") is None and not webui.services.DISCOVERY_JOBS.jobs
+    # A browser only takes the deletion of a __Host- cookie when it's Secure.
+    deleted = [c for c in response.headers.getlist("Set-Cookie") if c.startswith(name + "=")]
+    assert deleted and "Secure" in deleted[0]
+
+
 def test_remote_errors_do_not_expose_secrets_and_allow_retry(webui, monkeypatch, caplog):
     def fail(instance, progress):
         raise requests.HTTPError("http://server?apikey=do-not-leak-key")
@@ -173,23 +190,59 @@ def test_running_jobs_are_never_purged(webui):
     assert "job" in webui.services.DISCOVERY_JOBS.jobs
 
 
-def test_prowlarr_and_discovered_apps_lead_the_app_list(webui):
+def test_prowlarr_and_discovered_apps_lead_their_category(webui):
     html = client_for(webui).get("/").get_data(as_text=True)
     cards = [line for line in html.splitlines() if 'class="app-card' in line and "data-app=" in line]
-    assert [c.split('data-app="')[1].split('"')[0] for c in cards[:9]] == [
-        "prowlarr", "radarr", "sonarr", "lidarr", "whisparr", "lazylibrarian", "sabnzbd", "nzbget", "profilarr"]
+    assert [c.split('data-app="')[1].split('"')[0] for c in cards] == [
+        "prowlarr", "radarr", "sonarr", "lidarr", "whisparr", "lazylibrarian", "profilarr", "bazarr", "tdarr",
+        "sabnzbd", "nzbget",
+        "tautulli", "jellyfin", "emby", "plex", "seerr", "immich",
+        "pihole", "opnsense", "pfsense", "unifi",
+        "bitwarden", "vaultwarden",
+        "homeassistant",
+        "qnap", "synology", "unraid"]
     assert html.count('id="discover-btn"') == 1
     assert html.index('data-app="prowlarr"') < html.index('id="discover-btn"') < html.index('class="help-tip"') < html.index('data-app="profilarr"')
     assert html.count('class="help-tip"') == 1
 
 
-def test_app_list_has_hidden_group_headings_before_the_cards(webui):
-    # app.js shows them and moves the cards under them once an app is saved enabled.
+def test_each_app_card_sits_in_its_categorys_collapsed_section(webui):
+    """#148: a section per category that has apps, in APP_CATEGORIES order,
+    collapsed until app.js opens it."""
+    from config_store import APP_CATEGORIES, APP_META
     html = client_for(webui).get("/").get_data(as_text=True)
-    for heading in ('id="apps-enabled-heading" class="app-group-heading hidden"',
-                    'id="apps-disabled-heading" class="app-group-heading hidden"'):
-        assert html.count(heading) == 1
-        assert html.index('id="app-list"') < html.index(heading) < html.index('data-app="prowlarr"')
+    sections = re.findall(r'<section class="app-category" data-category="([a-z-]+)">', html)
+    # Server holds Backuparr's own card (#165), so it shows with no app in it.
+    assert sections == ["media-management", "downloaders", "media-servers", "network", "security", "home-automation",
+                        "server"]
+    assert [c["id"] for c in APP_CATEGORIES] == sections
+    for meta in APP_META:
+        section = html.split(f'data-category="{meta["category"]}"', 1)[1].split("</section>", 1)[0]
+        assert f'data-app="{meta["id"]}"' in section
+        assert f'class="category-body hidden" id="category-{meta["category"]}"' in section
+    assert 'apps-enabled-heading' not in html
+
+
+def test_every_app_has_a_known_category():
+    from config_store import APP_CATEGORIES, APP_META
+    known = {c["id"] for c in APP_CATEGORIES}
+    assert all(meta["category"] in known for meta in APP_META)
+
+
+def test_every_category_has_an_emoji_or_an_icon_for_both_themes(webui):
+    """#189: a category's icon has an image for the light and the dark theme."""
+    from pathlib import Path
+    from config_store import APP_CATEGORIES
+    static = Path(__file__).resolve().parent.parent / "webui" / "static"
+    css = (static / "style.css").read_text()
+    html = client_for(webui).get("/").get_data(as_text=True)
+    for category in APP_CATEGORIES:
+        assert bool(category.get("emoji")) != bool(category.get("icon")), category["id"]
+        if category.get("icon"):
+            rules = re.findall(rf'\.category-icon-{category["icon"]} \{{ --category-icon: url\("([^"]+)"\); \}}', css)
+            assert len(rules) == 3 and len(set(rules)) == 2, rules  # light, and dark twice (system and toggle)
+            assert all((static / path).is_file() for path in rules)
+            assert f'class="category-icon category-icon-{category["icon"]}"' in html
 
 
 def test_every_discoverable_card_can_show_what_prowlarr_found(webui):

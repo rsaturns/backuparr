@@ -12,10 +12,12 @@ services:
       PUID: 1000
       PGID: 1000
       # Optional: disable local login when a reverse proxy (e.g. Authelia)
-      # protects the entire UI and API. Block direct access to port 8990.
+      # protects the entire UI and API. Block direct access to ports 8990
+      # and 8991.
       # BACKUPARR_DISABLE_AUTH: "true"
     ports:
-      - "8990:8990"
+      - "8990:8990"   # HTTP
+      - "8991:8991"   # HTTPS, self-signed certificate
     volumes:
       # config.json, rclone.conf, and local-destination backups.
       - ./data:/config/backuparr
@@ -39,3 +41,9 @@ services:
       # Needed to back up LazyLibrarian - the folder it has at /config. Read-write,
       # so each backup's file is removed from it and restores work.
       # - /share/Container/lazylibrarian/config:/mnt/lazylibrarian
+      # Needed to back up Bitwarden - the standard install's bwdata folder, or
+      # the folder Bitwarden lite has at /backups. Read-only is enough.
+      # - /share/Container/bitwarden/bwdata:/mnt/bitwarden:ro
+      # Needed to back up Vaultwarden - the folder Vaultwarden has at /data.
+      # Read-only is enough for backups; read-write to restore.
+      # - /share/Container/vaultwarden/data:/mnt/vaultwarden:ro

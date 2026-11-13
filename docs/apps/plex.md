@@ -1,7 +1,7 @@
 ---
 title: Plex
 parent: Apps
-nav_order: 6
+nav_order: 12
 ---
 
 # Plex
@@ -17,7 +17,9 @@ A Plex backup has two parts:
   user has to be invited again.
 
 Images, caches, codecs and plugins are left out; a library scan brings the
-images back.
+images back. **Include metadata** adds the images - see below.
+
+## Setting it up
 
 Mount Plex's data folder - `Library/Application Support/Plex Media Server`
 inside its `/config`, in both the official and linuxserver images:
@@ -42,10 +44,20 @@ folder** = `/mnt/plex`.
   `plex.direct` address when the URL is empty or points at the same machine.
   If the popup is blocked, use the **Open Plex sign-in** link. You can also
   [find a token by hand](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/).
+## Backups and restores
+
 - **The archive is sensitive:** `Preferences.xml` holds the server's plex.tv
   sign-in token.
+- **Include metadata** on the card adds the `Metadata` folder of Plex's data
+  folder: posters, artwork and other images, including the ones you uploaded.
+  It's off by default: most of it downloads again, and it can make each
+  backup many times larger (retention keeps that many copies). It's many
+  small files, so the backup and its check take longer. The `Media` folder
+  stays out: it holds video preview thumbnails and chapter images, which are
+  large and which Plex rebuilds.
 - **Restore needs Plex stopped** (`docker stop plex`); Backuparr refuses while
-  it's running. It replaces the database and `Preferences.xml`, then you start
+  it's running. It replaces the database and `Preferences.xml` (and the
+  `Metadata` folder's files, if the backup has them), then you start
   Plex. The backup must come from the same Plex version - see
   [The version check](../restoring.md#the-version-check).
 - **Rebuilding a server:** start the new Plex once (no need to sign in), stop
@@ -57,4 +69,4 @@ folder** = `/mnt/plex`.
   and [moving a server](https://support.plex.tv/articles/201370363-move-an-install-to-another-system/):
   put `com.plexapp.plugins.library.db` in `Plug-in Support/Databases` (deleting
   its `-wal` and `-shm` files) and `Preferences.xml` in the `Plex Media Server`
-  folder.
+  folder, and the backup's `Metadata` folder there too if it has one.

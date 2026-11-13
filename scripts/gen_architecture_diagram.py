@@ -1,18 +1,35 @@
 #!/usr/bin/env python3
-"""Regenerates webui/static/architecture-diagram.svg, the docs site's
-architecture reference diagram (services -> Backuparr -> destinations).
-Re-run this after adding/removing an app or destination, or after any of
-the icon/logo assets it embeds change. Requires Pillow (`pip install
-pillow`); not a runtime dependency of the app itself.
+"""Regenerates docs/architecture-diagram.png, the docs site's
+architecture reference diagram (apps -> Backuparr -> destinations). It lives
+with the docs, so the site shows the diagram of the branch it's published
+from.
+
+The apps come from config_store: a box per Settings category, holding the
+icons of its apps (#163), so a new app only adds an icon to its box. Re-run
+this after adding/removing an app or destination, or after any of the
+icon/logo assets it embeds change.
+
+The diagram is drawn as an SVG, then rendered to a PNG at twice its size by
+Chromium. A PNG shows the same everywhere: GitHub serves an SVG opened on
+its own with a policy that blocks the raster icons inside it (Backuparr's
+logo, Tdarr, LazyLibrarian).
+
+Run it with Backuparr's requirements installed, plus Pillow and Playwright
+(`pip install pillow playwright`), which aren't runtime dependencies of the
+app itself, and a Chromium: Playwright's (`playwright install chromium`), or
+a system one named in CHROMIUM (e.g. CHROMIUM=/usr/bin/chromium).
 """
 import base64
 import io
 import os
 import re
+import sys
 
 from PIL import Image
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, REPO)
+from config_store import APP_CATEGORIES, APP_META, SELF_APP  # noqa: E402
 ICONS = os.path.join(REPO, "webui", "static", "icons")
 STATIC = os.path.join(REPO, "webui", "static")
 
@@ -34,24 +51,27 @@ W = 1200
 CONTENT_TOP = 90
 BOTTOM_MARGIN = 40
 
-SOURCES = [
-    ("Radarr", os.path.join(ICONS, "radarr.svg"), "svg"),
-    ("Sonarr", os.path.join(ICONS, "sonarr.svg"), "svg"),
-    ("Lidarr", os.path.join(ICONS, "lidarr.svg"), "svg"),
-    ("Whisparr", os.path.join(ICONS, "whisparr.svg"), "svg"),
-    ("Prowlarr", os.path.join(ICONS, "prowlarr.svg"), "svg"),
-    ("Profilarr", os.path.join(ICONS, "profilarr.svg"), "svg"),
-    ("Bazarr", os.path.join(ICONS, "bazarr.svg"), "svg"),
-    ("Tdarr", os.path.join(ICONS, "tdarr.png"), "png"),
-    ("SABnzbd", os.path.join(ICONS, "sabnzbd.svg"), "svg"),
-    ("NZBGet", os.path.join(ICONS, "nzbget.svg"), "svg"),
-    ("Tautulli", os.path.join(ICONS, "tautulli.svg"), "svg"),
-    ("Jellyfin", os.path.join(ICONS, "jellyfin.svg"), "svg"),
-    ("Emby", os.path.join(ICONS, "emby.svg"), "svg"),
-    ("Plex", os.path.join(ICONS, "plex.svg"), "svg"),
-    ("Seerr", os.path.join(ICONS, "seerr.svg"), "svg"),
-    ("LazyLibrarian", os.path.join(ICONS, "lazylibrarian.png"), "png"),
+
+def _kind(icon_file):
+    return "png" if icon_file.endswith(".png") else "svg"
+
+
+def _icon_path(icon_file):
+    """App icons are in icons/; Backuparr's own logo is in static/."""
+    in_icons = os.path.join(ICONS, icon_file)
+    return in_icons if os.path.exists(in_icons) else os.path.join(STATIC, icon_file)
+
+
+# (category label, [(app label, icon path, kind)]) in Settings' order, with
+# Backuparr's own backup first in its category as on the Settings tab; a
+# category with no apps yet isn't drawn.
+CATEGORIES = [
+    (c["label"], [(m["label"], _icon_path(m["icon"]), _kind(m["icon"]))
+                  for m in ([SELF_APP] if SELF_APP["category"] == c["id"] else []) + APP_META
+                  if m["category"] == c["id"]])
+    for c in APP_CATEGORIES
 ]
+CATEGORIES = [(label, apps) for label, apps in CATEGORIES if apps]
 
 DESTS = [
     ("Local storage", None, "local", "zero setup"),
@@ -60,7 +80,9 @@ DESTS = [
     ("Dropbox", os.path.join(ICONS, "dropbox.svg"), "svg", "rclone authorize"),
 ]
 
-CARD_W, CARD_H, CARD_GAP, ICON_SIZE = 230, 60, 16, 32
+# A category's box: its name, then its apps' icons in rows of ICONS_PER_ROW.
+BOX_W, BOX_GAP, BOX_PAD, BOX_TITLE_H = 324, 16, 18, 40
+ICON_SIZE, ICON_GAP, ICONS_PER_ROW = 38, 12, 6
 DEST_W, DEST_H, DEST_GAP, DEST_ICON = 250, 90, 42, 38
 HUB_W, HUB_H = 240, 220
 LEFT_X = 40
@@ -105,8 +127,13 @@ def icon(path, kind, x, y, size, max_px=128):
     raise ValueError(kind)
 
 
+def box_height(apps):
+    rows = -(-len(apps) // ICONS_PER_ROW)
+    return BOX_TITLE_H + rows * ICON_SIZE + (rows - 1) * ICON_GAP + BOX_PAD
+
+
 def build():
-    src_block_h = len(SOURCES) * CARD_H + (len(SOURCES) - 1) * CARD_GAP
+    src_block_h = sum(box_height(apps) for _, apps in CATEGORIES) + (len(CATEGORIES) - 1) * BOX_GAP
     dest_block_h = len(DESTS) * DEST_H + (len(DESTS) - 1) * DEST_GAP
     # All three columns share one vertical center line, sized to the tallest.
     content_h = max(src_block_h, dest_block_h, HUB_H)
@@ -128,18 +155,22 @@ def build():
 </defs>''',
         f'<rect x="0" y="0" width="{W}" height="{H}" fill="{COLOR["bg"]}"/>',
         f'<text x="40" y="42" font-size="13" letter-spacing="1.5" font-weight="600" fill="{COLOR["muted"]}">BACKUPARR &#8212; ARCHITECTURE</text>',
-        f'<text x="40" y="64" font-size="13" fill="{COLOR["muted"]}">Each app\'s own backup API - or its mounted data folder - in, rclone out.</text>',
+        f'<text x="40" y="64" font-size="13" fill="{COLOR["muted"]}">Each app\'s own backup in - over its API or web UI, or from its mounted folder - and rclone out.</text>',
     ]
 
-    src_start_y = centered_start(src_block_h)
+    y = centered_start(src_block_h)
     src_anchor = []
-    for i, (label, path, kind) in enumerate(SOURCES):
-        y = src_start_y + i * (CARD_H + CARD_GAP)
-        parts.append(f'<rect x="{LEFT_X}" y="{y}" width="{CARD_W}" height="{CARD_H}" rx="12" fill="{COLOR["card"]}" stroke="{COLOR["border"]}" stroke-width="1.4" filter="url(#shadow)"/>')
-        ix, iy = LEFT_X + 16, y + (CARD_H - ICON_SIZE) / 2
-        parts.append(icon(path, kind, ix, iy, ICON_SIZE))
-        parts.append(f'<text x="{ix + ICON_SIZE + 14}" y="{y + CARD_H / 2 + 5}" font-size="16" font-weight="600" fill="{COLOR["text"]}">{label}</text>')
-        src_anchor.append((LEFT_X + CARD_W, y + CARD_H / 2))
+    for label, apps in CATEGORIES:
+        h = box_height(apps)
+        parts.append(f'<rect x="{LEFT_X}" y="{y}" width="{BOX_W}" height="{h}" rx="12" fill="{COLOR["card"]}" stroke="{COLOR["border"]}" stroke-width="1.4" filter="url(#shadow)"/>')
+        parts.append(f'<text x="{LEFT_X + BOX_PAD}" y="{y + 27}" font-size="15" font-weight="600" fill="{COLOR["text"]}">{label}</text>')
+        for i, (app_label, path, kind) in enumerate(apps):
+            row, col = divmod(i, ICONS_PER_ROW)
+            ix = LEFT_X + BOX_PAD + col * (ICON_SIZE + ICON_GAP)
+            iy = y + BOX_TITLE_H + row * (ICON_SIZE + ICON_GAP)
+            parts.append(f'<g><title>{app_label}</title>{icon(path, kind, ix, iy, ICON_SIZE)}</g>')
+        src_anchor.append((LEFT_X + BOX_W, y + h / 2))
+        y += h + BOX_GAP
 
     hub_y = centered_start(HUB_H)
     parts.append(f'<rect x="{HUB_X}" y="{hub_y}" width="{HUB_W}" height="{HUB_H}" rx="16" fill="{COLOR["card_hub"]}" stroke="{COLOR["border_hub"]}" stroke-width="2.2" filter="url(#shadow)"/>')
@@ -148,7 +179,7 @@ def build():
     parts.append(image_tag(os.path.join(STATIC, "logo.png"), logo_x, logo_y, logo_size, 256))
     parts.append(f'<text x="{HUB_X + HUB_W / 2}" y="{logo_y + logo_size + 34}" font-size="22" font-weight="700" text-anchor="middle" fill="{COLOR["text"]}">Backuparr</text>')
     ty = logo_y + logo_size + 56
-    for line in ("Triggers each app's backup,", "uploads it via rclone, prunes", "old backups on schedule"):
+    for line in ("Backs up each app, checks", "and encrypts it, uploads it", "with rclone, prunes old ones"):
         parts.append(f'<text x="{HUB_X + HUB_W / 2}" y="{ty}" font-size="13" text-anchor="middle" fill="{COLOR["muted"]}">{line}</text>')
         ty += 17
     hub_in = (HUB_X, hub_y + HUB_H / 2)
@@ -183,8 +214,19 @@ def build():
     return "\n".join(parts)
 
 
+def render_png(svg, out_path):
+    """Renders the SVG with Chromium at 2x, for sharp text on high-DPI screens."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(executable_path=os.environ.get("CHROMIUM") or None)
+        page = browser.new_page(viewport={"width": W, "height": 100}, device_scale_factor=2)
+        page.set_content(f'<html><body style="margin:0">{svg}</body></html>')
+        page.locator("svg").first.screenshot(path=out_path)
+        browser.close()
+
+
 if __name__ == "__main__":
-    out_path = os.path.join(STATIC, "architecture-diagram.svg")
-    with open(out_path, "w") as f:
-        f.write(build())
+    out_path = os.path.join(REPO, "docs", "architecture-diagram.png")
+    render_png(build(), out_path)
     print("wrote", out_path)

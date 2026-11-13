@@ -1,7 +1,7 @@
 ---
 title: Radarr, Sonarr and Lidarr
 parent: Apps
-nav_order: 8
+nav_order: 16
 ---
 
 # Radarr, Sonarr, Lidarr, Whisparr and Prowlarr
@@ -11,7 +11,26 @@ from the app's web UI, which doesn't accept the API key. If the app asks every
 address to log in, **Test connection** says so and shows **Username** and
 **Password** on the card. Restores go through the API and work either way.
 
-Pick one of the two options below.
+## Setting it up
+
+On the app's card, enter its URL - for example `http://radarr:7878` (Sonarr
+uses port 8989, Lidarr 8686 and Prowlarr 9696) - and its API key, from the
+app's **Settings > General > Security > API Key**. Click **Test connection**.
+
+Using Prowlarr? Fill in its card first and click **Discover services**: it
+fills in the cards of the apps Prowlarr knows, API keys included - see
+[Prowlarr discovery](../settings.md#prowlarr-discovery). Whisparr has its own
+page: [Whisparr](whisparr.md).
+
+If the app asks every address to log in, Test connection says so and shows
+**Username** and **Password**: pick one of the two options below.
+
+Each app's own guide to its backups and restores:
+[Radarr](https://wiki.servarr.com/radarr/faq#how-do-i-backuprestore-radarr),
+[Sonarr](https://wiki.servarr.com/sonarr/faq#how-do-i-backuprestore-my-sonarr),
+[Lidarr](https://wiki.servarr.com/lidarr/system#backup),
+[Whisparr](https://wiki.servarr.com/whisparr/faq#how-do-i-backuprestore-whisparr) and
+[Prowlarr](https://wiki.servarr.com/prowlarr/faq#how-do-i-backuprestore-prowlarr).
 
 ## Option 1: enter the app's login
 

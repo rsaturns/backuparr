@@ -1,10 +1,12 @@
 ---
 title: Seerr
 parent: Apps
-nav_order: 9
+nav_order: 17
 ---
 
 # Seerr
+
+## Setting it up
 
 Seerr has no backup API, so Backuparr reads **Seerr's config folder** (its
 `/app/config`):
@@ -17,6 +19,8 @@ Seerr has no backup API, so Backuparr reads **Seerr's config folder** (its
 Then fill in the card: the URL, the API key from **Settings > General**, and
 **Data folder** = `/mnt/seerr`. Seerr only accepts its API key once its setup
 is finished.
+
+## Backups and restores
 
 - **What's in the backup:** what [Seerr's backup
   guide](https://docs.seerr.dev/using-seerr/backups/) lists - the database

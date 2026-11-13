@@ -29,16 +29,20 @@ RUN pip install --no-cache-dir -r requirements.txt \
 COPY *.py entrypoint.sh VERSION /app/
 COPY apps /app/apps
 COPY webui /app/webui
-RUN chmod +x /app/entrypoint.sh
+# Compiled here: the web server runs as PUID, which can't write /app, so it
+# would otherwise compile every module again on each start.
+RUN chmod +x /app/entrypoint.sh \
+    && python -m compileall -q /app
 
 ENV RCLONE_CONFIG=/config/backuparr/rclone.conf \
     BACKUPARR_CONFIG=/config/backuparr/config.json \
     BACKUPARR_LOG_DIR=/var/log/backuparr \
     WEBUI_HOST=0.0.0.0 \
     WEBUI_PORT=8990 \
+    WEBUI_HTTPS_PORT=8991 \
     PYTHONUNBUFFERED=1
 
-EXPOSE 8990
+EXPOSE 8990 8991
 
 # Check the configured bind address, mapping wildcard listeners to loopback.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

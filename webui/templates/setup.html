@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Backuparr - backup your Arrs">
+<meta name="description" content="Backuparr - Everything you host, backed up.">
 <title>Backuparr</title>
 <script src="{{ url_for('static', filename='theme-init.js') }}"></script>
 <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
@@ -17,7 +17,7 @@
       <img class="brand-mark" src="{{ url_for('static', filename='logo.png') }}" alt="">
       <span class="brand-text">
         <span class="brand-name">Backuparr</span>
-        <span class="brand-tagline">Backup your Arrs</span>
+        <span class="brand-tagline">Everything you host, backed up.</span>
       </span>
     </div>
     <div id="choice-step"{% if needs_key %} class="hidden"{% endif %}>
@@ -46,7 +46,7 @@
     </div>
     </div>
     <div id="restored-step" class="hidden">
-    <h2>Backuparr is restored</h2>
+    <h2>Backuparr Is Restored</h2>
     <div id="sr-warnings"></div>
     <p class="hint">Sign in with the restored username and password.</p>
     <div class="save-row">
@@ -55,14 +55,14 @@
     </div>
     <div id="account-step"{% if not needs_key %} class="hidden"{% endif %}>
     {% if needs_key %}
-    <h2>Create a new login</h2>
+    <h2>Create a New Login</h2>
     <p class="hint">Backuparr already has settings. Enter your encryption key to keep them.</p>
     <label class="field">
       <span class="field-label">Encryption key</span>
       <input type="text" id="su-key" autocomplete="off" spellcheck="false">
     </label>
     {% else %}
-    <h2>Create an admin account</h2>
+    <h2>Create an Admin Account</h2>
     <p class="hint">This one-time setup creates the admin account that protects Backuparr's web UI. If you forget the password, see <a href="https://rsaturns.github.io/backuparr/security/#forgot-your-password" target="_blank" rel="noopener noreferrer">password recovery</a>.</p>
     {% endif %}
     <label class="field">
@@ -83,8 +83,8 @@
     </div>
     </div>
     <div id="key-step" class="hidden">
-    <h2>Save your encryption key</h2>
-    <p class="hint">This key encrypts the passwords, API keys and cloud logins Backuparr stores, and Backuparr's own backup. You need it to restore Backuparr.</p>
+    <h2>Save Your Encryption Key</h2>
+    <p class="hint">This key encrypts the passwords, API keys and cloud logins Backuparr stores, and your backups. You need it to restore Backuparr or an encrypted backup.</p>
     <div class="key-box">
       <code id="key-value" class="key-value"></code>
       <button type="button" class="btn btn-ghost btn-sm" id="key-copy-btn">Copy</button>
@@ -98,6 +98,7 @@
     </div>
   </div>
 </main>
+<script src="{{ url_for('static', filename='messages.js') }}"></script>
 <script src="{{ url_for('static', filename='key-prompt.js') }}"></script>
 <script src="{{ url_for('static', filename='self-restore.js') }}"></script>
 <script src="{{ url_for('static', filename='setup.js') }}"></script>

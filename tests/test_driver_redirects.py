@@ -14,6 +14,9 @@ APPS = {
     "lazylibrarian": (None, {}),
     "tdarr": ("x-api-key", {}),
     "sabnzbd": (None, {}),
+    "pihole": (None, {}),  # its app password goes in the login's body
+    "vaultwarden": (None, {}),  # it has no key: /api/version needs no login
+    "immich": (None, {}),  # its first call, /api/server/version, is public
 }
 
 
@@ -53,4 +56,6 @@ def test_a_same_host_redirect_is_still_followed(name, tmp_path):
         pytest.fail("a same-host https upgrade was refused")
     except Exception:
         pass  # The fixture's "[]" body isn't a real answer; only the redirect matters.
-    assert len(adapter.sent) == 2
+    # Followed: the next request went where it pointed (Pi-hole then also
+    # looks for a v5 API, as "[]" isn't its v6 login's answer).
+    assert adapter.sent[1].url == "https://app.example/moved"

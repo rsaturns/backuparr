@@ -7,7 +7,7 @@ import pytest
 import requests
 
 import destination_util
-from config_store import APP_META, APP_NAMES, DEST_NAMES, DESTINATION_META
+from config_store import APP_CATEGORIES, APP_META, APP_NAMES, DEST_NAMES, DESTINATION_META, SELF_APP
 
 
 def save(client, body):
@@ -27,6 +27,15 @@ def test_a_new_install_has_every_app_off_and_local_storage_on(authed_client):
     assert not any(app["enabled"] for app in cfg["apps"].values())
     assert cfg["destinations"]["local"]["enabled"] is True
     assert cfg["retention_days"] == 7 and cfg["cron_schedule"] == "0 3 * * *"
+
+
+def test_the_config_says_whether_the_saved_schedule_is_valid(authed_client, isolated_webui):
+    assert authed_client.get("/api/config").get_json()["schedule_valid"] is True
+    cfg = isolated_webui.settings.load_config()
+    cfg["cron_schedule"] = "0 0 * * 1#0"  # croniter 7.0 refuses it; 6.x took it
+    isolated_webui.settings.save_config(cfg)
+    assert authed_client.get("/api/config").get_json()["schedule_valid"] is False
+    assert "schedule_valid" not in stored(isolated_webui)
 
 
 def test_the_page_describes_what_the_ui_can_configure(authed_client):
@@ -66,6 +75,7 @@ def test_google_drive_credentials_use_appropriate_input_types(authed_client, fie
     ({"cron_schedule": "* * *"}, "5 space-separated"),
     ({"cron_schedule": "61 * * * *"}, "not a valid"),
     ({"cron_schedule": "a b c d e"}, "not a valid"),
+    ({"cron_schedule": "\uff10 \uff10 * * *"}, "not a valid"),  # fullwidth digits, refused since croniter 7.0
     ({"apps": {"nope": {}}}, "unknown app"),
     ({"apps": {"radarr": {"enabled": True}}}, "URL is required"),
     ({"apps": {"radarr": {"enabled": True, "url": "http://r"}}}, "API key is required"),
@@ -161,7 +171,8 @@ def test_settings_round_trip(authed_client):
     assert save(authed_client, body).status_code == 200
     cfg = authed_client.get("/api/config").get_json()
     assert (cfg["retention_days"], cfg["cron_schedule"], cfg["notify_url"], cfg["bazarr_backup_dir"]) == (14, "30 2 * * 1", "https://ntfy.example/topic", "/mnt/bazarr")
-    assert cfg["apps"]["radarr"] == {"enabled": True, "url": "http://radarr:7878", "api_key": "radarr-key", "username": "", "password": ""}
+    assert cfg["apps"]["radarr"] == {"enabled": True, "url": "http://radarr:7878", "api_key": "radarr-key", "username": "", "password": "",
+                                     "encrypt": True}
     assert cfg["destinations"]["local"]["path"] == "/data/backups"
 
 
@@ -258,7 +269,7 @@ def test_a_test_that_finds_the_apps_login_tells_the_card_to_ask_for_it(authed_cl
     error = LoginRequiredError("radarr 6.4 asks for a login. Enter its username and password.")
     monkeypatch.setattr(isolated_webui.settings, "build_app", lambda name, cfg: StubApp(error=error))
     result = authed_client.post("/api/test/radarr", json={"url": "http://r", "api_key": "k"}).get_json()
-    assert result == {"ok": False, "needs_login": True, "message": "radarr 6.4 asks for a login. Enter its username and password."}
+    assert result == {"ok": False, "needs_login": True, "message": "Radarr 6.4 asks for a login. Enter its username and password."}
     monkeypatch.setattr(isolated_webui.settings, "build_app", lambda name, cfg: StubApp(error=RuntimeError("radarr: down")))
     assert "needs_login" not in authed_client.post("/api/test/radarr", json={"url": "http://r", "api_key": "k"}).get_json()
 
@@ -397,6 +408,10 @@ def test_restore_override_fields_are_the_url_key_and_the_apps_own_extras(isolate
     assert fields("seerr") == {"url", "api_key", "data_dir"}
     assert fields("lazylibrarian") == {"url", "api_key", "data_dir"}
     assert fields("nzbget") == {"url", "api_key", "username", "password"}
+    assert fields("pihole") == {"url", "api_key"}
+    assert fields("vaultwarden") == {"url", "api_key", "data_dir"}
+    assert fields("immich") == {"url", "api_key"}
+    assert fields("homeassistant") == {"url", "api_key"}  # its backup options aren't asked for
     assert fields("unknown") == {"url", "api_key"}
 
 
@@ -469,7 +484,25 @@ def ui_meta(client):
 
 
 def test_the_page_carries_the_ui_metadata_as_data(authed_client):
-    assert ui_meta(authed_client) == {"apps": APP_META, "destinations": DESTINATION_META}
+    assert ui_meta(authed_client) == {"apps": APP_META, "categories": APP_CATEGORIES, "destinations": DESTINATION_META,
+                                      "self_app": SELF_APP}
+
+
+def test_the_overview_has_its_status_bar_under_at_a_glance(authed_client):
+    """#167: app.js fills it; it sits between At a Glance and the app cards."""
+    html = authed_client.get("/").get_data(as_text=True)
+    assert html.index("At a Glance") < html.index('id="overview-status"') < html.index('id="overview-apps"')
+
+
+def test_backuparrs_own_card_heads_server_and_is_never_an_app(authed_client):
+    """#165: its switch is self_backup, out of Schedule & Notifications; the
+    card has no data-app, so Save never sends it as an app."""
+    html = authed_client.get("/").get_data(as_text=True)
+    server = html.split('data-category="server"', 1)[1].split("</section>", 1)[0]
+    assert 'data-self-app="backuparr"' in server and 'id="s-self_backup"' in server
+    assert "Always encrypted for safety." in server and 'data-app="backuparr"' not in html
+    assert html.count('id="s-self_backup"') == 1
+    assert "own configuration, encrypted with your encryption key" not in html
 
 
 # --- each destination's own retention (#133) -------------------------------
@@ -499,3 +532,28 @@ def test_every_destination_card_has_a_retention_field(authed_client):
     for dest_id in DEST_NAMES:
         card = html.split(f'data-dest="{dest_id}"', 1)[1].split('class="app-card dest-card"', 1)[0]
         assert 'class="d-retention"' in card
+
+
+@pytest.mark.parametrize("body, message", [
+    ({"notify_url": ["https://x"]}, "notify_url must be text"),
+    ({"bazarr_backup_dir": 5}, "bazarr_backup_dir must be text"),
+    ({"apps": {"radarr": {"url": 7878}}}, "radarr: url must be text"),
+    ({"apps": {"radarr": {"api_key": {"k": 1}}}}, "radarr: api_key must be text"),
+    ({"notify_url": "discord.com/api/webhooks/1/x"}, "must start with http:// or https://"),
+    ({"apps": {"radarr": {"enabled": True, "url": "radarr:7878", "api_key": "k"}}}, "radarr: the URL must start with"),
+])
+def test_settings_fields_must_be_the_right_kind(authed_client, body, message):
+    authed_client.post("/api/secrets-key/acknowledge", json={"confirm": True})
+    response = authed_client.post("/api/config", json=body)
+    assert response.status_code == 400 and message in response.get_json()["error"]
+
+
+def test_a_url_left_on_a_disabled_card_or_an_unchanged_notify_url_doesnt_stop_a_save(authed_client, isolated_webui):
+    import config_store
+    authed_client.post("/api/secrets-key/acknowledge", json={"confirm": True})
+    cfg = config_store.load_config()
+    cfg["notify_url"] = "ntfy.example/backups"  # saved before the check existed
+    config_store.save_config(cfg)
+    response = authed_client.post("/api/config", json={"notify_url": "ntfy.example/backups", "retention_days": 9,
+                                                       "apps": {"sonarr": {"enabled": False, "url": "sonarr:8989"}}})
+    assert response.status_code == 200 and config_store.load_config()["retention_days"] == 9

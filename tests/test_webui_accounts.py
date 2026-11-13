@@ -144,7 +144,7 @@ def test_lockout_is_tracked_per_address(isolated_webui):
 
 PROTECTED = [
     ("GET", "/api/config"), ("POST", "/api/config"),
-    ("POST", "/api/test/radarr"), ("POST", "/api/test-notify"), ("POST", "/api/test-destination/local"),
+    ("POST", "/api/test/radarr"), ("POST", "/api/trust-certificate/radarr"), ("POST", "/api/test-notify"), ("POST", "/api/test-destination/local"),
     ("POST", "/api/discovery/prowlarr"), ("GET", "/api/discovery/prowlarr/x"),
     ("POST", "/api/plex/auth"), ("GET", "/api/plex/auth/x"), ("DELETE", "/api/plex/auth/x"),
     ("POST", "/api/backup/run"), ("POST", "/api/backup/cancel"), ("GET", "/api/backup/status"),
@@ -153,12 +153,17 @@ PROTECTED = [
     ("GET", "/api/restore/status"), ("GET", "/api/restore/local/radarr/backups"),
     ("POST", "/api/restore/local/sabnzbd/preview"), ("POST", "/api/restore/local/radarr"), ("POST", "/api/restore/local/radarr/check"),
     ("GET", "/api/runlogs"), ("GET", "/api/secrets-key"), ("POST", "/api/backuparr/restore"), ("POST", "/api/password"), ("POST", "/api/secrets-key/acknowledge"), ("GET", "/api/runlogs/radarr/radarr_20261101_030000"),
+    ("GET", "/api/encryption-notice"), ("POST", "/api/encryption-notice/acknowledge"),
+    ("POST", "/api/history/local/delete"), ("POST", "/api/history/local/download"),
+    ("GET", "/api/history/local/download/x"), ("GET", "/api/history/local/download/x/file"),
     ("GET", "/api/destinations/gdrive/oauth/start"), ("GET", "/api/destinations/gdrive/oauth/callback"),
     ("POST", "/api/destinations/gdrive/access-token"), ("POST", "/api/destinations/gdrive/folder"),
     ("POST", "/api/destinations/gdrive/disconnect"), ("POST", "/api/destinations/onedrive/connect"),
     ("POST", "/api/destinations/onedrive/disconnect"),
     ("POST", "/api/destinations/dropbox/connect"), ("POST", "/api/destinations/dropbox/disconnect"),
     ("POST", "/api/destinations/local/disconnect"),
+    ("POST", "/api/ha/token"), ("POST", "/api/ha/disable"),
+    ("GET", "/api/https"), ("POST", "/api/https/only"),
 ]
 
 
@@ -178,7 +183,9 @@ def test_static_files_need_no_login(anonymous):
 
 
 def test_every_registered_api_route_is_covered_by_the_gate_list(isolated_webui):
-    public = {"/api/logout", "/api/reset", "/api/setup", "/api/setup/restore", "/api/login"}
+    public = {"/api/logout", "/api/reset", "/api/setup", "/api/setup/restore", "/api/login",
+              # Home Assistant's: a bearer token of their own (test_webui_ha.py).
+              "/api/ha/status", "/api/ha/status/<app_id>"}
     routes = {rule.rule for rule in isolated_webui.app.url_map.iter_rules() if rule.rule.startswith("/api/")}
     listed = {path for _, path in PROTECTED}
 
@@ -271,7 +278,7 @@ def test_reset_still_resets_when_the_backup_folder_cant_be_cleared(isolated_webu
 def test_failed_logins_from_concurrent_requests_all_count(isolated_webui):
     import threading
     threads = [threading.Thread(target=lambda: [isolated_webui.auth._login_record_failure("10.0.0.9") for _ in range(200)])
-               for _ in range(6)]  # waitress's thread count
+               for _ in range(6)]  # several request threads at once
     for thread in threads:
         thread.start()
     for thread in threads:

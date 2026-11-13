@@ -1,6 +1,6 @@
 ---
 title: Configuration reference
-nav_order: 12
+nav_order: 13
 ---
 
 # Configuration reference
@@ -10,6 +10,7 @@ nav_order: 12
 | Field | Purpose |
 |---|---|
 | `apps.<name>.enabled/url/api_key` | Per app, as on the Settings tab |
+| `apps.<name>.encrypt` | Encrypt its backups (default `true`); ignored for an app that's always encrypted - see [Encrypted backups](security.md#encrypted-backups) |
 | `apps.<radarr\|sonarr\|lidarr\|whisparr>-<suffix>` | An extra instance (e.g. `radarr-4k`): the same fields plus `name` |
 | `apps.<radarr\|sonarr\|lidarr\|whisparr\|prowlarr>.username/password` | The app's own login, only if it asks every address to log in ([note](apps/servarr.md)) |
 | `apps.bazarr.username/password` | Only if Bazarr's web auth is `Basic` |
@@ -17,11 +18,26 @@ nav_order: 12
 | `apps.jellyfin.backup_dir` | Jellyfin's mounted backups folder - required |
 | `apps.emby.data_dir` | Emby's mounted data folder (its `/config`) - required |
 | `apps.plex.data_dir` | Plex's mounted `Plex Media Server` folder - required |
+| `apps.<jellyfin\|emby\|plex>.metadata` | Include metadata: `true` adds the app's metadata (posters and artwork) to its backups; default `false` |
 | `apps.seerr.data_dir` | Seerr's mounted config folder (its `/app/config`) - required |
 | `apps.lazylibrarian.data_dir` | LazyLibrarian's mounted data folder (its `/config`) - required |
+| `apps.bitwarden.data_dir` | Bitwarden's mounted `bwdata` folder (standard install) or lite's mounted backups folder - required |
+| `apps.vaultwarden.data_dir` | Vaultwarden's mounted data folder (its `/data`) - required |
+| `apps.opnsense.api_secret` | The secret of OPNsense's API key (encrypted at rest) - required |
+| `apps.pfsense.username/password` | The pfSense user's login (the password encrypted at rest) - required |
+| `apps.unifi.username/password` | The UniFi local admin's login (the password encrypted at rest) - required |
+| `apps.unifi.backup` | On UniFi OS: `everything` (UniFi OS's own backup, the default; needs a Super Admin) or `network` (UniFi Network's) |
+| `apps.unifi.history` | Statistics kept in a UniFi Network backup: `settings` (the default), `7`, `30`, `90`, `365` (days) or `all` |
+| `apps.unifi.install_type` | `unifi-os` or `standalone`, set by **Test connection** - don't edit |
+| `apps.unraid.password` | Unraid's root password (encrypted at rest) - required |
+| `apps.synology.username/password` | The DSM administrator's login (the password encrypted at rest) - required |
+| `apps.synology.device_token` | DSM's token for a trusted device after a 2-factor code (encrypted at rest), set by **Test connection** - don't edit |
+| `apps.qnap.username/password` | The login of a QuTS hero administrator or an account with the System Management role (the password encrypted at rest) - required |
+| `apps.qnap.device_token` | QuTS hero's remembered sign-in after a 2-step verification code (encrypted at rest), set by **Test connection** - don't edit |
+| `apps.<opnsense\|pfsense\|unifi\|unraid\|synology\|qnap>.trusted_cert` | The self-signed certificate trusted on the card: `{"sha256", "subject", "not_after"}`; set by **Trust** |
 | `bazarr_backup_dir` | Bazarr's mounted config/backup folder, for restores |
 | `request_headers` | [Service authentication headers](settings.md#service-authentication-headers): `[{"name": "Proxy-Authorization", "value": "Basic …", "apps": ["radarr"]}]`; omit `apps` for every app |
-| `destinations.local.enabled/path` | Local storage; the path defaults to `/config/backuparr/backups` |
+| `destinations.local.enabled/path` | Local Storage; the path defaults to `/config/backuparr/backups` |
 | `destinations.gdrive.enabled/client_id/client_secret/developer_key` | Google Drive OAuth client and API key, from the Setup guide |
 | `destinations.gdrive.refresh_token/folder_id/folder_name` | Set by Connect/Choose folder - don't edit |
 | `destinations.onedrive.enabled`, `destinations.dropbox.enabled` | Whether the destination is used |
@@ -30,8 +46,12 @@ nav_order: 12
 | `retention_days` | Delete backups older than this, per app and destination, always keeping each app's newest (default 7) |
 | `cron_schedule` | 5-field cron schedule (default `0 3 * * *`) |
 | `notify_url` | Optional summary after every run - see [Notifications](notifications.md) |
-| `self_backup` | Back up Backuparr's own configuration, encrypted, at the end of each full run (default `true`) - see [Backuparr's own backup](security.md#backuparrs-own-backup) |
+| `ha_enabled`, `ha_token_hash` | The [Home Assistant](home-assistant.md) integration's switch and its token's SHA-256; set only by the Backuparr card |
+| `https_only` | Plain HTTP closed, HTTPS only (default `false`); set only by the Backuparr card, and `BACKUPARR_HTTPS_ONLY` overrides it - see [HTTPS](security.md#https) |
+| `self_backup` | Back up Backuparr's own configuration, encrypted, at the end of each full run (default `true`; the switch on Settings' Backuparr card) - see [Backuparr's own backup](security.md#backuparrs-own-backup) |
 | `secrets_key_acknowledged` | Set once you've confirmed saving your encryption key - don't edit |
+| `encryption_notice_acknowledged` | Set once the "Backups Are Now Encrypted" notice has been seen - don't edit |
+| `upgrade_self_backup_tried`, `upgrade_self_backup_made` | Set once the first start of 3.0 has made Backuparr's own backup, and whether it worked - don't edit |
 
 ## Other files
 

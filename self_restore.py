@@ -2,8 +2,8 @@
 page of a fresh install or from Settings.
 
 Everything is checked before anything changes: the archive must open with
-the key given (Fernet is authenticated, so a wrong key or a damaged file
-fails here), hold only Backuparr's files, come from this or an older
+the key given (the encryption is authenticated, so a wrong key or a
+damaged file fails here), hold only Backuparr's files, come from this or an older
 Backuparr, and every file must parse. Then the restored key becomes this
 install's key - first, so a restore cut short can simply be run again -
 followed by the config, the login, the manifest, the run logs and the
@@ -19,10 +19,12 @@ from cryptography.fernet import Fernet
 import atomic_file
 import auth_store
 import config_store
+import destination_util
 import manifest
 import rclone_util
 import runlog
 import secrets_crypto
+import tls
 import self_backup
 from apps.base import AppError
 from webui.version import VERSION
@@ -35,7 +37,10 @@ class SelfRestoreError(AppError):
 
 
 def _version(text):
-    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", str(text or ""))
+    """(major, minor, patch) of a Backuparr version; a pre-release suffix
+    (3.0.0-beta) compares as its release, so a beta still refuses a backup
+    from a newer Backuparr."""
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.]+)?", str(text or ""))
     return tuple(int(part) for part in match.groups()) if match else None
 
 
@@ -98,6 +103,13 @@ def _write_or_remove(path, data):
         atomic_file.write_private(path, data)
 
 
+def _current_https_only():
+    try:
+        return config_store.stored_setting("https_only") is True
+    except (config_store.ConfigError, OSError):
+        return False
+
+
 def apply(members, key):
     """Writes a prepare()d archive in place of this install's state. Returns
     warnings for the user."""
@@ -112,7 +124,13 @@ def apply(members, key):
                         "can't be read.")
 
     manifest.clear()  # also stops a backfill still running from writing over it
-    atomic_file.write_private(config_store.CONFIG_PATH, members["config.json"])
+    # HTTPS only belongs to this install, like its ports: carried over to a
+    # server that hasn't published the HTTPS port, it would lock you out (#177).
+    # Read and written as plain JSON: the secrets key already changed above.
+    restored = json.loads(members["config.json"])
+    with config_store.CONFIG_LOCK:  # no Settings save in between can bring the old one back
+        restored["https_only"] = _current_https_only()
+        atomic_file.write_private(config_store.CONFIG_PATH, json.dumps(restored, indent=2))
     config_store.forget_secrets_key_acknowledged()
     atomic_file.write_private(auth_store.AUTH_PATH, members["auth.json"])
     _write_or_remove(manifest.path(), members.get("manifest.json"))
@@ -124,9 +142,20 @@ def apply(members, key):
             rclone_util.config_delete(name)
         for name, fields in remotes.items():
             fields = dict(fields)
-            rclone_util.config_set(name, fields.pop("type"), fields, force=True)
+            kind = fields.pop("type")
+            # Only the remotes Backuparr keeps, as the type each one is: some
+            # rclone remotes can run a command (sftp's ssh), and nothing else
+            # in rclone.conf is Backuparr's to bring back.
+            if destination_util.OWN_REMOTES.get(name) != kind:
+                log.warning("backuparr: left out the rclone remote %r (%s) from the backup - it isn't one of "
+                            "Backuparr's own", name, kind)
+                continue
+            rclone_util.config_set(name, kind, fields, force=True)
     except rclone_util.RcloneError as exc:
         warnings.append(f"The cloud connections couldn't all be restored ({exc.detail}); "
                         "the next backup sets them up again from the restored settings.")
+    key_pem, cert_pem = (members.get(name) for name in tls.BACKUP_NAMES)
+    if key_pem and cert_pem:
+        tls.restore_files(key_pem, cert_pem)
     log.info("backuparr: restored its configuration from its own backup")
     return warnings

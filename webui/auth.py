@@ -19,6 +19,7 @@ import manifest
 import runlog
 import secrets_crypto
 import self_restore
+import session_store
 from config_store import CONFIG_PATH, load_config
 from webui.services import DISCOVERY_JOBS, PLEX_LOGINS
 from webui.version import VERSION
@@ -32,6 +33,7 @@ log = logging.getLogger("backuparr.webui")
 _AUTH_DISABLED = os.environ.get("BACKUPARR_DISABLE_AUTH", "").lower() in ("1", "true", "yes")
 
 SECRET_KEY_PATH = os.environ.get("BACKUPARR_SECRET_KEY_PATH", "/config/backuparr/secret_key")
+MIN_PASSWORD_LENGTH = 8
 
 
 def _load_or_create_secret_key():
@@ -74,7 +76,19 @@ def _login_record_failure(ip):
 
 # ---------------------------------------------------------------- auth ----
 # Session-cookie login, single admin account created via the setup screen
-# (see auth_store.py).
+# (see auth_store.py). Each signed-in session also has an id the server
+# lists (session_store.py), so signing out ends it for a copied cookie too.
+def _sign_in():
+    """Signs this browser in, with a new session id."""
+    session.permanent = True
+    session["authed"] = True
+    session["sid"] = session_store.start()
+
+
+def _signed_in():
+    return bool(session.get("authed")) and session_store.valid(session.get("sid"))
+
+
 _PUBLIC_PATHS = {"/api/logout", "/api/reset"}
 # Every local-auth API route. Keep in sync with the /api/setup, /api/login,
 # /api/logout and /api/reset routes: any listed here is refused with 403 when
@@ -94,9 +108,17 @@ def _require_json_for_changes():
     return None
 
 
+# Home Assistant's read-only status routes (#170) take a bearer token of
+# their own, checked in webui/ha.py, never this login - so they skip it, and
+# BACKUPARR_DISABLE_AUTH doesn't open them.
+_HA_STATUS_PATH = "/api/ha/status"
+
+
 @bp.before_app_request
 def _check_auth():
     if request.path.startswith("/static/"):
+        return None
+    if request.method == "GET" and (request.path == _HA_STATUS_PATH or request.path.startswith(f"{_HA_STATUS_PATH}/")):
         return None
 
     if _AUTH_DISABLED:
@@ -119,13 +141,15 @@ def _check_auth():
     if request.path in ("/login", "/api/login"):
         if not has_creds:
             return redirect("/setup") if request.path == "/login" else (jsonify({"error": "not set up yet"}), 400)
-        if request.path == "/login" and session.get("authed"):
+        if request.path == "/login" and _signed_in():
             return redirect("/")
         return None
 
     if not has_creds:
         return redirect("/setup")
-    if not session.get("authed"):
+    if not _signed_in():
+        if session:
+            session.clear()  # one signed out on the server: the browser forgets it too
         if request.path.startswith("/api/"):
             return jsonify({"error": "authentication required"}), 401
         return redirect("/login")
@@ -219,8 +243,7 @@ def api_setup():
             log.warning("setup: couldn't record the encryption key as saved (%s)", exc)
         _new_session_key()
         session.clear()
-    session.permanent = True
-    session["authed"] = True
+    _sign_in()
     return jsonify({"ok": True})
 
 
@@ -304,17 +327,15 @@ def api_login():
         return jsonify({"error": "Incorrect username or password"}), 401
     with _LOGIN_FAILURES_LOCK:
         _LOGIN_FAILURES.pop(ip, None)
-    session.permanent = True
-    session["authed"] = True
+    session.clear()
+    _sign_in()
     return jsonify({"ok": True})
-
-
-MIN_PASSWORD_LENGTH = 8
 
 
 def _new_session_key():
     """Replaces the key sessions are signed with, so every existing session
-    cookie stops working."""
+    cookie stops working, and signs every session out on the server too."""
+    session_store.end_all()
     try:
         os.remove(SECRET_KEY_PATH)
     except FileNotFoundError:
@@ -346,18 +367,17 @@ def api_change_password():
     auth_store.set_credentials(auth_store.username(), new)
     _new_session_key()
     session.clear()
-    session.permanent = True
-    session["authed"] = True  # re-signed with the new key in this response
+    _sign_in()  # this browser stays signed in, re-signed with the new key in this response
     return jsonify({"ok": True})
 
 
 @bp.post("/api/logout")
 def api_logout():
+    session_store.end(session.get("sid"))
     session.clear()
-    PLEX_LOGINS.discard_owner(request.cookies.get(PLEX_LOGINS.cookie))
     response = jsonify({"ok": True})
-    response.delete_cookie(DISCOVERY_JOBS.cookie)
-    response.delete_cookie(PLEX_LOGINS.cookie)
+    PLEX_LOGINS.forget_browser(response)
+    DISCOVERY_JOBS.forget_browser(response)
     return response
 
 
@@ -378,8 +398,10 @@ def api_reset():
     try:
         cfg = load_config()
         local_backup_dir = destination_util.local_root(cfg["destinations"]["local"])
-    except Exception:
-        pass
+    except Exception as exc:  # reset still goes ahead: it's how a lost password is recovered
+        why = str(exc) if isinstance(exc, (config_store.ConfigError, OSError)) else type(exc).__name__
+        log.warning("reset: couldn't find the Local storage folder (%s), so its backups stay - "
+                    "delete them by hand if needed", why)
 
     if local_backup_dir and os.path.isdir(local_backup_dir):
         # Only Backuparr's own archives: the folder may hold other files.
@@ -396,13 +418,15 @@ def api_reset():
     rclone_conf_path = os.environ.get("RCLONE_CONFIG", "/config/backuparr/rclone.conf")
     rclone_pass_path = os.environ.get("RCLONE_CONFIG_PASS_FILE", "/config/backuparr/rclone.pass")
     # secret_key too, so it invalidates any other already-logged-in session.
-    for path in (CONFIG_PATH, rclone_conf_path, rclone_pass_path, auth_store.AUTH_PATH, SECRET_KEY_PATH, secrets_crypto.KEY_PATH):
+    for path in (CONFIG_PATH, rclone_conf_path, rclone_pass_path, auth_store.AUTH_PATH, SECRET_KEY_PATH, secrets_crypto.KEY_PATH,
+                 session_store.SESSIONS_PATH):
         try:
             os.remove(path)
         except FileNotFoundError:
             pass
     manifest.clear()
     runlog.clear()
+    session_store.forget()
     secrets_crypto.forget_key()
     config_store.forget_secrets_key_acknowledged()
 

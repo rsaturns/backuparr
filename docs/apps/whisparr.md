@@ -1,15 +1,24 @@
 ---
 title: Whisparr
 parent: Apps
-nav_order: 12
+nav_order: 24
 ---
 
 # Whisparr
 
+## Setting it up
+
+On Whisparr's card, enter its URL - for example `http://whisparr:6969` - and
+its API key, from Whisparr's **Settings > General > Security > API Key**.
+Click **Test connection**.
+
 Whisparr v2 and v3 are both supported. To back up both, add the second with
 **Add another Whisparr**. Like Radarr and Sonarr, if it asks every address to
 log in, it needs its login on the card or **Disabled for Local Addresses** -
-see the [Radarr, Sonarr and Lidarr note](servarr.md).
+see the [Radarr, Sonarr and Lidarr note](servarr.md). Whisparr's own guide:
+[How do I Backup/Restore Whisparr?](https://wiki.servarr.com/whisparr/faq#how-do-i-backuprestore-whisparr)
+
+## Good to know
 
 - **v3 restores:** Whisparr v3's own restore skips the database in its backups
   (they hold `whisparr3.db`, but it only accepts `whisparr.db`) and still

@@ -18,10 +18,10 @@ def _folders_matched(pattern, names):
 
 def test_the_pattern_covers_every_backup_folder_and_nothing_else():
     names = ["radarr", "radarr-4k", "sonarr-anime", "lidarr-flac", "whisparr-v3", "plex", "lazylibrarian",
-             "backuparr", "lost+found", "photos", "System Volume Information", "$RECYCLE.BIN", "@eaDir"]
+             "pihole", "pihole-2", "backuparr", "lost+found", "photos", "System Volume Information", "$RECYCLE.BIN", "@eaDir"]
     matched = _folders_matched(destination_util.backup_folder_pattern(), names)
     assert matched == ["radarr", "radarr-4k", "sonarr-anime", "lidarr-flac", "whisparr-v3", "plex", "lazylibrarian",
-                       "backuparr"]
+                       "pihole", "pihole-2", "backuparr"]
     assert all(destination_util.is_backup_folder(name) for name in matched)
 
 

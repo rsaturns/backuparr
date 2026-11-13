@@ -6,11 +6,13 @@ import shutil
 import tempfile
 import threading
 import time
+import zipfile
 
 from datetime import datetime, timezone
 
 from flask import after_this_request, Blueprint, jsonify, request, send_file
 
+import archive_crypto
 import destination_util
 import manifest
 import rclone_util
@@ -18,8 +20,11 @@ import runlog
 import restore_actions as ra
 import restore_version as rv
 from apps.http_headers import app_connection_config
-from backup import humanize_error, log_failure
-from config_store import DEST_NAMES, app_meta, instance_ids, instance_type, key_required, load_config, restore_supported
+from backup import branded, humanize_error, log_failure
+from config_store import (DEST_NAMES, SECRET_EXTRA_FIELDS, app_meta, instance_ids, instance_type, key_required, load_config,
+                          recorded_metadata, restore_supported)
+from webui import cookies
+from webui.jobs import OwnedJobs
 from webui.runs import _start_tracked_run, RESTORE_RUN_STATE, RUN_LOCK, RUN_STATE
 from webui.settings import _missing_required_field, _restore_override_fields
 
@@ -76,6 +81,7 @@ def _add_runs(history, dest_id):
             entries.append({
                 "name": run.get("file") or "", "size": None, "mod_time": run.get("finished") or run.get("started"),
                 "app_version": run.get("app_version"), "recorded": True, "run_id": run["id"], "missing": True,
+                "encrypted": archive_crypto.is_encrypted_name(run.get("file") or ""),
                 "reason": result.get("error") or run.get("error") or "not uploaded",
             })
 
@@ -89,8 +95,9 @@ def api_history(dest_id):
     # One recursive listing of Backuparr's folders instead of one rclone call
     # per app - much faster against remote destinations (Drive/OneDrive).
     # Keyed by instance id; a removed instance's backups are listed while any remain.
-    # The app version comes from the manifest; "recorded" is False for a
-    # backup the startup backfill hasn't reached yet.
+    # The app version, and whether a Jellyfin, Emby or Plex backup holds the
+    # app's metadata (#196), come from the manifest; "recorded" is False for
+    # a backup the startup backfill hasn't reached yet.
     history = {name: [] for name in instance_ids(cfg)}
     try:
         entries = destination_util.list_backups(root)
@@ -106,7 +113,8 @@ def api_history(dest_id):
             history.setdefault(app_name, []).append({
                 "name": entry["Name"], "size": entry["Size"], "mod_time": entry["ModTime"],
                 "app_version": details.get("app_version") if details else None, "recorded": details is not None,
-                "run_id": None,
+                "run_id": None, "encrypted": archive_crypto.is_encrypted_name(entry["Name"]),
+                "metadata": recorded_metadata(app_name, details),
             })
     _add_runs(history, dest_id)
     for entries in history.values():
@@ -147,30 +155,261 @@ def api_history_download(dest_id, app_name, filename):
     root, error = _destination_root_or_error(cfg, dest_id)
     if error:
         return error
+    return send_backup(dest_id, root, app_name, filename)
 
+
+def _decrypts_on_download(app_name, filename):
+    """An app's encrypted backup is decrypted for the signed-in user who asks
+    for it (#147). Backuparr's own stays encrypted: the setup screen restores
+    it as it is."""
+    return archive_crypto.is_encrypted_name(filename) and app_name != destination_util.SELF_BACKUP_FOLDER
+
+
+class _NotThere(Exception):
+    """A backup a download asked for that can't be had, and why, as
+    (response body, status)."""
+
+
+def _plain_copy(dest_id, root, app_name, filename, tmp_dir):
+    """(path, name) of one backup ready to hand to the browser: the file
+    where it is on Local storage, else a copy in tmp_dir; for an app's
+    encrypted backup its decrypted copy in tmp_dir under the plain name.
+    Raises _NotThere."""
     if dest_id == "local":
-        # Sent from where it is: a copy first would double a large backup's
-        # disk use and hold up the download. Never a link out of the folder.
+        # Never a link out of the folder.
         folder = os.path.realpath(os.path.join(root, app_name))
         path = os.path.realpath(os.path.join(folder, filename))
         if os.path.dirname(path) != folder or not os.path.isfile(path):
-            return jsonify({"error": f"{filename} isn't on Local storage any more"}), 404
-        return send_file(path, as_attachment=True, download_name=filename)
+            raise _NotThere({"error": f"{filename} isn't on Local Storage any more"}, 404)
+    else:
+        path = os.path.join(tmp_dir, filename)
+        try:
+            rclone_util.copyto(f"{root}/{app_name}/{filename}", path)
+        except rclone_util.RcloneError as exc:
+            raise _NotThere({"error": humanize_error(exc)}, 500) from None
+    if not _decrypts_on_download(app_name, filename):
+        return path, filename
+    plain = archive_crypto.plain_name(filename)
+    plain_path = os.path.join(tmp_dir, f"plain-{app_name}-{plain}")
+    try:
+        archive_crypto.decrypt_file(path, plain_path)
+    except archive_crypto.WrongKeyError:
+        raise _NotThere({"error": f"{filename} was encrypted with a different encryption key. Decrypt it with that "
+                                  "key using Backuparr's decrypt command."}, 409) from None
+    except archive_crypto.ArchiveCryptoError as exc:
+        raise _NotThere({"error": f"{filename}: {exc}"}, 409) from None
+    finally:
+        if dest_id != "local" and os.path.exists(path):
+            os.remove(path)  # only the decrypted copy needs the space now
+    return plain_path, plain
+
+
+def send_backup(dest_id, root, app_name, filename):
+    """The download response for one backup: the file itself, or for an
+    app's encrypted backup its decrypted copy under the plain name. History
+    and the Overview download through it, and so should anything else that
+    hands a backup to the browser. app_name and filename must already be
+    checked."""
+    if dest_id == "local" and not _decrypts_on_download(app_name, filename):
+        # Sent from where it is: a copy first would double a large backup's
+        # disk use and hold up the download.
+        try:
+            path, name = _plain_copy(dest_id, root, app_name, filename, None)
+        except _NotThere as exc:
+            return jsonify(exc.args[0]), exc.args[1]
+        return send_file(path, as_attachment=True, download_name=name)
 
     tmp_dir = tempfile.mkdtemp(prefix="backuparr-dl-")
-    local_path = os.path.join(tmp_dir, filename)
-    try:
-        rclone_util.copyto(f"{root}/{app_name}/{filename}", local_path)
-    except rclone_util.RcloneError as exc:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
-        return jsonify({"error": humanize_error(exc)}), 500
 
     @after_this_request
     def _cleanup(response):
         shutil.rmtree(tmp_dir, ignore_errors=True)
         return response
 
-    return send_file(local_path, as_attachment=True, download_name=filename)
+    try:
+        path, name = _plain_copy(dest_id, root, app_name, filename, tmp_dir)
+    except _NotThere as exc:
+        return jsonify(exc.args[0]), exc.args[1]
+    return send_file(path, as_attachment=True, download_name=name)
+
+
+# Several backups picked on History at once (#148).
+MAX_BULK = 200
+_RUN_ID = re.compile(r"[A-Za-z0-9._-]{1,120}")
+
+
+def _bulk_backups(items):
+    """[(app, file)] from a list of {"app", "file"} (or "app/file" strings),
+    or None if any isn't one of Backuparr's backups."""
+    if not isinstance(items, list) or len(items) > MAX_BULK:
+        return None
+    out = []
+    for item in items:
+        if isinstance(item, str):
+            app_name, _, filename = item.partition("/")
+        elif isinstance(item, dict):
+            app_name, filename = item.get("app"), item.get("file")
+        else:
+            return None
+        if not (isinstance(app_name, str) and isinstance(filename, str) and destination_util.is_backup_folder(app_name)
+                and ra.SAFE_FILENAME.match(filename)):
+            return None
+        out.append((app_name, filename))
+    return list(dict.fromkeys(out))
+
+
+@bp.post("/api/history/<dest_id>/delete")
+def api_history_bulk_delete(dest_id):
+    """Deletes the backups and failed runs picked on History: {"backups":
+    [{"app", "file"}], "runs": [{"app", "run_id"}]}. Returns what was
+    deleted and what couldn't be, with why."""
+    data = request.get_json(force=True, silent=True) or {}
+    backups = _bulk_backups(data.get("backups", []))
+    runs = data.get("runs", [])
+    if backups is None or not isinstance(runs, list) or len(runs) > MAX_BULK or not all(
+            isinstance(r, dict) and isinstance(r.get("app"), str) and destination_util.is_backup_folder(r["app"])
+            and isinstance(r.get("run_id"), str) and _RUN_ID.fullmatch(r["run_id"]) for r in runs):
+        return jsonify({"error": "pick backups and runs from the list"}), 400
+    if not backups and not runs:
+        return jsonify({"error": "nothing picked"}), 400
+    cfg = load_config()
+    root, error = _destination_root_or_error(cfg, dest_id)
+    if error:
+        return error
+    deleted, failed = [], []
+    for app_name, filename in backups:
+        try:
+            rclone_util.delete_file(f"{root}/{app_name}/{filename}")
+        except rclone_util.RcloneError as exc:
+            # Already gone (retention, or another browser) is what was wanted.
+            if "object not found" not in (exc.detail or ""):
+                failed.append({"app": app_name, "file": filename, "error": humanize_error(exc)})
+                continue
+        manifest.remove(app_name, filename, dest_id)
+        if manifest.get(app_name, filename) is None:
+            runlog.forget_file(app_name, filename)  # gone from every destination
+        deleted.append({"app": app_name, "file": filename})
+    for run in runs:
+        if runlog.forget_run(run["app"], run["run_id"], dest_id):
+            deleted.append({"app": run["app"], "run_id": run["run_id"]})
+        else:
+            failed.append({"app": run["app"], "run_id": run["run_id"], "error": "that run's log is already gone"})
+    log.info("history: deleted %d item(s) on %s%s", len(deleted), dest_id,
+             f", {len(failed)} couldn't be" if failed else "")
+    return jsonify({"deleted": deleted, "failed": failed})
+
+
+# Several backups as one zip (#164). The zip is built in the background, as
+# a job the page polls for "Preparing 3 of 5...", then fetched once; one
+# nobody fetches is removed after DOWNLOAD_TTL.
+DOWNLOAD_TTL = 600
+MAX_DOWNLOADS_PREPARING = 2
+
+
+def _forget_download(job):
+    shutil.rmtree(job["tmp_dir"], ignore_errors=True)
+
+
+DOWNLOAD_JOBS = OwnedJobs(
+    "backuparr_download", lambda job: job.get("finished", float("inf")) < time.monotonic() - DOWNLOAD_TTL,
+    forget=_forget_download)
+
+
+def _expire_downloads():
+    with DOWNLOAD_JOBS.lock:
+        DOWNLOAD_JOBS.purge_locked()
+
+
+def _build_download(job_id, dest_id, root, backups):
+    with DOWNLOAD_JOBS.lock:
+        job = DOWNLOAD_JOBS.current_locked(job_id)
+        tmp_dir = job["tmp_dir"]
+
+    def update(**fields):
+        with DOWNLOAD_JOBS.lock:
+            current = DOWNLOAD_JOBS.current_locked(job_id)
+            if current is not None:
+                current.update(fields)
+
+    outcome = {}
+    try:
+        bundle = os.path.join(tmp_dir, "bundle.zip")
+        # Stored, not deflated: the archives are compressed already.
+        with zipfile.ZipFile(bundle, "w", compression=zipfile.ZIP_STORED, allowZip64=True) as z:
+            for done, (app_name, filename) in enumerate(backups, 1):
+                path, name = _plain_copy(dest_id, root, app_name, filename, tmp_dir)
+                z.write(path, f"{app_name}/{name}")
+                if path.startswith(tmp_dir):
+                    os.remove(path)
+                update(done=done)
+        outcome = {"state": "ready", "path": bundle}
+    except _NotThere as exc:
+        outcome = {"state": "failed", "message": exc.args[0]["error"]}
+    except Exception as exc:  # a full disk, mostly
+        log_failure(log, "history: preparing a download", exc)
+        outcome = {"state": "failed", "message": humanize_error(exc)}
+    finally:
+        update(**outcome, finished=time.monotonic())
+        timer = threading.Timer(DOWNLOAD_TTL + 1, _expire_downloads)
+        timer.daemon = True
+        timer.start()
+
+
+@bp.post("/api/history/<dest_id>/download")
+def api_history_bulk_download(dest_id):
+    """Starts preparing several backups as one zip ({"backups": [{"app",
+    "file"}]}), each under <app>/ as a single download would give it: an
+    app's encrypted backup decrypted, Backuparr's own as it is."""
+    data = request.get_json(force=True, silent=True) or {}
+    backups = _bulk_backups(data.get("backups", []))
+    if not backups:
+        return jsonify({"error": "pick the backups to download"}), 400
+    cfg = load_config()
+    root, error = _destination_root_or_error(cfg, dest_id)
+    if error:
+        return error
+    owner, new_owner = DOWNLOAD_JOBS.owner()
+    with DOWNLOAD_JOBS.lock:
+        DOWNLOAD_JOBS.purge_locked()
+        if sum(job["state"] == "preparing" for _, job in DOWNLOAD_JOBS.jobs.values()) >= MAX_DOWNLOADS_PREPARING:
+            return jsonify({"error": "other downloads are still being prepared - try again when they're done"}), 429
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    job_id = DOWNLOAD_JOBS.add(owner, {"state": "preparing", "done": 0, "total": len(backups), "dest": dest_id,
+                                       "tmp_dir": tempfile.mkdtemp(prefix="backuparr-dl-"),
+                                       "name": f"backuparr-{dest_id}-{stamp}.zip"})
+    threading.Thread(target=_build_download, args=(job_id, dest_id, root, backups), daemon=True).start()
+    response = jsonify({"job_id": job_id, "total": len(backups)})
+    DOWNLOAD_JOBS.set_cookie(response, new_owner, cookies.secure())
+    return response, 202
+
+
+def _my_download(dest_id, job_id):
+    job = DOWNLOAD_JOBS.mine_locked(job_id)
+    return job if job is not None and job["dest"] == dest_id else None
+
+
+@bp.get("/api/history/<dest_id>/download/<job_id>")
+def api_history_download_status(dest_id, job_id):
+    with DOWNLOAD_JOBS.lock:
+        job = _my_download(dest_id, job_id)
+        if job is None:
+            return jsonify({"error": "that download expired - pick the backups again"}), 404
+        return jsonify({key: job[key] for key in ("state", "done", "total", "message") if key in job})
+
+
+@bp.get("/api/history/<dest_id>/download/<job_id>/file")
+def api_history_download_file(dest_id, job_id):
+    """The prepared zip, once: it's removed from the server as it's sent."""
+    with DOWNLOAD_JOBS.lock:
+        job = _my_download(dest_id, job_id)
+        if job is None:
+            return jsonify({"error": "that download expired - pick the backups again"}), 404
+        if job["state"] != "ready":
+            return jsonify({"error": "the download isn't ready"}), 409
+        del DOWNLOAD_JOBS.jobs[job_id]  # its files go after the response below
+    response = send_file(job["path"], as_attachment=True, download_name=job["name"])
+    shutil.rmtree(job["tmp_dir"], ignore_errors=True)  # open already, so it still sends
+    return response
 
 
 # ------------------------------------------------------------- restore ----
@@ -243,6 +482,9 @@ def _restore_work(app_name, root, app_cfg, data, bazarr_backup_dir):
             log.info("restore: the download matches the backup's checksum")
         else:
             log.warning("restore: no checksum is recorded for this backup, so the download couldn't be verified")
+        if archive_crypto.is_encrypted(local_zip):
+            log.info("restore: decrypting the backup...")
+        local_zip = ra.decrypted(tmp_dir, local_zip, _key(data))
 
         passwords = data.get("passwords", {})
 
@@ -253,14 +495,26 @@ def _restore_work(app_name, root, app_cfg, data, bazarr_backup_dir):
         result = ra.restore_app(app_name, app_cfg, tmp_dir, local_zip, bazarr_backup_dir=bazarr_backup_dir,
                                 sabnzbd_password_prompt=password_prompt)
         RESTORE_RUN_STATE["summary"] = result.get("summary")
-        RESTORE_RUN_STATE["message"] = ra.restore_message(app_name, result)
+        RESTORE_RUN_STATE["message"] = branded(ra.restore_message(app_name, result), app_cfg)
+        RESTORE_RUN_STATE["warning"] = bool(result.get("attention"))
+        if RESTORE_RUN_STATE["warning"]:
+            log.warning("restore: %s", RESTORE_RUN_STATE["message"])
         RESTORE_RUN_STATE["ok"] = True
     except Exception as exc:
         log_failure(log, f"restore failed for {app_name}", exc, app_cfg.get("url"), app=app_name)
         RESTORE_RUN_STATE["error"] = humanize_error(exc, app_cfg.get("url"))
+        # The Restore tab then asks for the key the backup was made with.
+        RESTORE_RUN_STATE["key_needed"] = isinstance(exc, archive_crypto.WrongKeyError)
     finally:
         if tmp_dir:
             shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+def _key(data):
+    """The key a restore request gives for a backup made with another key
+    (#147), or None for this install's. Never logged."""
+    key = data.get("key")
+    return key.strip() if isinstance(key, str) and key.strip() else None
 
 
 def _start_restore_run(app_name, root, app_cfg, data, bazarr_backup_dir):
@@ -275,7 +529,9 @@ def _start_restore_run(app_name, root, app_cfg, data, bazarr_backup_dir):
             "ok": False,
             "message": None,
             "summary": None,
+            "warning": False,
             "error": None,
+            "key_needed": False,
             "log": [],
         },
         _restore_work,
@@ -318,9 +574,11 @@ def api_restore_sabnzbd_preview(dest_id):
     tmp_dir = None
     try:
         tmp_dir, local_zip, filename = ra.fetch_backup(root, "sabnzbd", data.get("file"))
-        config = ra.load_sabnzbd_config(tmp_dir, local_zip)
+        config = ra.load_sabnzbd_config(tmp_dir, ra.decrypted(tmp_dir, local_zip, _key(data)))
         servers = ra.sabnzbd_server_summary(config)
         return jsonify({"file": filename, "servers": servers})
+    except archive_crypto.WrongKeyError as exc:
+        return jsonify({"error": humanize_error(exc), "key_needed": True}), 409
     except Exception as exc:
         return jsonify({"error": humanize_error(exc)}), 500
     finally:
@@ -357,7 +615,8 @@ def api_restore(dest_id, app_name):
 @bp.post("/api/restore/<dest_id>/<app_name>/check")
 def api_restore_check(dest_id, app_name):
     """The version check, run on the Restore tab when a backup is picked -
-    for Emby, Plex, Seerr and LazyLibrarian while they're still running."""
+    for Emby, Plex, Seerr, LazyLibrarian and Vaultwarden while they're still
+    running."""
     if not instance_type(app_name):
         return jsonify({"error": "unknown app"}), 404
     data = request.get_json(force=True, silent=True) or {}
@@ -374,6 +633,14 @@ def api_restore_check(dest_id, app_name):
         return jsonify({"status": "refused", "message": humanize_error(exc, app=app_name)})
     _remember_check(app_name, file, app_cfg, result)
     return jsonify(result)
+
+
+def _saved_secrets(app_name):
+    """The fields of an app's saved connection that only its own URL gets:
+    the key, the web login (login_only) and any password or other secret."""
+    meta = app_meta(app_name) or {}
+    return ({"api_key"} | set(SECRET_EXTRA_FIELDS.get(instance_type(app_name), ()))
+            | {f["name"] for f in meta.get("extra_fields", []) if f.get("login_only") or f.get("type") == "password"})
 
 
 def _restore_target(dest_id, app_name, data):
@@ -396,20 +663,25 @@ def _restore_target(dest_id, app_name, data):
     override = data.get("override")
     if override and not isinstance(override, dict):
         return None, None, None, (jsonify({"error": "override must be an object"}), 400)
+    elsewhere = False
     if override:
         allowed = _restore_override_fields(app_name)
         app_cfg = dict(app_cfg)
-        if override.get("url"):
-            # The saved web login belongs to the configured app: never take
-            # it to another one (a restore doesn't need it anyway).
-            for field in (app_meta(app_name) or {}).get("extra_fields", []):
-                if field.get("login_only"):
-                    app_cfg[field["name"]] = ""
+        if override.get("url") and override["url"] != app_cfg.get("url"):
+            # The saved key, login and passwords belong to the configured app:
+            # never take them to another address. The override gives its own.
+            elsewhere = True
+            for field in _saved_secrets(app_name):
+                app_cfg[field] = ""
         for field in allowed:
             value = override.get(field)
             if value:
                 app_cfg[field] = value
 
+    if elsewhere and key_required(app_name) and not app_cfg.get("api_key"):
+        label = (app_meta(app_name) or {}).get("key_label") or "API key"
+        return None, None, None, (jsonify({"error": f"{app_name}: enter the {label} for that URL - the saved one "
+                                                    "only goes to the app's own URL"}), 400)
     if not app_cfg.get("url") or (key_required(app_name) and not app_cfg.get("api_key")):
         return None, None, None, (jsonify({"error": f"{app_name} is not configured"}), 400)
     missing = _missing_required_field(app_name, app_cfg)
