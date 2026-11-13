@@ -1,7 +1,7 @@
 ---
 title: Vaultwarden
 parent: Apps
-nav_order: 21
+nav_order: 22
 ---
 
 # Vaultwarden

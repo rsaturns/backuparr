@@ -41,7 +41,7 @@ CHANGED_TEXT = "{whose} certificate changed. Check it and trust the new one to r
 UNTRUSTED_TEXT = "{whose} certificate isn't trusted. Check it and trust it in Settings to back it up."
 # Whose certificate the messages name, by app type; the rest are firewalls.
 _WHOSE = {"homeassistant": "Home Assistant's", "unifi": "UniFi's", "unraid": "Unraid's", "bitwarden": "Bitwarden's",
-          "synology": "DSM's"}
+          "synology": "DSM's", "qnap": "QNAP's"}
 _FIREWALLS = "the firewall's"
 
 

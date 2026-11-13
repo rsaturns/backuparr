@@ -65,8 +65,8 @@ destination. They're kept like this:
   extended file fails to decrypt rather than restoring something else.
 - **On by default for every app**, and always on - with no switch - for apps
   whose backups hold secrets that must never sit readable anywhere: Pi-hole,
-  Bitwarden, Vaultwarden, OPNsense, pfSense, UniFi, Home Assistant, Unraid, Synology DSM and
-  Backuparr's own backup.
+  Bitwarden, Vaultwarden, OPNsense, pfSense, UniFi, Home Assistant, Unraid, Synology DSM, QNAP QuTS hero
+  and Backuparr's own backup.
 - **Checked before upload.** Each backup is checked to be whole before it's
   encrypted, and the encrypted file is checked to decrypt back to it before
   it's uploaded. See [The check before upload](backups.md#the-check-before-upload).
