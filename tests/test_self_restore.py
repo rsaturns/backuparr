@@ -222,12 +222,12 @@ def test_the_setup_restore_reports_a_wrong_key_and_bad_uploads(old_install, isol
     assert not auth_store.has_credentials()
 
 
-def test_a_backup_from_before_3_0_says_to_restore_it_with_2_5_6(old_install, isolated_webui):
+def test_a_backup_from_before_3_0_says_to_restore_it_with_2_5_7(old_install, isolated_webui):
     _archive, key = old_install
     legacy = Fernet(key.encode()).encrypt(b"PK as 2.5.x wrote it")
     response = isolated_webui.app.test_client().post("/api/setup/restore", json=upload(legacy, key))
     assert response.status_code == 400
-    assert response.get_json()["error"] == "this backup is from before Backuparr 3.0. Restore it with Backuparr 2.5.6, then update."
+    assert response.get_json()["error"] == "this backup is from before Backuparr 3.0. Restore it with Backuparr 2.5.7, then update."
     assert not os.path.exists(config_store.CONFIG_PATH) and not auth_store.has_credentials()
 
 
@@ -284,9 +284,9 @@ def test_no_restore_while_a_backup_runs(running_install, isolated_webui):
     assert response.status_code == 409 and auth_store.verify_password("newadmin", "new-admin-password")
 
 
-def test_settings_restore_of_a_backup_from_before_3_0_says_to_use_2_5_6(running_install, isolated_webui):
+def test_settings_restore_of_a_backup_from_before_3_0_says_to_use_2_5_7(running_install, isolated_webui):
     client, _archive, key = running_install
     legacy = Fernet(key.encode()).encrypt(b"PK as 2.5.x wrote it")
     response = client.post("/api/backuparr/restore", json=upload(legacy, key, confirm=True, password="new-admin-password"))
-    assert response.status_code == 400 and "Restore it with Backuparr 2.5.6, then update" in response.get_json()["error"]
+    assert response.status_code == 400 and "Restore it with Backuparr 2.5.7, then update" in response.get_json()["error"]
     assert auth_store.verify_password("newadmin", "new-admin-password")

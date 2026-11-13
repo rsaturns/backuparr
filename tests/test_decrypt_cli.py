@@ -29,13 +29,13 @@ def test_backuparrs_own_backup_becomes_a_zip(tmp_path, key_env):
     assert (tmp_path / "backuparr_20261108_030000.zip").read_bytes() == b"PK new"
 
 
-def test_backuparrs_own_backup_from_before_3_0_says_to_use_2_5_6(tmp_path, monkeypatch):
+def test_backuparrs_own_backup_from_before_3_0_says_to_use_2_5_7(tmp_path, monkeypatch):
     """Said before any key is asked for."""
     monkeypatch.setattr(secrets_crypto, "KEY_PATH", str(tmp_path / "missing.key"))
     monkeypatch.setattr("sys.stdin.isatty", lambda: False)
     old = tmp_path / "backuparr_20261101_030000.enc"
     old.write_bytes(Fernet(KEY.encode()).encrypt(b"PK old"))  # as 2.5.x wrote it
-    with pytest.raises(SystemExit, match=r"from before Backuparr 3\.0\. Restore it with Backuparr 2\.5\.6, then update"):
+    with pytest.raises(SystemExit, match=r"from before Backuparr 3\.0\. Restore it with Backuparr 2\.5\.7, then update"):
         decrypt.main([str(old)])
     assert not (tmp_path / "backuparr_20261101_030000.zip").exists()
 

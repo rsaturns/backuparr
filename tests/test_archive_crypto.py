@@ -401,11 +401,11 @@ def test_backuparrs_own_backup_uses_the_shared_format(isolated_webui, monkeypatc
     assert "config.json" in self_backup.open_archive(data)
 
 
-def test_a_backup_of_backuparr_from_before_3_0_says_to_use_2_5_6():
+def test_a_backup_of_backuparr_from_before_3_0_says_to_use_2_5_7():
     """Recognised, not opened - with the key it was made with or another."""
     legacy = Fernet(OTHER_KEY.encode()).encrypt(self_zip())  # as 2.5.x wrote it
     for key in (None, OTHER_KEY):
-        with pytest.raises(self_backup.SelfBackupError, match=r"from before Backuparr 3\.0\. Restore it with Backuparr 2\.5\.6, then update"):
+        with pytest.raises(self_backup.SelfBackupError, match=r"from before Backuparr 3\.0\. Restore it with Backuparr 2\.5\.7, then update"):
             self_backup.open_archive(legacy, key)
 
 
