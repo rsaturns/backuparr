@@ -51,6 +51,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - rclone 1.76.0 (from 1.75.0, taking the security fixes in 1.75.1 and 1.75.2), croniter 7.0.0, and the release workflow's docker/login-action 4.8.0 and softprops/action-gh-release 3.0.4 (#166).
 - With croniter 7.0, a hand-typed schedule step that starts at a field's maximum, such as `59/15`, means only that value; schedules made with the picker are unchanged (#166).
 - Deleting on Google Drive and OneDrive (retention, History) is now permanent, so deleted backups no longer fill your cloud storage from the trash or recycle bin, which both count against it.
+- The `latest` image tag follows full releases only: a beta such as 3.0.0-beta is published under its own tag, so containers that update from `latest` stay on the last full release.
 
 ### Fixed
 
