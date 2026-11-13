@@ -1,10 +1,19 @@
 ---
 title: Tautulli
 parent: Apps
-nav_order: 18
+nav_order: 19
 ---
 
 # Tautulli
+
+## Setting it up
+
+In Tautulli, open **Settings > Web Interface**, tick **Enable API** under
+**API** and save, then copy the **API key** shown there. On Tautulli's card,
+enter its URL - for example `http://tautulli:8181` - and the key, then click
+**Test connection**.
+
+## Good to know
 
 - **Backup:** `download_database` removes Plex tokens, but `download_config`
   only removes `PMS_TOKEN`/`JWT_SECRET`. **The Tautulli API key and any

@@ -628,9 +628,24 @@ APP_META = [
 # its backups are always encrypted (self_backup.py).
 SELF_APP = {"id": "backuparr", "label": "Backuparr", "icon": "logo.png", "category": "server", "always_encrypted": True}
 
+# Each card's "?" opens its app's page on the docs site at "Setting it up".
+# Radarr, Sonarr, Lidarr and Prowlarr share one page; every other app's page
+# is named after its id. Backuparr's card links to its own backup's section.
+DOCS_URL = "https://rsaturns.github.io/backuparr/"
+SETUP_SECTION = "setting-it-up"
+_DOCS_PAGE = {"radarr": "servarr", "sonarr": "servarr", "lidarr": "servarr", "prowlarr": "servarr"}
+
+
+def docs_page(app_type):
+    """The docs page (docs/apps/<page>.md) an app's card links to."""
+    return _DOCS_PAGE.get(app_type, app_type)
+
+
+SELF_APP["help_url"] = f"{DOCS_URL}security/#backuparrs-own-backup"
 for _meta in APP_META:
     _meta["discoverable"] = _meta["id"] in DISCOVERABLE_APPS
     _meta["category"] = _APP_CATEGORY[_meta["id"]]
+    _meta["help_url"] = f"{DOCS_URL}apps/{docs_page(_meta['id'])}/#{SETUP_SECTION}"
 
 DEST_NAMES = ["local", "gdrive", "onedrive", "dropbox"]
 

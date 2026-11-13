@@ -744,6 +744,26 @@ input:focus, select:focus, textarea:focus {
 .help-tip:hover,
 .help-tip:focus { color: var(--accent); border-color: var(--accent); outline: none; }
 
+/* A card's "?": its app's page in the docs, at "Setting it up". */
+.card-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--text-muted);
+  border-radius: 50%;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.card-help:hover,
+.card-help:focus-visible { color: var(--accent); border-color: var(--accent); outline: none; }
+
 .help-tip:hover::after,
 .help-tip:focus::after {
   content: attr(data-tip);

@@ -71,7 +71,7 @@
     <div class="grid">
       <div class="card apps-card">
         <h2>Apps</h2>
-        <p class="hint">Check the apps you want backed up - each one expands for its URL and API key (find the key in that app's Settings &gt; General).</p>
+        <p class="hint">Check the apps you want backed up - each one expands for its URL and key, and its ? opens its setup guide.</p>
         <div id="app-list">
           {# One collapsible section per category (#148); app.js opens them, counts the
              enabled apps and puts those first. #}
@@ -96,6 +96,7 @@
                   </label>
                   <img class="app-icon" src="{{ url_for('static', filename=self_app.icon) }}" alt="" width="22" height="22">
                   <h3>{{ self_app.label }}</h3>
+                  <a class="card-help" href="{{ self_app.help_url }}" target="_blank" rel="noopener noreferrer" title="Setup guide" aria-label="{{ self_app.label }} setup guide, in the docs">?</a>
                   <span class="status-dot" data-state="idle"></span>
                 </div>
                 <div class="app-card-body hidden">
@@ -145,6 +146,7 @@
                   </label>
                   <img class="app-icon" src="{{ url_for('static', filename='icons/' ~ m.icon) }}" alt="" width="22" height="22">
                   <h3>{{ m.label }}</h3>
+                  <a class="card-help" href="{{ m.help_url }}" target="_blank" rel="noopener noreferrer" title="Setup guide" aria-label="{{ m.label }} setup guide, in the docs">?</a>
                   {% if m.discoverable %}<span class="discovery-badge discovery-origin hidden">From Prowlarr</span>{% endif %}
                   <span class="status-dot" data-state="idle"></span>
                 </div>
@@ -576,13 +578,15 @@
 </footer>
 
 <div class="feedback" id="feedback">
-  <div class="feedback-menu hidden" id="feedback-menu" role="menu" aria-label="Feedback">
+  <div class="feedback-menu hidden" id="feedback-menu" role="menu" aria-label="Help and feedback">
+    <a class="feedback-link" role="menuitem" target="_blank" rel="noopener noreferrer"
+       href="https://rsaturns.github.io/backuparr/">Documentation</a>
     <a class="feedback-link" role="menuitem" target="_blank" rel="noopener noreferrer"
        href="https://github.com/rsaturns/backuparr/issues/new?template=bug_report.yml">Report a bug</a>
     <a class="feedback-link" role="menuitem" target="_blank" rel="noopener noreferrer"
        href="https://github.com/rsaturns/backuparr/issues/new?template=feature_request.yml">Request a feature</a>
   </div>
-  <button type="button" class="feedback-btn" id="feedback-btn" aria-label="Report a bug or request a feature"
+  <button type="button" class="feedback-btn" id="feedback-btn" aria-label="Documentation, or report a bug or request a feature"
           aria-haspopup="menu" aria-expanded="false" aria-controls="feedback-menu">
     <img src="{{ url_for('static', filename='logo.png') }}" alt="">
   </button>

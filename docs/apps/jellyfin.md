@@ -6,6 +6,8 @@ nav_order: 6
 
 # Jellyfin
 
+## Setting it up
+
 Jellyfin creates backups through its API but can't download or upload them, so
 mount **Jellyfin's backups folder** into Backuparr. It is
 `/config/data/backups` in the official image and `/config/data/data/backups` in
@@ -23,6 +25,8 @@ Then fill in the card: the URL, an API key from **Dashboard > API Keys** (a
 user's sign-in token can't manage backups), and **Backups folder** =
 `/mnt/jellyfin-backups`. If the path is wrong, **Test connection** names the
 folder Jellyfin actually uses.
+
+## Backups and restores
 
 - **What's in the backup:** Jellyfin's database (users, watched state,
   playlists, collections, libraries, settings and API keys) and config files.

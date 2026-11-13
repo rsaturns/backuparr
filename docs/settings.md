@@ -13,7 +13,9 @@ The **Settings** tab holds, from top to bottom:
   backup. A category starts closed and opens once one of its apps is set up;
   after that it stays as you left it, in this browser. Within a category,
   enabled apps come first. A card per app: switch it on, enter its URL and API
-  key, and click **Test connection**. **Encrypt backup** is on unless you turn it off
+  key, and click **Test connection**. The **?** next to an app's name opens its
+  page in these docs, at **Setting it up**: where its key comes from and what
+  else it needs. **Encrypt backup** is on unless you turn it off
   (see [Encrypted backups](security.md#encrypted-backups)). See
   [Apps](apps/index.md). **Server** starts with Backuparr's own card: its
   switch turns [Backuparr's own backup](security.md#backuparrs-own-backup)

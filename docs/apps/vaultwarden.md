@@ -1,10 +1,12 @@
 ---
 title: Vaultwarden
 parent: Apps
-nav_order: 22
+nav_order: 23
 ---
 
 # Vaultwarden
+
+## Setting it up
 
 Vaultwarden has no backup API, so Backuparr reads **Vaultwarden's data
 folder** (its `/data`):
@@ -18,6 +20,8 @@ Then fill in the card: the URL (for example `http://vaultwarden`, the address
 Backuparr reaches it on - no login is needed) and **Data folder** =
 `/mnt/vaultwarden`. The URL is only used for Vaultwarden's version and, before
 a restore, to check that it's stopped.
+
+## Backups and restores
 
 - **What's in the backup:** what [Vaultwarden's backup
   guide](https://github.com/dani-garcia/vaultwarden/wiki/Backing-up-your-vault)
