@@ -18,6 +18,7 @@ nav_order: 13
 | `apps.jellyfin.backup_dir` | Jellyfin's mounted backups folder - required |
 | `apps.emby.data_dir` | Emby's mounted data folder (its `/config`) - required |
 | `apps.plex.data_dir` | Plex's mounted `Plex Media Server` folder - required |
+| `apps.<jellyfin\|emby\|plex>.metadata` | Include metadata: `true` adds the app's metadata (posters and artwork) to its backups; default `false` |
 | `apps.seerr.data_dir` | Seerr's mounted config folder (its `/app/config`) - required |
 | `apps.lazylibrarian.data_dir` | LazyLibrarian's mounted data folder (its `/config`) - required |
 | `apps.bitwarden.data_dir` | Bitwarden's mounted `bwdata` folder (standard install) or lite's mounted backups folder - required |

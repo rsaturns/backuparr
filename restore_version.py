@@ -9,7 +9,7 @@ restores with a warning instead."""
 import manifest
 from apps.base import AppError
 from backup import build_app, humanize_error
-from config_store import app_meta, instance_type
+from config_store import app_meta, instance_type, recorded_metadata
 
 # Restored while stopped: they can't be asked their version at restore time,
 # so the check runs on the Restore tab first, while they're still running.
@@ -59,23 +59,26 @@ def installed_version(app, app_cfg):
 def check(app, file, app_cfg):
     """Compares a backup with the installed app. Returns
     {"status": "match" | "unknown", "backup_version", "installed_version",
-    "message"}; raises RestoreVersionError on a mismatch or when the app
-    can't be asked."""
+    "message", "metadata"}; raises RestoreVersionError on a mismatch or when
+    the app can't be asked. "metadata" is whether a Jellyfin, Emby or Plex
+    backup holds the app's metadata (#196), None when that isn't recorded."""
     label, app_type = app_label(app), instance_type(app)
     installed = installed_version(app, app_cfg)
     entry = manifest.get(app, file)
     backup_version = entry.get("app_version") if entry else None
+    metadata = recorded_metadata(app, entry)
     if not backup_version:
         reason = ("This backup doesn't record " + label + "'s version" if entry
                   else "This backup's version hasn't been read yet")
         return {"status": "unknown", "backup_version": None, "installed_version": installed,
-                "message": f"{reason}, so it can't be checked against the installed {label} {installed}."}
+                "message": f"{reason}, so it can't be checked against the installed {label} {installed}.",
+                "metadata": metadata}
     if not _same(app_type, backup_version, installed):
         raise RestoreVersionError(
             f"{app}: this backup is from {label} {backup_version} and {label} {installed} is installed. "
             + _install_hint(app_type, label, backup_version))
     return {"status": "match", "backup_version": backup_version, "installed_version": installed,
-            "message": f"This backup is from {label} {backup_version}, the installed version."}
+            "message": f"This backup is from {label} {backup_version}, the installed version.", "metadata": metadata}
 
 
 def verify_checksum(app, file, local_path):

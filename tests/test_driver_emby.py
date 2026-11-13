@@ -1,13 +1,13 @@
 import io
 import json
 import os
+import shutil
 import sqlite3
 import zipfile
 
 import pytest
 import requests
 
-import backup
 from apps import emby
 from apps.emby import MANIFEST, EmbyApp, EmbyError
 
@@ -87,7 +87,7 @@ def app(folder):
 
 def make_backup(app, tmp_path):
     archive = str(tmp_path / "emby_20261028_030000.zip")
-    backup.zip_dir(app.backup(str(tmp_path / "work")), archive)
+    shutil.move(app.backup(str(tmp_path / "work")), archive)
     return archive
 
 
@@ -145,7 +145,7 @@ def test_backup_takes_settings_databases_and_lists_but_not_images_cache_or_logs(
         "metadata/collections/Set/collection.nfo",
     }
     assert manifest == {"emby_version": "4.10.2.0", "server_id": SERVER_ID,
-                        "databases": ["authentication.db", "library.db", "users.db"]}
+                        "databases": ["authentication.db", "library.db", "users.db"], "metadata": False}
 
 
 def test_a_live_database_is_snapshotted_with_its_unflushed_changes(app, server, folder, tmp_path):
@@ -173,6 +173,35 @@ def test_backup_refuses_another_servers_folder(app, server, folder, tmp_path):
     server.routes["GET /emby/System/Info"] = (200, {"Version": "4.10.2.0", "Id": "different"})
     with pytest.raises(EmbyError, match="holds another Emby server's data"):
         app.backup(str(tmp_path / "work"))
+
+
+def test_include_metadata_takes_the_whole_metadata_folder_but_still_not_cache_or_logs(server, folder, tmp_path):
+    (folder / "metadata/People/A/Actor").mkdir(parents=True)
+    (folder / "metadata/People/A/Actor/folder.jpg").write_bytes(b"\xff\xd8\xffperson")
+    app = EmbyApp("http://emby:8096", KEY, data_dir=str(folder), metadata=True)
+    with zipfile.ZipFile(make_backup(app, tmp_path)) as zf:
+        names = set(zf.namelist())
+        manifest = json.loads(zf.read(MANIFEST))
+    assert {"metadata/library/aa/poster.jpg", "metadata/People/A/Actor/folder.jpg",
+            "metadata/collections/Set/collection.nfo", "data/library.db", "config/system.xml"} <= names
+    assert not any(n.startswith(("cache/", "logs/")) for n in names)
+    assert manifest["metadata"] is True
+
+
+def test_include_metadata_without_a_metadata_folder_says_so_and_records_none(server, folder, tmp_path, caplog):
+    shutil.rmtree(folder / "metadata")
+    app = EmbyApp("http://emby:8096", KEY, data_dir=str(folder), metadata=True)
+    assert app.test_connection() == "emby 4.10.2.0 reachable, data folder OK; it has no metadata folder, so backups won't hold metadata"
+    with zipfile.ZipFile(make_backup(app, tmp_path)) as zf:
+        assert json.loads(zf.read(MANIFEST))["metadata"] is False
+    assert "has no metadata folder" in caplog.text
+
+
+def test_a_failed_backup_leaves_nothing_behind(app, server, folder, tmp_path, monkeypatch):
+    monkeypatch.setattr(emby.mounted, "write_archive", lambda *a, **k: (_ for _ in ()).throw(EmbyError("emby: boom")))
+    with pytest.raises(EmbyError, match="boom"):
+        app.backup(str(tmp_path / "work"))
+    assert list((tmp_path / "work").iterdir()) == []
 
 
 # --- restore -----------------------------------------------------------------
@@ -296,3 +325,33 @@ def test_restore_refuses_paths_outside_what_a_backup_holds(app, server, folder, 
     with pytest.raises(EmbyError, match="unexpected path in the backup"):
         app.restore_from_file(str(archive))
     assert not (tmp_path / "escape.txt").exists()
+
+
+def test_a_backup_with_metadata_puts_it_back_and_one_without_leaves_emby_s_alone(server, folder, tmp_path):
+    with_metadata = make_backup(EmbyApp("http://emby:8096", KEY, data_dir=str(folder), metadata=True), tmp_path)
+    (tmp_path / "plain").mkdir()
+    without = make_backup(EmbyApp("http://emby:8096", KEY, data_dir=str(folder)), tmp_path / "plain")
+    stop_emby(server)
+    (folder / "metadata/library/aa/poster.jpg").write_bytes(b"changed since")
+    (folder / "metadata/library/bb").mkdir()
+    (folder / "metadata/library/bb/poster.jpg").write_bytes(b"new item")
+
+    EmbyApp("http://emby:8096", KEY, data_dir=str(folder)).restore_from_file(without)
+    assert (folder / "metadata/library/aa/poster.jpg").read_bytes() == b"changed since"
+
+    EmbyApp("http://emby:8096", KEY, data_dir=str(folder)).restore_from_file(with_metadata)
+    assert (folder / "metadata/library/aa/poster.jpg").read_bytes() == b"jpg"
+    # Written over, not mirrored: an image Emby fetched since stays.
+    assert (folder / "metadata/library/bb/poster.jpg").read_bytes() == b"new item"
+    assert rows(folder / "data/library.db") == ["watched"]
+
+
+def test_a_metadata_restore_that_cant_write_changes_nothing(server, folder, tmp_path, monkeypatch):
+    archive = make_backup(EmbyApp("http://emby:8096", KEY, data_dir=str(folder), metadata=True), tmp_path)
+    make_db(folder / "data/library.db", rows=("after the backup",)).close()
+    stop_emby(server)
+    real = os.access
+    monkeypatch.setattr(emby.mounted.os, "access", lambda path, mode: "metadata/library" not in str(path) and real(path, mode))
+    with pytest.raises(EmbyError, match="can't write metadata/library/aa/poster.jpg"):
+        EmbyApp("http://emby:8096", KEY, data_dir=str(folder)).restore_from_file(archive)
+    assert rows(folder / "data/library.db") == ["after the backup"]

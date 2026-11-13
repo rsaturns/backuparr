@@ -32,11 +32,23 @@ folder Jellyfin actually uses.
   playlists, collections, libraries, settings and API keys) and config files.
   Images and subtitles are left out; a library scan brings them back. The
   archive holds password hashes and API keys.
+- **Include metadata** on the card adds Jellyfin's metadata folder: posters,
+  artwork and people images, artwork you set by hand, and saved metadata. It
+  uses the Metadata option of Jellyfin's own backup, and takes the default
+  metadata folder too when you set a custom metadata path. It's off by
+  default: most metadata downloads again, and it can make each backup many
+  times larger (retention keeps that many copies). Jellyfin writes the
+  archive to its backups folder first, so that folder needs room for it.
+  Trickplay images and extracted subtitles stay out; Jellyfin rebuilds them.
+  Jellyfin 10.11.7 or newer is needed: older versions restored metadata to
+  the wrong folder
+  ([jellyfin#16425](https://github.com/jellyfin/jellyfin/pull/16425)), so on
+  them Backuparr leaves it out and Test connection says so.
 - **Mount the folder read-write**: Backuparr removes Jellyfin's copy of each
   archive after taking it, and a restore writes into the folder. Read-only,
   backups still work but restores don't.
-- **Restore** replaces Jellyfin's database and settings, then Jellyfin restarts
-  to apply them, as in Jellyfin's guide,
+- **Restore** replaces Jellyfin's database and settings, and its metadata if
+  the backup has it, then Jellyfin restarts to apply them, as in Jellyfin's guide,
   [Restore from a Built-in Backup](https://jellyfin.org/docs/general/administration/backup-and-restore/#restore-from-a-built-in-backup). The archive stays in Jellyfin's backups folder; delete it
   there when you're done. API keys come back too: after rebuilding Jellyfin, enter the
   new install's key under **Restore to a different target**, not in Settings -

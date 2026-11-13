@@ -186,13 +186,17 @@ APP_META = [
         "url_placeholder": "http://jellyfin:8096",
         "key_help": "Dashboard > API Keys",
         # Jellyfin's API can't download a backup, so its backups folder is
-        # mounted into this container - see apps/jellyfin.py.
+        # mounted into this container - see apps/jellyfin.py. Include
+        # metadata (#196) asks for Jellyfin's Metadata option, and for Emby
+        # and Plex adds their metadata folder.
         "extra_fields": [
             {"name": "backup_dir", "label": "Backups folder", "type": "text", "required": True,
              "placeholder": "/mnt/jellyfin-backups",
              "help": "Jellyfin's backups folder as mounted here; read-write to restore"},
+            {"name": "metadata", "label": "Include metadata", "type": "switch", "default": False, "option": True,
+             "help": "posters and artwork; can make backups many times larger"},
         ],
-        "restore_warning": {"lead": "Replaces Jellyfin's database and settings", "text": "with the backup's - users, watch history, libraries and API keys. Anything added since is lost. Jellyfin restarts to apply it."},
+        "restore_warning": {"lead": "Replaces Jellyfin's database and settings", "text": "with the backup's - users, watch history, libraries and API keys. A backup with metadata puts it back too. Anything added since is lost. Jellyfin restarts to apply it."},
     },
     {
         "id": "emby",
@@ -207,8 +211,10 @@ APP_META = [
             {"name": "data_dir", "label": "Data folder", "type": "text", "required": True,
              "placeholder": "/mnt/emby",
              "help": "Emby's /config folder as mounted here; read-write to restore"},
+            {"name": "metadata", "label": "Include metadata", "type": "switch", "default": False, "option": True,
+             "help": "posters and artwork; can make backups many times larger"},
         ],
-        "restore_warning": {"lead": "Stop Emby first", "text": "- the restore is refused while it's running. It replaces Emby's databases and settings with the backup's - users, watch history, playlists, collections and API keys. Anything added since is lost. Start Emby again afterwards."},
+        "restore_warning": {"lead": "Stop Emby first", "text": "- the restore is refused while it's running. It replaces Emby's databases and settings with the backup's - users, watch history, playlists, collections and API keys. A backup with metadata puts it back too. Anything added since is lost. Start Emby again afterwards."},
     },
     {
         "id": "plex",
@@ -224,8 +230,10 @@ APP_META = [
             {"name": "data_dir", "label": "Data folder", "type": "text", "required": True,
              "placeholder": "/mnt/plex",
              "help": "Plex's \"Plex Media Server\" folder as mounted here; read-write to restore"},
+            {"name": "metadata", "label": "Include metadata", "type": "switch", "default": False, "option": True,
+             "help": "posters and artwork; can make backups many times larger"},
         ],
-        "restore_warning": {"lead": "Stop Plex first", "text": "- the restore is refused while it's running. It replaces Plex's library database and settings with the backup's - libraries, playlists, collections, every user's watched state, and the server's identity, so a rebuilt server comes back as the same server with its shared users. Anything added since is lost. Never run the original server at the same time. Start Plex again afterwards."},
+        "restore_warning": {"lead": "Stop Plex first", "text": "- the restore is refused while it's running. It replaces Plex's library database and settings with the backup's - libraries, playlists, collections, every user's watched state, and the server's identity, so a rebuilt server comes back as the same server with its shared users. A backup with metadata puts it back too. Anything added since is lost. Never run the original server at the same time. Start Plex again afterwards."},
     },
     {
         "id": "seerr",
@@ -1094,6 +1102,20 @@ def enabled_apps(cfg):
 # These take an app or an instance id: an instance shares its app's metadata.
 def app_meta(name):
     return next((m for m in APP_META if m["id"] == instance_type(name)), None)
+
+
+def has_metadata_option(name):
+    """Whether the app's card has Include metadata (#196): Jellyfin, Emby, Plex."""
+    return any(f["name"] == "metadata" for f in (app_meta(name) or {}).get("extra_fields", []))
+
+
+def recorded_metadata(name, entry):
+    """Whether a backup holds the app's metadata, from its manifest entry: a
+    Jellyfin, Emby or Plex backup recorded before the switch existed holds
+    none; None for an unrecorded backup or any other app."""
+    if entry is None or not has_metadata_option(name):
+        return None
+    return entry.get("metadata", False)
 
 
 def app_label(app_id, app_cfg=None):

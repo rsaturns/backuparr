@@ -6,11 +6,17 @@ backups, all with an administrator API key (Dashboard > API Keys):
 - POST /Backup/Create writes a zip to Jellyfin's own backups folder
   (<data dir>/backups: /config/data/backups in the official image,
   /config/data/data/backups in linuxserver's) and
-  answers with its manifest once the file is complete. Only the database is
+  answers with its manifest once the file is complete. The database is
   requested: users, watch state, playlists, libraries and server settings
-  come along with it (the archive always carries the config XML files too),
-  while metadata images, trickplay and subtitles - large and regenerable -
-  are left out.
+  come along with it (the archive always carries the config XML files too).
+  With Include metadata on (#196), Jellyfin's Metadata option too: its
+  metadata folder (images, custom artwork too, and saved metadata) - and
+  the default one when a custom metadata path is set. Jellyfin's archive
+  records the options in its manifest.json. Trickplay and subtitles - large,
+  and rebuilt by Jellyfin - are left out.
+  Before 10.11.7 Jellyfin restored metadata into its data folder rather
+  than its metadata folder (jellyfin/jellyfin#16425, checked in the 10.11.6
+  source), so there it isn't asked for.
 - GET /Backup lists the archives in that folder.
 - POST /Backup/Restore takes the *filename* of an archive in that folder,
   restarts Jellyfin in-process and applies the archive on startup.
@@ -38,8 +44,9 @@ from apps.base import AppError, poll_until
 
 logger = logging.getLogger(f"backuparr.{__name__}")
 
-# Database only - see the module docstring.
+# See the module docstring; Metadata follows the card's switch.
 BACKUP_OPTIONS = {"Database": True, "Metadata": False, "Trickplay": False, "Subtitles": False}
+METADATA_RESTORE_FIXED = (10, 11, 7)
 
 _SAFE_NAME = re.compile(r"^(?!\.)[A-Za-z0-9._-]+\Z")
 
@@ -63,17 +70,30 @@ def _server_folder(path):
     return "/".join(head) or "its backups folder"
 
 
+def _version(text):
+    return tuple(int(p) for p in re.findall(r"\d+", text or "")[:3])
+
+
+def metadata_restores(version):
+    """Whether this Jellyfin version puts metadata back where it reads it
+    on a restore. An unreadable version is taken as a current one."""
+    parsed = _version(version)
+    return not parsed or parsed >= METADATA_RESTORE_FIXED
+
+
 def is_jellyfin_backup(path):
     return mounted.is_backup_zip(path, {"manifest.json"})
 
 
 class JellyfinApp:
-    def __init__(self, url, api_key, backup_dir=None, timeout=30, backup_timeout=1800):
+    def __init__(self, url, api_key, backup_dir=None, metadata=None, timeout=30, backup_timeout=None):
         self.url = url.rstrip("/")
         self.backup_dir = backup_dir or None
+        self.metadata = bool(metadata)
         self.timeout = timeout
-        # Creating a backup exports the whole database before Jellyfin answers.
-        self.backup_timeout = backup_timeout
+        # Creating a backup exports the whole database - and zips the
+        # metadata folder, with it on - before Jellyfin answers.
+        self.backup_timeout = backup_timeout or (3600 if self.metadata else 1800)
         self.session = requests.Session()
         self.session.headers.update({"Authorization": f'MediaBrowser Token="{api_key}"', "Accept": "application/json"})
 
@@ -118,8 +138,12 @@ class JellyfinApp:
                 f"{_server_folder(paths[0])} - check the volume mount"
             )
         if not os.access(self.backup_dir, os.W_OK):
-            return f"jellyfin {version} reachable; backups folder is read-only, so backups work but restores won't"
-        return f"jellyfin {version} reachable, backups folder OK"
+            message = f"jellyfin {version} reachable; backups folder is read-only, so backups work but restores won't"
+        else:
+            message = f"jellyfin {version} reachable, backups folder OK"
+        if self.metadata and not metadata_restores(version):
+            message += "; metadata needs Jellyfin 10.11.7 or newer, so backups leave it out"
+        return message
 
     def _wait_for_file(self, path, wait_s=10):
         # A network share can show a new file a moment after Jellyfin wrote it.
@@ -127,8 +151,20 @@ class JellyfinApp:
 
     def backup(self, dest_dir):
         self._require_folder()
-        logger.info("jellyfin: creating a backup (database and config, no metadata images)...")
-        res = self.session.post(f"{self.url}/Backup/Create", json=BACKUP_OPTIONS, timeout=self.backup_timeout)
+        metadata = self.metadata
+        if metadata:
+            version = self.server_version()
+            if not metadata_restores(version):
+                logger.warning("jellyfin: Jellyfin %s can't restore metadata to its metadata folder (fixed in 10.11.7), "
+                               "so this backup leaves it out - update Jellyfin to back it up", version)
+                metadata = False
+        if metadata:
+            logger.info("jellyfin: creating a backup (database, config and metadata; Jellyfin zips the metadata first, "
+                        "which can take a while)...")
+        else:
+            logger.info("jellyfin: creating a backup (database and config, no metadata images)...")
+        options = {**BACKUP_OPTIONS, "Metadata": metadata}
+        res = self.session.post(f"{self.url}/Backup/Create", json=options, timeout=self.backup_timeout)
         if res.status_code == 404:
             raise JellyfinError("jellyfin: this server has no backup API - Jellyfin 10.11 or newer is needed")
         manifest = self._check(res).json()

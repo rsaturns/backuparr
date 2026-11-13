@@ -12,7 +12,9 @@ for Plex, Emby, Seerr, NZBGet, Vaultwarden and a standard Bitwarden the
 backuparr-<app>.json Backuparr writes; lite Bitwarden's manifest.txt (its image
 tag, when lite knew it).
 Bazarr, SABnzbd and Tdarr archives hold none, so theirs is recorded as
-unknown. An encrypted archive (#147) is decrypted with this install's key to
+unknown. For Jellyfin, Emby and Plex it also records whether the backup holds
+the app's metadata (#196): Jellyfin's manifest.json lists its options, and
+Backuparr's own manifest says it for the other two. An encrypted archive (#147) is decrypted with this install's key to
 read it; one made with another key is recorded with its version unknown."""
 import configparser
 import json
@@ -33,7 +35,7 @@ import manifest
 import rclone_util
 from apps import bitwarden, homeassistant, synology, unifi, unraid
 from apps.base import AppError
-from config_store import enabled_destinations, instance_type, load_config
+from config_store import enabled_destinations, has_metadata_option, instance_type, load_config
 
 log = logging.getLogger("backuparr.manifest")
 
@@ -160,6 +162,23 @@ def read_version(app_type, archive):
     return None
 
 
+def read_metadata(app_type, archive):
+    """Whether a Jellyfin, Emby or Plex backup holds the app's metadata,
+    from the manifest inside it; None for any other app, or when it can't
+    be read. A backup made before the switch has none."""
+    if not has_metadata_option(app_type):
+        return None
+    try:
+        if app_type == "jellyfin":
+            text = _zip_text(archive, "manifest.json")
+            return (json.loads(text).get("Options") or {}).get("Metadata") is True if text else None
+        text = _zip_text(archive, f"backuparr-{app_type}.json")
+        return json.loads(text).get("metadata") is True if text else None
+    except (OSError, ValueError, AttributeError, zipfile.BadZipFile) as exc:
+        log.warning("manifest: couldn't read what %s holds (%s)", os.path.basename(archive), type(exc).__name__)
+    return None
+
+
 def _backups_on(root):
     """[(app, file, size)] for each of Backuparr's archives under root."""
     found = []
@@ -172,7 +191,7 @@ def _backups_on(root):
 
 
 def _examine(dest_id, root, app, name, tmp_dir):
-    """(app_version, sha256, encrypted) of one archive. A local destination's
+    """(app_version, metadata, sha256, encrypted) of one archive. A local destination's
     file is read where it is; any other is downloaded to tmp_dir first. The
     SHA-256 is of the file as stored."""
     if dest_id == "local":
@@ -183,23 +202,29 @@ def _examine(dest_id, root, app, name, tmp_dir):
     try:
         sha256 = manifest.file_sha256(local)
         encrypted = archive_crypto.is_encrypted(local)
-        return _version_in(app, name, local, tmp_dir, encrypted), sha256, encrypted
+        return (*_details_in(app, name, local, tmp_dir, encrypted), sha256, encrypted)
     finally:
         if dest_id != "local":
             os.remove(local)
 
 
-def _version_in(app, name, local, tmp_dir, encrypted):
+def _details(app, archive):
+    app_type = instance_type(app)
+    return manifest.normalise_version(app_type, read_version(app_type, archive)), read_metadata(app_type, archive)
+
+
+def _details_in(app, name, local, tmp_dir, encrypted):
+    """(app_version, metadata) read inside one archive."""
     if not encrypted:
-        return manifest.normalise_version(instance_type(app), read_version(instance_type(app), local))
+        return _details(app, local)
     plain = os.path.join(tmp_dir, "plain-" + archive_crypto.plain_name(name))
     try:
         archive_crypto.decrypt_file(local, plain)
     except archive_crypto.ArchiveCryptoError as exc:
         log.warning("manifest: couldn't read the version inside %s (%s)", name, exc)
-        return None
+        return None, None
     try:
-        return manifest.normalise_version(instance_type(app), read_version(instance_type(app), plain))
+        return _details(app, plain)
     finally:
         os.remove(plain)
 
@@ -219,17 +244,19 @@ def backfill_destination(dest_id, root, expected_generation, should_stop=None, s
                 continue
             if entry and entry.get("sha256") and entry.get("size") == size:
                 # The same run's archive, already read from another destination.
-                version, sha256, encrypted = entry.get("app_version"), entry["sha256"], entry.get("encrypted", False)
+                version, metadata = entry.get("app_version"), entry.get("metadata")
+                sha256, encrypted = entry["sha256"], entry.get("encrypted", False)
             else:
                 try:
-                    version, sha256, encrypted = _examine(dest_id, root, app, name, tmp_dir)
+                    version, metadata, sha256, encrypted = _examine(dest_id, root, app, name, tmp_dir)
                 except (OSError, rclone_util.RcloneError) as exc:
                     # Gone since the listing, or unreachable: tried again next start.
                     log.warning("manifest: skipped %s/%s on %s: %s", app, name, dest_id,
                                 getattr(exc, "detail", None) or getattr(exc, "strerror", None) or type(exc).__name__)
                     continue
             if not manifest.add_found(app, name, dest_id, app_version=version, sha256=sha256, size=size,
-                                      expected_generation=expected_generation, encrypted=encrypted):
+                                      expected_generation=expected_generation, encrypted=encrypted,
+                                      metadata=metadata):
                 return None
             added += 1
     finally:

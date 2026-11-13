@@ -369,6 +369,20 @@ def test_the_backfill_reads_the_version_inside_an_encrypted_backup(tmp_path, mon
     assert sorted(os.listdir(folder)) == ["radarr_20260101_030000.zip.enc", "radarr_20260102_030000.zip.enc"]
 
 
+def test_the_backfill_reads_whether_an_encrypted_backup_holds_metadata(tmp_path, monkeypatch):
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as z:
+        z.writestr("backuparr-plex.json", json.dumps({"plex_version": "1.43.5", "metadata": True}))
+    folder = tmp_path / "plex"
+    folder.mkdir()
+    (folder / "plex_20260101_030000.zip.enc").write_bytes(encrypt(buffer.getvalue()))
+    monkeypatch.setattr(manifest_backfill.destination_util, "list_backups", lambda root: [
+        {"Path": f"plex/{p.name}", "Size": p.stat().st_size, "IsDir": False} for p in sorted(folder.iterdir())])
+    assert manifest_backfill.backfill_destination("local", str(tmp_path), manifest.generation()) == 1
+    entry = manifest.get("plex", "plex_20260101_030000.zip.enc")
+    assert entry["metadata"] is True and entry["app_version"] == "1.43.5" and entry["encrypted"] is True
+
+
 # --- Backuparr's own backup ---------------------------------------------------
 
 def self_zip():

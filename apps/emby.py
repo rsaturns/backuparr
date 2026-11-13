@@ -19,8 +19,11 @@ manual-backup guide covers:
   restore), data/lastversion.txt (the version the databases were last
   migrated by), the playlist and collection folders.
 
-Left out: metadata images, cache, logs and transcoding files - large, and
-rebuilt by a library scan.
+With Include metadata on (#196), the whole metadata/ folder too: images,
+custom artwork and people images, which Emby would otherwise download again
+(and can't for artwork set by hand). Left out always: cache, logs and
+transcoding files - rebuilt by Emby. The files are read where they are into
+the archive (mounted.write_archive), not copied first.
 
 A restore writes those files back, and is only possible while Emby is
 stopped: overwriting the databases of a running server would corrupt them.
@@ -49,14 +52,15 @@ logger = logging.getLogger(f"backuparr.{__name__}")
 
 MANIFEST = "backuparr-emby.json"
 
-# Copied whole; under data/ only the files and folders below are taken.
+# Taken whole; under data/ only the files and folders below are taken.
 _TREES = ["config", "plugins", "data/playlists", "data/userplaylists", "data/collections", "metadata/collections"]
+METADATA = "metadata"
 _DATA_FILES = ["device.txt", "lastversion.txt"]
 # Restored as an exact copy of the backup's: a playlist or collection folder
 # left behind would be imported again by the next library scan.
 _MIRRORED = ["data/playlists", "data/userplaylists", "data/collections", "metadata/collections"]
 _RESTORABLE = re.compile(
-    r"^(?:(?:config|plugins|data/(?:playlists|userplaylists|collections)|metadata/collections)/"
+    r"^(?:(?:config|plugins|data/(?:playlists|userplaylists|collections)|metadata)/"
     r"|data/(?:[^/]+\.db|device\.txt|lastversion\.txt)$)"
 )
 
@@ -91,11 +95,12 @@ def is_emby_backup(path):
 
 
 class EmbyApp:
-    def __init__(self, url, api_key, data_dir=None, timeout=30):
+    def __init__(self, url, api_key, data_dir=None, metadata=None, timeout=30):
         # Emby answers on both /emby/... and /...; /emby/ also works behind
         # a base URL, so a URL ending in /emby is taken as the server root.
         self.url = re.sub(r"/emby/?$", "", url.rstrip("/"))
         self.data_dir = data_dir or None
+        self.metadata = bool(metadata)
         self.timeout = timeout
         self.session = SameHostSession(self.url)
         self.session.headers.update({"X-Emby-Token": api_key, "Accept": "application/json"})
@@ -141,35 +146,48 @@ class EmbyApp:
             raise EmbyError(f"emby: can't read data/library.db in {self.data_dir} ({exc}) - check its permissions") from exc
         version = info.get("Version", "?")
         if not os.access(self.data_dir, os.W_OK):
-            return f"emby {version} reachable; data folder is read-only, so backups work but restores won't"
-        return f"emby {version} reachable, data folder OK"
+            message = f"emby {version} reachable; data folder is read-only, so backups work but restores won't"
+        else:
+            message = f"emby {version} reachable, data folder OK"
+        if self.metadata and not os.path.isdir(self._path(METADATA)):
+            message += "; it has no metadata folder, so backups won't hold metadata"
+        return message
 
     def backup(self, dest_dir):
         info = self.server_info()
         self._require_folder(info.get("Id"))
-        logger.info("emby: copying settings and databases (no metadata images or cache)...")
-        os.makedirs(dest_dir, exist_ok=True)
-
-        for tree in _TREES:
-            src = self._path(*tree.split("/"))
-            if os.path.isdir(src):
-                shutil.copytree(src, os.path.join(dest_dir, *tree.split("/")), symlinks=False)
-
-        data_dest = os.path.join(dest_dir, "data")
-        os.makedirs(data_dest, exist_ok=True)
-        for name in _DATA_FILES:
-            if os.path.isfile(self._path("data", name)):
-                shutil.copyfile(self._path("data", name), os.path.join(data_dest, name))
-
-        databases = sorted(n for n in os.listdir(self._path("data")) if n.endswith(".db"))
-        for name in databases:
-            snapshot_db(self._path("data", name), os.path.join(data_dest, name))
-
-        manifest = {"emby_version": info.get("Version"), "server_id": info.get("Id"), "databases": databases}
-        with open(os.path.join(dest_dir, MANIFEST), "w") as f:
-            json.dump(manifest, f, indent=2)
-        logger.info("emby: backed up %d database(s) from Emby %s", len(databases), info.get("Version", "?"))
-        return dest_dir
+        metadata = self.metadata and os.path.isdir(self._path(METADATA))
+        if self.metadata and not metadata:
+            logger.warning("emby: %s has no metadata folder, so this backup holds no metadata - if Emby keeps it "
+                           "elsewhere (its metadata path), mount that folder at %s", self.data_dir, self._path(METADATA))
+        logger.info("emby: copying settings and databases%s...",
+                    ", and metadata" if metadata else " (no metadata images or cache)")
+        # metadata/ holds metadata/collections.
+        trees = [METADATA] if metadata else []
+        trees += [tree for tree in _TREES if not (metadata and tree.startswith(METADATA + "/"))]
+        sources = [(self._path(*tree.split("/")), tree) for tree in trees]
+        sources += [(self._path("data", name), f"data/{name}") for name in _DATA_FILES]
+        stage = os.path.join(dest_dir, "stage")
+        archive = os.path.join(dest_dir, "emby.zip")
+        os.makedirs(os.path.join(stage, "data"))
+        try:
+            databases = sorted(n for n in os.listdir(self._path("data")) if n.endswith(".db"))
+            for name in databases:
+                snapshot_db(self._path("data", name), os.path.join(stage, "data", name))
+            manifest = {"emby_version": info.get("Version"), "server_id": info.get("Id"), "databases": databases,
+                        "metadata": metadata}
+            with open(os.path.join(stage, MANIFEST), "w") as f:
+                json.dump(manifest, f, indent=2)
+            files = mounted.write_archive(archive, stage, sources, self.data_dir, EmbyError, "emby", "Emby")
+        except BaseException:
+            if os.path.exists(archive):
+                os.remove(archive)
+            raise
+        finally:
+            shutil.rmtree(stage)
+        logger.info("emby: backed up %d database(s) and %d file(s) from Emby %s",
+                    len(databases), files, info.get("Version", "?"))
+        return archive
 
     def _check_stopped(self):
         data = self._path("data")
@@ -219,30 +237,22 @@ class EmbyApp:
                 parts = info.filename.split("/")
                 if not _RESTORABLE.match(info.filename) or any(p in ("", ".", "..") for p in parts):
                     raise EmbyError(f"emby: unexpected path in the backup: {info.filename!r}")
-            self._preflight(members)
-
+            # The metadata goes first: a disk filling up stops the restore
+            # before Emby's databases and settings are touched.
+            first = [i.filename.startswith(METADATA + "/")
+                     and not any(i.filename.startswith(f + "/") for f in _MIRRORED) for i in members]
+            bulk = [i for i, f in zip(members, first) if f]
+            rest = [i for i, f in zip(members, first) if not f]
+            mounted.check_writable(members, self.data_dir, EmbyError, "emby", "Emby")
+            mounted.write_files(zf, bulk, self.data_dir)
             for folder in _MIRRORED:
                 self._mirror_cleanup(folder, {i.filename for i in members})
-            for info in members:
-                self._write(zf, info)
+            mounted.write_files(zf, rest, self.data_dir)
             # No -wal exists (checked above), so any -shm index is stale.
             for name in os.listdir(self._path("data")):
                 if name.endswith(".db-shm"):
                     os.remove(self._path("data", name))
         logger.info("emby: restored %d file(s) into %s - start Emby to load them", len(members), self.data_dir)
-
-    def _preflight(self, members):
-        """Refuses before writing anything when a file can't be replaced, so
-        a permission problem doesn't leave half a restore behind."""
-        for info in members:
-            target = self._path(*info.filename.split("/"))
-            while not os.path.exists(target):
-                target = os.path.dirname(target)
-            if not os.access(target, os.W_OK):
-                raise EmbyError(
-                    f"emby: can't write {info.filename} in {self.data_dir} - run Backuparr with "
-                    "Emby's PUID:PGID, or give it write access to Emby's files"
-                )
 
     def _mirror_cleanup(self, folder, keep):
         root = self._path(*folder.split("/"))
@@ -255,14 +265,3 @@ class EmbyApp:
                     os.remove(full)
             if dirpath != root and not os.listdir(dirpath):
                 os.rmdir(dirpath)
-
-    def _write(self, zf, info):
-        parts = info.filename.split("/")
-        folder = self.data_dir
-        for part in parts[:-1]:
-            folder = os.path.join(folder, part)
-            if not os.path.isdir(folder):
-                os.mkdir(folder)
-                os.chmod(folder, 0o755)  # Backuparr's private umask would hide it from Emby.
-        with zf.open(info) as src:
-            mounted.write_in_place(src, os.path.join(folder, parts[-1]))
