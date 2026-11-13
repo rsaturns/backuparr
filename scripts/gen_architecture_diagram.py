@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-"""Regenerates webui/static/architecture-diagram.png, the docs site's
-architecture reference diagram (apps -> Backuparr -> destinations).
+"""Regenerates docs/architecture-diagram.png, the docs site's
+architecture reference diagram (apps -> Backuparr -> destinations). It lives
+with the docs, so the site shows the diagram of the branch it's published
+from.
 
 The apps come from config_store: a box per Settings category, holding the
 icons of its apps (#163), so a new app only adds an icon to its box. Re-run
@@ -225,6 +227,6 @@ def render_png(svg, out_path):
 
 
 if __name__ == "__main__":
-    out_path = os.path.join(STATIC, "architecture-diagram.png")
+    out_path = os.path.join(REPO, "docs", "architecture-diagram.png")
     render_png(build(), out_path)
     print("wrote", out_path)
