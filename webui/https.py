@@ -8,7 +8,7 @@ setting it to false reopens HTTP for anyone who did get locked out."""
 from flask import Blueprint, jsonify, request
 
 import tls
-from config_store import load_config, save_config
+from config_store import editing_config
 from webui import serve
 
 bp = Blueprint("https", __name__)
@@ -44,8 +44,7 @@ def api_https_only():
     if enabled and not _came_in_on_https():
         return jsonify({"error": f"open Backuparr over HTTPS on port {serve.https_port()} first, "
                                  "so this can't lock you out"}), 409
-    cfg = load_config()
-    cfg["https_only"] = enabled
-    save_config(cfg)
+    with editing_config() as cfg:
+        cfg["https_only"] = enabled
     serve.set_http_open(not enabled)
     return jsonify({"ok": True, "https_only": enabled})

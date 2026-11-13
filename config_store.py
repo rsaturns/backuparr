@@ -1,10 +1,12 @@
 """Persistent config for Backuparr - a single JSON file on a volume,
 shared by backup.py and the web UI."""
+import contextlib
 import copy
 import json
 import logging
 import os
 import re
+import threading
 
 from croniter import croniter
 
@@ -15,6 +17,12 @@ from apps.http_headers import RequestHeadersError, validate_request_headers
 log = logging.getLogger("backuparr.config_store")
 
 CONFIG_PATH = os.environ.get("BACKUPARR_CONFIG", "/config/backuparr/config.json")
+
+# A change to config.json is load, change, save. They run one at a time, so
+# two at once - a Settings save while the first start's backup of Backuparr
+# records itself, say - can't undo each other: change it with
+# editing_config(), which holds this lock, and save_config() takes it too.
+CONFIG_LOCK = threading.RLock()
 
 
 class ConfigError(RuntimeError):
@@ -942,9 +950,8 @@ def holds_settings():
 
 def acknowledge_secrets_key():
     global _key_acknowledged
-    cfg = load_config()
-    cfg["secrets_key_acknowledged"] = True
-    save_config(cfg)
+    with editing_config() as cfg:
+        cfg["secrets_key_acknowledged"] = True
     _key_acknowledged = True
 
 
@@ -1031,6 +1038,12 @@ def _stored_secret_fields():
 
 
 def load_config():
+    # Under the lock: a first start, or a legacy plaintext secret, saves.
+    with CONFIG_LOCK:
+        return _load_config()
+
+
+def _load_config():
     if not os.path.exists(CONFIG_PATH):
         cfg = copy.deepcopy(DEFAULTS)
         cfg["encryption_notice_acknowledged"] = True  # new: there's no change to tell about
@@ -1068,7 +1081,22 @@ def load_config():
     return merged
 
 
+@contextlib.contextmanager
+def editing_config():
+    """The config to change in the with block, saved at its end (not if it
+    raises), with no other change to config.json in between."""
+    with CONFIG_LOCK:
+        cfg = load_config()
+        yield cfg
+        save_config(cfg)
+
+
 def save_config(cfg):
+    with CONFIG_LOCK:
+        _save_config(cfg)
+
+
+def _save_config(cfg):
     try:
         validate_request_headers(cfg.get("request_headers", []), instance_ids(cfg))
     except RequestHeadersError as exc:
@@ -1154,18 +1182,16 @@ def encrypts(cfg, name):
 
 
 def acknowledge_encryption_notice():
-    cfg = load_config()
-    cfg["encryption_notice_acknowledged"] = True
-    save_config(cfg)
+    with editing_config() as cfg:
+        cfg["encryption_notice_acknowledged"] = True
 
 
 def mark_upgrade_self_backup(made=False):
     """Records that the first start of 3.0 tried its self-backup (#162), and
     that it worked when made."""
-    cfg = load_config()
-    cfg["upgrade_self_backup_tried"] = True
-    cfg["upgrade_self_backup_made"] = cfg.get("upgrade_self_backup_made") is True or made
-    save_config(cfg)
+    with editing_config() as cfg:
+        cfg["upgrade_self_backup_tried"] = True
+        cfg["upgrade_self_backup_made"] = cfg.get("upgrade_self_backup_made") is True or made
 
 
 def enabled_destinations(cfg):

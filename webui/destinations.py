@@ -16,7 +16,7 @@ import onedrive_oauth
 import rclone_token
 import rclone_util
 from backup import humanize_error, log_failure
-from config_store import DEFAULT_DEST, DEST_EDITABLE_FIELDS, DEST_NAMES, load_config, save_config
+from config_store import DEFAULT_DEST, DEST_EDITABLE_FIELDS, DEST_NAMES, editing_config, load_config
 
 
 bp = Blueprint("destinations", __name__)
@@ -132,9 +132,9 @@ def api_gdrive_oauth_callback():
         log_failure(log, "gdrive oauth exchange failed", exc, gdrive_oauth.TOKEN_URL)
         return _redirect_with_error(humanize_error(exc, gdrive_oauth.TOKEN_URL))
 
-    gdrive_cfg["refresh_token"] = tokens["refresh_token"]
-    gdrive_cfg["enabled"] = True
-    save_config(cfg)
+    with editing_config() as cfg:  # the exchange took a while: change the config as it is now
+        cfg["destinations"]["gdrive"]["refresh_token"] = tokens["refresh_token"]
+        cfg["destinations"]["gdrive"]["enabled"] = True
     destination_util.sync(cfg)
     return redirect("/?gdrive=connected")
 
@@ -157,13 +157,12 @@ def api_gdrive_folder():
     if not folder_id:
         return jsonify({"error": "folder_id is required"}), 400
 
-    cfg = load_config()
-    gdrive_cfg = cfg["destinations"]["gdrive"]
-    if not gdrive_cfg.get("refresh_token"):
+    if not load_config()["destinations"]["gdrive"].get("refresh_token"):
         return jsonify({"error": "Google Drive is not connected"}), 400
-    gdrive_cfg["folder_id"] = folder_id
-    gdrive_cfg["folder_name"] = folder_name
-    save_config(cfg)
+    with editing_config() as cfg:
+        gdrive_cfg = cfg["destinations"]["gdrive"]
+        gdrive_cfg["folder_id"] = folder_id
+        gdrive_cfg["folder_name"] = folder_name
     destination_util.sync(cfg)
     return jsonify({"ok": True})
 
@@ -174,11 +173,10 @@ def api_destination_disconnect(dest_id):
     themselves (Google Drive's OAuth client) stays."""
     if dest_id not in destination_util.REMOTES:
         return jsonify({"error": "unknown destination"}), 404
-    cfg = load_config()
     kept = DEST_EDITABLE_FIELDS[dest_id] - {"enabled"}
-    cfg["destinations"][dest_id].update(
-        {key: value for key, value in DEFAULT_DEST[dest_id].items() if key not in kept}, enabled=False)
-    save_config(cfg)
+    with editing_config() as cfg:
+        cfg["destinations"][dest_id].update(
+            {key: value for key, value in DEFAULT_DEST[dest_id].items() if key not in kept}, enabled=False)
     destination_util.sync(cfg)
     return jsonify({"ok": True})
 
@@ -195,14 +193,13 @@ def api_onedrive_connect():
     except Exception as exc:
         return jsonify({"error": humanize_error(exc)}), 400
 
-    cfg = load_config()
-    onedrive_cfg = cfg["destinations"]["onedrive"]
-    onedrive_cfg["token"] = token_json
-    onedrive_cfg["drive_id"] = approot["parentReference"]["driveId"]
-    onedrive_cfg["drive_type"] = approot["parentReference"]["driveType"]
-    onedrive_cfg["item_id"] = approot["id"]
-    onedrive_cfg["enabled"] = True
-    save_config(cfg)
+    with editing_config() as cfg:
+        onedrive_cfg = cfg["destinations"]["onedrive"]
+        onedrive_cfg["token"] = token_json
+        onedrive_cfg["drive_id"] = approot["parentReference"]["driveId"]
+        onedrive_cfg["drive_type"] = approot["parentReference"]["driveType"]
+        onedrive_cfg["item_id"] = approot["id"]
+        onedrive_cfg["enabled"] = True
     # force=True: fresh token should win over whatever's already stored.
     onedrive_oauth.sync_rclone_remote(onedrive_cfg, force=True)
     return jsonify({"ok": True})
@@ -220,11 +217,10 @@ def api_dropbox_connect():
     except Exception as exc:
         return jsonify({"error": humanize_error(exc)}), 400
 
-    cfg = load_config()
-    dropbox_cfg = cfg["destinations"]["dropbox"]
-    dropbox_cfg["token"] = token_json
-    dropbox_cfg["enabled"] = True
-    save_config(cfg)
+    with editing_config() as cfg:
+        dropbox_cfg = cfg["destinations"]["dropbox"]
+        dropbox_cfg["token"] = token_json
+        dropbox_cfg["enabled"] = True
     # force=True: fresh token should win over whatever's already stored.
     dropbox_oauth.sync_rclone_remote(dropbox_cfg, force=True)
     return jsonify({"ok": True})

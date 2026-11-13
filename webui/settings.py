@@ -8,7 +8,7 @@ import destination_util
 from apps import cert_pin
 from apps.http_headers import headers_for_app, RequestHeadersError, validate_request_headers
 from backup import branded, build_app, humanize_error, notify
-from config_store import acknowledge_encryption_notice, app_meta, APP_NAMES, DEFAULT_APP, DEFAULT_INSTANCE, DEST_EDITABLE_FIELDS, DEST_NAMES, instance_ids, instance_type, key_required, load_config, MAX_EXTRA_INSTANCES, MULTI_INSTANCE_APPS, save_config, valid_schedule
+from config_store import acknowledge_encryption_notice, app_meta, APP_NAMES, CONFIG_LOCK, DEFAULT_APP, DEFAULT_INSTANCE, DEST_EDITABLE_FIELDS, DEST_NAMES, instance_ids, instance_type, key_required, load_config, MAX_EXTRA_INSTANCES, MULTI_INSTANCE_APPS, save_config, valid_schedule
 from webui import runs
 
 
@@ -207,11 +207,19 @@ def _validate_config(data, cfg):
 @bp.post("/api/config")
 def api_set_config():
     data = request.get_json(force=True, silent=True)
-    cfg = load_config()
-    error = _validate_config(data, cfg)
-    if error:
-        return jsonify({"error": error}), 400
+    with CONFIG_LOCK:  # checked and changed against config.json as it is now
+        cfg = load_config()
+        error = _validate_config(data, cfg)
+        if error:
+            return jsonify({"error": error}), 400
+        _apply_config(data, cfg)
+        save_config(cfg)
+    destination_util.sync(cfg)
+    return jsonify({"ok": True})
 
+
+def _apply_config(data, cfg):
+    """A validated Settings save's changes, made to cfg."""
     for key in ("retention_days", "cron_schedule", "notify_url", "bazarr_backup_dir", "request_headers", "self_backup"):
         if key in data:
             cfg[key] = data[key]
@@ -235,10 +243,6 @@ def api_set_config():
             cfg["destinations"][name].update({k: v for k, v in incoming.items() if k in DEST_EDITABLE_FIELDS[name]})
             days = cfg["destinations"][name].get("retention_days")
             cfg["destinations"][name]["retention_days"] = None if days is None else int(days)
-
-    save_config(cfg)
-    destination_util.sync(cfg)
-    return jsonify({"ok": True})
 
 
 # The one-time "Backups are now encrypted" notice for an install that

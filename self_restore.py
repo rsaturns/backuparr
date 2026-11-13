@@ -128,8 +128,9 @@ def apply(members, key):
     # server that hasn't published the HTTPS port, it would lock you out (#177).
     # Read and written as plain JSON: the secrets key already changed above.
     restored = json.loads(members["config.json"])
-    restored["https_only"] = _current_https_only()
-    atomic_file.write_private(config_store.CONFIG_PATH, json.dumps(restored, indent=2))
+    with config_store.CONFIG_LOCK:  # no Settings save in between can bring the old one back
+        restored["https_only"] = _current_https_only()
+        atomic_file.write_private(config_store.CONFIG_PATH, json.dumps(restored, indent=2))
     config_store.forget_secrets_key_acknowledged()
     atomic_file.write_private(auth_store.AUTH_PATH, members["auth.json"])
     _write_or_remove(manifest.path(), members.get("manifest.json"))

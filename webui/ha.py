@@ -26,7 +26,7 @@ import secrets
 from flask import Blueprint, jsonify, request
 
 import runlog
-from config_store import app_label, enabled_apps, load_config, save_config
+from config_store import app_label, editing_config, enabled_apps, load_config
 from webui import auth
 from webui.runs import RUN_STATE
 from webui.version import VERSION
@@ -47,19 +47,17 @@ def api_ha_token():
     """Turns the integration on with a new token, shown this once; any
     earlier token stops working."""
     token = secrets.token_urlsafe(32)
-    cfg = load_config()
-    cfg["ha_enabled"] = True
-    cfg["ha_token_hash"] = _hash(token)
-    save_config(cfg)
+    with editing_config() as cfg:
+        cfg["ha_enabled"] = True
+        cfg["ha_token_hash"] = _hash(token)
     return jsonify({"token": token})
 
 
 @bp.post("/api/ha/disable")
 def api_ha_disable():
-    cfg = load_config()
-    cfg["ha_enabled"] = False
-    cfg["ha_token_hash"] = ""
-    save_config(cfg)
+    with editing_config() as cfg:
+        cfg["ha_enabled"] = False
+        cfg["ha_token_hash"] = ""
     return jsonify({"ok": True})
 
 
