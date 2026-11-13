@@ -16,6 +16,7 @@ hold up the whole web UI. This adapter follows PEP 3333 instead:
 import asyncio
 import sys
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as SendTimeout
 from tempfile import SpooledTemporaryFile
 
 SPOOL_IN_MEMORY = 1024 * 1024
@@ -23,6 +24,10 @@ SPOOL_IN_MEMORY = 1024 * 1024
 # event loop and back, so Werkzeug's own 8 KB made a large download CPU-bound
 # (about 100 MB/s, against 3 GB/s at 1 MiB, on a desktop).
 FILE_BLOCK = 1024 * 1024
+# How long one chunk of a response may wait to go out. A client that stops
+# reading - or a connection that stalls - otherwise holds its worker thread
+# for good, and with every worker held the web UI stops answering.
+SEND_TIMEOUT = 300
 
 
 class ClientGone(Exception):
@@ -114,8 +119,9 @@ class WsgiToAsgi:
     request's path that gives it. The body is read before the app (and its
     login check) sees the request, so it's kept small where it can be."""
 
-    def __init__(self, app, max_body, threads=16):
+    def __init__(self, app, max_body, threads=16, send_timeout=SEND_TIMEOUT):
         self.app = app
+        self.send_timeout = send_timeout
         self.max_body = max_body if callable(max_body) else (lambda _path: max_body)
         self.executor = ThreadPoolExecutor(max_workers=threads, thread_name_prefix="web")
 
@@ -181,8 +187,12 @@ class WsgiToAsgi:
         def blocking_send(message):
             if gone.is_set():
                 raise ClientGone
+            future = asyncio.run_coroutine_threadsafe(send(message), loop)
             try:
-                asyncio.run_coroutine_threadsafe(send(message), loop).result()
+                future.result(timeout=self.send_timeout)
+            except SendTimeout:
+                future.cancel()  # nothing more goes to a client that isn't reading
+                raise ClientGone from None
             except Exception as exc:  # the connection closed under us
                 raise ClientGone from exc
 

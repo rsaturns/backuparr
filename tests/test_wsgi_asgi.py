@@ -270,3 +270,37 @@ def test_lifespan_is_answered():
         await WsgiToAsgi(lambda e, s: [], 100)({"type": "lifespan"}, receive, send)
         return sent
     assert run(go()) == ["lifespan.startup.complete", "lifespan.shutdown.complete"]
+
+
+def test_a_client_that_stops_reading_frees_its_worker():
+    # Hypercorn's send waits for the socket to drain; a client that never
+    # reads would hold the worker thread for good.
+    produced, closed = [], threading.Event()
+
+    def app(environ, start_response):
+        start_response("200 OK", [])
+
+        def chunks():
+            try:
+                for i in range(1000):
+                    produced.append(i)
+                    yield b"x" * 1024
+            finally:
+                closed.set()
+        return chunks()
+
+    async def main():
+        async def receive():
+            if not hasattr(receive, "done"):
+                receive.done = True
+                return {"type": "http.request", "body": b"", "more_body": False}
+            await asyncio.Event().wait()
+
+        async def send(message):
+            if message["type"] == "http.response.body":
+                await asyncio.Event().wait()  # never drains
+        started = time.monotonic()
+        await WsgiToAsgi(app, 100, send_timeout=0.2)(scope(), receive, send)
+        return time.monotonic() - started
+    took = run(main())
+    assert took < 3 and closed.wait(3) and len(produced) == 1
