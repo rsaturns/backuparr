@@ -124,6 +124,15 @@ def _validate_instances(data, cfg):
     return None
 
 
+# Plain text fields: of Settings itself, and of every app's card.
+_TEXT_SETTINGS = ("notify_url", "bazarr_backup_dir")
+_TEXT_APP_FIELDS = ("url", "api_key", "username", "password")
+
+
+def _web_url(value):
+    return value.startswith(("http://", "https://"))
+
+
 def _retention_error(value, label):
     """Why value isn't a usable number of days, or None."""
     try:
@@ -164,6 +173,14 @@ def _validate_config(data, cfg):
             return error
     if "self_backup" in data and not isinstance(data["self_backup"], bool):
         return "self_backup must be true or false"
+    for key in _TEXT_SETTINGS:
+        if key in data and not isinstance(data[key], str):
+            return f"{key} must be text"
+    # Checked when it changes, so one saved before this check doesn't stop
+    # every other change being saved.
+    notify_url = data.get("notify_url")
+    if notify_url and notify_url != cfg.get("notify_url") and not _web_url(notify_url):
+        return "The Notify URL must start with http:// or https://"
     if "cron_schedule" in data:
         schedule = str(data["cron_schedule"])
         if len(schedule.split()) != 5:
@@ -176,6 +193,12 @@ def _validate_config(data, cfg):
         meta = app_meta(name)
         if "encrypt" in app_data and not isinstance(app_data["encrypt"], bool):
             return f"{name}: encrypt must be true or false"
+        for field in _TEXT_APP_FIELDS:
+            if field in app_data and not isinstance(app_data[field], str):
+                return f"{name}: {field} must be text"
+        # Every card comes with a save; only an enabled app's URL has to work.
+        if app_data.get("enabled") and app_data.get("url") and not _web_url(app_data["url"]):
+            return f"{name}: the URL must start with http:// or https://"
         error = _extra_field_error(name, meta, app_data)
         if error:
             return error
