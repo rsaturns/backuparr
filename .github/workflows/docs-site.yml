@@ -11,9 +11,13 @@ on:
       - "release-*"
     paths:
       - "docs/**"
+  # While 3.0 is in beta the site is published from release-3.0.0, so the
+  # beta's links (every card's ?, the CHANGELOG) find their pages; main's
+  # copy of this workflow doesn't deploy meanwhile. At 3.0.0 this branch
+  # merges to main: switch this back to main.
   push:
     branches:
-      - main
+      - release-3.0.0
     paths:
       - "docs/**"
   workflow_dispatch:
