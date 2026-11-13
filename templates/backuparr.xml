@@ -20,7 +20,12 @@
   <Screenshot>https://raw.githubusercontent.com/rsaturns/backuparr/main/docs/screenshots/settings.png</Screenshot>
   <Screenshot>https://raw.githubusercontent.com/rsaturns/backuparr/main/docs/screenshots/run.png</Screenshot>
   <Screenshot>https://raw.githubusercontent.com/rsaturns/backuparr/main/docs/screenshots/history.png</Screenshot>
-  <Changes>### 2.5.6 (2026-11-07)
+  <Changes>### 2.5.7 (2026-11-13)
+- rclone 1.76.0 (from 1.75.0), with the security fixes from rclone 1.75.1 and 1.75.2 and its updated Go libraries: the image scan's 2 critical and 20 high findings in rclone are gone.
+- The image no longer has pip, which Backuparr doesn't use once its packages are in: pip's own copies of urllib3, msgpack and setuptools were the scan's other 5 high findings.
+- The release workflow's docker/login-action 4.8.0 and softprops/action-gh-release 3.0.4, as Dependabot proposed (#159, #160).
+
+### 2.5.6 (2026-11-07)
 - Google's script for the Drive folder picker loads only when you choose a folder, not on every page.
 - Downloading a backup from Local storage starts straight away: it's no longer copied inside the container first, which for a large Plex or Emby backup took time and as much disk space again.
 - Local storage on a USB disk that spins down to save power no longer fails with an I/O error: Backuparr waits up to 60 seconds for the disk to wake before writing to it (#140). Thanks to u/Neither_Rutabaga_627 on Reddit for the report: https://www.reddit.com/r/SideProject/comments/1xnc98k/comment/19s90yr7r7tnp/
@@ -39,11 +44,8 @@
 - The top bar fits on phones instead of pushing the page sideways, and History lists each backup as a block on narrow screens.
 - A backup deleted from one destination, or removed there by its retention, no longer shows there as a failed run.
 
-### 2.5.4 (2026-11-05)
-- A sound SQLite database no longer fails the check before upload because a column holds a number where its type says text, or the other way round (SQLite reports these as "NUMERIC value in ..."). Long-running Sonarr installs have them in SceneMappings, so their backups weren't uploaded. Emby, Seerr and LazyLibrarian's own database checks skip them too.
-
 View all changes: https://github.com/rsaturns/backuparr/blob/main/CHANGELOG.md</Changes>
-  <Date>2026-11-07</Date>
+  <Date>2026-11-13</Date>
   <Config Name="WebUI" Target="8990" Default="8990" Mode="tcp" Description="Port of the Backuparr web UI." Type="Port" Display="always" Required="true" Mask="false">8990</Config>
   <Config Name="Appdata" Target="/config/backuparr" Default="/mnt/user/appdata/backuparr" Mode="rw" Description="Backuparr's settings, encrypted credentials and, with the Local destination, the backups themselves. Back this folder up or keep a cloud destination enabled." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/backuparr</Config>
   <Config Name="Jellyfin backups folder" Target="/mnt/jellyfin-backups" Default="" Mode="rw" Description="Needed to back up Jellyfin: the folder Jellyfin writes its backups to, e.g. /mnt/user/appdata/jellyfin/data/data/backups for the linuxserver image. See https://rsaturns.github.io/backuparr/apps/jellyfin/" Type="Path" Display="always" Required="false" Mask="false"/>
