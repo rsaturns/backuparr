@@ -91,7 +91,9 @@ class WsgiToAsgi:
                     return
         if scope["type"] != "http":
             return
-        with SpooledTemporaryFile(max_size=SPOOL_IN_MEMORY) as body:
+        body = SpooledTemporaryFile(max_size=SPOOL_IN_MEMORY)
+        handed_over = False
+        try:
             size = 0
             while True:
                 message = await receive()
@@ -115,10 +117,18 @@ class WsgiToAsgi:
 
             watcher = asyncio.create_task(watch())
             loop = asyncio.get_running_loop()
+            # From here the worker owns the body and closes it when it's done:
+            # cancelled at shutdown, this coroutine stops waiting, but the app
+            # may still be reading it.
+            handed_over = True
             try:
                 await loop.run_in_executor(self.executor, self._run, build_environ(scope, body), send, loop, gone)
             finally:
+                gone.set()  # cancelled: the worker stops at its next chunk
                 watcher.cancel()
+        finally:
+            if not handed_over:
+                body.close()
 
     def _run(self, environ, send, loop, gone):
         """Runs the app in a pool thread."""
@@ -157,15 +167,18 @@ class WsgiToAsgi:
                               "headers": [(k.lower().encode("latin-1"), v.encode("latin-1")) for k, v in headers]}
             return write
 
-        result = self.app(environ, start_response)
         try:
-            for chunk in result:
-                write(chunk)
-            send_headers()
-            blocking_send({"type": "http.response.body", "body": b"", "more_body": False})
-        except ClientGone:
-            pass
+            result = self.app(environ, start_response)
+            try:
+                for chunk in result:
+                    write(chunk)
+                send_headers()
+                blocking_send({"type": "http.response.body", "body": b"", "more_body": False})
+            except ClientGone:
+                pass
+            finally:
+                close = getattr(result, "close", None)
+                if close is not None:
+                    close()
         finally:
-            close = getattr(result, "close", None)
-            if close is not None:
-                close()
+            environ["wsgi.input"].close()

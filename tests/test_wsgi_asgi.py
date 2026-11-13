@@ -160,6 +160,37 @@ def test_a_download_stops_when_the_browser_goes_away():
     assert len(produced) < 50
 
 
+def test_a_request_cancelled_at_shutdown_stops_and_can_still_read_its_body():
+    started, done = threading.Event(), threading.Event()
+    seen = {}
+
+    def app(environ, start_response):
+        started.set()
+        time.sleep(0.2)  # still running when the server gives up on it
+        seen["body"] = environ["wsgi.input"].read()
+        start_response("200 OK", [])
+
+        def chunks():
+            try:
+                for i in range(1000):
+                    seen["chunks"] = i
+                    yield b"x" * 1024
+            finally:
+                done.set()
+        return chunks()
+
+    async def main():
+        adapter = WsgiToAsgi(app, 100)
+        task = asyncio.create_task(call(adapter, body=b"upload"))
+        await asyncio.to_thread(started.wait, 5)
+        task.cancel()  # Hypercorn's graceful timeout ran out
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        await asyncio.to_thread(done.wait, 5)
+    run(main())
+    assert seen["body"] == b"upload" and seen["chunks"] == 0
+
+
 def test_requests_run_side_by_side():
     gate = threading.Event()
 
