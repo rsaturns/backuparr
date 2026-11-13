@@ -6,6 +6,8 @@ nav_order: 5
 
 # Updating
 
+> **These docs cover Backuparr 3.0.0-beta.** On 2.5.7? Its docs are [on GitHub](https://github.com/rsaturns/backuparr/tree/v2.5.7/docs).
+
 With Compose:
 
 ```sh
