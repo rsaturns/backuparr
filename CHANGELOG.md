@@ -33,6 +33,8 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Restore to a different target needs that app's key when its URL isn't the app's own: the saved key, login and passwords only go to the app's own URL. See https://rsaturns.github.io/backuparr/restoring/
+- Settings checks what it saves: an enabled app's URL and a changed Notify URL must start with http:// or https://, and an app's URL, key, username and password must be text.
 - Messages in the web UI name each app as its card does, with the product's own capitalisation: "OPNsense: ...", "pfSense 2.8.1 reachable", "SABnzbd restore complete", and Run & Status's OK and Failed lists say "Radarr (4K)" in place of the app's id (#191).
 - Settings shows a certificate's SHA-256 fingerprint in a tooltip on the ? next to SHA-256, as four rows of 8 bytes, on the Backuparr card and on the cards of apps with a self-signed certificate (#189).
 - The Server category has its own icon in place of an emoji, outlined on the light theme and filled on the dark; the Run & Status and Restore pickers head each category with its name in bold, without an emoji (#189).
