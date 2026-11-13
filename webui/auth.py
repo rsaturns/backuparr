@@ -32,6 +32,7 @@ log = logging.getLogger("backuparr.webui")
 _AUTH_DISABLED = os.environ.get("BACKUPARR_DISABLE_AUTH", "").lower() in ("1", "true", "yes")
 
 SECRET_KEY_PATH = os.environ.get("BACKUPARR_SECRET_KEY_PATH", "/config/backuparr/secret_key")
+MIN_PASSWORD_LENGTH = 8
 
 
 def _load_or_create_secret_key():
@@ -317,9 +318,6 @@ def api_login():
     return jsonify({"ok": True})
 
 
-MIN_PASSWORD_LENGTH = 8
-
-
 def _new_session_key():
     """Replaces the key sessions are signed with, so every existing session
     cookie stops working."""
@@ -385,8 +383,10 @@ def api_reset():
     try:
         cfg = load_config()
         local_backup_dir = destination_util.local_root(cfg["destinations"]["local"])
-    except Exception:
-        pass
+    except Exception as exc:  # reset still goes ahead: it's how a lost password is recovered
+        why = str(exc) if isinstance(exc, (config_store.ConfigError, OSError)) else type(exc).__name__
+        log.warning("reset: couldn't find the Local storage folder (%s), so its backups stay - "
+                    "delete them by hand if needed", why)
 
     if local_backup_dir and os.path.isdir(local_backup_dir):
         # Only Backuparr's own archives: the folder may hold other files.
