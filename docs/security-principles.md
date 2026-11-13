@@ -146,6 +146,10 @@ lists each one and why.
   anyone can read what Backuparr does with their data.
 - **Every change** runs the test suite (about 2,000 tests), a smoke test of
   the built image and GitHub's CodeQL security analysis before it's merged.
+- **The image is scanned** with [Trivy](https://trivy.dev/) on every change,
+  for known vulnerabilities in its system packages, its Python packages and
+  rclone. A critical or high one with a fix out fails the build, so it's
+  fixed before anything is merged.
 - **Dependencies** are kept up to date with Dependabot.
 - **Built with AI, reviewed by a human.** Backuparr was written with
   substantial help from Claude (Anthropic); every change is reviewed and
