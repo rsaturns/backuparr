@@ -27,7 +27,7 @@ from hypercorn.asyncio import serve
 from hypercorn.config import Config
 
 import tls
-from config_store import ConfigError, load_config
+from config_store import ConfigError, stored_setting
 from webui.forwarded import ForwardedHeaders
 from webui.wsgi_asgi import WsgiToAsgi, new_executor
 
@@ -81,7 +81,7 @@ def https_only(cfg=None):
     env = https_only_env()
     if env is not None:
         return env
-    return bool((cfg if cfg is not None else load_config()).get("https_only"))
+    return (cfg.get("https_only") if cfg is not None else stored_setting("https_only")) is True
 
 
 def _https_only_at_start():

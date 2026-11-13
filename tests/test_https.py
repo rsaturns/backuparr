@@ -330,7 +330,7 @@ def test_a_broken_config_doesnt_stop_the_server_starting(monkeypatch, caplog):
 
     def broken():
         raise config_store.ConfigError("config.json isn't valid JSON - fix it, or delete the file")
-    monkeypatch.setattr(serve, "load_config", broken)
+    monkeypatch.setattr(serve, "stored_setting", lambda key: broken())
     monkeypatch.delenv("BACKUPARR_HTTPS_ONLY", raising=False)
     assert serve._https_only_at_start() is False  # HTTP opens, so the UI can say what's wrong
     assert "isn't valid JSON" in caplog.text

@@ -105,9 +105,8 @@ def _write_or_remove(path, data):
 
 def _current_https_only():
     try:
-        with open(config_store.CONFIG_PATH, encoding="utf-8") as f:
-            return json.load(f).get("https_only") is True
-    except (OSError, ValueError, AttributeError):
+        return config_store.stored_setting("https_only") is True
+    except (config_store.ConfigError, OSError):
         return False
 
 

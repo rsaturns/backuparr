@@ -229,3 +229,23 @@ def test_a_change_that_raises_isnt_saved():
             cfg["https_only"] = True
             raise RuntimeError("stop")
     assert config_store.load_config().get("https_only") is not True
+
+
+def test_a_stored_setting_is_read_without_decrypting(monkeypatch):
+    config_store.load_config()
+    with config_store.editing_config() as cfg:
+        cfg["https_only"] = True
+    monkeypatch.setattr(secrets_crypto, "decrypt", lambda value: pytest.fail("decrypted"))
+    assert config_store.stored_setting("https_only") is True
+    assert config_store.stored_setting("not-a-setting") is None
+
+
+def test_a_stored_setting_of_a_missing_or_broken_config(tmp_path):
+    if os.path.exists(config_store.CONFIG_PATH):
+        os.remove(config_store.CONFIG_PATH)
+    assert config_store.stored_setting("https_only") is None  # and nothing made
+    assert not os.path.exists(config_store.CONFIG_PATH)
+    with open(config_store.CONFIG_PATH, "w") as f:
+        f.write("{not json")
+    with pytest.raises(config_store.ConfigError, match="isn't valid JSON"):
+        config_store.stored_setting("https_only")

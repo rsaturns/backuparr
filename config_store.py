@@ -1037,6 +1037,32 @@ def _stored_secret_fields():
         return {}
 
 
+def _read_stored():
+    """config.json as it's stored: its secrets still encrypted, no defaults
+    filled in. Raises FileNotFoundError, or ConfigError saying what to do."""
+    try:
+        with open(CONFIG_PATH) as f:
+            data = json.load(f)
+    except json.JSONDecodeError as exc:
+        raise ConfigError(
+            f"{CONFIG_PATH} isn't valid JSON ({exc.msg}, line {exc.lineno}) - fix it, or delete the file to start over with defaults"
+        ) from exc
+    if not isinstance(data, dict):
+        raise ConfigError(f"{CONFIG_PATH} should hold a JSON object - fix it, or delete the file to start over with defaults")
+    return data
+
+
+def stored_setting(key):
+    """One plain setting as config.json holds it, or None when it or the file
+    isn't there - without decrypting every secret, as load_config() does.
+    Raises ConfigError (or OSError) like load_config() for a file that can't
+    be used."""
+    try:
+        return _read_stored().get(key)
+    except FileNotFoundError:
+        return None
+
+
 def load_config():
     # Under the lock: a first start, or a legacy plaintext secret, saves.
     with CONFIG_LOCK:
@@ -1051,16 +1077,7 @@ def _load_config():
         save_config(cfg)
         return cfg
 
-    try:
-        with open(CONFIG_PATH) as f:
-            data = json.load(f)
-    except json.JSONDecodeError as exc:
-        raise ConfigError(
-            f"{CONFIG_PATH} isn't valid JSON ({exc.msg}, line {exc.lineno}) - fix it, or delete the file to start over with defaults"
-        ) from exc
-    if not isinstance(data, dict):
-        raise ConfigError(f"{CONFIG_PATH} should hold a JSON object - fix it, or delete the file to start over with defaults")
-
+    data = _read_stored()
     merged = _merge_defaults(data)
 
     # Decrypt in place; a legacy plaintext value gets re-saved encrypted.
