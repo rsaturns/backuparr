@@ -104,6 +104,7 @@ function initTabs() {
       if (leavingDirtySettings) {
         const leave = confirm("You have unsaved changes in Settings. Leave without saving?");
         if (!leave) return;
+        discardSettingsEdits();
       }
       document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
       document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
@@ -2107,6 +2108,16 @@ function snapshotSettingsState() {
 function isSettingsDirty() {
   if (SETTINGS_SNAPSHOT === null) return false;
   return JSON.stringify(collectConfig()) !== SETTINGS_SNAPSHOT;
+}
+
+// Leaving without saving throws the edits away: the form goes back to the
+// saved settings, so they aren't on screen when you come back - looking
+// saved - and the next Save doesn't save them after all.
+function discardSettingsEdits() {
+  clearDiscoveryResults();
+  document.querySelectorAll(".app-card[data-app] .test-result").forEach((el) => { el.textContent = ""; });
+  document.querySelectorAll(".app-card[data-app] .status-dot").forEach((dot) => { dot.dataset.state = "idle"; });
+  loadConfig().catch((e) => toast(`Couldn't reload the saved settings: ${clause(e.message)}`, "fail"));
 }
 
 async function saveSettings() {
