@@ -244,6 +244,14 @@ function encryptionBadge(encrypted) {
   return badge;
 }
 
+// A Jellyfin, Emby or Plex backup that holds the app's metadata (#196).
+function metadataBadge() {
+  const badge = document.createElement("span");
+  badge.className = "meta-badge";
+  badge.textContent = "With metadata";
+  return badge;
+}
+
 const DECRYPTED_DOWNLOAD_TEXT = "This download is decrypted. Anyone with access to this computer can read it.";
 
 // An app's encrypted backup downloads decrypted; Backuparr's own stays as it
@@ -3131,6 +3139,7 @@ function historyAppSection(destId, appId, entries) {
     nameText.textContent = e.name;
     nameTd.append(historyCheckbox({ kind: "backup", app: appId, file: e.name, encrypted: e.encrypted }, e.name),
       nameText, encryptionBadge(e.encrypted));
+    if (e.metadata) nameTd.appendChild(metadataBadge());
     const versionTd = document.createElement("td");
     versionTd.textContent = e.app_version || "-";
     if (!e.app_version) {
@@ -3576,8 +3585,19 @@ async function renderRestoreExtra() {
   }
   block.textContent = sentence(result.message);
   block.classList.add(result.status === "match" ? "ok" : "warn");
+  if (typeof result.metadata === "boolean") extraRoot.appendChild(restoreMetadataNote(appId, result.metadata));
   renderRestoreDetails(appId, extraRoot);
   setRestoreReady(true);
+}
+
+// What a Jellyfin, Emby or Plex backup holds of the app's metadata (#196).
+function restoreMetadataNote(appId, metadata) {
+  const note = document.createElement("div");
+  note.className = "extra-field-block";
+  note.textContent = metadata
+    ? "This backup includes metadata."
+    : `This backup has no metadata, so ${appLabel(appId)} downloads any that's missing.`;
+  return note;
 }
 
 function showRestoreCheckFailure(block, message) {

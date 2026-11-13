@@ -21,7 +21,8 @@ import restore_actions as ra
 import restore_version as rv
 from apps.http_headers import app_connection_config
 from backup import branded, humanize_error, log_failure
-from config_store import DEST_NAMES, app_meta, instance_ids, instance_type, key_required, load_config, restore_supported
+from config_store import (DEST_NAMES, app_meta, instance_ids, instance_type, key_required, load_config, recorded_metadata,
+                          restore_supported)
 from webui import cookies
 from webui.jobs import OwnedJobs
 from webui.runs import _start_tracked_run, RESTORE_RUN_STATE, RUN_LOCK, RUN_STATE
@@ -94,8 +95,9 @@ def api_history(dest_id):
     # One recursive listing of Backuparr's folders instead of one rclone call
     # per app - much faster against remote destinations (Drive/OneDrive).
     # Keyed by instance id; a removed instance's backups are listed while any remain.
-    # The app version comes from the manifest; "recorded" is False for a
-    # backup the startup backfill hasn't reached yet.
+    # The app version, and whether a Jellyfin, Emby or Plex backup holds the
+    # app's metadata (#196), come from the manifest; "recorded" is False for
+    # a backup the startup backfill hasn't reached yet.
     history = {name: [] for name in instance_ids(cfg)}
     try:
         entries = destination_util.list_backups(root)
@@ -112,6 +114,7 @@ def api_history(dest_id):
                 "name": entry["Name"], "size": entry["Size"], "mod_time": entry["ModTime"],
                 "app_version": details.get("app_version") if details else None, "recorded": details is not None,
                 "run_id": None, "encrypted": archive_crypto.is_encrypted_name(entry["Name"]),
+                "metadata": recorded_metadata(app_name, details),
             })
     _add_runs(history, dest_id)
     for entries in history.values():

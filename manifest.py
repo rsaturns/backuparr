@@ -2,7 +2,9 @@
 config.json. For each archive it keeps the destinations holding it, the
 version of the app that made it, Backuparr's version, its size, its
 SHA-256 (of the file as stored, so of the encrypted file when it's
-encrypted) and whether it's encrypted (#147).
+encrypted), whether it's encrypted (#147) and, for Jellyfin, Emby and Plex,
+whether it holds the app's metadata (#196, "metadata"; absent for other
+apps).
 
 The destinations stay the truth for which backups exist: History and
 retention list them, and read only those details from here. An entry for
@@ -103,7 +105,7 @@ def generation():
     return _generation
 
 
-def record(app, file, destinations, *, app_version, sha256, size, backuparr_version, encrypted=False):
+def record(app, file, destinations, *, app_version, sha256, size, backuparr_version, encrypted=False, metadata=None):
     """A backup this run made, on the destinations it reached."""
     with _lock:
         entries = _read()
@@ -119,10 +121,12 @@ def record(app, file, destinations, *, app_version, sha256, size, backuparr_vers
             "size": size,
             "encrypted": bool(encrypted),
         }
+        if metadata is not None:
+            entries[key(app, file)]["metadata"] = metadata
         _write(entries)
 
 
-def add_found(app, file, dest_id, *, app_version, sha256, size, expected_generation, encrypted=False):
+def add_found(app, file, dest_id, *, app_version, sha256, size, expected_generation, encrypted=False, metadata=None):
     """A backup the backfill found on dest_id. One already recorded only
     gains the destination. Returns False, recording nothing, once clear()
     has run since the backfill started."""
@@ -143,6 +147,8 @@ def add_found(app, file, dest_id, *, app_version, sha256, size, expected_generat
                 "size": size,
                 "encrypted": bool(encrypted),
             }
+            if metadata is not None:
+                entry["metadata"] = metadata
         entry["destinations"] = sorted(set(entry.get("destinations", [])) | {dest_id})
         _write(entries)
         return True

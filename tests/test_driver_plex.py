@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import shutil
 from pathlib import Path
 import sqlite3
 import zipfile
@@ -78,8 +79,8 @@ class Session:
         return response
 
 
-def driver(data_dir=None, **kwargs):
-    app = PlexApp('http://plex:32400/base/', 'private-plex-token', data_dir=data_dir)
+def driver(data_dir=None, metadata=None, **kwargs):
+    app = PlexApp('http://plex:32400/base/', 'private-plex-token', data_dir=data_dir, metadata=metadata)
     session = Session(**kwargs)
     session.headers = app.session.headers
     app.session = session
@@ -105,7 +106,7 @@ def folder(tmp_path):
 
 def make_backup(app, tmp_path):
     out = tmp_path / 'plex_20261028_030000.zip'
-    backup.zip_dir(app.backup(str(tmp_path / 'work')), str(out))
+    shutil.move(app.backup(str(tmp_path / 'work')), out)
     return str(out)
 
 
@@ -169,7 +170,7 @@ def test_backup_holds_plexs_database_export_and_its_settings_file(folder, tmp_pa
         assert zf.read(LIBRARY_DB) == data
         assert zf.read(PREFERENCES) == (folder / PREFERENCES).read_bytes()
         assert json.loads(zf.read(MANIFEST)) == {'plex_version': '1.43.5.11079-test', 'machine_identifier': SERVER_ID,
-                                                 'schema_version': 20240718114400}
+                                                 'schema_version': 20240718114400, 'metadata': False}
     url, kwargs = app.session.calls[1]
     assert url.endswith('/diagnostics/databases') and kwargs['stream'] and not kwargs['allow_redirects']
     # Every user's watch state comes along, not only the token owner's.
@@ -251,6 +252,37 @@ def test_factory_settings_and_token_storage(authed_client, isolated_webui, monke
     assert 'private-plex-token' not in Path(isolated_webui.auth.CONFIG_PATH).read_text()
     monkeypatch.setattr(PlexApp, 'test_connection', lambda self: 'Plex reachable')
     assert authed_client.post('/api/test/plex', json=cfg).json['ok']
+
+
+POSTER = b'\xff\xd8\xff poster'
+
+
+def with_metadata(root):
+    bundle = root / 'Metadata/Movies/c/6a47.bundle/Contents/_combined/posters'
+    bundle.mkdir(parents=True)
+    (bundle / 'tv.plex.agents.movie_f061').write_bytes(POSTER)
+    (root / 'Metadata/Movies/c/6a47.bundle/Uploads/posters').mkdir(parents=True)
+    (root / 'Metadata/Movies/c/6a47.bundle/Uploads/posters/6068').write_bytes(b'\xff\xd8\xff custom')
+    (root / 'Media/localhost/1/f32f.bundle/Contents/Indexes').mkdir(parents=True)
+    (root / 'Media/localhost/1/f32f.bundle/Contents/Indexes/index-sd.bif').write_bytes(b'thumbnails')
+    return root
+
+
+def test_include_metadata_adds_the_metadata_folder_but_not_media(folder, tmp_path):
+    with_metadata(folder)
+    with zipfile.ZipFile(make_backup(driver(str(folder), metadata=True), tmp_path)) as zf:
+        names = zf.namelist()
+        assert json.loads(zf.read(MANIFEST))['metadata'] is True
+        assert zf.read('Metadata/Movies/c/6a47.bundle/Contents/_combined/posters/tv.plex.agents.movie_f061') == POSTER
+    assert sorted(names) == sorted([MANIFEST, LIBRARY_DB, PREFERENCES,
+                                    'Metadata/Movies/c/6a47.bundle/Contents/_combined/posters/tv.plex.agents.movie_f061',
+                                    'Metadata/Movies/c/6a47.bundle/Uploads/posters/6068'])
+
+
+def test_include_metadata_on_a_server_without_a_library_records_none(folder, tmp_path):
+    shutil.rmtree(folder / 'Metadata')
+    with zipfile.ZipFile(make_backup(driver(str(folder), metadata=True), tmp_path)) as zf:
+        assert json.loads(zf.read(MANIFEST))['metadata'] is False
 
 
 # --- restore -----------------------------------------------------------------
@@ -339,6 +371,43 @@ def test_restore_refuses_a_file_that_isnt_a_plex_backup(folder, tmp_path):
     other.write_bytes(archive())  # Plex's raw export, not a Backuparr archive.
     with pytest.raises(PlexError, match="isn't a Plex backup made by Backuparr"):
         stopped(folder).restore_from_file(str(other))
+
+
+def test_a_backup_with_metadata_puts_it_back_before_the_database(folder, source, tmp_path, monkeypatch):
+    archive_path = make_backup(driver(str(with_metadata(source)), metadata=True), tmp_path)
+    order = []
+    real_copy, real_write = plex.mounted.copy_in_place, plex.mounted.write_files
+    monkeypatch.setattr(plex.mounted, 'copy_in_place', lambda src, dst: (order.append(os.path.basename(dst)), real_copy(src, dst)))
+    monkeypatch.setattr(plex.mounted, 'write_files', lambda zf, members, root: (order.append('Metadata'), real_write(zf, members, root)))
+    stopped(folder).restore_from_file(archive_path)
+    assert order == ['Metadata', LIBRARY_DB, PREFERENCES]
+    restored = folder / 'Metadata/Movies/c/6a47.bundle'
+    assert (restored / 'Contents/_combined/posters/tv.plex.agents.movie_f061').read_bytes() == POSTER
+    assert (restored / 'Uploads/posters/6068').read_bytes() == b'\xff\xd8\xff custom'
+    assert not (folder / 'Media').exists()
+
+
+@pytest.mark.parametrize('member', ['Media/localhost/x.bif', 'Metadata/../Preferences.xml', 'Metadata//x', 'Metadata',
+                                    'Plug-in Support/Databases/com.plexapp.plugins.library.blobs.db', '../escape',
+                                    'Metadata/a\\..\\..\\x'])
+def test_restore_refuses_paths_outside_what_a_backup_holds(folder, source, tmp_path, member):
+    archive_path = make_backup(driver(str(source)), tmp_path)
+    with zipfile.ZipFile(archive_path, 'a') as zf:
+        zf.writestr(member, b'x')
+    before = (folder / 'Plug-in Support/Databases' / LIBRARY_DB).read_bytes()
+    with pytest.raises(PlexError, match='unexpected path in the backup'):
+        stopped(folder).restore_from_file(archive_path)
+    assert (folder / 'Plug-in Support/Databases' / LIBRARY_DB).read_bytes() == before
+
+
+def test_a_metadata_restore_that_cant_write_changes_nothing(folder, source, tmp_path, monkeypatch):
+    archive_path = make_backup(driver(str(with_metadata(source)), metadata=True), tmp_path)
+    before = (folder / 'Plug-in Support/Databases' / LIBRARY_DB).read_bytes()
+    real = os.access
+    monkeypatch.setattr(plex.mounted.os, 'access', lambda path, mode: 'Metadata' not in str(path) and real(path, mode))
+    with pytest.raises(PlexError, match="can't write Metadata/Movies/c/6a47.bundle"):
+        stopped(folder).restore_from_file(archive_path)
+    assert (folder / 'Plug-in Support/Databases' / LIBRARY_DB).read_bytes() == before
 
 
 # --- connection failures -------------------------------------------------------

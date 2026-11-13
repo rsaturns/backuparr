@@ -27,6 +27,7 @@ import archive_check
 import archive_crypto
 import destination_util
 import manifest
+import manifest_backfill
 import rclone_util
 import runlog
 import self_backup
@@ -548,6 +549,7 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
                 # app's newest, so its last good backup stays.
                 log.info("%s: checking the backup...", name)
                 archive_check.check(name, archive_path)
+                metadata = manifest_backfill.read_metadata(instance_type(name), archive_path)
                 encrypted = encrypts(cfg, name)
                 if encrypted:
                     archive_path = encrypt_archive(name, archive_path)
@@ -576,7 +578,8 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
                 if uploaded:
                     try:
                         manifest.record(name, archive_name, uploaded, app_version=app_version, sha256=sha256,
-                                        size=size, backuparr_version=VERSION, encrypted=encrypted)
+                                        size=size, backuparr_version=VERSION, encrypted=encrypted,
+                                        metadata=metadata)
                     except OSError as exc:
                         # The backup itself is uploaded; only its record is missing.
                         log.warning("%s: couldn't write the backup record: %s", name, exc.strerror or type(exc).__name__)

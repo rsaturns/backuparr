@@ -15,6 +15,8 @@ nav_order: 2
 - Most apps are backed up through their own API. Jellyfin, Emby, Plex, Seerr,
   LazyLibrarian, Bitwarden and Vaultwarden also need a folder mounted into
   Backuparr.
+- **Include metadata** on Jellyfin, Emby and Plex adds their posters, artwork
+  and saved metadata, custom artwork too. History shows which backups have it.
 - Up to 10 extra instances each of Radarr, Sonarr, Lidarr, Whisparr, Pi-hole,
   OPNsense, pfSense, UniFi, Immich, Home Assistant, Unraid, Synology DSM and QNAP QuTS hero, such as a 4K Radarr or a second firewall. See [More than one instance](settings.md#more-than-one-instance).
 - **Prowlarr discovery** fills in the apps Prowlarr already knows, API keys

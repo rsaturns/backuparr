@@ -14,9 +14,15 @@ A backup holds two things:
   so it's read from Plex's data folder ("Plex Media Server", in Plex's
   /config at Library/Application Support/Plex Media Server in both the
   official and linuxserver images), mounted into Backuparr as data_dir.
-Images, media, caches and codecs are left out.
+- With Include metadata on (#196), the Metadata folder of that data folder:
+  posters, artwork and other images, custom ones too, which Plex would
+  otherwise download again (and can't for artwork set by hand). Its files
+  are read where they are into the archive (mounted.write_archive), not
+  copied first.
+Media (video preview thumbnails and chapter images, which Plex rebuilds),
+caches, codecs and logs are left out.
 
-A restore writes both back while Plex is stopped, as Plex's guide to
+A restore writes them back while Plex is stopped, as Plex's guide to
 moving a server does by hand: a rebuilt server comes back as the same
 server, so users keep their access. A running Plex keeps a .db-wal file next
 to its databases, so any -wal file means Plex is running - or was not shut
@@ -54,6 +60,7 @@ logger = logging.getLogger(f"backuparr.{__name__}")
 MANIFEST = "backuparr-plex.json"
 LIBRARY_DB = "com.plexapp.plugins.library.db"
 PREFERENCES = "Preferences.xml"
+METADATA = "Metadata"
 _DATABASES = ("Plug-in Support", "Databases")
 _PROGRESS_INTERVAL = 10
 _MIB = 1024 * 1024
@@ -122,7 +129,7 @@ class _PlexDirectAdapter(requests.adapters.HTTPAdapter):
 
 
 class PlexApp:
-    def __init__(self, url, api_key, data_dir=None, timeout=30):
+    def __init__(self, url, api_key, data_dir=None, metadata=None, timeout=30):
         try:
             parsed = urlsplit(url)
             valid = (parsed.scheme in ("http", "https") and parsed.hostname
@@ -136,6 +143,7 @@ class PlexApp:
             raise PlexError("plex: the server owner's Plex token is required")
         self.url = url.rstrip("/")
         self.data_dir = data_dir or None
+        self.metadata = bool(metadata)
         self.timeout = timeout
         self.session = requests.Session()
         self.session.mount("https://", _PlexDirectAdapter())
@@ -297,23 +305,33 @@ class PlexApp:
         logger.info("plex: checking server identity...")
         identity = self.identity()
         self._require_folder(identity["machine_identifier"])
-        os.makedirs(dest_dir, exist_ok=True)
+        # A new server has no Metadata folder until it has a library.
+        metadata = self.metadata and os.path.isdir(self._path(METADATA))
+        stage = os.path.join(dest_dir, "stage")
+        archive = os.path.join(dest_dir, "plex.zip")
+        os.makedirs(stage)
         try:
-            schema = self._download_database(dest_dir)
+            schema = self._download_database(stage)
             if self.identity() != identity:
                 raise PlexError("plex: server identity or version changed during the database export; retry once the server is stable")
-            shutil.copyfile(self._path(PREFERENCES), os.path.join(dest_dir, PREFERENCES))
-            self._preferences(os.path.join(dest_dir, PREFERENCES))  # A complete file, not one Plex was rewriting.
+            shutil.copyfile(self._path(PREFERENCES), os.path.join(stage, PREFERENCES))
+            self._preferences(os.path.join(stage, PREFERENCES))  # A complete file, not one Plex was rewriting.
             manifest = {"plex_version": identity["version"], "machine_identifier": identity["machine_identifier"],
-                        "schema_version": schema}
-            with open(os.path.join(dest_dir, MANIFEST), "w") as f:
+                        "schema_version": schema, "metadata": metadata}
+            with open(os.path.join(stage, MANIFEST), "w") as f:
                 json.dump(manifest, f, indent=2)
+            if metadata:
+                logger.info("plex: adding the Metadata folder (many small files, this can take a while)...")
+            files = mounted.write_archive(archive, stage, [(self._path(METADATA), METADATA)] if metadata else [],
+                                          self.data_dir, PlexError, "plex", "Plex")
         except BaseException:
-            for name in (LIBRARY_DB, PREFERENCES, MANIFEST):
-                Path(dest_dir, name).unlink(missing_ok=True)
+            Path(archive).unlink(missing_ok=True)
             raise
-        logger.info("plex: backed up the library database and server settings from Plex %s", identity["version"])
-        return dest_dir
+        finally:
+            shutil.rmtree(stage)
+        logger.info("plex: backed up the library database and server settings%s from Plex %s",
+                    f", and {files} metadata file(s)" if metadata else "", identity["version"])
+        return archive
 
     def _check_stopped(self):
         open_dbs = sorted(n for n in os.listdir(self._path(*_DATABASES)) if n.endswith(".db-wal"))
@@ -346,10 +364,9 @@ class PlexApp:
             )
         self._check_stopped()
 
-        with tempfile.TemporaryDirectory(prefix="plex-restore-") as work:
-            with zipfile.ZipFile(local_zip_path) as zf:
-                restored = zf.extract(LIBRARY_DB, work)
-                restored_prefs = zf.extract(PREFERENCES, work)
+        with tempfile.TemporaryDirectory(prefix="plex-restore-") as work, zipfile.ZipFile(local_zip_path) as zf:
+            restored = zf.extract(LIBRARY_DB, work)
+            restored_prefs = zf.extract(PREFERENCES, work)
             server_id = self._preferences(restored_prefs).get("ProcessedMachineIdentifier")
             backup_schema, installed = schema_version(restored), schema_version(target)
             if backup_schema > installed:
@@ -357,9 +374,28 @@ class PlexApp:
                     "plex: this backup comes from a newer Plex than the one installed (database schema "
                     f"{backup_schema}, installed {installed}) - update Plex first"
                 )
+            metadata = self._metadata_members(zf)
+            mounted.check_writable(metadata, self.data_dir, PlexError, "plex", "Plex")
+            # The metadata goes first: a disk filling up stops the restore
+            # before the database and settings are touched.
+            mounted.write_files(zf, metadata, self.data_dir)
             mounted.copy_in_place(restored, target)
             mounted.copy_in_place(restored_prefs, preferences)
         # No -wal exists (checked above), so a -shm index is stale.
         mounted.remove_journal_files(target)
-        logger.info("plex: restored the library database and server settings (server %s) into %s - start Plex to load them",
-                    server_id or "?", self.data_dir)
+        logger.info("plex: restored the library database and server settings%s (server %s) into %s - start Plex to load them",
+                    f", and {len(metadata)} metadata file(s)" if metadata else "", server_id or "?", self.data_dir)
+
+    @staticmethod
+    def _metadata_members(zf):
+        """The backup's Metadata files, refusing any other name: a restore
+        writes only the database, the settings and these."""
+        members = []
+        for info in zf.infolist():
+            if info.is_dir() or info.filename in (MANIFEST, LIBRARY_DB, PREFERENCES):
+                continue
+            parts = info.filename.split("/")
+            if parts[0] != METADATA or len(parts) < 2 or "\\" in info.filename or any(p in ("", ".", "..") for p in parts):
+                raise PlexError(f"plex: unexpected path in the backup: {info.filename!r}")
+            members.append(info)
+        return members
