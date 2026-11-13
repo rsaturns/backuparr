@@ -23,7 +23,7 @@ from hypercorn.asyncio import serve
 from hypercorn.config import Config
 
 import tls
-from config_store import load_config
+from config_store import ConfigError, load_config
 from webui.forwarded import ForwardedHeaders
 from webui.wsgi_asgi import WsgiToAsgi
 
@@ -69,6 +69,17 @@ def https_only(cfg=None):
     if env is not None:
         return env
     return bool((cfg if cfg is not None else load_config()).get("https_only"))
+
+
+def _https_only_at_start():
+    """https_only(), or off when config.json can't be read: the web UI then
+    opens on both ports and says what's wrong, as it did before #177."""
+    try:
+        return https_only()
+    except (ConfigError, OSError) as exc:
+        log.error("can't read the HTTPS only switch - %s. HTTP on port %s stays open until it's fixed.",
+                  exc, http_port())
+        return False
 
 
 def _bind(port):
@@ -200,7 +211,7 @@ class Server:
         self.ssl_context = _ssl_context(cert)
         tls.on_change(self._use_certificate)
         https_task = asyncio.create_task(self._run("HTTPS", https_port(), self.ssl_context, asyncio.Event()))
-        if https_only():
+        if _https_only_at_start():
             log.info("HTTPS only: HTTP on port %s stays closed", http_port())
         else:
             self._open_http()

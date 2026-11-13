@@ -253,6 +253,20 @@ def test_https_only_env_values(monkeypatch, value, expected):
     assert serve.https_only_env() is expected
 
 
+def test_a_broken_config_doesnt_stop_the_server_starting(monkeypatch, caplog):
+    import config_store
+    from webui import serve
+
+    def broken():
+        raise config_store.ConfigError("config.json isn't valid JSON - fix it, or delete the file")
+    monkeypatch.setattr(serve, "load_config", broken)
+    monkeypatch.delenv("BACKUPARR_HTTPS_ONLY", raising=False)
+    assert serve._https_only_at_start() is False  # HTTP opens, so the UI can say what's wrong
+    assert "isn't valid JSON" in caplog.text
+    monkeypatch.setenv("BACKUPARR_HTTPS_ONLY", "true")
+    assert serve._https_only_at_start() is True  # the environment needs no config.json
+
+
 # ------------------------------------------------ Backuparr's own backup ----
 def test_own_backup_carries_the_certificate_and_restore_keeps_https_only(authed_client, monkeypatch):
     import config_store
