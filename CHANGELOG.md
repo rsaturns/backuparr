@@ -9,6 +9,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - rclone 1.76.0 (from 1.75.0), with the security fixes from rclone 1.75.1 and 1.75.2 and its updated Go libraries: the image scan's 2 critical and 20 high findings in rclone are gone.
 
+### Changed
+
+- The release workflow's docker/login-action 4.8.0 and softprops/action-gh-release 3.0.4, as Dependabot proposed (#159, #160).
+
 ## [2.5.6] - 2026-11-07
 
 ### Changed
