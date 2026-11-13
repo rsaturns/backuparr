@@ -63,6 +63,9 @@ def sync_rclone_remote(dest_cfg, force=False, remotes=None):
         "drive_id": dest_cfg.get("drive_id", ""),
         "drive_type": dest_cfg.get("drive_type", "personal"),
         "root_folder_id": dest_cfg.get("item_id", ""),
+        # Deletes (retention, History) are permanent: the recycle bin counts
+        # against OneDrive's storage, so a removed backup would still fill it.
+        "hard_delete": "true",
     }
     if not force and remote is not None and all(remote.get(k, "") == v for k, v in fields.items()):
         return

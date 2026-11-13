@@ -116,6 +116,14 @@ def test_check_remote_lists_only_the_remote_itself(monkeypatch, root, expected):
     ("Failed to copyto: write /backups/a.zip: no space left on device", "the destination is out of space"),
     ("Failed to copyto: open /backups/a.zip: read-only file system", "the destination is read-only"),
     ("Failed to copyto: googleapi: Error 403: storageQuotaExceeded", "the destination is out of space"),
+    # Google Drive, full: Google's documented storageQuotaExceeded error as rclone prints it
+    # (google-api-go-client's googleapi.Error: "Error <code>: <message>, <reason>").
+    ("Failed to copyto: googleapi: Error 403: The user's Drive storage quota has been exceeded., storageQuotaExceeded",
+     "the destination is out of space"),
+    # Dropbox, as a full lab account answered.
+    ("Failed to copyto: upload failed: batch upload failed: upload failed: path/insufficient_space", "the destination is out of space"),
+    # OneDrive, as a full lab account answered.
+    ("Failed to copyto: quotaLimitReached: Quota limit reached", "the destination is out of space"),
     ("Failed to copyto: couldn't fetch token: invalid_grant: maybe token expired?", "reconnect it in Settings"),
     ("Failed to lsd: Get \"https://api.dropboxapi.com\": dial tcp: lookup api.dropboxapi.com on 127.0.0.11:53: no such host", "check this container's network and DNS"),
 ])

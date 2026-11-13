@@ -79,6 +79,9 @@ OAuth providers or notification webhooks. Values are encrypted like API keys.
 - Requests to an app with headers must stay on its configured scheme, host and
   port, redirects included, so use its final URL.
   `BACKUPARR_ALLOW_CROSS_HOST_REDIRECTS` doesn't override this.
+- When an app's answer is HTTP 401 or 403 and headers are set, the error
+  also points here: a proxy refusing a request looks the same as the app
+  refusing a wrong API key.
 - **Generate Basic authentication** turns a username and password into a
   `Basic …` value for the header you choose, in your browser; only the header
   is saved.

@@ -104,6 +104,7 @@ function initTabs() {
       if (leavingDirtySettings) {
         const leave = confirm("You have unsaved changes in Settings. Leave without saving?");
         if (!leave) return;
+        discardSettingsEdits();
       }
       document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
       document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
@@ -2109,6 +2110,16 @@ function isSettingsDirty() {
   return JSON.stringify(collectConfig()) !== SETTINGS_SNAPSHOT;
 }
 
+// Leaving without saving throws the edits away: the form goes back to the
+// saved settings, so they aren't on screen when you come back - looking
+// saved - and the next Save doesn't save them after all.
+function discardSettingsEdits() {
+  clearDiscoveryResults();
+  document.querySelectorAll(".app-card[data-app] .test-result").forEach((el) => { el.textContent = ""; });
+  document.querySelectorAll(".app-card[data-app] .status-dot").forEach((dot) => { dot.dataset.state = "idle"; });
+  loadConfig().catch((e) => toast(`Couldn't reload the saved settings: ${clause(e.message)}`, "fail"));
+}
+
 async function saveSettings() {
   const resultEl = document.getElementById("save-result");
   resultEl.textContent = "Saving...";
@@ -2422,8 +2433,12 @@ async function openGooglePicker() {
     const view = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
       .setSelectFolderEnabled(true)
       .setIncludeFolders(true);
+    // As large as fits the window, within Google's limits (566x350 to 1051x650).
+    const width = Math.max(566, Math.min(1051, window.innerWidth - 32));
+    const height = Math.max(350, Math.min(650, window.innerHeight - 32));
     const builder = new google.picker.PickerBuilder()
       .addView(view)
+      .setSize(width, height)
       .setTitle("Choose a folder for Backuparr's backups")
       .setOAuthToken(accessToken)
       .setDeveloperKey(gdriveCfg.developer_key)
@@ -3849,6 +3864,23 @@ function handleGdriveRedirect() {
   document.querySelector('.tab-btn[data-tab="settings"]').click();
 }
 
+// Whether release `latest` ("2.5.6") is newer than `current` ("3.0.0-beta"):
+// numbers compared in turn, and a release is newer than its own pre-release.
+// A beta, or a build newer than the latest release, isn't told to update.
+function isNewerVersion(latest, current) {
+  const parts = (v) => {
+    const [core, ...pre] = String(v || "").split("-");
+    return { nums: core.split(".").map((n) => parseInt(n, 10) || 0), pre: pre.length > 0 };
+  };
+  const a = parts(latest);
+  const b = parts(current);
+  for (let i = 0; i < Math.max(a.nums.length, b.nums.length); i++) {
+    const diff = (a.nums[i] || 0) - (b.nums[i] || 0);
+    if (diff !== 0) return diff > 0;
+  }
+  return !a.pre && b.pre;
+}
+
 // Compares the running version against GitHub's latest published Release.
 // Plain fetch (not apiFetch) - this is an external, unauthenticated call,
 // not one of Backuparr's own API routes. Fails silently (leaves the
@@ -3869,7 +3901,7 @@ async function checkForUpdate() {
 
   const dot = document.getElementById("version-check-dot");
   const text = document.getElementById("version-check-text");
-  if (latest === versionEl.dataset.version) {
+  if (!isNewerVersion(latest, versionEl.dataset.version)) {
     dot.dataset.state = "ok";
     text.className = "version-check-text ok";
     text.textContent = "Current Version";

@@ -27,6 +27,7 @@ def test_a_missing_remote_is_created(rclone):
     [(name, kind, fields, force)] = rclone["sets"]
     assert (name, kind, force) == ("backuparr-gdrive", "drive", True)
     assert json.loads(fields["token"])["refresh_token"] == "rt" and fields["root_folder_id"] == "folder"
+    assert fields["use_trash"] == "false"
 
 
 def test_an_unchanged_remote_is_left_alone_even_after_rclone_refreshes_it(rclone):

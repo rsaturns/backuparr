@@ -134,6 +134,9 @@ def sync_rclone_remote(dest_cfg, remotes=None):
         "client_secret": dest_cfg.get("client_secret", ""),
         "scope": "drive.file",
         "token": token_json,
+        # Deletes (retention, History) are permanent: Drive's trash counts
+        # against storage for 30 days, so a removed backup would still fill it.
+        "use_trash": "false",
     }
     if dest_cfg.get("folder_id"):
         fields["root_folder_id"] = dest_cfg["folder_id"]

@@ -17,7 +17,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - UniFi backups, signed in as a local admin: on UniFi OS (consoles and UniFi OS Server) UniFi OS's own backup of everything (a Super Admin) or, as an option, UniFi Network's only (Network: Full Management); on the standalone UniFi Network Server its Network backup. A Network backup's History option keeps settings only or 7, 30, 90 or 365 days or all of the statistics. Always encrypted, restored by hand with the Restore tab's download and steps; a self-signed certificate is trusted on the card (#161). See https://rsaturns.github.io/backuparr/apps/unifi/
 - Home Assistant (2025.5 and newer) backups and restores over its own backup API, with an administrator's long-lived access token: the card has the options of Home Assistant's backup page (Settings, History, and on HA OS and Supervised Media, Share folder, Local apps folder and Apps), Backuparr deletes the copy it makes in Home Assistant, and backups are always encrypted. A restore uploads the backup and Home Assistant restarts to finish it, also onto a new install that isn't set up yet; a self-signed certificate is trusted on the card (#155). See https://rsaturns.github.io/backuparr/apps/homeassistant/
 - Immich (2.5.0 and newer) database backups and restores over its API: Backuparr runs Immich's database dump job, downloads the dump and deletes it in Immich; a restore runs in Immich's maintenance mode, also onto a new install that has no admin yet. The API key needs job.create, queue.read, maintenance, backup.download, backup.upload and backup.delete; photos and videos aren't in the backup (#154). See https://rsaturns.github.io/backuparr/apps/immich/
-- OPNsense (24.1 and newer) backups of config.xml over its API, with an API key whose user needs only Diagnostics: Configuration History and Lobby: Dashboard (for the firmware version recorded with each backup); always encrypted, restored by hand with the Restore tab's download and steps (#153). See https://rsaturns.github.io/backuparr/apps/opnsense/
+- OPNsense (24.7 and newer) backups of config.xml over its API, with an API key whose user needs only Diagnostics: Configuration History and Lobby: Dashboard (for the firmware version recorded with each backup); always encrypted, restored by hand with the Restore tab's download and steps (#153). See https://rsaturns.github.io/backuparr/apps/opnsense/
 - pfSense (CE and Plus) backups of config.xml from its web UI's Backup & Restore page, signed in the way Netgate documents for scripted backups, as a user with WebCfg - Diagnostics: Backup & Restore and WebCfg - System: Login / Logout / Dashboard (for the version); always encrypted, restored by hand with the Restore tab's download and steps (#153). See https://rsaturns.github.io/backuparr/apps/pfsense/
 - A self-signed HTTPS certificate can be trusted on an app's card (OPNsense, pfSense, UniFi, Home Assistant, Unraid, Bitwarden, Synology DSM and QNAP QuTS hero): Test connection shows its fingerprint, name and expiry, Trust pins it, and a changed certificate stops backups until it's trusted again, with a link to the card from the Overview and Run & Status (#153).
 - Vaultwarden backups and restores from its mounted data folder: the database (SQLite), RSA key, admin page settings, attachments and Send files, always encrypted; restores run while Vaultwarden is stopped (#150). See https://rsaturns.github.io/backuparr/apps/vaultwarden/
@@ -50,11 +50,18 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - New tagline: "Everything you host, backed up.", as Backuparr covers more than media apps.
 - rclone 1.76.0 (from 1.75.0, taking the security fixes in 1.75.1 and 1.75.2), croniter 7.0.0, and the release workflow's docker/login-action 4.8.0 and softprops/action-gh-release 3.0.4 (#166).
 - With croniter 7.0, a hand-typed schedule step that starts at a field's maximum, such as `59/15`, means only that value; schedules made with the picker are unchanged (#166).
+- Deleting on Google Drive and OneDrive (retention, History) is now permanent, so deleted backups no longer fill your cloud storage from the trash or recycle bin, which both count against it.
 
 ### Fixed
 
 - A saved schedule that isn't valid no longer just stops backups without a word: the Overview and Run & Status say "Your backup schedule isn't valid any more. Check it in Settings.", and the log says so once (#166).
 - On a phone, Prowlarr's card no longer runs off the screen: its buttons wrap onto a second line.
+- On a phone, Run & Status no longer scrolls sideways during a run: its buttons wrap onto a second line.
+- Leaving Settings without saving now discards the edits: before, they stayed on the page, looking saved, and the next Save saved them.
+- Google Drive's Choose folder opens its picker in the middle of the window; on a scrolled page it could open off screen.
+- The footer says "Update Available" only when the latest release is newer, not for a newer build or a beta.
+- A full Dropbox or OneDrive now gets the "the destination is out of space" hint.
+- An app answering HTTP 401 or 403 now also points at the Service Authentication headers when some are set: a proxy refusing a request looks the same as a wrong API key.
 
 ## [2.5.6] - 2026-11-07
 
