@@ -384,6 +384,41 @@ def test_http_closes_and_opens_again_without_a_restart(running_server):
     assert server.http_open()
 
 
+def _wait_for_http(port, open_, tries=100):
+    for _ in range(tries):
+        try:
+            _get(port, False)
+            if open_:
+                return True
+        except OSError:
+            if not open_:
+                return True
+        time.sleep(0.05)
+    return False
+
+
+def test_http_turned_back_on_while_it_is_still_closing_opens_again(running_server):
+    server, http_port, _ = running_server
+    # Keep a request in flight so the old server takes a while to close.
+    busy = socket.create_connection(("127.0.0.1", http_port))
+    busy.sendall(b"GET / HTTP/1.1\r\nHost: x\r\n")
+    server.set_http_open(False)
+    server.set_http_open(True)
+    busy.close()
+    time.sleep(0.5)
+    assert _wait_for_http(http_port, True) and server.http_open()
+
+
+def test_http_turned_off_again_while_it_is_closing_stays_closed(running_server):
+    server, http_port, _ = running_server
+    for open_ in (False, True, False):
+        server.set_http_open(open_)
+    time.sleep(0.5)
+    assert _wait_for_http(http_port, False)
+    time.sleep(0.5)
+    assert _wait_for_http(http_port, False, tries=1) and not server.http_open()
+
+
 def _served_fingerprint(port):
     pem = ssl.get_server_certificate(("127.0.0.1", port))
     return tls.fingerprint(x509.load_pem_x509_certificate(pem.encode()))

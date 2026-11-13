@@ -136,6 +136,7 @@ class Server:
         self.stopping = None
         self.http_stop = None
         self.http_task = None
+        self.http_wanted = False  # the latest switch, even while the old server is still closing
         self.ssl_context = None
         self.fingerprint = None
 
@@ -150,14 +151,22 @@ class Server:
 
     # In the loop.
     def _open_http(self):
+        self.http_wanted = True
         if self.http_open():
+            if self.http_stop.is_set():  # still closing: open again once it has
+                self.http_task.add_done_callback(self._reopen_http)
             return
         self.http_stop = asyncio.Event()
         self.http_task = self.loop.create_task(
             self._run("HTTP", http_port(), None, self.http_stop))
 
+    def _reopen_http(self, task):
+        if self.http_wanted and task is self.http_task and not self.stopping.is_set():
+            self._open_http()
+
     def _close_http(self):
-        if self.http_open():
+        self.http_wanted = False
+        if self.http_open() and not self.http_stop.is_set():
             log.info("HTTP on port %s closed: HTTPS only", http_port())
             self.http_stop.set()
 
