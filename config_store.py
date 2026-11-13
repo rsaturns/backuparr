@@ -86,6 +86,8 @@ _APP_CATEGORY = {
     "qnap": "server", "synology": "server", "unraid": "server",
 }
 
+# An app's "icon_dark", if any, replaces its "icon" in the dark theme: the
+# card, the Overview and the status bar follow the theme toggle.
 # Drives the web UI's forms generically. restore_warning is shown on the
 # Restore tab before an app's restore. manual_restore: an app Backuparr can't
 # restore itself - the Restore tab offers the backup's download, its "steps"
@@ -509,6 +511,7 @@ APP_META = [
         "id": "qnap",
         "label": "QNAP QuTS hero",
         "icon": "qnap.svg",
+        "icon_dark": "qnap-light.svg",
         # QuTS hero's system configuration file (.bin) - its settings, not the
         # data in its shared folders - from the Control Panel's own export
         # (/qmigrate/v1/backup/download), signed in as an administrator or an

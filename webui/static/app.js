@@ -281,20 +281,35 @@ async function showEncryptionNotice() {
 
 // One Overview tile: an app's (or Backuparr's own) latest backup, or why its
 // last run failed, with download and log links.
-function overviewCard(appId, { label, icon, latest, failure, latestRun, idleText }) {
+// An app's icon, plus its dark-theme one if it has one (APP_META icon_dark):
+// CSS shows the one that fits the theme.
+function appIconImgs(icon, iconDark) {
+  return [[icon, iconDark ? "icon-light" : ""], [iconDark, "icon-dark"]].filter(([src]) => src).map(([src, theme]) => {
+    const img = document.createElement("img");
+    img.className = theme ? `app-icon ${theme}` : "app-icon";
+    img.src = src;
+    img.alt = "";
+    return img;
+  });
+}
+
+function appIconUrls(appId) {
+  if (appId === "backuparr") return { icon: "/static/logo.png", iconDark: null };
+  const meta = appMeta(appId);
+  return {
+    icon: meta ? `/static/icons/${meta.icon}` : null,
+    iconDark: meta && meta.icon_dark ? `/static/icons/${meta.icon_dark}` : null,
+  };
+}
+
+function overviewCard(appId, { label, icon, iconDark, latest, failure, latestRun, idleText }) {
   const card = document.createElement("div");
   card.className = "overview-app-card";
   card.id = `overview-card-${appId}`; // the status bar's failure lines scroll here
 
   const head = document.createElement("div");
   head.className = "overview-app-head";
-  if (icon) {
-    const img = document.createElement("img");
-    img.className = "app-icon";
-    img.src = icon;
-    img.alt = "";
-    head.appendChild(img);
-  }
+  appIconImgs(icon, iconDark).forEach((img) => head.appendChild(img));
   const h3 = document.createElement("h3");
   h3.textContent = label;
   head.appendChild(h3);
@@ -439,13 +454,7 @@ function renderOverviewStatus(items, running) {
     btn.type = "button";
     btn.className = "overview-status-item";
     btn.title = `Go to ${item.label}`;
-    if (item.icon) {
-      const img = document.createElement("img");
-      img.className = "app-icon";
-      img.src = item.icon;
-      img.alt = "";
-      btn.appendChild(img);
-    }
+    appIconImgs(item.icon, item.iconDark).forEach((img) => btn.appendChild(img));
     // One run of text, so a long error wraps under the name on a phone.
     const line = document.createElement("span");
     line.className = "overview-status-line";
@@ -538,14 +547,14 @@ async function loadOverview() {
       ...enabledIds,
     ].map((appId) => ({
       id: appId, label: appLabel(appId), latest: latestByApp[appId], failure: failureByApp[appId],
-      icon: appId === "backuparr" ? "/static/logo.png" : appMeta(appId) ? `/static/icons/${appMeta(appId).icon}` : null,
+      ...appIconUrls(appId),
     }));
     // With no app enabled the page says to add one; the bar has nothing to say.
     renderOverviewStatus(enabledIds.length ? statusItems : [], !!(runState && runState.running));
 
     // Backuparr's own backup leads, always there (#110); then each enabled app.
     appsEl.appendChild(overviewCard("backuparr", {
-      label: "Backuparr", icon: "/static/logo.png", latest: latestByApp.backuparr,
+      label: "Backuparr", ...appIconUrls("backuparr"), latest: latestByApp.backuparr,
       failure: failureByApp.backuparr, latestRun: (latestRuns || {}).backuparr,
       idleText: cfg.self_backup === false ? "Turned off in Settings." : "No backups yet.",
     }));
@@ -557,9 +566,8 @@ async function loadOverview() {
       return;
     }
     enabledIds.forEach((appId) => {
-      const meta = appMeta(appId);
       appsEl.appendChild(overviewCard(appId, {
-        label: appLabel(appId), icon: meta ? `/static/icons/${meta.icon}` : null, latest: latestByApp[appId],
+        label: appLabel(appId), ...appIconUrls(appId), latest: latestByApp[appId],
         failure: failureByApp[appId], latestRun: (latestRuns || {})[appId], idleText: "No backups yet.",
       }));
     });

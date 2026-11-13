@@ -1,5 +1,6 @@
-"""Setup help on every card (#199): each app card's "?" opens its app's docs
-page at "Setting it up", and the Backuparr menu links the docs."""
+"""Setup help on every card and theme-aware icons (#199): each app card's "?"
+opens its app's docs page at "Setting it up", the Backuparr menu links the
+docs, and an app with a dark-theme icon shows both for CSS to pick from."""
 import os
 import re
 from html.parser import HTMLParser
@@ -8,6 +9,7 @@ from config_store import APP_META, DOCS_URL, SELF_APP, SETUP_SECTION, docs_page
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DOCS = os.path.join(ROOT, "docs")
+ICONS = os.path.join(ROOT, "webui", "static", "icons")
 
 
 def kramdown_id(heading):
@@ -24,14 +26,19 @@ def heading_ids(path):
 class Links(HTMLParser):
     def __init__(self):
         super().__init__()
-        self.current, self.help, self.menu = None, {}, []
+        self.current, self.in_head, self.help, self.icons, self.menu = None, False, {}, {}, []
 
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
         if "app-card" in (a.get("class") or "").split():
             self.current = a.get("data-app") or a.get("data-self-app")
+        if "app-card-head" in (a.get("class") or "").split():
+            self.in_head = True  # a card's icons come before its "?"
         if tag == "a" and a.get("class") == "card-help":
             self.help[self.current] = a
+            self.in_head = False
+        if tag == "img" and "app-icon" in (a.get("class") or "") and self.in_head:
+            self.icons.setdefault(self.current, []).append(a)
         if tag == "a" and a.get("class") == "feedback-link":
             self.menu.append(a)
 
@@ -76,6 +83,21 @@ def test_the_backuparr_menu_links_the_docs_first(authed_client):
     assert len(links) == 3 and all(link["target"] == "_blank" for link in links)
 
 
-def test_the_help_url_reaches_the_ui_metadata(authed_client):
+def test_a_dark_theme_icon_is_shown_next_to_the_light_one(authed_client):
+    parsed = page(authed_client)
+    dark = [m for m in APP_META if m.get("icon_dark")]
+    assert [m["id"] for m in dark] == ["qnap"]
+    for meta in APP_META:
+        assert os.path.exists(os.path.join(ICONS, meta["icon"]))
+        icons = parsed.icons[meta["id"]]
+        if meta.get("icon_dark"):
+            assert os.path.exists(os.path.join(ICONS, meta["icon_dark"]))
+            assert [(i["class"], i["src"].rsplit("/", 1)[-1]) for i in icons] == [
+                ("app-icon icon-light", meta["icon"]), ("app-icon icon-dark", meta["icon_dark"])]
+        else:
+            assert [i["class"] for i in icons] == ["app-icon"]
+
+
+def test_the_dark_icon_reaches_the_ui_metadata(authed_client):
     html = authed_client.get("/").get_data(as_text=True)
-    assert '"help_url": "https://rsaturns.github.io/backuparr/apps/qnap/#setting-it-up"' in html
+    assert '"icon_dark": "qnap-light.svg"' in html and '"help_url": "https://rsaturns.github.io/backuparr/apps/qnap/#setting-it-up"' in html

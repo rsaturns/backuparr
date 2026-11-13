@@ -144,7 +144,9 @@
                     <input type="checkbox" class="f-enabled">
                     <span class="slider"></span>
                   </label>
-                  <img class="app-icon" src="{{ url_for('static', filename='icons/' ~ m.icon) }}" alt="" width="22" height="22">
+                  {# A second icon for the dark theme, if the app has one: CSS shows the one that fits. #}
+                  <img class="app-icon{% if m.icon_dark %} icon-light{% endif %}" src="{{ url_for('static', filename='icons/' ~ m.icon) }}" alt="" width="22" height="22">
+                  {% if m.icon_dark %}<img class="app-icon icon-dark" src="{{ url_for('static', filename='icons/' ~ m.icon_dark) }}" alt="" width="22" height="22">{% endif %}
                   <h3>{{ m.label }}</h3>
                   <a class="card-help" href="{{ m.help_url }}" target="_blank" rel="noopener noreferrer" title="Setup guide" aria-label="{{ m.label }} setup guide, in the docs">?</a>
                   {% if m.discoverable %}<span class="discovery-badge discovery-origin hidden">From Prowlarr</span>{% endif %}

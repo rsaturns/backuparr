@@ -215,6 +215,16 @@ body {
   flex-shrink: 0;
 }
 
+/* An app with a second icon for the dark theme (APP_META icon_dark): the
+   one that fits the theme shows - the toggle's choice, else the system's. */
+.app-icon.icon-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .app-icon.icon-light { display: none; }
+  :root:not([data-theme="light"]) .app-icon.icon-dark { display: inline; }
+}
+:root[data-theme="dark"] .app-icon.icon-light { display: none; }
+:root[data-theme="dark"] .app-icon.icon-dark { display: inline; }
+
 .content {
   width: 100%;
   max-width: 1080px;
