@@ -2,7 +2,7 @@ FROM python:3.15-alpine
 
 # rclone from its own GitHub release, not apk - apk's build lags
 # upstream and carries known CVEs in its bundled Go dependencies.
-ARG RCLONE_VERSION=1.75.0
+ARG RCLONE_VERSION=1.76.0
 ARG TARGETARCH
 
 # su-exec (from the community repo, enabled in python:alpine) drops from root
@@ -21,7 +21,10 @@ RUN apk add --no-cache bash tzdata su-exec \
 
 WORKDIR /app
 COPY requirements.txt /app/
-RUN pip install --no-cache-dir -r requirements.txt
+# pip isn't needed once the requirements are in, and it carries its own
+# vendored copies of urllib3, msgpack and setuptools that scanners flag.
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip uninstall -y pip
 
 COPY *.py entrypoint.sh VERSION /app/
 COPY apps /app/apps
