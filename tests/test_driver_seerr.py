@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import shutil
 import sqlite3
 import zipfile
 
@@ -348,3 +349,25 @@ def test_the_restore_action_uses_the_data_folder(app, server, folder, tmp_path):
     cfg = {"url": "http://seerr:5055", "api_key": KEY, "data_dir": str(folder)}
     assert restore_actions.restore_app("seerr", cfg, str(tmp_path), archive) == {"kind": "seerr"}
     assert rows(folder / "db/db.sqlite3") == ["request"]
+
+
+@pytest.mark.parametrize("linked", ["settings.json", "db"])
+def test_restore_never_writes_through_a_link_in_seerrs_folder(app, server, folder, tmp_path, linked):
+    """GHSA-r2gf-f7v8-j7g2: Seerr's settings.json (or its db folder) made a
+    link to Backuparr's own files mustn't turn a restore into a write there."""
+    archive = make_backup(app, tmp_path)
+    outside = tmp_path / "backuparr-config"
+    outside.mkdir()
+    (outside / "settings.json").write_text("Backuparr's login")
+    (outside / "db.sqlite3").write_text("Backuparr's file")
+    if linked == "db":
+        shutil.rmtree(folder / "db")
+        (folder / "db").symlink_to(outside)
+    else:
+        (folder / "settings.json").unlink()
+        (folder / "settings.json").symlink_to(outside / "settings.json")
+    stop_seerr(server)
+    with pytest.raises(SeerrError, match=f"^seerr: {linked} in .* is a link - Backuparr won't write through it$"):
+        app.restore_from_file(archive)
+    assert (outside / "settings.json").read_text() == "Backuparr's login"
+    assert (outside / "db.sqlite3").read_text() == "Backuparr's file"

@@ -243,11 +243,14 @@ class EmbyApp:
                      and not any(i.filename.startswith(f + "/") for f in _MIRRORED) for i in members]
             bulk = [i for i, f in zip(members, first) if f]
             rest = [i for i, f in zip(members, first) if not f]
+            # Nor through a link: the folders the mirror cleanup deletes in
+            # and the data folder it clears -shm files from included.
+            mounted.refuse_links(self.data_dir, ["data", *_MIRRORED], EmbyError, "emby")
             mounted.check_writable(members, self.data_dir, EmbyError, "emby", "Emby")
-            mounted.write_files(zf, bulk, self.data_dir)
+            mounted.write_files(zf, bulk, self.data_dir, EmbyError, "emby")
             for folder in _MIRRORED:
                 self._mirror_cleanup(folder, {i.filename for i in members})
-            mounted.write_files(zf, rest, self.data_dir)
+            mounted.write_files(zf, rest, self.data_dir, EmbyError, "emby")
             # No -wal exists (checked above), so any -shm index is stale.
             for name in os.listdir(self._path("data")):
                 if name.endswith(".db-shm"):

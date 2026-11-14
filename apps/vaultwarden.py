@@ -215,17 +215,8 @@ class VaultwardenApp:
     def _write(self, zf, info, relative):
         """Writes one member in place: an existing file keeps Vaultwarden's
         owner and mode, a new one (and a new folder) is made readable."""
-        target = self._path(*relative.split("/"))
-        folder = os.path.dirname(target)
-        missing = []
-        while not os.path.isdir(folder):
-            missing.append(folder)
-            folder = os.path.dirname(folder)
-        for path in reversed(missing):
-            os.mkdir(path)
-            os.chmod(path, 0o755)
         with zf.open(info) as src:
-            mounted.write_in_place(src, target)
+            mounted.write_in_place(src, self.data_dir, relative, VaultwardenError, "vaultwarden")
 
     def restore_from_file(self, local_zip_path):
         """Writes the backup's database and files over Vaultwarden's while
@@ -239,6 +230,7 @@ class VaultwardenApp:
             raise VaultwardenError(f"vaultwarden: unexpected contents in the backup: {unexpected[0]!r}")
         self._require_folder()
         # Checked before anything is written, so a restore never stops halfway.
+        mounted.refuse_links(self.data_dir, [DATABASE, *(i.filename for i in members)], VaultwardenError, "vaultwarden")
         blocked = self._unwritable(i.filename for i in members if i.filename != MANIFEST)
         if blocked:
             raise VaultwardenError(
@@ -258,7 +250,7 @@ class VaultwardenApp:
                 raise VaultwardenError("vaultwarden: this backup comes from a newer Vaultwarden than the one installed - "
                                        "update Vaultwarden first")
             self._check_stopped()
-            mounted.copy_in_place(restored, target)
+            mounted.copy_in_place(restored, self.data_dir, DATABASE, VaultwardenError, "vaultwarden")
         mounted.remove_journal_files(target)
         written = 0
         with zipfile.ZipFile(local_zip_path) as zf:

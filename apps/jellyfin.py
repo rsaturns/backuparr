@@ -204,10 +204,9 @@ class JellyfinApp:
 
         filename = os.path.basename(local_zip_path)
         target = os.path.join(self.backup_dir, filename)
-        shutil.copyfile(local_zip_path, target)
-        # Backuparr's private umask would make this unreadable to Jellyfin
-        # when the two containers run as different users.
-        os.chmod(target, 0o644)
+        # Never through a link Jellyfin left at that name; readable to
+        # Jellyfin, which Backuparr's private umask would stop.
+        mounted.copy_in_place(local_zip_path, self.backup_dir, filename, JellyfinError, "jellyfin", mode=0o644)
 
         listed = {_server_filename(b["Path"]) for b in self.list_backups() if b.get("Path")}
         if filename not in listed:

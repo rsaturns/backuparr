@@ -185,6 +185,7 @@ class LazyLibrarianApp:
         permissions; new ones are made readable to LazyLibrarian."""
         names = archive_members(local_path)
         self._require_folder(match_key=False)
+        mounted.refuse_links(self.data_dir, names, LazyLibrarianError, "lazylibrarian")
         targets = [self._path(n) for n in names]
         if not os.access(self.data_dir, os.W_OK) or not all(
                 os.access(t, os.W_OK) for t in targets if os.path.exists(t)):
@@ -206,8 +207,8 @@ class LazyLibrarianApp:
                 raise LazyLibrarianError(
                     f"lazylibrarian: the backup's database failed SQLite's check ({'; '.join(problems[:3])})")
             self._check_stopped()
-            for name, target in zip(names, targets):
-                mounted.copy_in_place(os.path.join(work, name), target)
+            for name in names:
+                mounted.copy_in_place(os.path.join(work, name), self.data_dir, name, LazyLibrarianError, "lazylibrarian")
         mounted.remove_journal_files(self._path(DATABASE))
         logger.info("lazylibrarian: restored %s into %s - start LazyLibrarian to load them",
                     ", ".join(names), self.data_dir)

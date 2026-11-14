@@ -62,6 +62,7 @@ LIBRARY_DB = "com.plexapp.plugins.library.db"
 PREFERENCES = "Preferences.xml"
 METADATA = "Metadata"
 _DATABASES = ("Plug-in Support", "Databases")
+_DATABASE_NAME = "/".join((*_DATABASES, LIBRARY_DB))  # in the data folder, as a restore writes it
 _PROGRESS_INTERVAL = 10
 _MIB = 1024 * 1024
 
@@ -357,6 +358,7 @@ class PlexApp:
         databases = self._path(*_DATABASES)
         target = os.path.join(databases, LIBRARY_DB)
         preferences = self._path(PREFERENCES)
+        mounted.refuse_links(self.data_dir, [_DATABASE_NAME, PREFERENCES], PlexError, "plex")
         if not all(os.access(p, os.W_OK) for p in (databases, target, preferences)):
             raise PlexError(
                 f"plex: Plex's databases in {self.data_dir} aren't writable - mount the data folder "
@@ -378,9 +380,9 @@ class PlexApp:
             mounted.check_writable(metadata, self.data_dir, PlexError, "plex", "Plex")
             # The metadata goes first: a disk filling up stops the restore
             # before the database and settings are touched.
-            mounted.write_files(zf, metadata, self.data_dir)
-            mounted.copy_in_place(restored, target)
-            mounted.copy_in_place(restored_prefs, preferences)
+            mounted.write_files(zf, metadata, self.data_dir, PlexError, "plex")
+            mounted.copy_in_place(restored, self.data_dir, _DATABASE_NAME, PlexError, "plex")
+            mounted.copy_in_place(restored_prefs, self.data_dir, PREFERENCES, PlexError, "plex")
         # No -wal exists (checked above), so a -shm index is stale.
         mounted.remove_journal_files(target)
         logger.info("plex: restored the library database and server settings%s (server %s) into %s - start Plex to load them",
