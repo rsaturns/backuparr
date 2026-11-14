@@ -1184,8 +1184,7 @@ def key_required(name):
 def restore_supported(name):
     """Whether Backuparr restores the app itself. An app with manual_restore
     gets a download and steps on the Restore tab instead (#151)."""
-    meta = app_meta(name) or {}
-    return not meta.get("manual_restore") and meta.get("restore_supported", True)
+    return not (app_meta(name) or {}).get("manual_restore")
 
 
 def always_encrypted(name):

@@ -1,11 +1,19 @@
-"""Trigger each configured app's own backup mechanism, zip the result if
-needed, and upload it to the configured rclone remote. Most apps are backed
-up over their HTTP API (Home Assistant over its WebSocket API). A few need their folder mounted into this container:
-Jellyfin's and LazyLibrarian's APIs can't download the backup they create, so
-it's picked up from the mounted folder; Emby, Seerr and Vaultwarden have no
-backup API, so their files are read from their mounted data folders; and
-Plex's settings and server identity come from its mounted data folder.
-Settings come from config_store, not environment variables.
+"""One backup run: for each enabled app or instance, its own backup is
+made, checked to be whole (archive_check), encrypted with the install's key
+when it's on for that app (archive_crypto) and checked to decrypt back,
+then uploaded to every enabled destination - Local storage, and Google
+Drive, OneDrive and Dropbox, each through its own rclone remote. Each
+upload is recorded in the backup record (manifest) and each app's run in
+its run log (runlog); retention then deletes each destination's old
+backups, and a full run ends with Backuparr's own backup (self_backup).
+
+Most apps are backed up over their HTTP API (Home Assistant over its
+WebSocket API). A few need their folder mounted into this container:
+Jellyfin's and LazyLibrarian's APIs can't download the backup they create,
+so it's picked up from the mounted folder; Emby, Seerr, Vaultwarden and
+Bitwarden have no backup API, so their files are read from their mounted
+folders; and Plex's settings and server identity come from its mounted data
+folder. Settings come from config_store, not environment variables.
 """
 import errno
 import json

@@ -3378,9 +3378,9 @@ function initRestoreAppOptions() {
   const select = document.getElementById("r-app");
   const previous = select.value;
   select.replaceChildren();
-  // restore_supported defaults to true; an app restored by hand (manual_restore,
-  // #151) is listed for its download and steps. Saved extra instances follow their app.
-  addCategoryOptions(select, APP_META.filter((m) => m.restore_supported !== false || m.manual_restore).flatMap((m) =>
+  // Every app: one restored by hand (manual_restore, #151) is listed for its
+  // download and steps. Saved extra instances follow their app.
+  addCategoryOptions(select, APP_META.flatMap((m) =>
     [m.id, ...Array.from(INSTANCE_NAMES.keys()).filter((appId) => instanceType(appId) === m.id)]));
   if (Array.from(select.options).some((opt) => opt.value === previous)) select.value = previous;
 }

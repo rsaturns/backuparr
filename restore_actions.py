@@ -197,8 +197,8 @@ def _mounted(label):
                    f"{{name}} restore complete, start {label} again to load it")
 
 
-# Keyed by app type. An app missing here has no automated restore (see
-# restore_supported in config_store).
+# Keyed by app type. An app missing here is restored by hand: its APP_META
+# entry has manual_restore (tests/test_restore_actions.py checks both ways).
 RESTORES = {
     **{name: _UPLOAD for name in UPLOAD_RESTORE_APPS},
     "bazarr": Restore("triggering bazarr restore", _bazarr, "bazarr restore triggered, app is restarting"),
