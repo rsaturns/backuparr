@@ -17,7 +17,8 @@ token of an administrator (Profile > Security). The WebSocket API
   and finds it in backup/info by that name.
 - GET /api/backup/download/<id>?agent_id=... downloads it (a plain tar
   holding backup.json and homeassistant.tar.gz, plus one tar per app and
-  folder on HA OS), and backup/delete removes Backuparr's copy. Backups the
+  folder on HA OS), and backup/delete removes Backuparr's copy (Home Assistant
+  asks every backup location; only the local one's answer counts). Backups the
   user made are never touched, and Home Assistant's own "keep N" count only
   counts its automatic backups, so Backuparr's never pushes one out.
 
@@ -582,7 +583,13 @@ class HomeAssistantApp:
         failure is logged, as the backup or restore itself worked. Returns
         whether it went. After a restart Home Assistant lists its backups a
         little later than it answers, and deleting one it hasn't listed yet
-        does nothing, so it waits for the copy to be listed first."""
+        does nothing, so it waits for the copy to be listed first.
+
+        backup/delete takes no location: Home Assistant asks every backup
+        location it has, and returns each one's error. Backuparr's copy is
+        only ever in the local one, so only that one's error counts (#238);
+        Home Assistant Cloud's or Synology DSM's "Failed to list backups",
+        when that service can't be reached, is noted, not a failed delete."""
         try:
             connection = self._connect()
             try:
@@ -590,15 +597,21 @@ class HomeAssistantApp:
                     listed = poll_until(lambda: True if self._listed(connection, backup_id) else None, _RESULT_S, 2)
                     if not listed:
                         raise HomeAssistantError("homeassistant: Home Assistant didn't list the uploaded copy")
+                _install, agent = self._agents(connection)
                 body = self._admin(connection, "backup/delete", backup_id=backup_id)
                 errors = (body or {}).get("agent_errors") or {}
-                if errors:
-                    raise HomeAssistantError(f"homeassistant: {'; '.join(str(e) for e in errors.values())[:200]}")
+                if agent in errors:
+                    raise HomeAssistantError(f"homeassistant: {str(errors[agent])[:200]}")
                 if self._listed(connection, backup_id):
                     raise HomeAssistantError("homeassistant: it's still listed after the delete")
             finally:
                 connection.close()
             logger.info("homeassistant: deleted Backuparr's copy (%s) from Home Assistant", backup_id)
+            for other, error in sorted(errors.items()):
+                if other != agent:
+                    logger.info("homeassistant: Home Assistant's backup location %s answered \"%s\" - its own backups "
+                                "there may not be working; see Settings > System > Backups in Home Assistant",
+                                other, str(error)[:200])
             return True
         except (HomeAssistantError, OSError) as exc:
             logger.warning("homeassistant: couldn't delete Backuparr's copy (%s) from Home Assistant (%s) - delete it "

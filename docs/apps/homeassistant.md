@@ -9,7 +9,9 @@ nav_order: 4
 Home Assistant 2025.5 or newer is backed up over its own backup API: Backuparr
 has Home Assistant make a backup, downloads it, then deletes that copy from
 Home Assistant. No folder is mounted, and Home Assistant's own backups and
-schedule are left alone.
+schedule are left alone. If another of Home Assistant's backup locations, such
+as Home Assistant Cloud or a Synology NAS, can't be reached, the backup's log
+says so; Backuparr's copy is still deleted.
 
 ## Setting it up
 
