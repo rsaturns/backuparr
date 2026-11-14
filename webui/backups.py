@@ -105,10 +105,12 @@ def api_history(dest_id):
         return jsonify({"error": humanize_error(exc)}), 502
     recorded = manifest.backups()
     for entry in entries:
-        if entry.get("IsDir"):
-            continue
-        app_name, _, _ = entry["Path"].partition("/")
-        if destination_util.is_backup_folder(app_name):
+        # Only Backuparr's archives directly in an app's folder: never another
+        # file kept there, or one in a subfolder, which Download and Delete
+        # would look for in the app's folder (#223).
+        app_name, sep, name = entry["Path"].partition("/")
+        if (not entry.get("IsDir") and sep and destination_util.is_backup_folder(app_name)
+                and destination_util.is_backup_name(app_name, name)):
             details = recorded.get(manifest.key(app_name, entry["Name"]))
             history.setdefault(app_name, []).append({
                 "name": entry["Name"], "size": entry["Size"], "mod_time": entry["ModTime"],
@@ -122,12 +124,22 @@ def api_history(dest_id):
     return jsonify(history)
 
 
-@bp.delete("/api/history/<dest_id>/<app_name>/<filename>")
-def api_history_delete(dest_id, app_name, filename):
+def _not_a_backup(app_name, filename):
+    """The error response for anything History mustn't touch, or None for
+    one of Backuparr's backups: Delete and Download act only on what History
+    lists (#223)."""
     if not destination_util.is_backup_folder(app_name):
         return jsonify({"error": "unknown app"}), 404
-    if not ra.SAFE_FILENAME.match(filename):
+    if not ra.SAFE_FILENAME.match(filename) or not destination_util.is_backup_name(app_name, filename):
         return jsonify({"error": "invalid filename"}), 400
+    return None
+
+
+@bp.delete("/api/history/<dest_id>/<app_name>/<filename>")
+def api_history_delete(dest_id, app_name, filename):
+    error = _not_a_backup(app_name, filename)
+    if error:
+        return error
 
     cfg = load_config()
     root, error = _destination_root_or_error(cfg, dest_id)
@@ -146,10 +158,9 @@ def api_history_delete(dest_id, app_name, filename):
 
 @bp.get("/api/history/<dest_id>/<app_name>/<filename>/download")
 def api_history_download(dest_id, app_name, filename):
-    if not destination_util.is_backup_folder(app_name):
-        return jsonify({"error": "unknown app"}), 404
-    if not ra.SAFE_FILENAME.match(filename):
-        return jsonify({"error": "invalid filename"}), 400
+    error = _not_a_backup(app_name, filename)
+    if error:
+        return error
 
     cfg = load_config()
     root, error = _destination_root_or_error(cfg, dest_id)
@@ -252,7 +263,7 @@ def _bulk_backups(items):
         else:
             return None
         if not (isinstance(app_name, str) and isinstance(filename, str) and destination_util.is_backup_folder(app_name)
-                and ra.SAFE_FILENAME.match(filename)):
+                and ra.SAFE_FILENAME.match(filename) and destination_util.is_backup_name(app_name, filename)):
             return None
         out.append((app_name, filename))
     return list(dict.fromkeys(out))

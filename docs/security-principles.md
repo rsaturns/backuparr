@@ -77,7 +77,8 @@ destination. They're kept like this:
 - **Downloads are decrypted** for you, with a warning: the file on your
   computer is then readable by anyone with access to it.
 - **Retention only deletes what Backuparr made**: files in its own naming
-  pattern, never the newest backup of an app.
+  pattern, never the newest backup of an app. History lists, downloads and
+  deletes only those files too.
 
 ## Talking to your apps
 
