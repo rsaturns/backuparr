@@ -2546,10 +2546,13 @@ function openSetupGuide(destId) {
   document.getElementById("setup-guide-title").textContent = help.title;
   document.getElementById("setup-guide-intro").textContent = help.intro || "";
 
-  const redirectBlock = document.getElementById("setup-guide-redirect");
-  redirectBlock.classList.add("hidden");
-
   const stepsEl = document.getElementById("setup-guide-steps");
+  // The redirect URI's block sits in the step that shows it. Put it back
+  // after the list before the steps are cleared, or it goes with them and
+  // the next guide can't find it.
+  const redirectBlock = document.getElementById("setup-guide-redirect");
+  stepsEl.after(redirectBlock);
+  redirectBlock.classList.add("hidden");
   stepsEl.innerHTML = "";
   (help.steps || []).forEach((step) => {
     const li = document.createElement("li");
