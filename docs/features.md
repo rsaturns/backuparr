@@ -7,11 +7,39 @@ nav_order: 2
 
 ## Apps
 
-- Backs up 27 apps: Radarr, Sonarr, Lidarr, Whisparr (v2 and v3), Prowlarr,
-  Profilarr, Bazarr, Tdarr (2 and 3), SABnzbd, NZBGet, Tautulli, Jellyfin,
-  Emby, Plex, Seerr, Immich (its database), LazyLibrarian, Pi-hole (v6),
-  Bitwarden (self-hosted), Vaultwarden, OPNsense, pfSense, UniFi, Home Assistant, Unraid (its boot
-  device), Synology DSM and QNAP QuTS hero (their settings, not the NAS's data). See [Apps](apps/index.md).
+Backuparr backs up 27 apps:
+
+- Radarr
+- Sonarr
+- Lidarr
+- Whisparr (v2 and v3)
+- Prowlarr
+- Profilarr
+- Bazarr
+- Tdarr (2 and 3)
+- LazyLibrarian
+- SABnzbd
+- NZBGet
+- Tautulli
+- Jellyfin
+- Emby
+- Plex
+- Seerr
+- Immich (its database)
+- Pi-hole (v6)
+- OPNsense
+- pfSense
+- UniFi
+- Bitwarden (self-hosted)
+- Vaultwarden
+- Home Assistant
+- Unraid (its boot device)
+- Synology DSM (its settings)
+- QNAP QuTS hero (its settings)
+{: .columns-2 }
+
+See [Apps](apps/index.md) for how each one is backed up and restored.
+
 - Most apps are backed up through their own API. Jellyfin, Emby, Plex, Seerr,
   LazyLibrarian, Bitwarden and Vaultwarden also need a folder mounted into
   Backuparr.
@@ -22,8 +50,10 @@ nav_order: 2
 - **Prowlarr discovery** fills in the apps Prowlarr already knows, API keys
   included. See [Prowlarr discovery](settings.md#prowlarr-discovery).
 - **Test connection** on every app card.
-- Signs in to Radarr, Sonarr, Lidarr, Whisparr and Prowlarr with their own
-  login when they ask for one. See [the note](apps/servarr.md).
+- Supports logins for Radarr, Sonarr, Lidarr, Whisparr and Prowlarr when they
+  ask for one (see [the note](apps/servarr.md)), and 2FA codes for
+  [Synology DSM](apps/synology.md#2-factor-sign-in) and
+  [QNAP QuTS hero](apps/qnap.md#2-step-verification).
 - Works with apps behind an authenticating reverse proxy. See
   [Service authentication headers](settings.md#service-authentication-headers).
 
