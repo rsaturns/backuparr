@@ -3414,7 +3414,8 @@ function renderRestoreOverride() {
   const block = document.createElement("div");
   block.className = "extra-field-block";
 
-  block.appendChild(overrideField("URL", "", { type: "text", id: "r-ovr-url", placeholder: meta.url_placeholder || "" }));
+  block.appendChild(overrideField("URL", "the saved key, passwords and headers only go to the app's own URL",
+    { type: "text", id: "r-ovr-url", placeholder: meta.url_placeholder || "" }));
   if (!meta.no_api_key) {
     const hint = meta.key_required ? meta.key_help : `optional${meta.key_help ? ` \u2014 ${meta.key_help}` : ""}`;
     block.appendChild(overrideField(meta.key_label || "API key", hint, { type: "password", id: "r-ovr-api_key" }));

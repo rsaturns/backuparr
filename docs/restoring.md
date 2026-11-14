@@ -26,7 +26,8 @@ restoring it by hand and a link to its page here, in place of **Restore**.
 fields for that restore only, without changing Settings. Use it for a rebuilt
 or renamed instance, or for a trial restore on a throwaway copy. With a
 different URL, enter that app's key too: the saved key, login and passwords
-only go to the app's own URL.
+only go to the app's own URL. Its [Service Authentication](settings.md#service-authentication-headers)
+headers aren't sent to a different scheme, host or port either.
 
 ## The version check
 

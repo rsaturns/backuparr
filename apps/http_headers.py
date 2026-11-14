@@ -75,6 +75,15 @@ def _origin(url):
         raise RequestHeadersError("Use a valid HTTP or HTTPS app URL for request headers") from None
 
 
+def same_origin(url, other):
+    """Whether two app URLs share a scheme, host and port - where the
+    Service Authentication headers may go. An unusable URL shares none."""
+    try:
+        return _origin(requests.Request("GET", url).prepare().url) == _origin(requests.Request("GET", other).prepare().url)
+    except (RequestHeadersError, requests.RequestException, ValueError, TypeError):
+        return False
+
+
 def _merge_cookies(current, defaults):
     """Fill missing cookie names, preserving app/server values and their encoding."""
     if not current:

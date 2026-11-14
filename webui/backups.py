@@ -19,7 +19,7 @@ import rclone_util
 import runlog
 import restore_actions as ra
 import restore_version as rv
-from apps.http_headers import app_connection_config
+from apps.http_headers import app_connection_config, same_origin
 from backup import branded, humanize_error, log_failure
 from config_store import (DEST_NAMES, SECRET_EXTRA_FIELDS, app_meta, instance_ids, instance_type, key_required, load_config,
                           recorded_metadata, restore_supported)
@@ -684,6 +684,10 @@ def _restore_target(dest_id, app_name, data):
             elsewhere = True
             for field in _saved_secrets(app_name):
                 app_cfg[field] = ""
+            # Nor the Service Authentication headers to another scheme, host
+            # or port (#225); a different path on the same one keeps them.
+            if not same_origin(override["url"], app_cfg.get("url")):
+                app_cfg["request_headers"] = []
         for field in allowed:
             value = override.get(field)
             if value:

@@ -411,9 +411,9 @@ def test_scheduled_backup_and_web_restore_send_headers_at_every_phase(authed_cli
         sent.append(request.copy())
         assert request.headers["Proxy-Authorization"] == SECRET
         # The override's own key goes to the override's URL, never the saved one.
-        expected_key = "target-key" if request.url.startswith("https://target.example") else "native-key"
+        expected_key = "target-key" if urlsplit(request.url).path.startswith("/target/") else "native-key"
         assert request.headers["X-Api-Key"] == expected_key
-        path = urlsplit(request.url).path
+        path = urlsplit(request.url).path.removeprefix("/target")
         if path == "/api/v3/command":
             return reply(request, {"id": 1})
         if path == "/api/v3/command/1":
@@ -443,10 +443,12 @@ def test_scheduled_backup_and_web_restore_send_headers_at_every_phase(authed_cli
     assert backup.run_backup(cfg) == (["radarr"], [])
     assert len(uploaded) == 1
     assert any(r.url.endswith("/backup/manual/config.zip") for r in sent)
-    response = authed_client.post("/api/restore/local/radarr", json={"confirm": True, "file": "backup.zip", "override": {"url": "https://target.example", "api_key": "target-key"}})
+    # The headers go to an override on the app's own scheme, host and port;
+    # to another one they don't (#225, tests/test_webui_history_restore.py).
+    response = authed_client.post("/api/restore/local/radarr", json={"confirm": True, "file": "backup.zip", "override": {"url": "https://app.example/target", "api_key": "target-key"}})
     assert response.status_code == 200 and response.json["started"]
     assert isolated_webui.runs.RESTORE_RUN_STATE["ok"]
-    assert any(r.url == "https://target.example/api/v3/system/backup/restore/upload" for r in sent)
+    assert any(r.url == "https://app.example/target/api/v3/system/backup/restore/upload" for r in sent)
     assert sent[-1].url.endswith("/system/restart")
     assert "request_headers" not in config_store.load_config()["apps"]["radarr"]
 

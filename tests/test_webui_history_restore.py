@@ -522,6 +522,24 @@ def test_an_override_url_never_gets_the_saved_web_login(restore, authed_client):
     assert (app_cfg["username"], app_cfg["password"]) == ("admin", "web-pass")
 
 
+@pytest.mark.parametrize("url, kept", [
+    ("http://other:7878", False), ("https://radarr:7878", False), ("http://radarr:8989", False), ("not a url", False),
+    ("http://radarr:7878/radarr", True), ("http://RADARR:7878/", True),
+])
+def test_an_override_url_on_another_host_never_gets_the_headers(restore, authed_client, url, kept):
+    """The Service Authentication headers stay on the app's own scheme, host
+    and port, as the key does (#225)."""
+    headers = [{"name": "Proxy-Authorization", "value": "Basic c2VjcmV0"}]
+    authed_client.post("/api/config", json={"apps": {"radarr": {"enabled": True, "url": "http://radarr:7878", "api_key": "k"}},
+                                            "request_headers": headers})
+    start(authed_client, "radarr", override={"url": url, "api_key": "k2"})
+    _, _, app_cfg, _ = restore["calls"][-1]
+    assert app_cfg["request_headers"] == (headers if kept else [])
+    start(authed_client, "radarr")
+    _, _, app_cfg, _ = restore["calls"][-1]
+    assert app_cfg["request_headers"] == headers
+
+
 def test_override_may_set_an_apps_own_extra_fields(restore, authed_client):
     start(authed_client, "bazarr", override={"username": "u", "password": "p", "enabled": False})
     _, _, app_cfg, _ = restore["calls"][-1]
