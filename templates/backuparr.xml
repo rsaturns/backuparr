@@ -67,6 +67,8 @@
 - Backuparr's own files (its settings, login and keys) are flushed to disk when they're written, so a power cut can't leave one empty, and a destination listing, delete or connection change from the web UI ends after 5 minutes (#229).
 - Every Python package in the image is pinned to an exact version with its hashes, so each build installs what was tested (#230).
 - History, retention and backups do less work: the backup record and run logs are read again only when they change, retention updates the record once, an encrypted backup isn't read again for its checksum, and History syncs rclone's settings only when they changed (#231).
+- The docs read better, on a phone too: the Features page lists the apps in two columns, the Apps page has a short table for each category, What each restore does is two lists, the Configuration reference is split into sections, long sections are broken up, and trusting a self-signed certificate is one section in Settings (#218, #219, #220, #221). See https://rsaturns.github.io/backuparr/apps/
+- The setup guides on the destination cards are shorter, one or two sentences a step; the docs' Destinations page has the reasons (#222). See https://rsaturns.github.io/backuparr/destinations/
 - A saved schedule that isn't valid no longer just stops backups without a word: the Overview and Run &amp; Status say "Your backup schedule isn't valid any more. Check it in Settings.", and the log says so once (#166).
 - On a phone, Prowlarr's card no longer runs off the screen: its buttons wrap onto a second line.
 - On a phone, Run &amp; Status no longer scrolls sideways during a run: its buttons wrap onto a second line.
@@ -80,6 +82,8 @@
 - Restore to a different target no longer sends the Service Authentication headers to a different scheme, host or port, as with the saved key and passwords (#225).
 - A request whose body isn't a JSON object gets a plain error instead of a server error, and every text setting is checked to be text (#226).
 - Run &amp; Status shows only the run's own log lines, and a scheduled backup skipped because one is already running is logged (#227).
+- Google Drive's setup guide opens again after another destination's guide was open: it stopped with an error until the page was reloaded.
+- Docs: the Plex page's Backups and restores section no longer shows inside a bullet; archive names, the Configuration reference, Encryption at rest and QNAP QuTS hero's restore link are right for 3.0; and the docs' changelog, SECURITY.md and Edit this page links open the 3.0 beta's files, not 2.5.x's (#216, #217).
 
 ### 2.5.7 (2026-11-13)
 - rclone 1.76.0 (from 1.75.0), with the security fixes from rclone 1.75.1 and 1.75.2 and its updated Go libraries: the image scan's 2 critical and 20 high findings in rclone are gone.
