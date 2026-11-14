@@ -6,7 +6,9 @@ asgiref's runs every request on one shared thread, so one download would
 hold up the whole web UI. This adapter follows PEP 3333 instead:
 
 - Requests run in a pool of threads; a large upload waits in a temporary
-  file, not in memory, and anything over the size limit gets 413.
+  file, not in memory, and anything over the size limit gets 413. Only a
+  few large uploads are taken at once; another gets 503 before any of it
+  is read.
 - Headers are sent with the first non-empty chunk of the body, or when the
   body ends empty, so an app can still swap them for an error until then.
 - Each chunk is sent before the next is read (backpressure), so a large
@@ -28,6 +30,12 @@ FILE_BLOCK = 1024 * 1024
 # reading - or a connection that stalls - otherwise holds its worker thread
 # for good, and with every worker held the web UI stops answering.
 SEND_TIMEOUT = 300
+
+
+# A route that takes a body bigger than this (Backuparr's own backup, to
+# restore it) needs one of the adapter's upload slots while its body is held.
+LARGE_BODY = 1024 * 1024
+BUSY = b'{"error": "Busy - try again in a moment"}'
 
 
 class ClientGone(Exception):
@@ -102,9 +110,9 @@ def build_environ(scope, body):
     return environ
 
 
-async def _plain(send, status, text):
+async def _plain(send, status, text, content_type=b"text/plain; charset=utf-8"):
     await send({"type": "http.response.start", "status": status,
-                "headers": [(b"content-type", b"text/plain; charset=utf-8"), (b"content-length", str(len(text)).encode())]})
+                "headers": [(b"content-type", content_type), (b"content-length", str(len(text)).encode())]})
     await send({"type": "http.response.body", "body": text})
 
 
@@ -123,13 +131,18 @@ class WsgiToAsgi:
     request's path that gives it. The body is read before the app (and its
     login check) sees the request, so it's kept small where it can be.
     executor: the thread pool requests run in, shared by the servers that
-    pass the same one; without it this adapter makes its own."""
+    pass the same one; without it this adapter makes its own.
+    upload_slots: a threading.BoundedSemaphore shared the same way, one slot
+    per large body (a route allowing more than LARGE_BODY) that may be held
+    at once (#228): uploads come before the login check, so without it many
+    at once could fill the disk. None limits nothing."""
 
-    def __init__(self, app, max_body, executor=None, send_timeout=SEND_TIMEOUT):
+    def __init__(self, app, max_body, executor=None, send_timeout=SEND_TIMEOUT, upload_slots=None):
         self.app = app
         self.send_timeout = send_timeout
         self.max_body = max_body if callable(max_body) else (lambda _path: max_body)
         self.executor = executor or new_executor()
+        self.upload_slots = upload_slots
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "lifespan":
@@ -147,6 +160,11 @@ class WsgiToAsgi:
         if declared is not None and declared > limit:
             await _plain(send, 413, b"Request too large")  # refused before a byte of it is read
             return
+        slot = self.upload_slots if self.upload_slots is not None and limit > LARGE_BODY else None
+        if slot is not None and not slot.acquire(blocking=False):
+            await _plain(send, 503, BUSY, b"application/json")  # nor this one
+            return
+        release = slot.release if slot is not None else (lambda: None)
         body = SpooledTemporaryFile(max_size=SPOOL_IN_MEMORY)
         handed_over = False
         try:
@@ -178,16 +196,18 @@ class WsgiToAsgi:
             # may still be reading it.
             handed_over = True
             try:
-                await loop.run_in_executor(self.executor, self._run, build_environ(scope, body), send, loop, gone)
+                await loop.run_in_executor(self.executor, self._run, build_environ(scope, body), send, loop, gone, release)
             finally:
                 gone.set()  # cancelled: the worker stops at its next chunk
                 watcher.cancel()
         finally:
             if not handed_over:
                 body.close()
+                release()
 
-    def _run(self, environ, send, loop, gone):
-        """Runs the app in a pool thread."""
+    def _run(self, environ, send, loop, gone, release=lambda: None):
+        """Runs the app in a pool thread; release() frees the request's
+        upload slot once its body is closed."""
         state = {"start": None, "sent": False}
 
         def blocking_send(message):
@@ -242,3 +262,4 @@ class WsgiToAsgi:
                     close()
         finally:
             environ["wsgi.input"].close()
+            release()

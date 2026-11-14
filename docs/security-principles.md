@@ -102,6 +102,9 @@ destination. They're kept like this:
 - **A login by default**, with a lockout after repeated wrong passwords.
   Signing out ends the session on the server, so a copied cookie stops
   working, and changing the password signs out every other browser.
+- **Limits before sign-in.** Only two password checks and two uploads of
+  Backuparr's own backup run at once, so a burst of them can't use up a
+  small server's memory or disk.
 - **HTTPS on its own port** (8991), with a self-signed certificate Backuparr
   makes, or your own. **HTTPS only** closes plain HTTP. See
   [HTTPS](security.md#https).
