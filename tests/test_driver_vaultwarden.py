@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import shutil
 import sqlite3
 import zipfile
 
@@ -369,3 +370,23 @@ def test_the_restore_action_uses_the_data_folder(app, server, folder, tmp_path):
     cfg = {"url": "http://vaultwarden", "data_dir": str(folder)}
     assert restore_actions.restore_app("vaultwarden", cfg, str(tmp_path), archive) == {"kind": "vaultwarden"}
     assert users(folder / "db.sqlite3") == ["alice@lab.local"]
+
+
+@pytest.mark.parametrize("linked", ["rsa_key.pem", "attachments"])
+def test_restore_never_writes_through_a_link_in_vaultwardens_folder(app, server, folder, tmp_path, linked):
+    """GHSA-r2gf-f7v8-j7g2: refused before anything is written, the database included."""
+    archive = make_backup(app, tmp_path)
+    make_db(folder / "db.sqlite3", users=("added later",)).close()
+    outside = tmp_path / "backuparr-config"
+    outside.mkdir()
+    (outside / "rsa_key.pem").write_text("Backuparr's file")
+    if linked == "attachments":
+        shutil.rmtree(folder / "attachments")
+    else:
+        (folder / linked).unlink()
+    (folder / linked).symlink_to(outside if linked == "attachments" else outside / "rsa_key.pem")
+    stop(server)
+    with pytest.raises(VaultwardenError, match=f"^vaultwarden: {linked} in .* is a link - Backuparr won't write through it$"):
+        app.restore_from_file(archive)
+    assert os.listdir(outside) == ["rsa_key.pem"] and (outside / "rsa_key.pem").read_text() == "Backuparr's file"
+    assert users(folder / "db.sqlite3") == ["added later"]  # nothing written

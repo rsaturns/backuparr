@@ -96,6 +96,10 @@ destination. They're kept like this:
 - **Restores are checked first**: against the backup's recorded checksum and
   the app's version. A backup is unpacked with guards against paths that
   point outside its folder.
+- **Restores never write through a link in an app's folder.** For the apps
+  restored into a mounted folder, a symbolic link at a file or folder the
+  restore writes stops the restore before anything is written, so the app
+  can't send it to a file outside its folder, such as Backuparr's own.
 
 ## The web UI
 

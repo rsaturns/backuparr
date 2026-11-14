@@ -377,8 +377,8 @@ def test_a_backup_with_metadata_puts_it_back_before_the_database(folder, source,
     archive_path = make_backup(driver(str(with_metadata(source)), metadata=True), tmp_path)
     order = []
     real_copy, real_write = plex.mounted.copy_in_place, plex.mounted.write_files
-    monkeypatch.setattr(plex.mounted, 'copy_in_place', lambda src, dst: (order.append(os.path.basename(dst)), real_copy(src, dst)))
-    monkeypatch.setattr(plex.mounted, 'write_files', lambda zf, members, root: (order.append('Metadata'), real_write(zf, members, root)))
+    monkeypatch.setattr(plex.mounted, 'copy_in_place', lambda src, root, name, *a, **kw: (order.append(os.path.basename(name)), real_copy(src, root, name, *a, **kw)))
+    monkeypatch.setattr(plex.mounted, 'write_files', lambda zf, members, root, *a: (order.append('Metadata'), real_write(zf, members, root, *a)))
     stopped(folder).restore_from_file(archive_path)
     assert order == ['Metadata', LIBRARY_DB, PREFERENCES]
     restored = folder / 'Metadata/Movies/c/6a47.bundle'
@@ -578,3 +578,25 @@ def test_service_headers_reach_plex_at_its_plex_direct_address(plex_tls, lookups
     app.test_connection()
     assert plex_tls['received'] and all(h['X-Proxy-Token'] == 'proxy-secret' and h['X-Plex-Token'] == 'private-plex-token'
                                         for h in plex_tls['received'])
+
+
+@pytest.mark.parametrize('linked', [PREFERENCES, 'Plug-in Support/Databases', 'Metadata'])
+def test_restore_never_writes_through_a_link_in_plexs_folder(folder, source, tmp_path, linked):
+    """GHSA-r2gf-f7v8-j7g2."""
+    archive_path = make_backup(driver(str(with_metadata(source)), metadata=True), tmp_path)
+    outside = tmp_path / 'backuparr-config'
+    outside.mkdir()
+    (outside / PREFERENCES).write_text("Backuparr's file")
+    path = folder / linked
+    if path.is_dir():
+        shutil.copytree(path, outside, dirs_exist_ok=True)
+        shutil.rmtree(path)
+    elif path.exists():
+        path.unlink()
+    path.symlink_to(outside / PREFERENCES if linked == PREFERENCES else outside)
+    def tree():
+        return {str(p.relative_to(outside)): p.read_bytes() if p.is_file() else None for p in outside.rglob('*')}
+    before = tree()
+    with pytest.raises(PlexError, match=f"^plex: {linked} in .* is a link - Backuparr won't write through it$"):
+        stopped(folder).restore_from_file(archive_path)
+    assert tree() == before

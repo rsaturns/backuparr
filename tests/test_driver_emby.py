@@ -355,3 +355,25 @@ def test_a_metadata_restore_that_cant_write_changes_nothing(server, folder, tmp_
     with pytest.raises(EmbyError, match="can't write metadata/library/aa/poster.jpg"):
         EmbyApp("http://emby:8096", KEY, data_dir=str(folder)).restore_from_file(archive)
     assert rows(folder / "data/library.db") == ["after the backup"]
+
+
+@pytest.mark.parametrize("linked", ["config/system.xml", "data/playlists"])
+def test_restore_never_writes_or_deletes_through_a_link_in_embys_folder(app, server, folder, tmp_path, linked):
+    """GHSA-r2gf-f7v8-j7g2: neither the files a restore writes nor the
+    folders whose leftovers it deletes (playlists, collections)."""
+    archive = make_backup(app, tmp_path)
+    outside = tmp_path / "backuparr-config"
+    outside.mkdir()
+    (outside / "system.xml").write_text("Backuparr's file")
+    (outside / "auth.json").write_text("Backuparr's login")
+    if linked == "data/playlists":
+        shutil.rmtree(folder / linked)
+        (folder / linked).symlink_to(outside)
+    else:
+        (folder / linked).unlink()
+        (folder / linked).symlink_to(outside / "system.xml")
+    stop_emby(server)
+    with pytest.raises(EmbyError, match=f"^emby: {linked} in .* is a link - Backuparr won't write through it$"):
+        app.restore_from_file(archive)
+    assert sorted(os.listdir(outside)) == ["auth.json", "system.xml"]
+    assert (outside / "system.xml").read_text() == "Backuparr's file"

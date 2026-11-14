@@ -93,6 +93,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Google Drive's setup guide opens again after another destination's guide was open: it stopped with an error until the page was reloaded.
 - Docs: the Plex page's Backups and restores section no longer shows inside a bullet; archive names, the Configuration reference, Encryption at rest and QNAP QuTS hero's restore link are right for 3.0; and the docs' changelog, SECURITY.md and Edit this page links open the 3.0 beta's files, not 2.5.x's (#216, #217).
 
+### Security
+
+- Restoring Emby, Plex, Seerr, LazyLibrarian, Vaultwarden, Jellyfin or Bazarr no longer writes through a symbolic link in the app's mounted folder: a link at a file or folder the restore writes stops the restore before anything is written, so a compromised app can't use a restore to overwrite files outside its folder, such as Backuparr's own login. 2.5.7 and earlier are affected and won't get a fix: update to 3.0.0-beta. See https://github.com/rsaturns/backuparr/security/advisories/GHSA-r2gf-f7v8-j7g2
+
 ## [2.5.7] - 2026-11-13
 
 ### Security

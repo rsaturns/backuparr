@@ -123,3 +123,20 @@ def test_a_download_that_never_reads_back_fails_and_keeps_the_server_copy(tmp_pa
         with pytest.raises(BazarrError, match="never finished writing"):
             run_backup(tmp_path, downloads)
     assert len(downloads) == 2  # one download, then the deadline had passed
+
+
+def test_a_link_bazarr_left_at_the_archives_name_is_never_written_through(restore, tmp_path):
+    """GHSA-r2gf-f7v8-j7g2."""
+    from apps.bazarr import BazarrError
+    outside = tmp_path / "auth.json"
+    outside.write_text("Backuparr's login")
+    (restore.target_dir / "bazarr_backup_vbazarr_20261028_210819.zip").symlink_to(outside)
+    with pytest.raises(BazarrError, match="is a link - Backuparr won't write through it$"):
+        restore(patch_result=reply(200))
+    assert outside.read_text() == "Backuparr's login"
+
+
+def test_the_archive_is_placed_readable_to_bazarr(restore):
+    restore(patch_result=reply(200))
+    placed = restore.target_dir / "bazarr_backup_vbazarr_20261028_210819.zip"
+    assert placed.read_bytes() == b"zip" and placed.stat().st_mode & 0o777 == 0o644

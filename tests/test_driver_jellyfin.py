@@ -240,3 +240,16 @@ def test_a_failed_restore_call_is_reported(app, server, folder, tmp_path):
     server.routes["POST /Backup/Restore"] = (500, {})
     with pytest.raises(requests.exceptions.HTTPError):
         app.restore_from_file(archive(tmp_path / "jellyfin_1.zip"))
+
+
+def test_restore_never_writes_through_a_link_in_the_backups_folder(app, server, folder, tmp_path):
+    """GHSA-r2gf-f7v8-j7g2: a link Jellyfin left at the archive's name."""
+    source = archive(tmp_path / "jellyfin_20261028_030000.zip")
+    outside = tmp_path / "auth.json"
+    outside.write_text("Backuparr's login")
+    (folder / "jellyfin_20261028_030000.zip").symlink_to(outside)
+    server.routes["GET /Backup"] = (200, [])
+    with pytest.raises(JellyfinError, match="^jellyfin: jellyfin_20261028_030000.zip in .* is a link - Backuparr won't write through it$"):
+        app.restore_from_file(source)
+    assert outside.read_text() == "Backuparr's login"
+    assert not any(r.path_url == "/Backup/Restore" for r in server.sent)
