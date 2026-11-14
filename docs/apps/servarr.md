@@ -1,5 +1,5 @@
 ---
-title: Radarr, Sonarr and Lidarr
+title: Radarr, Sonarr, Lidarr and Prowlarr
 parent: Apps
 nav_order: 16
 ---
@@ -9,7 +9,8 @@ nav_order: 16
 Backuparr asks the app to make a backup over its API, then downloads the file
 from the app's web UI, which doesn't accept the API key. If the app asks every
 address to log in, **Test connection** says so and shows **Username** and
-**Password** on the card. Restores go through the API and work either way.
+**Password** on the card: pick one of the two options below. Restores go
+through the API and work either way.
 
 ## Setting it up
 
@@ -21,9 +22,6 @@ Using Prowlarr? Fill in its card first and click **Discover services**: it
 fills in the cards of the apps Prowlarr knows, API keys included - see
 [Prowlarr discovery](../settings.md#prowlarr-discovery). Whisparr has its own
 page: [Whisparr](whisparr.md).
-
-If the app asks every address to log in, Test connection says so and shows
-**Username** and **Password**: pick one of the two options below.
 
 Each app's own guide to its backups and restores:
 [Radarr](https://wiki.servarr.com/radarr/faq#how-do-i-backuprestore-radarr),

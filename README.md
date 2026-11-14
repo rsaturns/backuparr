@@ -10,16 +10,16 @@
 
 Scheduled backups of the apps you host - media management, downloaders,
 media servers, network, security, home automation and server apps - sent to
-every destination you enable: Local storage, Google Drive, OneDrive and
+every destination you enable: Local Storage, Google Drive, OneDrive and
 Dropbox. Backups are encrypted with your own key by default, and most apps
 restore from the web UI. Everything - apps, destinations, schedule, retention
-and restores - is set up in the web UI, not env vars. See the
-[full list of apps](https://rsaturns.github.io/backuparr/apps/).
+and restores - is set up in the web UI, not env vars.
 
-Most apps are backed up through their own API or web UI. Some apps also need
-their folder mounted into Backuparr - see the
-[app notes](https://rsaturns.github.io/backuparr/apps/). How your backups and
-credentials are kept safe: [Security principles](https://rsaturns.github.io/backuparr/security-principles/).
+Most apps are backed up through their own API or web UI; some also need
+their folder mounted into Backuparr. See the
+[full list of apps](https://rsaturns.github.io/backuparr/apps/). How your
+backups and credentials are kept safe:
+[Security principles](https://rsaturns.github.io/backuparr/security-principles/).
 
 **[Documentation](https://rsaturns.github.io/backuparr/)** · [Changelog](CHANGELOG.md)
 
@@ -55,38 +55,12 @@ services:
       - TZ=America/Los_Angeles
       - PUID=1000
       - PGID=1000
-      # Optional - see Environment variables.
-      #- LOG_LEVEL=INFO
-      #- BACKUPARR_FORCE_HTTPS=true
-      #- BACKUPARR_DISABLE_AUTH=true
-      #- BACKUPARR_SECRETS_KEY=
-      #- RCLONE_CONFIG_PASS=
-      #- BACKUPARR_HTTPS_ONLY=true
-      # Changing these also means updating the ports: mapping below.
-      #- WEBUI_PORT=8990
-      #- WEBUI_HTTPS_PORT=8991
     ports:
       - "8990:8990"   # HTTP
       - "8991:8991"   # HTTPS, self-signed certificate
     volumes:
       # config.json, rclone.conf, and local-destination backups.
       - /share/Container/backuparr:/config/backuparr
-      # Optional: needed only to restore Bazarr - path to its config/backup folder.
-      #- /share/Container/bazarr/backup:/mnt/bazarr-backup
-      # Needed to back up Jellyfin - its backups folder (see the Jellyfin note).
-      #- /share/Container/jellyfin/config/data/backups:/mnt/jellyfin-backups
-      # Needed to back up Emby - its /config folder (see the Emby note).
-      #- /share/Container/emby/config:/mnt/emby:ro
-      # Needed to back up Plex - its "Plex Media Server" folder (see the Plex note).
-      #- "/share/Container/plex/Library/Application Support/Plex Media Server:/mnt/plex:ro"
-      # Needed to back up Seerr - its /app/config folder (see the Seerr note).
-      #- /share/Container/seerr/config:/mnt/seerr:ro
-      # Needed to back up LazyLibrarian - its /config folder (see the LazyLibrarian note).
-      #- /share/Container/lazylibrarian/config:/mnt/lazylibrarian
-      # Needed to back up Bitwarden - its bwdata folder, or lite's backups folder (see the Bitwarden note).
-      #- /share/Container/bitwarden/bwdata:/mnt/bitwarden:ro
-      # Needed to back up Vaultwarden - its /data folder (see the Vaultwarden note).
-      #- /share/Container/vaultwarden/data:/mnt/vaultwarden:ro
 ```
 
 ```sh
@@ -109,10 +83,11 @@ Pin a version to control upgrades. Tags are on [Docker Hub](https://hub.docker.c
 and the same images are on GitHub Container Registry as
 [`ghcr.io/rsaturns/backuparr`](https://github.com/rsaturns/backuparr/pkgs/container/backuparr).
 
-The optional settings are covered in
-[Docker](https://rsaturns.github.io/backuparr/getting-started/docker/), and
-building the image yourself in
-[Build from source](https://rsaturns.github.io/backuparr/getting-started/build-from-source/).
+[Docker](https://rsaturns.github.io/backuparr/getting-started/docker/) has the
+full example, with the folders some apps need mounted and the optional
+settings, and
+[Build from source](https://rsaturns.github.io/backuparr/getting-started/build-from-source/)
+covers building the image yourself.
 
 ### Unraid
 

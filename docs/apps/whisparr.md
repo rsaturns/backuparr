@@ -15,7 +15,7 @@ Click **Test connection**.
 Whisparr v2 and v3 are both supported. To back up both, add the second with
 **Add another Whisparr**. Like Radarr and Sonarr, if it asks every address to
 log in, it needs its login on the card or **Disabled for Local Addresses** -
-see the [Radarr, Sonarr and Lidarr note](servarr.md). Whisparr's own guide:
+see the [Radarr, Sonarr, Lidarr and Prowlarr note](servarr.md). Whisparr's own guide:
 [How do I Backup/Restore Whisparr?](https://wiki.servarr.com/whisparr/faq#how-do-i-backuprestore-whisparr)
 
 ## Good to know
