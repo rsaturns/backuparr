@@ -42,7 +42,7 @@ def _destination_root_or_error(cfg, dest_id):
     if not dest_cfg.get("enabled"):
         return None, (jsonify({"error": f"{dest_id} is not enabled"}), 400)
     try:
-        destination_util.sync(cfg)
+        destination_util.sync_saved()
         return destination_util.remote_root(dest_id, dest_cfg), None
     except destination_util.DestinationError as exc:
         return None, (jsonify({"error": str(exc)}), 400)

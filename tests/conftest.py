@@ -33,6 +33,13 @@ def manifest_in_tmp(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def rclone_conf_synced_afresh(monkeypatch):
+    """No test skips a sync because another one's files looked the same."""
+    import destination_util
+    monkeypatch.setattr(destination_util, "_synced", None)
+
+
+@pytest.fixture(autouse=True)
 def secrets_key_in_tmp(tmp_path, monkeypatch):
     """Every test has its own encryption key in tmp_path - backups are
     encrypted by default (#147), so run_backup needs one - and never the

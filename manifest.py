@@ -10,6 +10,7 @@ The destinations stay the truth for which backups exist: History and
 retention list them, and read only those details from here. An entry for
 a file that's no longer on a destination is dropped the next time
 retention lists that destination."""
+import copy
 import hashlib
 import json
 import logging
@@ -19,6 +20,7 @@ import threading
 
 import atomic_file
 import config_store
+import file_cache
 
 log = logging.getLogger("backuparr.manifest")
 
@@ -65,7 +67,7 @@ def file_sha256(file_path):
     return digest.hexdigest()
 
 
-def _read():
+def _load():
     try:
         with open(path(), encoding="utf-8") as f:
             data = json.load(f)
@@ -86,19 +88,34 @@ def _read():
     return backups if isinstance(backups, dict) else {}
 
 
+# Parsed once and read again only when the file changes (#231). What
+# _read() returns is that copy: change it only to _write() it.
+_cache = file_cache.ParsedFile()
+
+
+def _read():
+    return _cache.get(path(), _load)
+
+
 def _write(backups):
-    atomic_file.write_private(path(), json.dumps({"schema": SCHEMA, "backups": backups}, indent=1, sort_keys=True))
+    try:
+        atomic_file.write_private(path(), json.dumps({"schema": SCHEMA, "backups": backups}, indent=1, sort_keys=True))
+    except BaseException:
+        _cache.forget()  # the copy in memory may hold changes the file doesn't
+        raise
+    _cache.put(path(), backups)
 
 
 def backups():
-    """Every entry, keyed "<app>/<file>"."""
+    """Every entry, keyed "<app>/<file>". It's the copy kept in memory:
+    read it, don't change it."""
     with _lock:
         return _read()
 
 
 def get(app, file):
     with _lock:
-        return _read().get(key(app, file))
+        return copy.deepcopy(_read().get(key(app, file)))
 
 
 def generation():
@@ -157,15 +174,25 @@ def add_found(app, file, dest_id, *, app_version, sha256, size, expected_generat
 def remove(app, file, dest_id):
     """The file was deleted from dest_id; the entry goes once no destination
     holds it."""
+    remove_all(dest_id, [(app, file)])
+
+
+def remove_all(dest_id, files):
+    """Each (app, file) in files was deleted from dest_id, as remove() but
+    in one write: retention can delete thousands at once (#231)."""
     with _lock:
         entries = _read()
-        entry = entries.get(key(app, file))
-        if entry is None or dest_id not in entry.get("destinations", []):
-            return
-        entry["destinations"] = [d for d in entry["destinations"] if d != dest_id]
-        if not entry["destinations"]:
-            del entries[key(app, file)]
-        _write(entries)
+        changed = False
+        for app, file in files:
+            entry = entries.get(key(app, file))
+            if entry is None or dest_id not in entry.get("destinations", []):
+                continue
+            entry["destinations"] = [d for d in entry["destinations"] if d != dest_id]
+            if not entry["destinations"]:
+                del entries[key(app, file)]
+            changed = True
+        if changed:
+            _write(entries)
 
 
 def reconcile(dest_id, present):
@@ -190,6 +217,7 @@ def clear():
     global _generation
     with _lock:
         _generation += 1
+        _cache.forget()
         try:
             os.remove(path())
         except FileNotFoundError:

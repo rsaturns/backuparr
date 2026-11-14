@@ -186,12 +186,30 @@ def decrypt_file(src_path, dst_path, key=None):
         raise
 
 
+class _Hashing:
+    """A file being read, and the SHA-256 of what was read from it."""
+
+    def __init__(self, f):
+        self.f, self.digest = f, hashlib.sha256()
+
+    def read(self, size=-1):
+        data = self.f.read(size)
+        self.digest.update(data)
+        return data
+
+
 def check_file(path, plain_sha256, key=None):
     """Raises ArchiveCryptoError unless path decrypts to a plaintext with
-    that SHA-256: the check before an encrypted backup is uploaded."""
-    with open(path, "rb") as src:
+    that SHA-256: the check before an encrypted backup is uploaded. Returns
+    the SHA-256 of the encrypted file itself, read on the way, so the backup
+    record needn't read it again (#231)."""
+    with open(path, "rb") as f:
+        src = _Hashing(f)
         if decrypt_stream(src, None, key) != plain_sha256:
             raise ArchiveCryptoError("the encrypted backup didn't decrypt to the archive that was made")
+        while src.read(1024 * 1024):  # decrypt_stream stops at the end already; anything after counts too
+            pass
+    return src.digest.hexdigest()
 
 
 def is_encrypted(path):
