@@ -21,6 +21,7 @@ import secrets_crypto
 import self_restore
 import session_store
 from config_store import CONFIG_PATH, load_config
+from webui.body import json_object
 from webui.services import DISCOVERY_JOBS, PLEX_LOGINS
 from webui.version import VERSION
 
@@ -179,7 +180,7 @@ def api_secrets_key():
 
 @bp.post("/api/secrets-key/acknowledge")
 def api_secrets_key_acknowledge():
-    data = request.get_json(force=True, silent=True) or {}
+    data = json_object()
     if data.get("confirm") is not True:
         return jsonify({"error": "confirm must be true"}), 400
     config_store.acknowledge_secrets_key()
@@ -293,7 +294,7 @@ def api_setup_restore():
 
 @bp.post("/api/backuparr/restore")
 def api_backuparr_restore():
-    data = request.get_json(force=True, silent=True) or {}
+    data = json_object()
     if data.get("confirm") is not True:
         return jsonify({"error": "Confirm that this replaces Backuparr's settings and login first"}), 400
     if not _AUTH_DISABLED:
@@ -430,7 +431,7 @@ def _reset():
 
 @bp.post("/api/reset")
 def api_reset():
-    data = request.get_json(force=True, silent=True) or {}
+    data = json_object()
     if data.get("confirm") != RESET_CONFIRM_PHRASE:
         return jsonify({"error": "confirmation phrase didn't match"}), 400
 

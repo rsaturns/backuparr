@@ -10,6 +10,7 @@ from apps.http_headers import headers_for_app, refusal_hint, RequestHeadersError
 from backup import branded, build_app, humanize_error, notify
 from config_store import acknowledge_encryption_notice, app_meta, APP_NAMES, CONFIG_LOCK, DEFAULT_APP, DEFAULT_INSTANCE, DEST_EDITABLE_FIELDS, DEST_NAMES, instance_ids, instance_type, key_required, load_config, MAX_EXTRA_INSTANCES, MULTI_INSTANCE_APPS, save_config, valid_schedule
 from webui import runs
+from webui.body import json_object
 
 
 bp = Blueprint("settings", __name__)
@@ -30,6 +31,17 @@ _APP_SLUG = re.compile(r"[a-z0-9_]{1,64}")
 MAX_LISTED_APPS = 100
 # A hidden field without choices: set by a Test connection (Synology's 2FA device token).
 MAX_HIDDEN_TEXT = 512
+# A text or password setting: room for any URL, path, key or password.
+MAX_TEXT = 4096
+
+
+def text_error(value, label):
+    """Why value can't be a text setting, or None (#226)."""
+    if not isinstance(value, str):
+        return f"{label} must be text"
+    if len(value) > MAX_TEXT:
+        return f"{label} must be at most {MAX_TEXT} characters"
+    return None
 
 
 def _valid_app_list(value):
@@ -46,6 +58,8 @@ def _extra_field_error(name, meta, app_data):
         if field["name"] not in app_data or field.get("locked"):
             continue
         value, kind = app_data[field["name"]], field.get("type")
+        if kind in ("text", "password") and text_error(value, field["name"]):
+            return f"{name}: {text_error(value, field['name'])}"
         if kind == "switch" and not isinstance(value, bool):
             return f"{name}: {field['name']} must be true or false"
         if kind == "select" and value not in [choice["value"] for choice in field["choices"]]:
@@ -143,6 +157,15 @@ def _retention_error(value, label):
     return None
 
 
+def destination_field_error(name, dest_data):
+    """Why a destination's editable text field (its folder, Google Drive's
+    OAuth client) can't be saved, or None (#226)."""
+    for field in sorted(DEST_EDITABLE_FIELDS[name] - {"enabled", "retention_days"}):
+        if field in dest_data and text_error(dest_data[field], field):
+            return f"{name}: {text_error(dest_data[field], field)}"
+    return None
+
+
 def _validate_config(data, cfg):
     if not isinstance(data, dict):
         return "expected a JSON object"
@@ -174,8 +197,8 @@ def _validate_config(data, cfg):
     if "self_backup" in data and not isinstance(data["self_backup"], bool):
         return "self_backup must be true or false"
     for key in _TEXT_SETTINGS:
-        if key in data and not isinstance(data[key], str):
-            return f"{key} must be text"
+        if key in data and text_error(data[key], key):
+            return text_error(data[key], key)
     # Checked when it changes, so one saved before this check doesn't stop
     # every other change being saved.
     notify_url = data.get("notify_url")
@@ -194,8 +217,8 @@ def _validate_config(data, cfg):
         if "encrypt" in app_data and not isinstance(app_data["encrypt"], bool):
             return f"{name}: encrypt must be true or false"
         for field in _TEXT_APP_FIELDS:
-            if field in app_data and not isinstance(app_data[field], str):
-                return f"{name}: {field} must be text"
+            if field in app_data and text_error(app_data[field], field):
+                return f"{name}: {text_error(app_data[field], field)}"
         # Every card comes with a save; only an enabled app's URL has to work.
         if app_data.get("enabled") and app_data.get("url") and not _web_url(app_data["url"]):
             return f"{name}: the URL must start with http:// or https://"
@@ -214,6 +237,9 @@ def _validate_config(data, cfg):
     for name, dest_data in data.get("destinations", {}).items():
         if name not in DEST_NAMES:
             return f"unknown destination: {name}"
+        error = destination_field_error(name, dest_data)
+        if error:
+            return error
         if dest_data.get("retention_days") is not None:
             error = _retention_error(dest_data["retention_days"], f"{name}: retention_days")
             if error:
@@ -297,9 +323,7 @@ def api_test(app_name):
     # Any well-formed id: an instance can be tested before it's saved.
     if not instance_type(app_name):
         return jsonify({"ok": False, "message": "unknown app"}), 404
-    data = request.get_json(force=True, silent=True) or {}
-    if not isinstance(data, dict):
-        return jsonify({"ok": False, "message": "expected a JSON object"}), 400
+    data = json_object()
     if not data.get("url"):
         return jsonify({"ok": False, "message": "URL is required"}), 400
     if key_required(app_name) and not data.get("api_key"):
@@ -341,7 +365,7 @@ def api_trust_certificate(app_name):
     meta = app_meta(app_name) if instance_type(app_name) else None
     if not meta or not meta.get("pins_certificate"):
         return jsonify({"error": "this app has no certificate to trust"}), 404
-    data = request.get_json(force=True, silent=True) or {}
+    data = json_object()
     url, sha256 = data.get("url"), data.get("sha256")
     if not isinstance(url, str) or not url.lower().startswith("https://") or not isinstance(sha256, str):
         return jsonify({"error": "an https URL and the certificate's SHA-256 fingerprint are required"}), 400
@@ -356,7 +380,7 @@ def api_trust_certificate(app_name):
 
 @bp.post("/api/test-notify")
 def api_test_notify():
-    data = request.get_json(force=True, silent=True) or {}
+    data = json_object()
     notify_url = data.get("notify_url")
     if not notify_url:
         return jsonify({"ok": False, "message": "Notify URL is required"}), 400

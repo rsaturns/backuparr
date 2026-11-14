@@ -7,13 +7,14 @@ import time
 from datetime import datetime, timezone
 
 from croniter import croniter
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify
 
 import backup
 import config_store
 import runlog
 from backup import describe_failure, format_run_message, log_failure, notify, run_backup
 from config_store import enabled_apps, load_config, valid_schedule
+from webui.body import json_object
 
 
 bp = Blueprint("runs", __name__)
@@ -292,9 +293,8 @@ def _runnable(cfg):
 
 @bp.post("/api/backup/run")
 def api_backup_run():
-    data = request.get_json(force=True, silent=True)
     # No "app" (or null) backs up every enabled app; otherwise just that one.
-    only = data.get("app") if isinstance(data, dict) else None
+    only = json_object().get("app")
     if only is not None and (not isinstance(only, str) or only not in _runnable(load_config())):
         return jsonify({"error": "that app isn't enabled - pick an enabled app, or All apps"}), 400
     if not _start_backup_run(only):

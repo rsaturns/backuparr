@@ -541,6 +541,13 @@ def test_every_destination_card_has_a_retention_field(authed_client):
     ({"apps": {"radarr": {"api_key": {"k": 1}}}}, "radarr: api_key must be text"),
     ({"notify_url": "discord.com/api/webhooks/1/x"}, "must start with http:// or https://"),
     ({"apps": {"radarr": {"enabled": True, "url": "radarr:7878", "api_key": "k"}}}, "radarr: the URL must start with"),
+    # Every text and password field (#226).
+    ({"apps": {"jellyfin": {"backup_dir": ["/backups"]}}}, "jellyfin: backup_dir must be text"),
+    ({"apps": {"plex": {"data_dir": 1}}}, "plex: data_dir must be text"),
+    ({"apps": {"opnsense": {"api_secret": 12345}}}, "opnsense: api_secret must be text"),
+    ({"apps": {"radarr": {"password": "x" * 4097}}}, "radarr: password must be at most 4096 characters"),
+    ({"destinations": {"local": {"path": ["/backups"]}}}, "local: path must be text"),
+    ({"destinations": {"gdrive": {"client_secret": 5}}}, "gdrive: client_secret must be text"),
 ])
 def test_settings_fields_must_be_the_right_kind(authed_client, body, message):
     authed_client.post("/api/secrets-key/acknowledge", json={"confirm": True})

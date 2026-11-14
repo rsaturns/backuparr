@@ -24,6 +24,7 @@ from backup import branded, humanize_error, log_failure
 from config_store import (DEST_NAMES, SECRET_EXTRA_FIELDS, app_meta, instance_ids, instance_type, key_required, load_config,
                           recorded_metadata, restore_supported)
 from webui import cookies
+from webui.body import json_object
 from webui.jobs import OwnedJobs
 from webui.runs import _start_tracked_run, RESTORE_RUN_STATE, RUN_LOCK, RUN_STATE
 from webui.settings import _missing_required_field, _restore_override_fields
@@ -274,7 +275,7 @@ def api_history_bulk_delete(dest_id):
     """Deletes the backups and failed runs picked on History: {"backups":
     [{"app", "file"}], "runs": [{"app", "run_id"}]}. Returns what was
     deleted and what couldn't be, with why."""
-    data = request.get_json(force=True, silent=True) or {}
+    data = json_object()
     backups = _bulk_backups(data.get("backups", []))
     runs = data.get("runs", [])
     if backups is None or not isinstance(runs, list) or len(runs) > MAX_BULK or not all(
@@ -371,7 +372,7 @@ def api_history_bulk_download(dest_id):
     """Starts preparing several backups as one zip ({"backups": [{"app",
     "file"}]}), each under <app>/ as a single download would give it: an
     app's encrypted backup decrypted, Backuparr's own as it is."""
-    data = request.get_json(force=True, silent=True) or {}
+    data = json_object()
     backups = _bulk_backups(data.get("backups", []))
     if not backups:
         return jsonify({"error": "pick the backups to download"}), 400
@@ -577,7 +578,7 @@ def api_restore_backups(dest_id, app_name):
 
 @bp.post("/api/restore/<dest_id>/sabnzbd/preview")
 def api_restore_sabnzbd_preview(dest_id):
-    data = request.get_json(force=True, silent=True) or {}
+    data = json_object()
     cfg = load_config()
     root, error = _destination_root_or_error(cfg, dest_id)
     if error:
@@ -602,7 +603,7 @@ def api_restore(dest_id, app_name):
     if not instance_type(app_name):
         return jsonify({"error": "unknown app"}), 404
 
-    data = request.get_json(force=True, silent=True) or {}
+    data = json_object()
     if not data.get("confirm"):
         return jsonify({"error": "confirm must be true"}), 400
 
@@ -630,7 +631,7 @@ def api_restore_check(dest_id, app_name):
     running."""
     if not instance_type(app_name):
         return jsonify({"error": "unknown app"}), 404
-    data = request.get_json(force=True, silent=True) or {}
+    data = json_object()
     file = data.get("file")
     if not isinstance(file, str) or not ra.SAFE_FILENAME.match(file):
         return jsonify({"error": "invalid filename"}), 400
