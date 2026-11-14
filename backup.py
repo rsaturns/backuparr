@@ -1,11 +1,19 @@
-"""Trigger each configured app's own backup mechanism, zip the result if
-needed, and upload it to the configured rclone remote. Most apps are backed
-up over their HTTP API (Home Assistant over its WebSocket API). A few need their folder mounted into this container:
-Jellyfin's and LazyLibrarian's APIs can't download the backup they create, so
-it's picked up from the mounted folder; Emby, Seerr and Vaultwarden have no
-backup API, so their files are read from their mounted data folders; and
-Plex's settings and server identity come from its mounted data folder.
-Settings come from config_store, not environment variables.
+"""One backup run: for each enabled app or instance, its own backup is
+made, checked to be whole (archive_check), encrypted with the install's key
+when it's on for that app (archive_crypto) and checked to decrypt back,
+then uploaded to every enabled destination - Local storage, and Google
+Drive, OneDrive and Dropbox, each through its own rclone remote. Each
+upload is recorded in the backup record (manifest) and each app's run in
+its run log (runlog); retention then deletes each destination's old
+backups, and a full run ends with Backuparr's own backup (self_backup).
+
+Most apps are backed up over their HTTP API (Home Assistant over its
+WebSocket API). A few need their folder mounted into this container:
+Jellyfin's and LazyLibrarian's APIs can't download the backup they create,
+so it's picked up from the mounted folder; Emby, Seerr, Vaultwarden and
+Bitwarden have no backup API, so their files are read from their mounted
+folders; and Plex's settings and server identity come from its mounted data
+folder. Settings come from config_store, not environment variables.
 """
 import errno
 import json
@@ -397,6 +405,7 @@ def apply_retention(root, retention_days, now=None, only=None, dest_id=None):
         per_app.setdefault(app, []).append(name)
     if dest_id is not None:
         manifest.reconcile(dest_id, present)
+    removed = []
     for app, names in per_app.items():
         names.sort()  # The timestamp makes name order oldest-first.
         for name in names[:-1]:
@@ -409,10 +418,13 @@ def apply_retention(root, retention_days, now=None, only=None, dest_id=None):
             try:
                 rclone_util.delete_file(f"{root}/{app}/{name}")
                 log.info("retention: removed %s/%s", app, name)
-                if dest_id is not None:
-                    manifest.remove(app, name, dest_id)
+                removed.append((app, name))
             except rclone_util.RcloneError as exc:
                 log.warning("retention: couldn't remove %s/%s: %s", app, name, exc.detail)
+    if dest_id is not None and removed:
+        # One write for all of them (#231); a run stopped before it leaves
+        # entries the next listing's reconcile() drops.
+        manifest.remove_all(dest_id, removed)
 
 
 class RunCancelled(Exception):
@@ -436,17 +448,17 @@ def _app_version(app, name, url):
 def encrypt_archive(name, archive_path):
     """Encrypts a checked archive with the install's key (#147), checks the
     encrypted file decrypts back to it, and removes the plain one. Returns
-    the encrypted file's path."""
+    the encrypted file's path and its SHA-256."""
     log.info("%s: encrypting the backup...", name)
     encrypted_path = archive_crypto.encrypted_name(archive_path)
     plain_sha256 = archive_crypto.encrypt_file(archive_path, encrypted_path)
     try:
-        archive_crypto.check_file(encrypted_path, plain_sha256)
+        sha256 = archive_crypto.check_file(encrypted_path, plain_sha256)
     except BaseException:
         os.remove(encrypted_path)
         raise
     os.remove(archive_path)
-    return encrypted_path
+    return encrypted_path, sha256
 
 
 def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
@@ -554,10 +566,12 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
                 metadata = manifest_backfill.read_metadata(instance_type(name), archive_path)
                 encrypted = encrypts(cfg, name)
                 if encrypted:
-                    archive_path = encrypt_archive(name, archive_path)
+                    # The check reads the whole encrypted file, so it gives its SHA-256 too.
+                    archive_path, sha256 = encrypt_archive(name, archive_path)
                     archive_name = run["file"] = os.path.basename(archive_path)
+                else:
+                    sha256 = manifest.file_sha256(archive_path)
                 size = os.path.getsize(archive_path)
-                sha256 = manifest.file_sha256(archive_path)
                 app_version = run["app_version"] = _app_version(app, name, app_cfg.get("url"))
                 uploaded = []
                 dest_failures = []

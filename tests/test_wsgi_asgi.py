@@ -147,6 +147,58 @@ def test_a_declared_length_over_the_limit_is_refused_before_reading():
     assert sent[0]["status"] == 413 and not reads
 
 
+def test_only_a_few_large_bodies_are_held_at_once():
+    """Uploads come before the login check: one more than the slots allow
+    gets 503 before any of it is read, and a slot frees when its request
+    is done - or refused (#228)."""
+    gate, reads = threading.Event(), []
+
+    def app(environ, start_response):
+        environ["wsgi.input"].read()
+        if environ["PATH_INFO"] == "/upload":
+            gate.wait(5)
+        start_response("200 OK", [])
+        return [b"ok"]
+
+    async def main():
+        slots = threading.BoundedSemaphore(2)
+        adapter = WsgiToAsgi(app, lambda path: 80 * 1024 * 1024 if path.startswith("/upload") else 1024, upload_slots=slots)
+        held = [asyncio.create_task(call(adapter, b"big", path="/upload")) for _ in range(2)]
+        while slots._value:  # both have their slot
+            await asyncio.sleep(0.01)
+
+        async def receive():
+            reads.append(1)
+            return {"type": "http.request", "body": b"x", "more_body": False}
+        refused = []
+
+        async def send(message):
+            refused.append(message)
+        await adapter(scope(path="/upload"), receive, send)
+        small = await call(adapter, b"small", path="/x")  # a small body needs no slot
+        gate.set()
+        done = [await task for task in held]
+        too_big = await call(adapter, path="/upload", headers=[(b"content-length", b"99999999999")])
+        after = await call(adapter, b"big", path="/upload-again")
+        return refused, small, done, too_big, after, slots._value
+    refused, small, done, too_big, after, free = run(main())
+    assert refused[0]["status"] == 503 and (b"content-type", b"application/json") in refused[0]["headers"]
+    assert body_of(refused) == b'{"error": "Busy - try again in a moment"}' and not reads
+    assert small[0]["status"] == 200 and [d[0]["status"] for d in done] == [200, 200]
+    assert too_big[0]["status"] == 413 and after[0]["status"] == 200 and free == 2
+
+
+def test_a_large_body_over_its_limit_frees_its_slot():
+    def app(environ, start_response):
+        start_response("200 OK", [])
+        return [b"ok"]
+    slots = threading.BoundedSemaphore(1)
+    adapter = WsgiToAsgi(app, lambda path: 2 * 1024 * 1024, upload_slots=slots)
+    assert run(call(adapter, chunks=[b"x" * (1024 * 1024)] * 3))[0]["status"] == 413  # found too big while read
+    assert run(call(adapter, b"x"))[0]["status"] == 200
+    assert slots._value == 1
+
+
 def test_a_chunked_body_reaches_flask():
     # No Content-Length: a script streaming its body (Transfer-Encoding: chunked).
     from flask import Flask, request

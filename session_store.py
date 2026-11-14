@@ -1,12 +1,11 @@
 """The browsers signed in to the web UI, kept on the server.
 
-Flask's session is a signed cookie and nothing more: signing out only told
-that browser to forget it, so a copy of the cookie - read off plain HTTP,
-say - kept working until it expired, up to 30 days after its last use. Now
-each sign-in gets a random id, carried in the session and listed here, and
-a session whose id isn't listed is signed out. Signing out takes this
-browser's id off the list; a password change, a restore of Backuparr
-and a reset end every session.
+Flask's session is a signed cookie, so on its own a copy of the cookie -
+read off plain HTTP, say - would keep working until it expired. Each
+sign-in gets a random id, carried in the session and listed here, and a
+session whose id isn't listed is signed out. Signing out takes this
+browser's id off the list; a password change, a restore of Backuparr and a
+reset end every session.
 
 The file holds a SHA-256 of each id, never the id itself, with when it was
 last used (updated at most once a day, so a request doesn't write a file).

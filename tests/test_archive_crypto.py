@@ -106,9 +106,9 @@ def test_a_file_that_isnt_one_is_refused():
 
 
 def test_names_and_detection(tmp_path):
-    assert archive_crypto.plain_name("radarr_1.zip.enc") == "radarr_1.zip"
-    assert archive_crypto.plain_name("radarr_1.zip") == "radarr_1.zip"
-    assert archive_crypto.is_encrypted_name("radarr_1.tar.gz.enc") and not archive_crypto.is_encrypted_name("radarr_1.zip")
+    assert archive_crypto.plain_name("radarr_20260101_030000.zip.enc") == "radarr_20260101_030000.zip"
+    assert archive_crypto.plain_name("radarr_20260101_030000.zip") == "radarr_20260101_030000.zip"
+    assert archive_crypto.is_encrypted_name("radarr_20260101_030000.tar.gz.enc") and not archive_crypto.is_encrypted_name("radarr_20260101_030000.zip")
     sealed, plain = tmp_path / "a.enc", tmp_path / "a.zip"
     sealed.write_bytes(encrypt(b"x"))
     plain.write_bytes(b"PK")
@@ -213,15 +213,15 @@ def test_a_backup_that_fails_its_encryption_check_is_not_uploaded(monkeypatch, r
 # --- restore ----------------------------------------------------------------
 
 def test_decrypted_gives_the_plain_archive_and_removes_the_encrypted_copy(tmp_path):
-    sealed = tmp_path / "radarr_1.zip.enc"
+    sealed = tmp_path / "radarr_20260101_030000.zip.enc"
     sealed.write_bytes(encrypt(b"PK plain"))
     plain = restore_actions.decrypted(str(tmp_path), str(sealed))
-    assert plain == str(tmp_path / "radarr_1.zip") and Path(plain).read_bytes() == b"PK plain"
+    assert plain == str(tmp_path / "radarr_20260101_030000.zip") and Path(plain).read_bytes() == b"PK plain"
     assert not sealed.exists()
 
 
 def test_decrypted_leaves_a_plain_backup_alone(tmp_path):
-    plain = tmp_path / "radarr_1.zip"
+    plain = tmp_path / "radarr_20260101_030000.zip"
     plain.write_bytes(b"PK")
     assert restore_actions.decrypted(str(tmp_path), str(plain)) == str(plain)
 
@@ -234,8 +234,8 @@ def encrypted_restore(inline, authed_client, monkeypatch, tmp_path):
     def fetch(root, app, filename=None):
         work = tmp_path / "work"
         work.mkdir(exist_ok=True)
-        (work / "radarr_1.zip.enc").write_bytes(encrypt(b"PK radarr", seen.get("made_with")))
-        return str(work), str(work / "radarr_1.zip.enc"), "radarr_1.zip.enc"
+        (work / "radarr_20260101_030000.zip.enc").write_bytes(encrypt(b"PK radarr", seen.get("made_with")))
+        return str(work), str(work / "radarr_20260101_030000.zip.enc"), "radarr_20260101_030000.zip.enc"
 
     def restore_app(app_name, app_cfg, tmp_dir, local_zip, **kwargs):
         seen["restored"] = (os.path.basename(local_zip), Path(local_zip).read_bytes())
@@ -248,14 +248,14 @@ def encrypted_restore(inline, authed_client, monkeypatch, tmp_path):
 
 
 def restore(client, **body):
-    assert client.post("/api/restore/local/radarr", json={"confirm": True, "file": "radarr_1.zip.enc", **body}).status_code == 200
+    assert client.post("/api/restore/local/radarr", json={"confirm": True, "file": "radarr_20260101_030000.zip.enc", **body}).status_code == 200
     return client.get("/api/restore/status").get_json()
 
 
 def test_an_encrypted_backup_is_decrypted_before_the_app_gets_it(authed_client, encrypted_restore):
     state = restore(authed_client)
     assert state["ok"] is True and state["key_needed"] is False
-    assert encrypted_restore["restored"] == ("radarr_1.zip", b"PK radarr")
+    assert encrypted_restore["restored"] == ("radarr_20260101_030000.zip", b"PK radarr")
 
 
 def test_a_backup_made_with_another_key_asks_for_it_then_restores_with_it(authed_client, encrypted_restore):
@@ -265,7 +265,7 @@ def test_a_backup_made_with_another_key_asks_for_it_then_restores_with_it(authed
     assert "restored" not in encrypted_restore
     state = restore(authed_client, key=OTHER_KEY)
     assert state["ok"] is True and state["key_needed"] is False
-    assert encrypted_restore["restored"] == ("radarr_1.zip", b"PK radarr")
+    assert encrypted_restore["restored"] == ("radarr_20260101_030000.zip", b"PK radarr")
 
 
 def test_the_key_given_for_a_restore_is_never_logged(authed_client, encrypted_restore, caplog):
@@ -280,14 +280,14 @@ def test_the_sabnzbd_preview_decrypts_and_asks_for_another_key(authed_client, mo
 
     def fetch(root, app, filename=None):
         work.mkdir(exist_ok=True)
-        (work / "sabnzbd_1.zip.enc").write_bytes(encrypt(b"PK", OTHER_KEY))
-        return str(work), str(work / "sabnzbd_1.zip.enc"), "sabnzbd_1.zip.enc"
+        (work / "sabnzbd_20260101_030000.zip.enc").write_bytes(encrypt(b"PK", OTHER_KEY))
+        return str(work), str(work / "sabnzbd_20260101_030000.zip.enc"), "sabnzbd_20260101_030000.zip.enc"
 
     monkeypatch.setattr(restore_actions, "fetch_backup", fetch)
     monkeypatch.setattr(restore_actions, "load_sabnzbd_config", lambda tmp, path: {"config": {"servers": []}})
-    response = authed_client.post("/api/restore/local/sabnzbd/preview", json={"file": "sabnzbd_1.zip.enc"})
+    response = authed_client.post("/api/restore/local/sabnzbd/preview", json={"file": "sabnzbd_20260101_030000.zip.enc"})
     assert response.status_code == 409 and response.get_json()["key_needed"] is True
-    response = authed_client.post("/api/restore/local/sabnzbd/preview", json={"file": "sabnzbd_1.zip.enc", "key": OTHER_KEY})
+    response = authed_client.post("/api/restore/local/sabnzbd/preview", json={"file": "sabnzbd_20260101_030000.zip.enc", "key": OTHER_KEY})
     assert response.status_code == 200 and response.get_json()["servers"] == []
 
 
@@ -301,17 +301,17 @@ def local_file(isolated_webui, app, name, data):
 
 def test_history_marks_encrypted_backups(authed_client, isolated_webui, monkeypatch):
     entries = [{"Path": f"radarr/{n}", "Name": n, "Size": 1, "ModTime": "2026-01-01T00:00:00Z", "IsDir": False}
-               for n in ("radarr_1.zip", "radarr_2.zip.enc")]
+               for n in ("radarr_20260101_030000.zip", "radarr_20260102_030000.zip.enc")]
     monkeypatch.setattr(isolated_webui.backups.rclone_util, "lsjson", lambda root, recursive=False, include=(): entries)
     history = authed_client.get("/api/history/local").get_json()
-    assert {e["name"]: e["encrypted"] for e in history["radarr"]} == {"radarr_1.zip": False, "radarr_2.zip.enc": True}
+    assert {e["name"]: e["encrypted"] for e in history["radarr"]} == {"radarr_20260101_030000.zip": False, "radarr_20260102_030000.zip.enc": True}
 
 
 def test_an_encrypted_backup_downloads_decrypted_under_its_plain_name(authed_client, isolated_webui):
-    local_file(isolated_webui, "radarr", "radarr_1.zip.enc", encrypt(b"PK plain"))
-    response = authed_client.get("/api/history/local/radarr/radarr_1.zip.enc/download")
+    local_file(isolated_webui, "radarr", "radarr_20260101_030000.zip.enc", encrypt(b"PK plain"))
+    response = authed_client.get("/api/history/local/radarr/radarr_20260101_030000.zip.enc/download")
     assert response.status_code == 200 and response.data == b"PK plain"
-    assert "radarr_1.zip" in response.headers["Content-Disposition"] and ".enc" not in response.headers["Content-Disposition"]
+    assert "radarr_20260101_030000.zip" in response.headers["Content-Disposition"] and ".enc" not in response.headers["Content-Disposition"]
 
 
 def test_a_cloud_backup_downloads_decrypted_and_leaves_no_copy(authed_client, isolated_webui, monkeypatch):
@@ -326,7 +326,7 @@ def test_a_cloud_backup_downloads_decrypted_and_leaves_no_copy(authed_client, is
         Path(dst).write_bytes(encrypt(b"PK cloud"))
 
     monkeypatch.setattr(isolated_webui.backups.rclone_util, "copyto", copyto)
-    response = authed_client.get("/api/history/dropbox/radarr/radarr_1.zip.enc/download")
+    response = authed_client.get("/api/history/dropbox/radarr/radarr_20260101_030000.zip.enc/download")
     assert response.status_code == 200 and response.data == b"PK cloud"
     response.close()
     assert not os.path.exists(os.path.dirname(copies[0]))
@@ -340,8 +340,8 @@ def test_backuparrs_own_backup_downloads_as_it_is(authed_client, isolated_webui)
 
 
 def test_a_download_made_with_another_key_is_refused_plainly(authed_client, isolated_webui):
-    local_file(isolated_webui, "radarr", "radarr_1.zip.enc", encrypt(b"PK", OTHER_KEY))
-    response = authed_client.get("/api/history/local/radarr/radarr_1.zip.enc/download")
+    local_file(isolated_webui, "radarr", "radarr_20260101_030000.zip.enc", encrypt(b"PK", OTHER_KEY))
+    response = authed_client.get("/api/history/local/radarr/radarr_20260101_030000.zip.enc/download")
     assert response.status_code == 409 and "different encryption key" in response.get_json()["error"]
 
 

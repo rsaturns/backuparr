@@ -230,6 +230,19 @@ def test_reset_wipes_all_local_state_and_returns_to_setup(isolated_webui, authed
     assert anonymous.get("/").headers["Location"] == "/setup"
 
 
+@pytest.mark.parametrize("state", ["RUN_STATE", "RESTORE_RUN_STATE"])
+def test_reset_waits_for_a_running_backup_or_restore(isolated_webui, authed_client, monkeypatch, state):
+    """A run going on through a reset would write its record and logs back,
+    and back up the reset install as Backuparr's own (#224)."""
+    backups = seed_state(isolated_webui, authed_client)
+    monkeypatch.setitem(getattr(isolated_webui.runs, state), "running", True)
+    response = isolated_webui.app.test_client().post("/api/reset", json={"confirm": isolated_webui.auth.RESET_CONFIRM_PHRASE})
+    assert response.status_code == 409
+    assert response.get_json() == {"error": "A backup or restore is running - reset when it finishes"}
+    assert os.path.exists(auth_store.AUTH_PATH) and os.listdir(backups) and os.path.exists(isolated_webui.auth.CONFIG_PATH)
+    assert authed_client.get("/api/config").status_code == 200  # still signed in
+
+
 def test_reset_removes_only_backuparrs_archives_from_a_custom_local_folder(isolated_webui, authed_client, tmp_path):
     # A custom path may be a share that holds other files: only Backuparr's
     # own <app>/<app>_<timestamp> archives (and app folders left empty) go.

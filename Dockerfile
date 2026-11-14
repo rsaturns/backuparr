@@ -21,9 +21,10 @@ RUN apk add --no-cache bash tzdata su-exec \
 
 WORKDIR /app
 COPY requirements.txt /app/
-# pip isn't needed once the requirements are in, and it carries its own
+# Every package is pinned with its hashes (#230), so a build installs what
+# CI tested. pip isn't needed once they're in, and it carries its own
 # vendored copies of urllib3, msgpack and setuptools that scanners flag.
-RUN pip install --no-cache-dir -r requirements.txt \
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt \
     && pip uninstall -y pip
 
 COPY *.py entrypoint.sh VERSION /app/

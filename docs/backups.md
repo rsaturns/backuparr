@@ -74,7 +74,8 @@ latest run is always kept.
 Pick a destination to list each app's backups there, with their size, date,
 the app version each one came from, and whether it's encrypted. You can
 download or delete any of them, or open its log. An encrypted backup downloads
-decrypted - see [Encrypted backups](security.md#encrypted-backups).
+decrypted - see [Encrypted backups](security.md#encrypted-backups). Other files
+kept in Backuparr's folders aren't listed, so History never deletes them.
 
 The apps are grouped under the same categories as on Settings, each with a
 header that folds it away; Backuparr's own backups are under Server. Which

@@ -1,7 +1,5 @@
 """X-Forwarded-* headers from a TLS reverse proxy (BACKUPARR_FORCE_HTTPS).
-
-Waitress used to apply these itself (--trusted-proxy); the server since
-#177 passes headers through untouched, so this does the same job:
+The server passes headers through untouched; this applies them:
 
 - Without BACKUPARR_FORCE_HTTPS none are used.
 - With it, X-Forwarded-Proto and X-Forwarded-Host are used, so links and

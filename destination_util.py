@@ -6,10 +6,13 @@ import errno
 import logging
 import os
 import re
+import threading
 import time
 
 import atomic_file
+import config_store
 import dropbox_oauth
+import file_cache
 import gdrive_oauth
 import onedrive_oauth
 import rclone_util
@@ -178,10 +181,40 @@ def remote_root(dest_id, dest_cfg):
         raise DestinationError(str(exc)) from exc
 
 
+# config.json's and rclone.conf's stamps after sync_saved() last synced
+# them, or None when anything else has synced since (#231).
+_synced = None
+_sync_lock = threading.RLock()
+
+
+def _stamps():
+    return (file_cache.stamp(config_store.CONFIG_PATH),
+            file_cache.stamp(os.environ.get("RCLONE_CONFIG", "/config/backuparr/rclone.conf")))
+
+
 def sync(cfg):
     """Keeps rclone.conf in sync with any OAuth-connected destinations
     before an operation touches them - safe/cheap to call unconditionally:
-    one `rclone config dump`, and a write only for a remote that differs."""
-    remotes = rclone_util.config_dump()
-    for dest_id, module in REMOTES.items():
-        module.sync_rclone_remote(cfg["destinations"][dest_id], remotes=remotes)
+    one `rclone config dump`, and a write only for a remote that differs.
+    cfg may hold changes not saved yet (a destination's Test)."""
+    global _synced
+    with _sync_lock:
+        _synced = None
+        remotes = rclone_util.config_dump()
+        for dest_id, module in REMOTES.items():
+            module.sync_rclone_remote(cfg["destinations"][dest_id], remotes=remotes)
+
+
+def sync_saved():
+    """sync() for the settings config.json holds, skipped when neither
+    config.json nor rclone.conf has changed since it last ran: every History
+    and Restore request calls it (#231). rclone writes rclone.conf when it
+    refreshes a token, so that counts as a change too."""
+    global _synced
+    with _sync_lock:  # no other sync() between this one and its stamps
+        before = _stamps()  # before the settings are read: a save after this is synced next time
+        if None not in before and before == _synced:
+            return
+        sync(config_store.load_config())
+        after = _stamps()
+        _synced = after if after[0] == before[0] else None

@@ -8,6 +8,7 @@ without its extension), when it started and finished, the archive's file
 name once it was made, whether it worked and why not, the destinations it
 was for with each one's result, and its log lines. Records older than
 retention_days go, always keeping each app's latest, as for backups."""
+import copy
 import json
 import logging
 import os
@@ -16,6 +17,7 @@ from datetime import datetime, timedelta, timezone
 
 import atomic_file
 import config_store
+import file_cache
 
 log = logging.getLogger("backuparr.runlog")
 
@@ -29,7 +31,7 @@ def path():
     return os.path.join(os.path.dirname(config_store.CONFIG_PATH), "run_logs.json")
 
 
-def _read():
+def _load():
     try:
         with open(path(), encoding="utf-8") as f:
             data = json.load(f)
@@ -48,8 +50,22 @@ def _read():
     return runs if isinstance(runs, dict) else {}
 
 
+# Parsed once and read again only when the file changes (#231). What
+# _read() returns is that copy: change it only to _write() it.
+_cache = file_cache.ParsedFile()
+
+
+def _read():
+    return _cache.get(path(), _load)
+
+
 def _write(runs):
-    atomic_file.write_private(path(), json.dumps({"schema": SCHEMA, "runs": runs}, separators=(",", ":")))
+    try:
+        atomic_file.write_private(path(), json.dumps({"schema": SCHEMA, "runs": runs}, separators=(",", ":")))
+    except BaseException:
+        _cache.forget()  # the copy in memory may hold changes the file doesn't
+        raise
+    _cache.put(path(), runs)
 
 
 class Capture(logging.Handler):
@@ -113,7 +129,8 @@ def _summary(record):
 
 
 def latest():
-    """{app: its latest run, without the log lines}."""
+    """{app: its latest run, without the log lines}. Like all_runs(), it
+    shares what's kept in memory: read it, don't change it."""
     with _lock:
         return {app: _summary(app_runs[-1]) for app, app_runs in _read().items() if app_runs}
 
@@ -126,7 +143,7 @@ def all_runs():
 
 def get(app, run_id):
     with _lock:
-        return next((r for r in _read().get(app, []) if r.get("id") == run_id), None)
+        return copy.deepcopy(next((r for r in _read().get(app, []) if r.get("id") == run_id), None))
 
 
 def forget_file(app, file):
@@ -188,6 +205,7 @@ def prune(retention_days, now=None):
 def clear():
     """Reset: the run logs go with the rest of Backuparr's config."""
     with _lock:
+        _cache.forget()
         try:
             os.remove(path())
         except FileNotFoundError:

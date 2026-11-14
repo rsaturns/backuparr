@@ -10,6 +10,7 @@ from flask import Blueprint, jsonify, request
 import tls
 from config_store import editing_config
 from webui import serve
+from webui.body import json_object
 
 bp = Blueprint("https", __name__)
 
@@ -36,7 +37,7 @@ def api_https():
 
 @bp.post("/api/https/only")
 def api_https_only():
-    enabled = (request.get_json(silent=True) or {}).get("enabled")
+    enabled = json_object().get("enabled")
     if not isinstance(enabled, bool):
         return jsonify({"error": "enabled must be true or false"}), 400
     if serve.https_only_env() is not None:

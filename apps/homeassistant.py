@@ -313,6 +313,7 @@ class _Connection:
 class HomeAssistantApp:
     def __init__(self, url, api_key, history=None, media=None, share=None, local_apps=None, apps=None,
                  chosen_apps=None, install_type=None, trusted_cert=None, timeout=_HTTP_S):
+        # install_type only takes in the saved setting: the card shows it, this doesn't read it.
         self.url = url.rstrip("/")
         self.token = api_key
         self.timeout = timeout

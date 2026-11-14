@@ -294,6 +294,7 @@ def check_backup(path):
 class UnifiApp:
     def __init__(self, url, username=None, password=None, backup=None, history=None, install_type=None,
                  trusted_cert=None, timeout=_TIMEOUT):
+        # install_type only takes in the saved setting: the card shows it, this doesn't read it.
         self.url = url.rstrip("/")
         self.username = username or ""
         self.password = password or ""
@@ -302,8 +303,7 @@ class UnifiApp:
         self.timeout = timeout
         self.session = SameHostSession(self.url, strict=True)
         cert_pin.pin(self.session, "unifi", trusted_cert)
-        # Found on every use; install_type (from the last Test) only drives the card.
-        self.install = None
+        self.install = None  # found on every use
         self.card_info = None  # what Test connection found, for the card
         self._roles = None
         self._version = None

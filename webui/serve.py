@@ -22,6 +22,7 @@ import os
 import signal
 import ssl
 import sys
+import threading
 
 from hypercorn.asyncio import serve
 from hypercorn.config import Config
@@ -42,6 +43,9 @@ LISTENER_KEY = "backuparr.listener"
 MAX_BODY = 1024 * 1024
 MAX_UPLOAD = 80 * 1024 * 1024
 UPLOAD_PATHS = frozenset({"/api/setup/restore", "/api/backuparr/restore"})
+# How many of those bodies may be held at once, on both servers together:
+# they come before the login check (#228).
+MAX_UPLOADS = 2
 
 
 def body_limit(path):
@@ -164,6 +168,7 @@ class Server:
         # One pool of request threads for both servers, kept when HTTP is
         # closed and opened again.
         self.executor = new_executor()
+        self.upload_slots = threading.BoundedSemaphore(MAX_UPLOADS)
         self.loop = None
         self.stopping = None
         self.http_stop = None
@@ -205,7 +210,8 @@ class Server:
     async def _run(self, name, port, ssl_context, stop):
         """Serves until stopped; a port that can't be opened (in use, say)
         is logged and ends it early."""
-        app = WsgiToAsgi(_tagged(self.app, "https" if ssl_context else "http"), body_limit, self.executor)
+        app = WsgiToAsgi(_tagged(self.app, "https" if ssl_context else "http"), body_limit, self.executor,
+                         upload_slots=self.upload_slots)
         try:
             await serve(app, _config(port, ssl_context), mode="asgi", shutdown_trigger=lambda: self._either(stop))
         except OSError as exc:

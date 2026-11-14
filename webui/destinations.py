@@ -3,6 +3,7 @@ disconnecting OneDrive and Dropbox."""
 import hmac
 import logging
 import os
+import re
 import secrets
 import threading
 import time
@@ -18,6 +19,8 @@ import rclone_token
 import rclone_util
 from backup import humanize_error, log_failure
 from config_store import DEFAULT_DEST, DEST_EDITABLE_FIELDS, DEST_NAMES, editing_config, load_config
+from webui.body import json_object
+from webui.settings import destination_field_error, text_error
 
 
 bp = Blueprint("destinations", __name__)
@@ -54,8 +57,12 @@ def api_test_destination(dest_id):
 
     cfg = load_config()
     dest_cfg = dict(cfg["destinations"].get(dest_id, {}))
-    data = request.get_json(force=True, silent=True) or {}
-    dest_cfg.update({k: v for k, v in data.items() if k in DEST_EDITABLE_FIELDS.get(dest_id, set())})
+    data = json_object()
+    edits = {k: v for k, v in data.items() if k in DEST_EDITABLE_FIELDS.get(dest_id, set())}
+    error = destination_field_error(dest_id, edits)
+    if error:
+        return jsonify({"ok": False, "message": error}), 400
+    dest_cfg.update(edits)
 
     try:
         if dest_id == "local":
@@ -161,13 +168,22 @@ def api_gdrive_access_token():
         return jsonify({"error": humanize_error(exc)}), 400
 
 
+_DRIVE_ID = re.compile(r"[A-Za-z0-9_-]{1,256}")
+
+
 @bp.post("/api/destinations/gdrive/folder")
 def api_gdrive_folder():
-    data = request.get_json(force=True, silent=True) or {}
+    data = json_object()
     folder_id = data.get("folder_id", "")
     folder_name = data.get("folder_name", "")
     if not folder_id:
         return jsonify({"error": "folder_id is required"}), 400
+    # It goes into rclone.conf: only the characters Drive's IDs use (#226).
+    if not isinstance(folder_id, str) or not _DRIVE_ID.fullmatch(folder_id):
+        return jsonify({"error": "folder_id isn't a Google Drive folder ID"}), 400
+    error = text_error(folder_name, "folder_name")
+    if error:
+        return jsonify({"error": error}), 400
 
     if not load_config()["destinations"]["gdrive"].get("refresh_token"):
         return jsonify({"error": "Google Drive is not connected"}), 400
@@ -198,7 +214,7 @@ def api_destination_disconnect(dest_id):
 def api_onedrive_connect():
     """Validates the pasted `rclone authorize onedrive` token and resolves
     the app folder's drive_id/drive_type via one Graph API call."""
-    data = request.get_json(force=True, silent=True) or {}
+    data = json_object()
     try:
         token_json, access_token = rclone_token.parse_token_blob(data.get("token_blob", ""), "onedrive")
         approot = onedrive_oauth.approot_metadata(access_token)
@@ -222,7 +238,7 @@ def api_onedrive_connect():
 def api_dropbox_connect():
     """Validates the pasted `rclone authorize dropbox` token against
     Dropbox before saving it."""
-    data = request.get_json(force=True, silent=True) or {}
+    data = json_object()
     try:
         token_json, access_token = rclone_token.parse_token_blob(data.get("token_blob", ""), "dropbox")
         dropbox_oauth.verify_access_token(access_token)

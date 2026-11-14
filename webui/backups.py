@@ -19,11 +19,12 @@ import rclone_util
 import runlog
 import restore_actions as ra
 import restore_version as rv
-from apps.http_headers import app_connection_config
+from apps.http_headers import app_connection_config, same_origin
 from backup import branded, humanize_error, log_failure
 from config_store import (DEST_NAMES, SECRET_EXTRA_FIELDS, app_meta, instance_ids, instance_type, key_required, load_config,
                           recorded_metadata, restore_supported)
 from webui import cookies
+from webui.body import json_object
 from webui.jobs import OwnedJobs
 from webui.runs import _start_tracked_run, RESTORE_RUN_STATE, RUN_LOCK, RUN_STATE
 from webui.settings import _missing_required_field, _restore_override_fields
@@ -41,7 +42,7 @@ def _destination_root_or_error(cfg, dest_id):
     if not dest_cfg.get("enabled"):
         return None, (jsonify({"error": f"{dest_id} is not enabled"}), 400)
     try:
-        destination_util.sync(cfg)
+        destination_util.sync_saved()
         return destination_util.remote_root(dest_id, dest_cfg), None
     except destination_util.DestinationError as exc:
         return None, (jsonify({"error": str(exc)}), 400)
@@ -105,10 +106,12 @@ def api_history(dest_id):
         return jsonify({"error": humanize_error(exc)}), 502
     recorded = manifest.backups()
     for entry in entries:
-        if entry.get("IsDir"):
-            continue
-        app_name, _, _ = entry["Path"].partition("/")
-        if destination_util.is_backup_folder(app_name):
+        # Only Backuparr's archives directly in an app's folder: never another
+        # file kept there, or one in a subfolder, which Download and Delete
+        # would look for in the app's folder (#223).
+        app_name, sep, name = entry["Path"].partition("/")
+        if (not entry.get("IsDir") and sep and destination_util.is_backup_folder(app_name)
+                and destination_util.is_backup_name(app_name, name)):
             details = recorded.get(manifest.key(app_name, entry["Name"]))
             history.setdefault(app_name, []).append({
                 "name": entry["Name"], "size": entry["Size"], "mod_time": entry["ModTime"],
@@ -122,12 +125,22 @@ def api_history(dest_id):
     return jsonify(history)
 
 
-@bp.delete("/api/history/<dest_id>/<app_name>/<filename>")
-def api_history_delete(dest_id, app_name, filename):
+def _not_a_backup(app_name, filename):
+    """The error response for anything History mustn't touch, or None for
+    one of Backuparr's backups: Delete and Download act only on what History
+    lists (#223)."""
     if not destination_util.is_backup_folder(app_name):
         return jsonify({"error": "unknown app"}), 404
-    if not ra.SAFE_FILENAME.match(filename):
+    if not ra.SAFE_FILENAME.match(filename) or not destination_util.is_backup_name(app_name, filename):
         return jsonify({"error": "invalid filename"}), 400
+    return None
+
+
+@bp.delete("/api/history/<dest_id>/<app_name>/<filename>")
+def api_history_delete(dest_id, app_name, filename):
+    error = _not_a_backup(app_name, filename)
+    if error:
+        return error
 
     cfg = load_config()
     root, error = _destination_root_or_error(cfg, dest_id)
@@ -146,10 +159,9 @@ def api_history_delete(dest_id, app_name, filename):
 
 @bp.get("/api/history/<dest_id>/<app_name>/<filename>/download")
 def api_history_download(dest_id, app_name, filename):
-    if not destination_util.is_backup_folder(app_name):
-        return jsonify({"error": "unknown app"}), 404
-    if not ra.SAFE_FILENAME.match(filename):
-        return jsonify({"error": "invalid filename"}), 400
+    error = _not_a_backup(app_name, filename)
+    if error:
+        return error
 
     cfg = load_config()
     root, error = _destination_root_or_error(cfg, dest_id)
@@ -252,7 +264,7 @@ def _bulk_backups(items):
         else:
             return None
         if not (isinstance(app_name, str) and isinstance(filename, str) and destination_util.is_backup_folder(app_name)
-                and ra.SAFE_FILENAME.match(filename)):
+                and ra.SAFE_FILENAME.match(filename) and destination_util.is_backup_name(app_name, filename)):
             return None
         out.append((app_name, filename))
     return list(dict.fromkeys(out))
@@ -263,7 +275,7 @@ def api_history_bulk_delete(dest_id):
     """Deletes the backups and failed runs picked on History: {"backups":
     [{"app", "file"}], "runs": [{"app", "run_id"}]}. Returns what was
     deleted and what couldn't be, with why."""
-    data = request.get_json(force=True, silent=True) or {}
+    data = json_object()
     backups = _bulk_backups(data.get("backups", []))
     runs = data.get("runs", [])
     if backups is None or not isinstance(runs, list) or len(runs) > MAX_BULK or not all(
@@ -360,7 +372,7 @@ def api_history_bulk_download(dest_id):
     """Starts preparing several backups as one zip ({"backups": [{"app",
     "file"}]}), each under <app>/ as a single download would give it: an
     app's encrypted backup decrypted, Backuparr's own as it is."""
-    data = request.get_json(force=True, silent=True) or {}
+    data = json_object()
     backups = _bulk_backups(data.get("backups", []))
     if not backups:
         return jsonify({"error": "pick the backups to download"}), 400
@@ -566,7 +578,7 @@ def api_restore_backups(dest_id, app_name):
 
 @bp.post("/api/restore/<dest_id>/sabnzbd/preview")
 def api_restore_sabnzbd_preview(dest_id):
-    data = request.get_json(force=True, silent=True) or {}
+    data = json_object()
     cfg = load_config()
     root, error = _destination_root_or_error(cfg, dest_id)
     if error:
@@ -591,7 +603,7 @@ def api_restore(dest_id, app_name):
     if not instance_type(app_name):
         return jsonify({"error": "unknown app"}), 404
 
-    data = request.get_json(force=True, silent=True) or {}
+    data = json_object()
     if not data.get("confirm"):
         return jsonify({"error": "confirm must be true"}), 400
 
@@ -619,7 +631,7 @@ def api_restore_check(dest_id, app_name):
     running."""
     if not instance_type(app_name):
         return jsonify({"error": "unknown app"}), 404
-    data = request.get_json(force=True, silent=True) or {}
+    data = json_object()
     file = data.get("file")
     if not isinstance(file, str) or not ra.SAFE_FILENAME.match(file):
         return jsonify({"error": "invalid filename"}), 400
@@ -673,6 +685,10 @@ def _restore_target(dest_id, app_name, data):
             elsewhere = True
             for field in _saved_secrets(app_name):
                 app_cfg[field] = ""
+            # Nor the Service Authentication headers to another scheme, host
+            # or port (#225); a different path on the same one keeps them.
+            if not same_origin(override["url"], app_cfg.get("url")):
+                app_cfg["request_headers"] = []
         for field in allowed:
             value = override.get(field)
             if value:
