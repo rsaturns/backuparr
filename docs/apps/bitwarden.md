@@ -27,8 +27,8 @@ Then fill in the card: the URL you open Bitwarden at (for example
 only used to read Bitwarden's version (`/api/config`, no login needed).
 **Test connection** says which install it found and names the newest
 database backup. If Bitwarden uses a self-signed certificate (an option in
-both installers), Test connection shows it and you can trust it on the card:
-Backuparr then accepts only that certificate.
+both installers), trust it on the card, as
+[Trusting a certificate](../settings.md#trusting-a-certificate) describes.
 
 Backups are always encrypted with your encryption key. They hold the
 database and certificate passwords, and the data-protection keys that

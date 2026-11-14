@@ -41,12 +41,9 @@ is reported once and not retried.
 
 ## The certificate
 
-pfSense's web UI uses a self-signed certificate. The first **Test connection**
-shows it (name and expiry, and the SHA-256 fingerprint on the **?** next to
-SHA-256); compare it with **System > Certificates** in pfSense, then click
-**Trust** and **Save**. It works as for
-[OPNsense](opnsense.md#the-certificate): a changed certificate stops backups
-until you trust the new one, and the failure links to the card.
+pfSense's web UI uses a self-signed certificate: trust it on the card, as
+[Trusting a certificate](../settings.md#trusting-a-certificate) describes. Compare its fingerprint with the one under
+**System > Certificates** in pfSense.
 
 ## Restoring
 

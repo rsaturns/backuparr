@@ -89,7 +89,8 @@ destination. They're kept like this:
   self-signed certificate. Test connection shows it, with its SHA-256
   fingerprint to compare with the app's own; **Trust** pins it. From then on
   only that certificate is accepted, checked before a byte of the request is
-  sent. A different one stops backups until you trust it.
+  sent. A different one stops backups until you trust it. See
+  [Trusting a certificate](settings.md#trusting-a-certificate).
 - **No redirects to another host** while a key or login is being sent.
 - **Restores are checked first**: against the backup's recorded checksum and
   the app's version. A backup is unpacked with guards against paths that

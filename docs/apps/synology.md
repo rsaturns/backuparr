@@ -75,11 +75,8 @@ set up OTP for the account as above.
 
 ## The certificate
 
-DSM serves HTTPS with a self-signed certificate until you add your own. The
-first **Test connection** shows it (name and expiry, and the SHA-256
-fingerprint on the **?** next to SHA-256): click **Trust** and **Save**. It
-works as for [OPNsense](opnsense.md#the-certificate): a changed certificate
-stops backups until you trust the new one. A certificate from a trusted CA
+DSM serves HTTPS with a self-signed certificate until you add your own:
+trust it on the card, as [Trusting a certificate](../settings.md#trusting-a-certificate) describes. A certificate from a trusted CA
 (such as DSM's Let's Encrypt one) needs nothing.
 
 ## Restoring

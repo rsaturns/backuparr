@@ -24,8 +24,8 @@ schedule are left alone.
    the options it has.
 
 For a second Home Assistant, use **Add instance** on the card. If Home
-Assistant serves HTTPS with a self-signed certificate, Test connection shows
-it and you trust it on the card, as for [OPNsense](opnsense.md).
+Assistant serves HTTPS with a self-signed certificate, trust it on the card,
+as [Trusting a certificate](../settings.md#trusting-a-certificate) describes.
 
 ## What to back up
 

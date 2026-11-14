@@ -50,13 +50,19 @@ role the backup needs:
   make a backup, and its **Admins** page adds only site admins (Site
   Administrator, Hotspot Manager, View Only), which can't.
 
-To add the admin on UniFi OS, open **People** in UniFi Network (the people
-icon in the sidebar), click **Create New > Create New User**, tick **Admin**
-and enter a username (for example `backuparr`) and a long random password.
-Either pick the **Super Admin** role, or untick **Use a Predefined Role**
-and set the first role (Network) to **Full Management** and the second one
-to **None**. Then **Create**. The admin is local only: it signs in without
-a UI.com account. Ubiquiti's guides: [UniFi Roles
+To add the admin on UniFi OS:
+
+1. In UniFi Network, open **People** (the people icon in the sidebar) and
+   click **Create New > Create New User**.
+2. Tick **Admin**, and enter a username (for example `backuparr`) and a long
+   random password.
+3. Either pick the **Super Admin** role, or untick **Use a Predefined Role**
+   and set the first role (Network) to **Full Management** and the second
+   one to **None**.
+4. Click **Create**. The admin is local only: it signs in without a UI.com
+   account.
+
+Ubiquiti's guides: [UniFi Roles
 Explained](https://help.ui.com/hc/en-us/articles/1500011491541) and [Adding
 Admins in UniFi](https://help.ui.com/hc/en-us/articles/28692158912279).
 
@@ -72,12 +78,9 @@ never retries, and says so when it's refused.
 
 ## The certificate
 
-UniFi uses a self-signed certificate unless you've given it your own. The
-first **Test connection** shows it (name and expiry, and the SHA-256
-fingerprint on the **?** next to SHA-256): click **Trust** and **Save**. It
-works as for [OPNsense](opnsense.md#the-certificate): a changed certificate
-stops backups until you trust the new one. A certificate from a trusted CA
-needs nothing.
+UniFi uses a self-signed certificate unless you've given it your own: trust
+it on the card, as [Trusting a certificate](../settings.md#trusting-a-certificate) describes. A certificate from a trusted CA needs
+nothing.
 
 ## Restoring
 
