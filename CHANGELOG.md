@@ -3,6 +3,18 @@
 All notable changes to this project are documented in this file. The
 format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+
+- The docs read better, on a phone too: the Features page lists the apps in two columns, the Apps page has a short table for each category, What each restore does is two lists, the Configuration reference is split into sections, long sections are broken up, and trusting a self-signed certificate is one section in Settings (#218, #219, #220, #221). See https://rsaturns.github.io/backuparr/apps/
+- The setup guides on the destination cards are shorter, one or two sentences a step; the docs' Destinations page has the reasons (#222). See https://rsaturns.github.io/backuparr/destinations/
+
+### Fixed
+
+- Google Drive's setup guide opens again after another destination's guide was open: it stopped with an error until the page was reloaded.
+- Docs: the Plex page's Backups and restores section no longer shows inside a bullet; archive names, the Configuration reference, Encryption at rest and QNAP QuTS hero's restore link are right for 3.0; and the docs' changelog, SECURITY.md and Edit this page links open the 3.0 beta's files, not 2.5.x's (#216, #217).
+
 ## [3.0.0-beta] - 2026-11-13
 
 **"You get a backup! And YOU get a backup! Everything you host gets a backup!"** 3.0.0-beta is the biggest Backuparr yet: it grows past the media apps to the rest of what you host.
