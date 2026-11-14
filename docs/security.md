@@ -98,7 +98,8 @@ proxy with its own login.
 
 These are encrypted in `config.json`:
 
-- every app's API key, and Bazarr's and NZBGet's passwords
+- every app's API key or token, password and 2FA device token, and
+  OPNsense's API secret
 - service authentication header values
 - Google Drive's client secret, API key and refresh token, and OneDrive's and
   Dropbox's tokens

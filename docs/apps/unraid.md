@@ -60,12 +60,9 @@ with that in mind.
 ## The certificate
 
 With **Use SSL/TLS** set to **Yes** (**Settings > Management Access**), Unraid
-serves its web UI with a self-signed certificate. The first **Test
-connection** shows it (name and expiry, and the SHA-256 fingerprint on the
-**?** next to SHA-256): click **Trust** and **Save**. It works as for
-[OPNsense](opnsense.md#the-certificate): a changed certificate stops backups
-until you trust the new one. A `myunraid.net` certificate is from a trusted CA
-and needs nothing.
+serves its web UI with a self-signed certificate: trust it on the card, as
+[Trusting a certificate](../settings.md#trusting-a-certificate) describes. A `myunraid.net` certificate is from a trusted CA and needs
+nothing.
 
 ## Restoring
 

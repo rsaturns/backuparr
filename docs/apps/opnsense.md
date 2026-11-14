@@ -36,23 +36,9 @@ configuration in use.
 
 ## The certificate
 
-OPNsense's web UI uses a self-signed certificate. The first **Test
-connection** says it isn't trusted and shows it: its name and expiry, and its
-SHA-256 fingerprint when you point at the **?** next to SHA-256 (or tap it).
-OPNsense prints the same fingerprint on its console (`HTTPS:
-SHA256 ...`) and under **System > Trust > Certificates**. If they match,
-click **Trust**, then **Save**. From then on Backuparr accepts only that
-certificate.
-
-![OPNsense card: Test connection says the certificate isn't trusted, the ? next to SHA-256 shows its fingerprint in four rows, and a Trust button below]({{ '/screenshots/opnsense-certificate.png' | relative_url }})
-
-If the certificate changes (OPNsense made a new one, or you replaced it),
-backups stop with "The firewall's certificate changed. Check it and trust the
-new one to resume backups." Nothing is sent to the firewall until then. The
-failure on the Overview and in Run & Status links to the card: **Test
-connection** shows the new certificate next to the one trusted until now,
-and **Trust** (then **Save**) resumes backups. A certificate from a trusted CA,
-such as Let's Encrypt, is checked as usual and needs no trusting.
+OPNsense's web UI uses a self-signed certificate: trust it on the card, as
+[Trusting a certificate](../settings.md#trusting-a-certificate) describes. OPNsense prints its fingerprint on its console
+(`HTTPS: SHA256 ...`) and shows it under **System > Trust > Certificates**.
 
 ## Restoring
 

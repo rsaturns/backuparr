@@ -48,21 +48,27 @@ image to `rsaturns/backuparr:3.0.0-beta` (on Unraid, set **Repository** to it).
 
 ### After you update
 
-- **Sign in again** once: signing out now ends a session on the server too,
-  and sessions from before 3.0 don't have what that needs.
+- **Sign in again** once: 3.0 keeps sessions on the server, so sessions from
+  2.5.x end.
 - **Backups are encrypted** with your encryption key from the next run,
   including apps you set up before; Backuparr says so once. Turn it off for
   an app on its card in Settings. See
   [Encrypted backups](../security.md#encrypted-backups).
 - **Backups made before stay as they are** and still restore.
 - **Backuparr backs itself up** in the background on the first start of 3.0
-  (if its own backup is on and a destination is set up). Its backups from
-  before 3.0 can't be restored any more: restore one with Backuparr 2.5.7,
-  then update. They stay until retention removes them. See
+  (if its own backup is on and a destination is set up). 3.0 can't restore
+  Backuparr's own 2.5.x backups: restore one on 2.5.7 first, then update.
+  They stay until retention removes them. See
   [Restoring Backuparr itself](../restoring.md#restoring-backuparr-itself).
 - **Deleting on Google Drive and OneDrive is permanent:** backups that
   retention or History removes no longer go to the trash or recycle bin,
-  which counts against your storage.
+  where they still counted against your storage.
+- **Hand-typed schedules:** 3.0's cron update refuses a few hand-typed
+  forms, such as `1#7` or non-ASCII digits; the Overview and Run & Status
+  then say the schedule isn't valid until you fix it in Settings. A step that
+  starts at a field's maximum, such as `59/15` or `6/1`, now means just that
+  value, not "every": use `*/15` for every 15 minutes. The schedule picker
+  never writes these.
 
 ### Going back to 2.5.7
 

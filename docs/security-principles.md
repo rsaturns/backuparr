@@ -89,7 +89,8 @@ destination. They're kept like this:
   self-signed certificate. Test connection shows it, with its SHA-256
   fingerprint to compare with the app's own; **Trust** pins it. From then on
   only that certificate is accepted, checked before a byte of the request is
-  sent. A different one stops backups until you trust it.
+  sent. A different one stops backups until you trust it. See
+  [Trusting a certificate](settings.md#trusting-a-certificate).
 - **No redirects to another host** while a key or login is being sent.
 - **Restores are checked first**: against the backup's recorded checksum and
   the app's version. A backup is unpacked with guards against paths that
@@ -138,7 +139,7 @@ Some protection only you can provide:
 A few trade-offs are deliberate, for a single trusted admin: the
 forgot-password reset works without a login, `BACKUPARR_DISABLE_AUTH` trusts
 your proxy completely, and the key sits on the same volume unless you move it.
-[SECURITY.md](https://github.com/rsaturns/backuparr/blob/main/SECURITY.md)
+[SECURITY.md](https://github.com/rsaturns/backuparr/blob/{{ site.gh_edit_branch }}/SECURITY.md)
 lists each one and why.
 
 ## How the code is checked
@@ -161,4 +162,4 @@ lists each one and why.
 Please don't open a public issue. Use GitHub's
 [private vulnerability reporting](https://github.com/rsaturns/backuparr/security/advisories/new)
 instead, so a fix can be ready before the details are public. See
-[SECURITY.md](https://github.com/rsaturns/backuparr/blob/main/SECURITY.md).
+[SECURITY.md](https://github.com/rsaturns/backuparr/blob/{{ site.gh_edit_branch }}/SECURITY.md).

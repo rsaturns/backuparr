@@ -9,16 +9,12 @@ nav_order: 6
 
 Set the schedule under **Settings → Schedule & Notifications**: daily, weekly,
 every few hours, or a 5-field cron schedule. Changes apply without a restart.
-If a saved schedule stops being valid (3.0's cron update refuses a few
-hand-typed forms, such as `1#7` or non-ASCII digits), no scheduled backups
-run, and the Overview and Run & Status say so until you fix it in Settings.
-
-A hand-typed step that starts at a field's maximum, such as `59/15` or `6/1`,
-now means just that value, not "every": use `*/15` for every 15 minutes. The
-schedule picker never writes these.
+If a saved schedule isn't valid, no scheduled backups run, and the Overview
+and Run & Status say so until you fix it in Settings.
 
 **Run & Status → Run backup now** backs up every app, or the one you pick
-(Backuparr itself included), and shows the run live. A backup and a restore never run at the same time.
+(Backuparr itself included), and shows the run live. A backup and a restore
+never run at the same time.
 
 ![Run & Status tab: a backup of all apps in progress, with its live log]({{ '/screenshots/run.png' | relative_url }})
 
@@ -37,15 +33,15 @@ backup runs it says "Backing up...", and it updates when the run ends.
 **Default retention (days)** deletes each app's backups older than that,
 separately on each destination. Each app's newest backup is always kept, so a
 run of failed backups never removes the last good one. Backuparr only deletes
-its own archives (`<app>/<app>_<date>_<time>.zip`, or `.zip.enc` when
-[encrypted](security.md#encrypted-backups)), so a destination folder can hold
-other files. On Google Drive and OneDrive, deleting is permanent: backups
-don't go to the trash or recycle bin, which would still count against your
-storage.
+its own archives (`<app>/<app>_<date>_<time>.<ext>`, the app's own file type,
+with `.enc` added when [encrypted](security.md#encrypted-backups)), so a
+destination folder can hold other files. On Google Drive and OneDrive,
+deleting is permanent: backups don't go to the trash or recycle bin, which
+would still count against your storage.
 
 To keep backups longer or shorter on one destination, set **Retention (days)**
 on its card under Settings > Destinations - for example 28 days on Local
-storage and 7 on Google Drive. Left blank, a destination uses the default. Once
+Storage and 7 on Google Drive. Left blank, a destination uses the default. Once
 a destination has its own, the Overview shows each destination's retention.
 
 ## The check before upload
@@ -88,13 +84,17 @@ categories are folded is remembered in your browser.
 
 **Several at once:** click **Select**, tick the backups (or a whole app with
 the box beside its name), then use the bar at the bottom of the window:
-**Download** gets one backup as usual, or several in one zip, each as a single
-download would give it: the bar shows "Preparing 3 of 5..." while Backuparr
-builds the zip, then the download starts. **Delete** removes them after one
-confirmation, counting up ("Deleting 3 of 10..."); any that couldn't be
-deleted stay ticked, and the bar says why. A failed run's row can be ticked
-and deleted too, which removes it from this destination's History. **Cancel**
-leaves the selection. While the bar is busy, the selection can't change.
+
+- **Download** gets one backup as usual, or several in one zip, each as a
+  single download would give it. The bar shows "Preparing 3 of 5..." while
+  Backuparr builds the zip, then the download starts.
+- **Delete** removes them after one confirmation, counting up ("Deleting 3 of
+  10..."). Any that couldn't be deleted stay ticked, and the bar says why. A
+  failed run's row can be ticked and deleted too, which removes it from this
+  destination's History.
+- **Cancel** leaves the selection.
+
+While the bar is busy, the selection can't change.
 
 ![Picking several backups: two of Sonarr's ticked, and the bar at the bottom with 2 selected, Download, Delete and Cancel]({{ '/screenshots/history-select.png' | relative_url }})
 

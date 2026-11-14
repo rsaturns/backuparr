@@ -44,6 +44,7 @@ folder** = `/mnt/plex`.
   `plex.direct` address when the URL is empty or points at the same machine.
   If the popup is blocked, use the **Open Plex sign-in** link. You can also
   [find a token by hand](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/).
+
 ## Backups and restores
 
 - **The archive is sensitive:** `Preferences.xml` holds the server's plex.tv

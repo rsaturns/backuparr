@@ -7,19 +7,21 @@ nav_order: 8
 
 The **Settings** tab holds, from top to bottom:
 
-- **Apps** - grouped by category (Media Management, Downloaders, Media
-  Servers, ...); click a category to open or close it. Its header counts the
-  enabled apps and shows a dot that turns red when one of them failed its last
-  backup. A category starts closed and opens once one of its apps is set up;
-  after that it stays as you left it, in this browser. Within a category,
-  enabled apps come first. A card per app: switch it on, enter its URL and API
-  key, and click **Test connection**. The **?** next to an app's name opens its
-  page in these docs, at **Setting it up**: where its key comes from and what
-  else it needs. **Encrypt backup** is on unless you turn it off
-  (see [Encrypted backups](security.md#encrypted-backups)). See
-  [Apps](apps/index.md). **Server** starts with Backuparr's own card: its
-  switch turns [Backuparr's own backup](security.md#backuparrs-own-backup)
-  on or off.
+- **Apps** - a card per app, grouped by category (Media Management,
+  Downloaders, Media Servers, ...). See [Apps](apps/index.md).
+  - Click a category to open or close it. Its header counts the enabled apps,
+    with a dot that turns red when one of them failed its last backup. A
+    category starts closed and opens once one of its apps is set up; after
+    that it stays as you left it, in this browser.
+  - Within a category, enabled apps come first.
+  - On a card, switch the app on, enter its URL and API key, and click **Test
+    connection**. The **?** next to the app's name opens its page in these
+    docs, at **Setting it up**: where its key comes from and what else it
+    needs.
+  - **Encrypt backup** is on unless you turn it off (see
+    [Encrypted backups](security.md#encrypted-backups)).
+  - **Server** starts with Backuparr's own card: its switch turns
+    [Backuparr's own backup](security.md#backuparrs-own-backup) on or off.
 - **Destinations** - see [Destinations](destinations.md). Each card can set
   its own [retention](backups.md#retention). Click its heading to fold it.
 - **Schedule & Notifications** - the default retention, the schedule and the
@@ -55,11 +57,38 @@ Each instance has its own settings, backups, History and Restore entry, and can
 get its own [authentication headers](#service-authentication-headers).
 
 - The name also sets the instance's backup folder and archive names: `4K`
-  gives `radarr-4k/radarr-4k_<date>_<time>.zip`. Renaming it later keeps the
+  gives `radarr-4k/radarr-4k_<date>_<time>.zip.enc`. Renaming it later keeps the
   folder.
 - Removing an instance keeps its backups; they stay in History, and retention
   keeps the newest.
 - Up to 10 extra instances per app.
+
+## Trusting a certificate
+
+Firewalls, NAS and other appliances often serve HTTPS with a self-signed
+certificate, which Backuparr refuses until you trust it on the app's card.
+OPNsense, pfSense, UniFi, Unraid, Synology DSM, QNAP QuTS hero, Home
+Assistant and Bitwarden can be trusted this way.
+
+1. Click **Test connection**. It says the certificate isn't trusted and shows
+   it: its name and expiry, and its SHA-256 fingerprint when you point at the
+   **?** next to SHA-256 (or tap it).
+2. Compare the fingerprint with the one the app shows; its page here says
+   where.
+3. If they match, click **Trust**, then **Save**. From then on Backuparr
+   accepts only that certificate.
+
+![OPNsense card: Test connection says the certificate isn't trusted, the ? next to SHA-256 shows its fingerprint in four rows, and a Trust button below]({{ '/screenshots/opnsense-certificate.png' | relative_url }})
+
+If the certificate changes (the app made a new one, or you replaced it),
+backups stop with "...certificate changed. Check it and trust the new one to
+resume backups." Nothing is sent to the app until then. The failure on the
+Overview and in Run & Status links to the card: **Test connection** shows the
+new certificate next to the one trusted until now, and **Trust** (then
+**Save**) resumes backups.
+
+A certificate from a trusted CA, such as Let's Encrypt, is checked as usual
+and needs no trusting.
 
 ## Service authentication headers
 
