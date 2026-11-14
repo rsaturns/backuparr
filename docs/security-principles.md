@@ -138,7 +138,7 @@ Some protection only you can provide:
 A few trade-offs are deliberate, for a single trusted admin: the
 forgot-password reset works without a login, `BACKUPARR_DISABLE_AUTH` trusts
 your proxy completely, and the key sits on the same volume unless you move it.
-[SECURITY.md](https://github.com/rsaturns/backuparr/blob/main/SECURITY.md)
+[SECURITY.md](https://github.com/rsaturns/backuparr/blob/{{ site.gh_edit_branch }}/SECURITY.md)
 lists each one and why.
 
 ## How the code is checked
@@ -161,4 +161,4 @@ lists each one and why.
 Please don't open a public issue. Use GitHub's
 [private vulnerability reporting](https://github.com/rsaturns/backuparr/security/advisories/new)
 instead, so a fix can be ready before the details are public. See
-[SECURITY.md](https://github.com/rsaturns/backuparr/blob/main/SECURITY.md).
+[SECURITY.md](https://github.com/rsaturns/backuparr/blob/{{ site.gh_edit_branch }}/SECURITY.md).

@@ -7,7 +7,7 @@ permalink: /
 
 # Backuparr
 
-> **These docs cover Backuparr 3.0.0-beta.** On 2.5.7? Its docs are [on GitHub](https://github.com/rsaturns/backuparr/tree/v2.5.7/docs).
+> **These docs cover Backuparr 3.0.0-beta:** try it with `rsaturns/backuparr:3.0.0-beta`. On 2.5.7? Its docs are [on GitHub](https://github.com/rsaturns/backuparr/tree/v2.5.7/docs).
 
 **Everything you host, backed up.**
 
@@ -55,7 +55,7 @@ explains what Backuparr protects, how, and what it leaves to you.
 - [Environment variables](environment-variables.md) and the
   [Configuration reference](configuration.md).
 
-See the [changelog](https://github.com/rsaturns/backuparr/blob/main/CHANGELOG.md)
+See the [changelog](https://github.com/rsaturns/backuparr/blob/{{ site.gh_edit_branch }}/CHANGELOG.md)
 for release history.
 
 > **AI disclosure:** This project was built with substantial assistance
