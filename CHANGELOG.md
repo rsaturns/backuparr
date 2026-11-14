@@ -5,6 +5,31 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [3.0.0-beta.2] - 2026-11-14
+
+### Changed
+
+- At most two password checks and two uploads of Backuparr's own backup run at once, so a burst of sign-ins or uploads can't use up a small server's memory or disk; another upload is told "Busy - try again in a moment" (#228).
+- Backuparr's own files (its settings, login and keys) are flushed to disk when they're written, so a power cut can't leave one empty, and a destination listing, delete or connection change from the web UI ends after 5 minutes (#229).
+- Every Python package in the image is pinned to an exact version with its hashes, so each build installs what was tested (#230).
+- History, retention and backups do less work: the backup record and run logs are read again only when they change, retention updates the record once, an encrypted backup isn't read again for its checksum, and History syncs rclone's settings only when they changed (#231).
+- The docs read better, on a phone too: the Features page lists the apps in two columns, the Apps page has a short table for each category, What each restore does is two lists, the Configuration reference is split into sections, long sections are broken up, and trusting a self-signed certificate is one section in Settings (#218, #219, #220, #221). See https://rsaturns.github.io/backuparr/apps/
+- The setup guides on the destination cards are shorter, one or two sentences a step; the docs' Destinations page has the reasons (#222). See https://rsaturns.github.io/backuparr/destinations/
+
+### Fixed
+
+- History lists, downloads and deletes only Backuparr's own backups: a file kept in an app's folder, or one in a subfolder, is no longer listed, so it can't be deleted from History (#223).
+- Reset waits for a running backup or restore ("A backup or restore is running - reset when it finishes") instead of letting it write back what the reset cleared (#224).
+- Restore to a different target no longer sends the Service Authentication headers to a different scheme, host or port, as with the saved key and passwords (#225).
+- A request whose body isn't a JSON object gets a plain error instead of a server error, and every text setting is checked to be text (#226).
+- Run & Status shows only the run's own log lines, and a scheduled backup skipped because one is already running is logged (#227).
+- Google Drive's setup guide opens again after another destination's guide was open: it stopped with an error until the page was reloaded.
+- Docs: the Plex page's Backups and restores section no longer shows inside a bullet; archive names, the Configuration reference, Encryption at rest and QNAP QuTS hero's restore link are right for 3.0; and the docs' changelog, SECURITY.md and Edit this page links open the 3.0 beta's files, not 2.5.x's (#216, #217).
+
+### Security
+
+- Restoring Emby, Plex, Seerr, LazyLibrarian, Vaultwarden, Jellyfin or Bazarr no longer writes through a symbolic link in the app's mounted folder: a link at a file or folder the restore writes stops the restore before anything is written, so a compromised app can't use a restore to overwrite files outside its folder, such as Backuparr's own login. 3.0.0-beta, 2.5.7 and earlier are affected, and 2.5.x won't get a fix: update to 3.0.0-beta.2. See https://github.com/rsaturns/backuparr/security/advisories/GHSA-r2gf-f7v8-j7g2
+
 ## [3.0.0-beta] - 2026-11-13
 
 **"You get a backup! And YOU get a backup! Everything you host gets a backup!"** 3.0.0-beta is the biggest Backuparr yet: it grows past the media apps to the rest of what you host.
@@ -68,12 +93,6 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - With croniter 7.0, a hand-typed schedule step that starts at a field's maximum, such as `59/15`, means only that value; schedules made with the picker are unchanged (#166).
 - Deleting on Google Drive and OneDrive (retention, History) is now permanent, so deleted backups no longer fill your cloud storage from the trash or recycle bin, which both count against it.
 - The `latest` image tag follows full releases only: a beta such as 3.0.0-beta is published under its own tag, so containers that update from `latest` stay on the last full release.
-- At most two password checks and two uploads of Backuparr's own backup run at once, so a burst of sign-ins or uploads can't use up a small server's memory or disk; another upload is told "Busy - try again in a moment" (#228).
-- Backuparr's own files (its settings, login and keys) are flushed to disk when they're written, so a power cut can't leave one empty, and a destination listing, delete or connection change from the web UI ends after 5 minutes (#229).
-- Every Python package in the image is pinned to an exact version with its hashes, so each build installs what was tested (#230).
-- History, retention and backups do less work: the backup record and run logs are read again only when they change, retention updates the record once, an encrypted backup isn't read again for its checksum, and History syncs rclone's settings only when they changed (#231).
-- The docs read better, on a phone too: the Features page lists the apps in two columns, the Apps page has a short table for each category, What each restore does is two lists, the Configuration reference is split into sections, long sections are broken up, and trusting a self-signed certificate is one section in Settings (#218, #219, #220, #221). See https://rsaturns.github.io/backuparr/apps/
-- The setup guides on the destination cards are shorter, one or two sentences a step; the docs' Destinations page has the reasons (#222). See https://rsaturns.github.io/backuparr/destinations/
 
 ### Fixed
 
@@ -85,17 +104,6 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The footer says "Update Available" only when the latest release is newer, not for a newer build or a beta.
 - A full Dropbox or OneDrive now gets the "the destination is out of space" hint.
 - An app answering HTTP 401 or 403 now also points at the Service Authentication headers when some are set: a proxy refusing a request looks the same as a wrong API key.
-- History lists, downloads and deletes only Backuparr's own backups: a file kept in an app's folder, or one in a subfolder, is no longer listed, so it can't be deleted from History (#223).
-- Reset waits for a running backup or restore ("A backup or restore is running - reset when it finishes") instead of letting it write back what the reset cleared (#224).
-- Restore to a different target no longer sends the Service Authentication headers to a different scheme, host or port, as with the saved key and passwords (#225).
-- A request whose body isn't a JSON object gets a plain error instead of a server error, and every text setting is checked to be text (#226).
-- Run & Status shows only the run's own log lines, and a scheduled backup skipped because one is already running is logged (#227).
-- Google Drive's setup guide opens again after another destination's guide was open: it stopped with an error until the page was reloaded.
-- Docs: the Plex page's Backups and restores section no longer shows inside a bullet; archive names, the Configuration reference, Encryption at rest and QNAP QuTS hero's restore link are right for 3.0; and the docs' changelog, SECURITY.md and Edit this page links open the 3.0 beta's files, not 2.5.x's (#216, #217).
-
-### Security
-
-- Restoring Emby, Plex, Seerr, LazyLibrarian, Vaultwarden, Jellyfin or Bazarr no longer writes through a symbolic link in the app's mounted folder: a link at a file or folder the restore writes stops the restore before anything is written, so a compromised app can't use a restore to overwrite files outside its folder, such as Backuparr's own login. 2.5.7 and earlier are affected and won't get a fix: update to 3.0.0-beta. See https://github.com/rsaturns/backuparr/security/advisories/GHSA-r2gf-f7v8-j7g2
 
 ## [2.5.7] - 2026-11-13
 
