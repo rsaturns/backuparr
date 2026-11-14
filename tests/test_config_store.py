@@ -191,3 +191,61 @@ def test_every_app_has_a_driver_built_from_its_meta():
         cfg = {"url": "http://app.example", "api_key": "key", **{f["name"]: "x" for f in meta["extra_fields"]}}
         driver = backup.build_app(meta["id"], cfg)
         assert isinstance(driver, backup.DRIVERS[meta["id"]])
+
+
+def test_two_changes_at_once_dont_undo_each_other():
+    # A Settings save beside the first start's self-backup recording itself:
+    # each loads, changes and saves, and without the lock the later save
+    # would bring back the config from before the other's change.
+    import threading
+    import time
+    config_store.load_config()
+    first_in = threading.Event()
+
+    def slow():
+        with config_store.editing_config() as cfg:
+            first_in.set()
+            time.sleep(0.2)
+            cfg["ha_enabled"] = True
+
+    def quick():
+        first_in.wait(5)
+        with config_store.editing_config() as cfg:
+            cfg["https_only"] = True
+
+    threads = [threading.Thread(target=slow), threading.Thread(target=quick)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(5)
+    cfg = config_store.load_config()
+    assert cfg["ha_enabled"] is True and cfg["https_only"] is True
+
+
+def test_a_change_that_raises_isnt_saved():
+    config_store.load_config()
+    with pytest.raises(RuntimeError):
+        with config_store.editing_config() as cfg:
+            cfg["https_only"] = True
+            raise RuntimeError("stop")
+    assert config_store.load_config().get("https_only") is not True
+
+
+def test_a_stored_setting_is_read_without_decrypting(monkeypatch):
+    config_store.load_config()
+    with config_store.editing_config() as cfg:
+        cfg["https_only"] = True
+    monkeypatch.setattr(secrets_crypto, "decrypt", lambda value: pytest.fail("decrypted"))
+    assert config_store.stored_setting("https_only") is True
+    assert config_store.stored_setting("not-a-setting") is None
+
+
+def test_a_stored_setting_of_a_missing_or_broken_config(tmp_path):
+    if os.path.exists(config_store.CONFIG_PATH):
+        os.remove(config_store.CONFIG_PATH)
+    assert config_store.stored_setting("https_only") is None  # and nothing made
+    assert not os.path.exists(config_store.CONFIG_PATH)
+    with open(config_store.CONFIG_PATH, "w") as f:
+        f.write("{not json")
+    with pytest.raises(config_store.ConfigError, match="isn't valid JSON"):
+        config_store.stored_setting("https_only")

@@ -140,3 +140,38 @@ def test_non_string_credentials_are_rejected_not_500(webui, body):
     assert client.post("/api/setup", json={"username": "admin", "password": "test-password"}).status_code == 200
     client.post("/api/logout", json={})
     assert client.post("/api/login", json=body).status_code == 401
+
+
+def test_only_a_few_password_checks_run_at_once(tmp_path, monkeypatch):
+    """Each Argon2 hash takes 64 MiB: sign-ins sent together are hashed a
+    couple at a time, the others waiting their turn, not all at once (#228)."""
+    import threading
+    import time
+    monkeypatch.setattr(auth_store, "AUTH_PATH", str(tmp_path / "auth.json"))
+    auth_store.set_credentials("admin", "correct horse battery")
+    real, running, most = auth_store._hasher.verify, [0], [0]
+    lock = threading.Lock()
+
+    def counted(hash_, password):
+        with lock:
+            running[0] += 1
+            most[0] = max(most[0], running[0])
+        time.sleep(0.05)
+        try:
+            return real(hash_, password)
+        finally:
+            with lock:
+                running[0] -= 1
+
+    class Counted:
+        verify = staticmethod(counted)
+    monkeypatch.setattr(auth_store, "_hasher", Counted())
+    results = []
+    threads = [threading.Thread(target=lambda i=i: results.append(
+        auth_store.verify_password("admin", "correct horse battery" if i == 0 else "wrong"))) for i in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(10)
+    assert sorted(results) == [False] * 7 + [True]
+    assert most[0] == auth_store.MAX_HASHING == 2

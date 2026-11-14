@@ -40,7 +40,7 @@ jobs:
           python-version: "3.15"
 
       - name: Install Python dependencies
-        run: pip install -r requirements.txt -r requirements-dev.txt
+        run: pip install --require-hashes -r requirements.txt -r requirements-dev.txt
 
       - name: Run test suite
         run: pytest -q
@@ -64,6 +64,22 @@ jobs:
 
       - name: Smoke test the container
         run: scripts/smoke_test.sh backuparr:ci
+
+      # Known vulnerabilities in the same image: Alpine's packages, the
+      # Python packages and rclone. A CRITICAL or HIGH one with a fix out
+      # fails the build, and the log's table names it. One accepted for a
+      # reason (say, a fix rclone hasn't shipped yet) goes in .trivyignore
+      # with that reason. Trivy's own version is pinned below; Dependabot
+      # updates the action but not that.
+      - name: Scan the image for known vulnerabilities (Trivy)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: backuparr:ci
+          version: v0.76.2
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
 
       # Both target architectures; nothing is pushed from this workflow.
       - name: Build Docker image (no push)

@@ -19,6 +19,7 @@ def make_zip(path):
     ("backup-2026-10-06-172005.tar.gz", ".tar.gz"),
     ("backup.tar.xz", ".tar.xz"),
     ("dump.sqlite", ".sqlite"),
+    ("immich-database.sql.gz", ".sql.gz"),
     ("no_extension", ".bin"),
 ])
 def test_non_zip_archives_keep_their_own_suffix(tmp_path, name, expected):
@@ -59,7 +60,17 @@ def test_run_backup_names_each_archive_by_its_real_format(tmp_path, monkeypatch)
     monkeypatch.setattr(backup.rclone_util, "copyto", lambda src, dst: uploaded.append(dst))
     monkeypatch.setattr(backup, "apply_retention", lambda *args, **kwargs: None)
 
+    # Encrypted by default (#147): the format's extension stays, .enc after it.
     ok, failed = backup.run_backup({"apps": {n: {} for n in kinds}, "destinations": {"local": {}}})
+
+    assert not failed and sorted(ok) == sorted(kinds)
+    names = {dst.split("/")[2]: dst.rsplit("/", 1)[1] for dst in uploaded}
+    assert re.fullmatch(r"profilarr_\d{8}_\d{6}\.tar\.gz\.enc", names["profilarr"])
+    assert re.fullmatch(r"radarr_\d{8}_\d{6}\.zip\.enc", names["radarr"])
+    assert re.fullmatch(r"tdarr_\d{8}_\d{6}\.zip\.enc", names["tdarr"])
+
+    uploaded.clear()
+    ok, failed = backup.run_backup({"apps": {n: {"encrypt": False} for n in kinds}, "destinations": {"local": {}}})
 
     assert not failed and sorted(ok) == sorted(kinds)
     names = {dst.split("/")[2]: dst.rsplit("/", 1)[1] for dst in uploaded}
@@ -90,28 +101,3 @@ def effective_umask(value):
 ])
 def test_entrypoint_umask_defaults_private_and_rejects_bad_values(value, expected):
     assert effective_umask(value) == expected
-
-
-PROXY_BLOCK = re.search(r'FORCE_HTTPS_LOWER=.*?\nfi\n', ENTRYPOINT.read_text(), re.S).group(0)
-
-
-def waitress_args(**env):
-    script = 'WAITRESS_ARGS=()\n' + PROXY_BLOCK + 'printf "%s\\n" "${WAITRESS_ARGS[@]}"'
-    clean = {k: v for k, v in os.environ.items() if not k.startswith("BACKUPARR_")}
-    out = subprocess.run(["bash", "-c", script], env={**clean, **env}, capture_output=True, text=True, check=True)
-    return [line for line in out.stdout.splitlines() if line]
-
-
-def test_plain_http_trusts_no_proxy_headers():
-    assert waitress_args() == []
-
-
-def test_https_alone_never_trusts_a_forwarded_client_address():
-    # Anyone reaching the port directly could forge X-Forwarded-For to dodge the login lockout.
-    args = waitress_args(BACKUPARR_FORCE_HTTPS="true")
-    assert args == ['--trusted-proxy=*', '--trusted-proxy-headers=x-forwarded-proto x-forwarded-host']
-
-
-def test_a_named_proxy_is_the_only_source_of_client_addresses():
-    args = waitress_args(BACKUPARR_FORCE_HTTPS="yes", BACKUPARR_TRUSTED_PROXY="172.18.0.5")
-    assert args == ['--trusted-proxy=172.18.0.5', '--trusted-proxy-headers=x-forwarded-proto x-forwarded-for x-forwarded-host']

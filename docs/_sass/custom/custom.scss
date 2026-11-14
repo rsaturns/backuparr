@@ -1,0 +1,16 @@
+// Just the Docs adds this file to the site's stylesheet.
+
+// A list with {: .columns-2 } under it (the apps on the Features page) runs
+// in two columns, on a phone too.
+.columns-2 {
+  columns: 2;
+  column-gap: 1.5rem;
+
+  // Spaced by padding, not margin: a column break drops the top margin of
+  // the next column's first item, which then sits higher than the first.
+  > li {
+    break-inside: avoid;
+    margin: 0;
+    padding-top: 0.25em;
+  }
+}

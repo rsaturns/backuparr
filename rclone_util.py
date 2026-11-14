@@ -47,7 +47,7 @@ def _clean_stderr(stderr):
 _HINTS = (
     (re.compile(r"read-only file system", re.I), "the destination is read-only"),
     (re.compile(r"permission denied", re.I), "the folder isn't writable by Backuparr's user (PUID:PGID)"),
-    (re.compile(r"no space left|disk quota|insufficient storage|storagequotaexceeded|out of space|quota.*exceeded", re.I), "the destination is out of space"),
+    (re.compile(r"no space left|disk quota|insufficient storage|insufficient[ _]space|quota ?limit ?reached|storagequotaexceeded|out of space|quota.*exceeded", re.I), "the destination is out of space"),
     (re.compile(r"invalid_grant|expired or revoked|couldn't fetch token|unauthorized_client|401 unauthorized", re.I), "the connection to this destination has expired or been revoked - reconnect it in Settings"),
     (re.compile(r"no such host|lookup .* on .*:", re.I), "the destination's hostname couldn't be resolved - check this container's network and DNS"),
 )
@@ -72,18 +72,32 @@ def _env(args):
     return None
 
 
-def _run(args, redact=()):
-    # stdin closed so an inherited TTY (e.g. manual docker exec) can't hang.
-    proc = subprocess.run(["rclone", *args], capture_output=True, text=True, stdin=subprocess.DEVNULL, env=_env(args))
-    if proc.returncode != 0:
-        cleaned = _clean_stderr(proc.stderr)
-        detail = f"{cleaned}{_hint(cleaned)}"
-        message = f"rclone {' '.join(args)} failed: {detail}"
+# How long a listing, a delete or a change to rclone.conf may take (#229).
+# rclone's own --contimeout and --timeout end most stalls, but with its
+# retries a listing can still take many minutes, and a web request (History,
+# Restore, Test) waits for all of it. A copy has no limit: a large upload on
+# a slow connection takes as long as it takes.
+TIMEOUT = 300
+
+
+def _run(args, redact=(), timeout=TIMEOUT):
+    def redacted(text):
         for secret in redact:
             if secret:
-                message = message.replace(secret, "***")
-                detail = detail.replace(secret, "***")
-        raise RcloneError(message, detail, proc.returncode)
+                text = text.replace(secret, "***")
+        return text
+
+    # stdin closed so an inherited TTY (e.g. manual docker exec) can't hang.
+    try:
+        proc = subprocess.run(["rclone", *args], capture_output=True, text=True, stdin=subprocess.DEVNULL, env=_env(args),
+                              timeout=timeout)
+    except subprocess.TimeoutExpired:  # rclone has been stopped
+        detail = f"the destination didn't answer within {timeout // 60} minutes - check its connection and try again"
+        raise RcloneError(redacted(f"rclone {' '.join(args)} failed: {detail}"), detail) from None
+    if proc.returncode != 0:
+        cleaned = _clean_stderr(proc.stderr)
+        detail = redacted(f"{cleaned}{_hint(cleaned)}")
+        raise RcloneError(redacted(f"rclone {' '.join(args)} failed: {detail}"), detail, proc.returncode)
     return proc.stdout
 
 
@@ -126,7 +140,7 @@ def connected_remote(name, connected, remotes=None):
 
 
 def copyto(local_path, remote_path):
-    _run(["copyto", local_path, remote_path])
+    _run(["copyto", local_path, remote_path], timeout=None)
 
 
 def delete_file(remote_path):

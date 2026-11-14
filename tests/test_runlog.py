@@ -135,7 +135,7 @@ def test_a_run_saves_each_apps_log_and_result(backup_run):
     saved = runlog.latest()["sabnzbd"]
     full = runlog.get("sabnzbd", saved["id"])
     assert saved["ok"] is True and saved["error"] is None and saved["app_version"] == "5.1.3"
-    assert saved["file"] == saved["id"] + ".zip"
+    assert saved["file"] == saved["id"] + ".zip.enc"
     assert saved["destinations"] == {"local": {"ok": True, "error": None}, "gdrive": {"ok": True, "error": None}}
     messages = [line["message"] for line in full["lines"]]
     assert "sabnzbd: server passwords are masked" in messages
@@ -255,3 +255,21 @@ def test_reset_deletes_the_run_logs(authed_client, isolated_webui):
     runlog.save(run("radarr", "20261101_030000"))
     authed_client.post("/api/reset", json={"confirm": isolated_webui.auth.RESET_CONFIRM_PHRASE})
     assert not os.path.exists(runlog.path())
+
+
+def test_forgetting_a_failed_run_on_one_destination_keeps_it_for_the_others():
+    runlog.save({"id": "radarr_20260101_030000", "app": "radarr", "file": None, "ok": False, "error": "x",
+                 "destinations": {"local": None, "gdrive": None}, "lines": []})
+    assert runlog.forget_run("radarr", "radarr_20260101_030000", "local") is True
+    assert runlog.get("radarr", "radarr_20260101_030000")["destinations"] == {"gdrive": None}
+    assert runlog.forget_run("radarr", "radarr_20260101_030000", "gdrive") is True
+    assert runlog.get("radarr", "radarr_20260101_030000") is None
+    assert runlog.forget_run("radarr", "radarr_20260101_030000", "gdrive") is False
+
+
+def test_forgetting_a_run_whose_backup_reached_a_destination_keeps_its_log():
+    runlog.save({"id": "radarr_20260101_030000", "app": "radarr", "file": "radarr_20260101_030000.zip", "ok": False,
+                 "error": "failed on gdrive", "lines": [],
+                 "destinations": {"local": {"ok": True, "error": None}, "gdrive": {"ok": False, "error": "quota"}}})
+    runlog.forget_run("radarr", "radarr_20260101_030000", "gdrive")
+    assert runlog.get("radarr", "radarr_20260101_030000")["destinations"] == {"local": {"ok": True, "error": None}}

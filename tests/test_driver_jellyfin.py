@@ -173,6 +173,29 @@ def test_windows_server_paths_map_to_the_filename(app, server, folder, tmp_path)
     assert app.backup(str(tmp_path / "work")).endswith("jellyfin-backup-2.zip")
 
 
+def test_include_metadata_asks_jellyfin_for_its_metadata_option_with_more_time(server, folder, tmp_path, monkeypatch):
+    server.routes["POST /Backup/Create"] = (200, created(folder))
+    timeouts = []
+    real_post = requests.Session.post
+    monkeypatch.setattr(requests.Session, "post", lambda self, url, **kw: (timeouts.append(kw.get("timeout")), real_post(self, url, **kw))[1])
+    JellyfinApp("http://jellyfin:8096", KEY, backup_dir=str(folder), metadata=True).backup(str(tmp_path / "work"))
+    assert json.loads(server.sent[-1].body) == {"Database": True, "Metadata": True, "Trickplay": False, "Subtitles": False}
+    assert timeouts == [3600]
+
+
+@pytest.mark.parametrize("version, restores", [("10.11.6", False), ("10.11.7", True), ("10.11.11", True),
+                                               ("12.4.0", True), ("?", True)])
+def test_metadata_is_left_out_on_a_jellyfin_that_cant_restore_it(server, folder, tmp_path, caplog, version, restores):
+    server.routes["GET /System/Info"] = (200, {"Version": version})
+    server.routes["POST /Backup/Create"] = (200, created(folder))
+    app = JellyfinApp("http://jellyfin:8096", KEY, backup_dir=str(folder), metadata=True)
+    note = "; metadata needs Jellyfin 10.11.7 or newer, so backups leave it out"
+    assert app.test_connection().endswith(note) is not restores
+    app.backup(str(tmp_path / "work"))
+    assert json.loads(server.sent[-1].body)["Metadata"] is restores
+    assert ("can't restore metadata to its metadata folder (fixed in 10.11.7)" in caplog.text) is not restores
+
+
 # --- restore -----------------------------------------------------------------
 
 def listing_once_copied(folder):
@@ -217,3 +240,16 @@ def test_a_failed_restore_call_is_reported(app, server, folder, tmp_path):
     server.routes["POST /Backup/Restore"] = (500, {})
     with pytest.raises(requests.exceptions.HTTPError):
         app.restore_from_file(archive(tmp_path / "jellyfin_1.zip"))
+
+
+def test_restore_never_writes_through_a_link_in_the_backups_folder(app, server, folder, tmp_path):
+    """GHSA-r2gf-f7v8-j7g2: a link Jellyfin left at the archive's name."""
+    source = archive(tmp_path / "jellyfin_20261028_030000.zip")
+    outside = tmp_path / "auth.json"
+    outside.write_text("Backuparr's login")
+    (folder / "jellyfin_20261028_030000.zip").symlink_to(outside)
+    server.routes["GET /Backup"] = (200, [])
+    with pytest.raises(JellyfinError, match="^jellyfin: jellyfin_20261028_030000.zip in .* is a link - Backuparr won't write through it$"):
+        app.restore_from_file(source)
+    assert outside.read_text() == "Backuparr's login"
+    assert not any(r.path_url == "/Backup/Restore" for r in server.sent)

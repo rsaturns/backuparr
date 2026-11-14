@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Backuparr - backup your Arrs">
+<meta name="description" content="Backuparr - Everything you host, backed up.">
 <title>Backuparr</title>
 <script src="{{ url_for('static', filename='theme-init.js') }}"></script>
 <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
@@ -17,10 +17,10 @@
       <img class="brand-mark" src="{{ url_for('static', filename='logo.png') }}" alt="">
       <span class="brand-text">
         <span class="brand-name">Backuparr</span>
-        <span class="brand-tagline">Backup your Arrs</span>
+        <span class="brand-tagline">Everything you host, backed up.</span>
       </span>
     </div>
-    <h2>Log in</h2>
+    <h2>Log In</h2>
     <label class="field">
       <span class="field-label">Username</span>
       <input type="text" id="li-username" autocomplete="username">
@@ -74,6 +74,7 @@
   </div>
 </div>
 
+<script src="{{ url_for('static', filename='messages.js') }}"></script>
 <script src="{{ url_for('static', filename='login.js') }}"></script>
 </body>
 </html>

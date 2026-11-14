@@ -6,6 +6,12 @@ nav_order: 1
 
 # Bazarr
 
+## Setting it up
+
+On Bazarr's card, enter its URL - for example `http://bazarr:6767` - and its
+API key, from Bazarr's **Settings > General > Security > API Key**. Click
+**Test connection**.
+
 ## Backup downloads and Bazarr's web auth
 
 Bazarr's backup download follows its **Settings > General > Security**, not
@@ -27,3 +33,6 @@ A restore needs Bazarr's config/backup folder mounted into Backuparr:
 
 Enter it under **Bazarr backup folder** on the Restore tab, unless it's set in
 Settings.
+
+Bazarr's own guide: [Backups](https://wiki.bazarr.media/Additional-Configuration/Settings/Application/#backups)
+in its Application settings.

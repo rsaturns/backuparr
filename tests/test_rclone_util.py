@@ -116,6 +116,14 @@ def test_check_remote_lists_only_the_remote_itself(monkeypatch, root, expected):
     ("Failed to copyto: write /backups/a.zip: no space left on device", "the destination is out of space"),
     ("Failed to copyto: open /backups/a.zip: read-only file system", "the destination is read-only"),
     ("Failed to copyto: googleapi: Error 403: storageQuotaExceeded", "the destination is out of space"),
+    # Google Drive, full: Google's documented storageQuotaExceeded error as rclone prints it
+    # (google-api-go-client's googleapi.Error: "Error <code>: <message>, <reason>").
+    ("Failed to copyto: googleapi: Error 403: The user's Drive storage quota has been exceeded., storageQuotaExceeded",
+     "the destination is out of space"),
+    # Dropbox, as a full lab account answered.
+    ("Failed to copyto: upload failed: batch upload failed: upload failed: path/insufficient_space", "the destination is out of space"),
+    # OneDrive, as a full lab account answered.
+    ("Failed to copyto: quotaLimitReached: Quota limit reached", "the destination is out of space"),
     ("Failed to copyto: couldn't fetch token: invalid_grant: maybe token expired?", "reconnect it in Settings"),
     ("Failed to lsd: Get \"https://api.dropboxapi.com\": dial tcp: lookup api.dropboxapi.com on 127.0.0.11:53: no such host", "check this container's network and DNS"),
 ])
@@ -185,3 +193,30 @@ def test_a_listing_passes_its_include_patterns(monkeypatch):
     rclone_util.lsjson("remote:", recursive=True, include=["/{a,b-*}/**"])
     rclone_util.lsjson("remote:")
     assert calls == [["lsjson", "--recursive", "--include", "/{a,b-*}/**", "remote:"], ["lsjson", "remote:"]]
+
+
+def test_a_listing_delete_or_config_change_has_a_time_limit_and_a_copy_none():
+    """A web request waits for these, holding one of the server's threads
+    (#229); an upload takes as long as it takes."""
+    seen = []
+
+    def fake_run(argv, **kwargs):
+        seen.append((argv[1], kwargs.get("timeout")))
+        return MagicMock(returncode=0, stdout="[]" if argv[1] == "lsjson" else "{}", stderr="")
+    with patch("rclone_util.subprocess.run", side_effect=fake_run):
+        rclone_util.lsjson("remote:")
+        rclone_util.lsf("remote:radarr/")
+        rclone_util.delete_file("remote:radarr/radarr_20261101_030000.zip")
+        rclone_util.config_dump()
+        rclone_util.check_remote("remote:radarr")
+        rclone_util.copyto("/tmp/a.zip", "remote:radarr/a.zip")
+    assert seen == [("lsjson", 300), ("lsf", 300), ("deletefile", 300), ("config", 300), ("lsd", 300), ("copyto", None)]
+
+
+def test_a_command_that_runs_out_of_time_says_so_plainly():
+    secret = "s3kr1t-token-value"
+    with patch("rclone_util.subprocess.run", side_effect=rclone_util.subprocess.TimeoutExpired(["rclone"], 300)):
+        with pytest.raises(rclone_util.RcloneError) as exc:
+            rclone_util._run(["config", "update", "gdrive", "token", secret], redact=[secret])
+    assert exc.value.detail == "the destination didn't answer within 5 minutes - check its connection and try again"
+    assert secret not in str(exc.value) and exc.value.returncode is None

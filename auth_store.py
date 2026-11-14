@@ -8,6 +8,7 @@ match one of OWASP's listed acceptable configurations.
 import hmac
 import json
 import os
+import threading
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
@@ -16,6 +17,11 @@ import atomic_file
 
 AUTH_PATH = os.environ.get("BACKUPARR_AUTH", "/config/backuparr/auth.json")
 _hasher = PasswordHasher()
+# Each hash takes 64 MiB. Sign-ins sent at once would otherwise all be
+# hashed together - up to one per request thread, about 1 GiB - so at most
+# MAX_HASHING run at a time and the rest wait their turn (#228).
+MAX_HASHING = 2
+_HASHING = threading.BoundedSemaphore(MAX_HASHING)
 
 
 def has_credentials():
@@ -36,7 +42,9 @@ def username():
 
 
 def set_credentials(username, password):
-    data = {"username": username, "password_hash": _hasher.hash(password)}
+    with _HASHING:
+        password_hash = _hasher.hash(password)
+    data = {"username": username, "password_hash": password_hash}
     atomic_file.write_private(AUTH_PATH, json.dumps(data, indent=2))
 
 
@@ -49,7 +57,8 @@ def verify_password(username, password):
     valid_user = hmac.compare_digest(
         username.encode("utf-8"), data.get("username", "").encode("utf-8"))
     try:
-        _hasher.verify(data.get("password_hash", ""), password)
+        with _HASHING:
+            _hasher.verify(data.get("password_hash", ""), password)
         valid_pass = True
     except (VerifyMismatchError, InvalidHashError):
         valid_pass = False

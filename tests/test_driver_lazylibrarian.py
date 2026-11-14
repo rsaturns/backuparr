@@ -350,3 +350,16 @@ def test_the_restore_action_uses_the_data_folder(app, server, folder, tmp_path):
     cfg = {"url": "http://lazylibrarian:5299", "api_key": KEY, "data_dir": str(folder)}
     assert restore_actions.restore_app("lazylibrarian", cfg, str(tmp_path), archive) == {"kind": "lazylibrarian"}
     assert rows(folder / "lazylibrarian.db") == ["book"]
+
+
+def test_restore_never_writes_through_a_link_in_lazylibrarians_folder(app, server, folder, tmp_path):
+    """GHSA-r2gf-f7v8-j7g2."""
+    archive = make_backup(app, tmp_path)
+    outside = tmp_path / "auth.json"
+    outside.write_text("Backuparr's login")
+    (folder / "config.ini").unlink()
+    (folder / "config.ini").symlink_to(outside)
+    stop(server)
+    with pytest.raises(LazyLibrarianError, match="^lazylibrarian: config.ini in .* is a link - Backuparr won't write through it$"):
+        app.restore_from_file(archive)
+    assert outside.read_text() == "Backuparr's login" and rows(folder / "lazylibrarian.db") == ["book"]

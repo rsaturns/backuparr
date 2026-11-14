@@ -18,12 +18,12 @@ header. Its quirks:
 """
 import logging
 import os
-import shutil
 import time
 import zipfile
 
 import requests
 
+from apps import mounted
 from apps.base import AppError, poll_until, save_stream
 from apps.servarr import SameHostSession
 
@@ -105,8 +105,8 @@ class BazarrApp:
                 if res.status_code == 401:
                     raise BazarrError(
                         "bazarr: download unauthorized - if Settings > General > Security is set to "
-                        "'Forms', switch it to 'None' or 'Basic' (and fill in the Basic auth username and "
-                        "password on Bazarr's card) for automated backups to work"
+                        "'Forms', switch it to 'None' or 'Basic' (and enter the Basic auth username and "
+                        "password for Bazarr in Backuparr's Settings) for automated backups to work"
                     )
                 res.raise_for_status()
                 save_stream(res, dest)
@@ -134,11 +134,9 @@ class BazarrApp:
         self.list_backups()
         stem = os.path.splitext(os.path.basename(local_zip_path))[0]
         filename = f"bazarr_backup_v{stem}.zip"
-        target = os.path.join(bazarr_backup_dir, filename)
-        shutil.copyfile(local_zip_path, target)
-        # Backuparr's private umask would make this unreadable to Bazarr
-        # when the two containers run as different users.
-        os.chmod(target, 0o644)
+        # Never through a link Bazarr left at that name; readable to Bazarr,
+        # which Backuparr's private umask would stop.
+        mounted.copy_in_place(local_zip_path, bazarr_backup_dir, filename, BazarrError, "bazarr", mode=0o644)
 
         try:
             res = self.session.patch(
