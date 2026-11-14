@@ -7,35 +7,81 @@ has_toc: false
 
 # Apps
 
-| App | Backup | Restore |
+How each app is backed up and restored. Each app's page has its setup and
+the details.
+
+## Media Management
+
+| App | Backed up | Restored |
 |---|---|---|
-| Radarr / Sonarr / Lidarr / Whisparr / Prowlarr | The app's own backup zip (`POST /system/backup`), downloaded and then deleted on the server. If the app asks every address to log in, it needs its login on the card or **Disabled for Local Addresses** - see the [Radarr, Sonarr and Lidarr note](servarr.md) | Uploaded to `/system/backup/restore/upload`; the app restarts itself. Whisparr - see the [Whisparr note](whisparr.md) |
-| Profilarr | The app's own backup (`POST /api/v1/backups`), downloaded and then deleted on the server | By hand: the Restore tab gives the download and the steps - see the [Profilarr note](profilarr.md) |
-| Bazarr | The app's own backup (`POST /api/system/backups`), downloaded and then deleted on the server | Written into Bazarr's mounted backup folder, then restored over the API. Downloads depend on Bazarr's web auth - see the [Bazarr note](bazarr.md) |
-| Tdarr | Every internal database collection, read over `/api/v2/cruddb` | Destructive: each collection is wiped, then refilled - see the [Tdarr note](tdarr.md) |
-| SABnzbd | `get_config` over the API. SABnzbd masks every password as `**********` - see the [SABnzbd note](sabnzbd.md) | Settings and Usenet servers over `set_config`; you're asked for each server's password. Categories, RSS feeds and sorters aren't restored |
-| NZBGet | Every setting, real passwords included, over JSON-RPC `loadconfig` | `saveconfig`, then NZBGet reloads - see the [NZBGet note](nzbget.md) |
-| Tautulli | `download_database` and `download_config` | Config only, via `import_config` - see the [Tautulli note](tautulli.md) |
-| Jellyfin (10.11+) | Jellyfin's own backup (`POST /Backup/Create`), picked up from its mounted backups folder | Over `POST /Backup/Restore`; Jellyfin restarts - see the [Jellyfin note](jellyfin.md) |
-| Emby | Settings, plugins, lists and databases from its mounted data folder, while Emby runs | Written back while Emby is stopped - see the [Emby note](emby.md) |
-| Plex | Plex's database export (`GET /diagnostics/databases`) plus `Preferences.xml` from its mounted data folder | Written back while Plex is stopped; the server keeps its identity - see the [Plex note](plex.md) |
-| Seerr | Database and `settings.json` from its mounted config folder, while Seerr runs | Written back while Seerr is stopped - see the [Seerr note](seerr.md) |
-| Home Assistant (2025.5+) | Home Assistant's own backup with the options of its backup page, over its WebSocket API with an administrator's token, then deleted in Home Assistant; always encrypted - see the [Home Assistant note](homeassistant.md) | Uploaded and restored by Home Assistant, which restarts; HA OS also restores apps and folders. Works on a new install that isn't set up yet; an HA OS backup restores only onto HA OS |
-| Immich (2.5.0+) | A database dump from Immich's backup job, over its API, then deleted in Immich; photos and videos aren't included - see the [Immich note](immich.md) | Uploaded and restored by Immich in maintenance mode; Immich restarts. Works on a new install with no admin yet |
-| LazyLibrarian | The app's own backup (`cmd=backup`), collected from its mounted data folder | Written back while LazyLibrarian is stopped - see the [LazyLibrarian note](lazylibrarian.md) |
-| Pi-hole (v6+) | Teleporter (`GET /api/teleporter`), with an app password; always encrypted - see the [Pi-hole note](pihole.md) | Imported over `POST /api/teleporter`; Pi-hole restarts |
-| OPNsense (24.7+) | `config.xml` over its API (`GET /api/core/backup/download/this`) with a backup-only API key; a self-signed certificate is trusted on the card; always encrypted - see the [OPNsense note](opnsense.md) | By hand: the Restore tab gives the download and the steps |
-| pfSense (CE and Plus) | `config.xml` from its web UI's Backup & Restore page, signed in as Netgate documents for scripted backups; a self-signed certificate is trusted on the card; always encrypted - see the [pfSense note](pfsense.md) | By hand: the Restore tab gives the download and the steps |
-| UniFi | UniFi OS's own backup (`.unifi`, everything; a Super Admin), or UniFi Network's (`.unf`, on UniFi OS or UniFi Network Server) with the statistics History keeps; signed in as a local admin; a self-signed certificate is trusted on the card; always encrypted - see the [UniFi note](unifi.md) | By hand: the Restore tab gives the download and the steps |
-| Unraid | Unraid's own Boot Device Backup, the whole boot device (USB flash drive or internal boot) without the previous release, signed in as root; a self-signed certificate is trusted on the card; always encrypted - see the [Unraid note](unraid.md) | By hand, with the Unraid USB Flash Creator: the Restore tab gives the download and the steps |
-| Synology DSM (7 and 6.2) | DSM's own Configuration Backup (`.dss`): its settings, not the data in its shared folders, over the Control Panel's Web API calls, signed in as an administrator (2-factor sign-in with a code works); a self-signed certificate is trusted on the card; always encrypted - see the [Synology DSM note](synology.md) | By hand, in DSM's Control Panel: the Restore tab gives the download and the steps |
-| QNAP QuTS hero (h5.2+) | QuTS hero's system configuration file (`.bin`): its settings, not the data in its shared folders, from the Control Panel's own export, signed in as an administrator or an account with the System Management role (2-step verification with a code works); a self-signed certificate is trusted on the card; always encrypted - see the [QNAP QuTS hero note](qnap.md) | By hand, in the Control Panel; the NAS restarts. The Restore tab gives the download and the steps |
-| Bitwarden (self-hosted) | The standard install's `bwdata` folder with its newest nightly database backup, or Bitwarden lite's newest own backup (lite 2026.10.1+), from a mounted folder; a self-signed certificate is trusted on the card; always encrypted - see the [Bitwarden note](bitwarden.md) | By hand: the Restore tab gives the download and the steps |
-| Vaultwarden | Database, RSA key, `config.json`, attachments and Sends from its mounted data folder, while Vaultwarden runs; always encrypted | Written back while Vaultwarden is stopped - see the [Vaultwarden note](vaultwarden.md) |
+| [Radarr, Sonarr, Lidarr and Prowlarr](servarr.md) | Their own backup, over the API | From the web UI |
+| [Whisparr](whisparr.md) (v2 and v3) | Its own backup, over the API | From the web UI |
+| [Profilarr](profilarr.md) | Its own backup, over the API | By hand |
+| [Bazarr](bazarr.md) | Its own backup, over the API | From the web UI, with its backup folder mounted |
+| [Tdarr](tdarr.md) (2 and 3) | Its database, over the API | From the web UI |
+| [LazyLibrarian](lazylibrarian.md) | Its own backup, from its mounted folder | From the web UI, while it's stopped |
 
-For the apps with a mounted folder, read-only is enough for backups; restoring
-from the web UI needs it read-write, with Backuparr running as the app's
-`PUID`/`PGID` (or otherwise able to write the app's files).
+If Radarr, Sonarr, Lidarr, Whisparr or Prowlarr asks every address to log
+in, it needs its login on the card or **Disabled for Local Addresses** - see
+[the note](servarr.md).
 
-Running more than one instance of an app? See
-[More than one instance](../settings.md#more-than-one-instance).
+## Downloaders
+
+| App | Backed up | Restored |
+|---|---|---|
+| [SABnzbd](sabnzbd.md) | Its settings, without passwords, over the API | From the web UI |
+| [NZBGet](nzbget.md) | Its settings, over the API | From the web UI |
+
+## Media Servers
+
+| App | Backed up | Restored |
+|---|---|---|
+| [Plex](plex.md) | Its database over the API, its settings from its mounted folder | From the web UI, while it's stopped |
+| [Jellyfin](jellyfin.md) (10.11+) | Its own backup, from its mounted folder | From the web UI |
+| [Emby](emby.md) | Its databases and settings, from its mounted folder | From the web UI, while it's stopped |
+| [Tautulli](tautulli.md) | Its database and config, over the API | The config from the web UI, the database by hand |
+| [Seerr](seerr.md) | Its database and settings, from its mounted folder | From the web UI, while it's stopped |
+| [Immich](immich.md) (2.5.0+) | Its database, not photos, over the API | From the web UI |
+
+## Network
+
+| App | Backed up | Restored |
+|---|---|---|
+| [Pi-hole](pihole.md) (v6+) | Teleporter, over the API | From the web UI |
+| [OPNsense](opnsense.md) (24.7+) | `config.xml`, over the API | By hand |
+| [pfSense](pfsense.md) (CE and Plus) | `config.xml`, from its web UI | By hand |
+| [UniFi](unifi.md) | Its own backup, from its web UI | By hand |
+
+## Security
+
+| App | Backed up | Restored |
+|---|---|---|
+| [Bitwarden](bitwarden.md) (self-hosted) | Its data and database backup, from its mounted folder | By hand |
+| [Vaultwarden](vaultwarden.md) | Its data, from its mounted folder | From the web UI, while it's stopped |
+
+## Home Automation
+
+| App | Backed up | Restored |
+|---|---|---|
+| [Home Assistant](homeassistant.md) (2025.5+) | Its own backup, over its API | From the web UI |
+
+## Server
+
+| App | Backed up | Restored |
+|---|---|---|
+| [Unraid](unraid.md) | Its boot device, from its web UI | By hand |
+| [Synology DSM](synology.md) (7 and 6.2) | Its settings, not your data, from its web UI | By hand |
+| [QNAP QuTS hero](qnap.md) (h5.2+) | Its settings, not your data, from its web UI | By hand |
+
+## Good to know
+
+- Backups of Pi-hole, Bitwarden, Vaultwarden, OPNsense, pfSense, UniFi, Home
+  Assistant, Unraid, Synology DSM and QNAP QuTS hero are always encrypted -
+  see [Encrypted backups](../security.md#encrypted-backups).
+- [What each restore does](../restoring.md#what-each-restore-does) lists what
+  happens when each app is restored.
+- For the apps with a mounted folder, read-only is enough for backups;
+  restoring from the web UI needs it read-write, with Backuparr running as the
+  app's `PUID`/`PGID` (or otherwise able to write the app's files).
+- Running more than one instance of an app? See
+  [More than one instance](../settings.md#more-than-one-instance).
