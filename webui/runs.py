@@ -57,14 +57,19 @@ RESTORE_RUN_STATE = {
 
 class _ListLogHandler(logging.Handler):
     """Keeps a run's newest lines for the UI, which is sent the whole list
-    on every status poll; backup.log keeps them all."""
+    on every status poll; backup.log keeps them all. Only lines from the
+    run's own thread count, as in runlog.Capture: a web request or the
+    startup backfill logging meanwhile isn't part of the run (#227)."""
     MAX_LINES = 500
 
     def __init__(self, sink):
         super().__init__()
         self.sink = sink
+        self.thread = threading.get_ident()
 
     def emit(self, record):
+        if record.thread != self.thread:
+            return
         self.sink.append(self.format(record))
         if len(self.sink) > self.MAX_LINES:
             del self.sink[:-self.MAX_LINES]
@@ -268,6 +273,8 @@ def _scheduler_loop():
                     log.info("scheduler: starting backup run (schedule %r, %s)", schedule, now.isoformat())
                 elif RESTORE_RUN_STATE["running"]:
                     log.warning("scheduler: skipped the %s backup run - a restore is in progress", now.isoformat())
+                else:
+                    log.warning("scheduler: skipped the %s backup run - a backup is already running", now.isoformat())
         except Exception as exc:
             # A persistent problem (unreadable config.json, say) would
             # repeat every tick; report each distinct one once.

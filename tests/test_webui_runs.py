@@ -207,6 +207,24 @@ def test_run_tracked_always_marks_the_run_finished(isolated_webui):
     assert not any(isinstance(h, isolated_webui.runs._ListLogHandler) for h in logging.getLogger("backuparr").handlers)
 
 
+def test_a_runs_live_log_keeps_only_its_own_threads_lines(isolated_webui):
+    """A web request's warning, or the startup backfill's lines, logged while
+    a backup runs aren't part of it (#227)."""
+    state = {"running": True, "finished_at": None, "log": []}
+
+    def elsewhere():
+        logging.getLogger("backuparr.webui").warning("a web request's warning")
+
+    def work():
+        logging.getLogger("backuparr").warning("the run's own line")
+        other = threading.Thread(target=elsewhere)
+        other.start()
+        other.join()
+
+    isolated_webui.runs._run_tracked(state, work)
+    assert [line.split(" ", 3)[-1] for line in state["log"]] == ["the run's own line"]
+
+
 def test_start_tracked_run_applies_resets_only_when_it_really_starts(inline):
     state = {"running": False, "started_at": None, "finished_at": "old", "items": ["stale"], "log": []}
     ran, order = [], []
@@ -324,11 +342,15 @@ def test_the_scheduler_reads_the_config_only_when_it_changes(isolated_webui, mon
     assert len(loads) == 2
 
 
-def test_the_scheduler_does_not_retry_a_minute_skipped_because_a_run_was_active(isolated_webui, monkeypatch, clock):
+def test_the_scheduler_does_not_retry_a_minute_skipped_because_a_run_was_active(isolated_webui, monkeypatch, clock, caplog):
     attempts = []
     monkeypatch.setattr(isolated_webui.runs, "_start_backup_run", lambda: attempts.append(1) or False)
-    clock("* * * * *", [at(5, 3, 0, 0), at(5, 3, 0, 20), at(5, 3, 0, 40)])
+    with caplog.at_level(logging.WARNING, logger="backuparr"):
+        clock("* * * * *", [at(5, 3, 0, 0), at(5, 3, 0, 20), at(5, 3, 0, 40)])
     assert attempts == [1]
+    # Said once, with why (#227).
+    assert [r.getMessage() for r in caplog.records if "skipped" in r.getMessage()] == [
+        "scheduler: skipped the 2026-01-05T03:00:00 backup run - a backup is already running"]
 
 
 def test_a_run_that_cannot_start_for_lack_of_disk_is_reported_in_one_line(inline, authed_client, monkeypatch, caplog):
