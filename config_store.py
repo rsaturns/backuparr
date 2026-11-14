@@ -713,14 +713,14 @@ DESTINATION_META = [
         "description": "Written straight to this container's own volume - nothing to connect. Download any backup from the History tab.",
         "setup_help": {
             "title": "Local Storage",
-            "intro": "No setup needed - this works out of the box.",
+            "intro": "No setup needed.",
             "steps": [
                 {
-                    "text": "Backups are written here by default, on the volume already mounted for this container (see docker-compose.yml):",
+                    "text": "Backups are written here, on the volume already mounted for this container:",
                     "code": "/config/backuparr/backups",
                     "link": None,
                 },
-                "Optionally set a custom path below if you'd rather use a different mounted volume - e.g. a NAS share mounted into this container.",
+                "To use another mounted volume, such as a NAS share, set a custom path below.",
             ],
             "links": [],
         },
@@ -732,10 +732,10 @@ DESTINATION_META = [
         "description": "Backed up to a folder in your Google Drive. Click-through OAuth - no rclone config, no terminal.",
         "setup_help": {
             "title": "Connect Google Drive",
-            "intro": "Google requires every app to have its own registered OAuth client - a one-time, ~5 minute setup in Google Cloud Console.",
+            "intro": "Google needs an OAuth client of your own for Backuparr: a one-time setup of about 5 minutes in Google Cloud Console.",
             "steps": [
                 {
-                    "text": "Create a Google Cloud project (or pick an existing one) - billing is not required for this.",
+                    "text": "Create a Google Cloud project, or pick one you have. Billing isn't needed.",
                     "link": {"label": "Create a project", "url": "https://console.cloud.google.com/projectcreate"},
                 },
                 {
@@ -743,49 +743,49 @@ DESTINATION_META = [
                     "link": {"label": "Enable the Google Drive API", "url": "https://console.cloud.google.com/apis/library/drive.googleapis.com"},
                 },
                 {
-                    "text": "Also enable the Google Picker API - it's what the \"Choose folder\" button uses, separately from the Drive API above, and it must be enabled before you can restrict an API key to it in a later step.",
+                    "text": "Enable the Google Picker API too: the Choose folder button uses it.",
                     "link": {"label": "Enable the Google Picker API", "url": "https://console.cloud.google.com/apis/library/picker.googleapis.com"},
                 },
                 {
-                    "text": "Set up the Google Auth Platform: click \"Get started\", fill in an app name and your support email under App Information, then choose External under Audience (this just means anyone with a Google account can be added as a tester - it does not make the app public).",
+                    "text": "Set up the Google Auth Platform: click Get started, enter an app name and your support email, and choose External under Audience. External doesn't make the app public.",
                     "link": {"label": "Google Auth Platform - Branding", "url": "https://console.cloud.google.com/auth/branding"},
                 },
                 {
-                    "text": "On the Audience tab, add your own Google account (and anyone else who should have access) under Test users - this keeps the app private with no Google review needed. Leave Publishing status as Testing for now; the next step changes that.",
+                    "text": "On the Audience tab, add your Google account under Test users.",
                     "link": {"label": "Google Auth Platform - Audience", "url": "https://console.cloud.google.com/auth/audience"},
                 },
                 {
-                    "text": "Still on the Audience tab, click \"Publish App\" under Publishing status and confirm. This is the important step: while a project stays in Testing, Google auto-expires every refresh token 7 days after it's issued, so Backuparr's Google Drive connection (and every other Testing-status app) would silently die and need reconnecting weekly. Publishing removes that 7-day limit. It does not require Google's review/verification process here, since drive.file is a non-sensitive scope and this app stays well under Google's 100-user threshold for requiring it - clicking Publish App just flips the status immediately.",
+                    "text": "Still on the Audience tab, click Publish App and confirm. Don't skip this: while the app is in Testing, Google ends its connection every 7 days.",
                     "link": {"label": "Google Auth Platform - Audience", "url": "https://console.cloud.google.com/auth/audience"},
                 },
                 {
-                    "text": "On the Data access tab, click \"Add or remove scopes\", filter by API = \"Google Drive API\", and check the row for this scope (not .../auth/drive, which is full access) - its description reads \"See, edit, create, and delete only the specific Google Drive files you use with this app\". It's classified as a non-sensitive scope, so it'll show up under \"Your non-sensitive scopes\" in the panel, not Sensitive or Restricted. Then click \"Update\" at the bottom of the panel:",
+                    "text": "On the Data access tab, click Add or remove scopes, filter by Google Drive API, tick this scope (not .../auth/drive, which is full access) and click Update:",
                     "code": "https://www.googleapis.com/auth/drive.file",
                     "link": {"label": "Google Auth Platform - Data access", "url": "https://console.cloud.google.com/auth/scopes"},
                 },
                 {
-                    "text": "On the Clients tab, click Create Client, choose Web application, and add the redirect URI shown below to Authorized redirect URIs, exactly as shown.",
+                    "text": "On the Clients tab, click Create Client, choose Web application, and add this redirect URI:",
                     "redirect_uri": True,
                     "link": {"label": "Google Auth Platform - Clients", "url": "https://console.cloud.google.com/auth/clients"},
                 },
                 {
-                    "text": "Click Create. Google only shows the Client Secret once, at this moment - copy both the Client ID and Client Secret now.",
+                    "text": "Click Create, and copy the Client ID and Client Secret now: Google shows the secret only once.",
                     "link": None,
                 },
                 {
-                    "text": "Also create an API key - the \"Choose folder\" button needs one even though you're already signed in, since Google's folder-picker widget calls the Drive API separately from the OAuth token. Click Create Credentials > API key.",
+                    "text": "Create an API key for the Choose folder button: Create Credentials > API key.",
                     "link": {"label": "Credentials", "url": "https://console.cloud.google.com/apis/credentials"},
                 },
                 {
-                    "text": "Google Cloud now requires picking at least one API restriction for a new key - under API restrictions, choose \"Restrict key\" and select Google Picker API (only - the picker's calls are attributed to this API, not Drive API, so Drive API doesn't need to be added here).",
+                    "text": "Under API restrictions, choose Restrict key and select only Google Picker API.",
                     "link": None,
                 },
                 {
-                    "text": "Leave Application restrictions set to None. Google's own docs say restricting by Websites works if you also allow https://docs.google.com/* (the picker itself runs in an iframe hosted there) - but in practice this can still fail with a cryptic \"The API developer key is invalid\" error, since the picker's internal request doesn't always carry a referrer your browser will send. The API restriction above already limits this key to the Picker API, so an unrestricted key here is a reasonable tradeoff.",
+                    "text": "Leave Application restrictions at None.",
                     "link": None,
                 },
                 {
-                    "text": "Copy the API key, then paste the Client ID, Client Secret, and API key into the fields below, save, then click \"Connect Google Drive\". Since the app is published but unverified, Google shows a \"Google hasn't verified this app\" warning on the consent screen - that's expected for your own app; click Advanced, then \"Go to (your app name) (unsafe)\" to continue.",
+                    "text": "Paste the Client ID, Client Secret and API key below, save, and click Connect Google Drive. Google warns that the app isn't verified: click Advanced, then Go to (your app name) (unsafe).",
                     "link": None,
                 },
             ],
@@ -803,10 +803,10 @@ DESTINATION_META = [
         "description": "Backed up to a dedicated app folder in your personal OneDrive. Uses rclone's own built-in Microsoft app - no Azure account, no app registration. Personal Microsoft accounts only, not work/school (Microsoft 365) accounts.",
         "setup_help": {
             "title": "Connect OneDrive",
-            "intro": "Uses rclone's own built-in Microsoft app, so there's no Azure account or app registration to set up - just run one command on any computer with a browser (it doesn't need to be this server).",
+            "intro": "Uses rclone's built-in Microsoft app, so there's nothing to register: you run one command on any computer with a browser.",
             "steps": [
                 {
-                    "text": "Download rclone (a single binary, no install needed) on any computer with a web browser - your own laptop is fine, it doesn't have to be wherever Backuparr runs.",
+                    "text": "Download rclone on any computer with a web browser. It doesn't have to be the one Backuparr runs on.",
                     "link": {"label": "Download rclone", "url": "https://rclone.org/downloads/"},
                 },
                 {
@@ -815,11 +815,11 @@ DESTINATION_META = [
                     "link": None,
                 },
                 {
-                    "text": "It prints a link - open it in your browser, sign in with your personal Microsoft account, and approve access.",
+                    "text": "Open the link it prints, sign in with your personal Microsoft account and approve access.",
                     "link": None,
                 },
                 {
-                    "text": "Back in the terminal, rclone prints a block starting with \"Paste the following into your remote machine --->\". Copy that whole block (or just the line in the middle - either works) and paste it below, then click \"Connect OneDrive\".",
+                    "text": "Copy the block rclone then prints after \"Paste the following into your remote machine --->\", paste it below and click Connect OneDrive.",
                     "link": None,
                 },
             ],
@@ -836,10 +836,10 @@ DESTINATION_META = [
         "description": "Backed up to a Backuparr folder in your Dropbox. Uses rclone's own built-in Dropbox app - no Dropbox developer account, no app registration.",
         "setup_help": {
             "title": "Connect Dropbox",
-            "intro": "Uses rclone's own built-in Dropbox app, so there's no app to register - just run one command on any computer with a browser (it doesn't need to be this server).",
+            "intro": "Uses rclone's built-in Dropbox app, so there's nothing to register: you run one command on any computer with a browser.",
             "steps": [
                 {
-                    "text": "Download rclone (a single binary, no install needed) on any computer with a web browser - your own laptop is fine, it doesn't have to be wherever Backuparr runs.",
+                    "text": "Download rclone on any computer with a web browser. It doesn't have to be the one Backuparr runs on.",
                     "link": {"label": "Download rclone", "url": "https://rclone.org/downloads/"},
                 },
                 {
@@ -848,11 +848,11 @@ DESTINATION_META = [
                     "link": None,
                 },
                 {
-                    "text": "It prints a link - open it in your browser, sign in to Dropbox, and approve access.",
+                    "text": "Open the link it prints, sign in to Dropbox and approve access.",
                     "link": None,
                 },
                 {
-                    "text": "Back in the terminal, rclone prints a block starting with \"Paste the following into your remote machine --->\". Copy that whole block (or just the line in the middle - either works) and paste it below, then click \"Connect Dropbox\".",
+                    "text": "Copy the block rclone then prints after \"Paste the following into your remote machine --->\", paste it below and click Connect Dropbox.",
                     "link": None,
                 },
                 {

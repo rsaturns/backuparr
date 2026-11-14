@@ -39,6 +39,15 @@ Set up from the Google Drive card, with no rclone config:
    unverified; click **Advanced**, then **Go to (your app name) (unsafe)**.
 4. Click **Choose folder** to pick or create the backup folder.
 
+Good to know:
+
+- Publishing the app doesn't need Google's review, as `drive.file` isn't a
+  sensitive scope.
+- The API key only needs the Google Picker API, which **Choose folder**
+  uses. Leave its **Application restrictions** at **None**: restricted to
+  websites, the picker can fail with "The API developer key is invalid". The
+  API restriction already limits what the key can do.
+
 ## OneDrive
 
 Uses rclone's built-in Microsoft app - no Azure registration. Personal
