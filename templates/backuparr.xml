@@ -20,7 +20,10 @@
   <Screenshot>https://raw.githubusercontent.com/rsaturns/backuparr/main/docs/screenshots/settings.png</Screenshot>
   <Screenshot>https://raw.githubusercontent.com/rsaturns/backuparr/main/docs/screenshots/run.png</Screenshot>
   <Screenshot>https://raw.githubusercontent.com/rsaturns/backuparr/main/docs/screenshots/history.png</Screenshot>
-  <Changes>### 3.0.0-beta.2 (2026-11-14)
+  <Changes>### 3.0.0-beta.3 (2026-11-14)
+- Home Assistant: a backup no longer ends with "couldn't delete Backuparr's copy (Failed to list backups)" when another of Home Assistant's backup locations, such as Home Assistant Cloud or Synology DSM, can't be reached: the copy was deleted, and only the local location's answer now counts. The log names the location that couldn't be reached (#238).
+
+### 3.0.0-beta.2 (2026-11-14)
 - At most two password checks and two uploads of Backuparr's own backup run at once, so a burst of sign-ins or uploads can't use up a small server's memory or disk; another upload is told "Busy - try again in a moment" (#228).
 - Backuparr's own files (its settings, login and keys) are flushed to disk when they're written, so a power cut can't leave one empty, and a destination listing, delete or connection change from the web UI ends after 5 minutes (#229).
 - Every Python package in the image is pinned to an exact version with its hashes, so each build installs what was tested (#230).
@@ -87,11 +90,6 @@
 - The footer says "Update Available" only when the latest release is newer, not for a newer build or a beta.
 - A full Dropbox or OneDrive now gets the "the destination is out of space" hint.
 - An app answering HTTP 401 or 403 now also points at the Service Authentication headers when some are set: a proxy refusing a request looks the same as a wrong API key.
-
-### 2.5.7 (2026-11-13)
-- rclone 1.76.0 (from 1.75.0), with the security fixes from rclone 1.75.1 and 1.75.2 and its updated Go libraries: the image scan's 2 critical and 20 high findings in rclone are gone.
-- The image no longer has pip, which Backuparr doesn't use once its packages are in: pip's own copies of urllib3, msgpack and setuptools were the scan's other 5 high findings.
-- The release workflow's docker/login-action 4.8.0 and softprops/action-gh-release 3.0.4, as Dependabot proposed (#159, #160).
 
 View all changes: https://github.com/rsaturns/backuparr/blob/main/CHANGELOG.md</Changes>
   <Date>2026-11-14</Date>

@@ -5,6 +5,8 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [3.0.0-beta.3] - 2026-11-14
+
 ### Fixed
 
 - Home Assistant: a backup no longer ends with "couldn't delete Backuparr's copy (Failed to list backups)" when another of Home Assistant's backup locations, such as Home Assistant Cloud or Synology DSM, can't be reached: the copy was deleted, and only the local location's answer now counts. The log names the location that couldn't be reached (#238).
