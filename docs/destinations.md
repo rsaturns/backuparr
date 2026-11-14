@@ -15,7 +15,7 @@ Each card can keep backups for its own number of days - see
 No setup. Backups go to `/config/backuparr/backups`, on the same volume as
 `config.json`. Set a custom path on the Local card to use another mounted
 volume, such as a NAS share. Backuparr only ever deletes its own archives
-there (`<app>/<app>_<date>_<time>.zip`), so the folder can hold other files.
+there (`<app>/<app>_<date>_<time>.<ext>`), so the folder can hold other files.
 
 A USB disk that spins down to save power is fine: before using it, Backuparr
 reads a small `.backuparr-wake` file it keeps there and waits up to 60 seconds

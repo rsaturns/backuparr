@@ -47,4 +47,5 @@ live by default.
 | `BACKUPARR_SECRET_KEY_PATH` | `/config/backuparr/secret_key` | Session-signing key - not the same as `secrets.key` |
 | `BACKUPARR_AUTH` | `/config/backuparr/auth.json` | Admin username and password hash |
 | `BACKUPARR_SESSIONS` | `/config/backuparr/sessions.json` | The signed-in browsers, so signing out ends a session on the server |
+| `BACKUPARR_TLS_DIR` | `/config/backuparr/tls` | Backuparr's own HTTPS key and certificate (`key.pem`, `cert.pem`) |
 | `BACKUPARR_LOG_DIR` | `/var/log/backuparr` | Where `backup.log` (shown on Run & Status) is written |

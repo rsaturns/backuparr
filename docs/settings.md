@@ -55,7 +55,7 @@ Each instance has its own settings, backups, History and Restore entry, and can
 get its own [authentication headers](#service-authentication-headers).
 
 - The name also sets the instance's backup folder and archive names: `4K`
-  gives `radarr-4k/radarr-4k_<date>_<time>.zip`. Renaming it later keeps the
+  gives `radarr-4k/radarr-4k_<date>_<time>.zip.enc`. Renaming it later keeps the
   folder.
 - Removing an instance keeps its backups; they stay in History, and retention
   keeps the newest.

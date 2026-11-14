@@ -37,11 +37,11 @@ backup runs it says "Backing up...", and it updates when the run ends.
 **Default retention (days)** deletes each app's backups older than that,
 separately on each destination. Each app's newest backup is always kept, so a
 run of failed backups never removes the last good one. Backuparr only deletes
-its own archives (`<app>/<app>_<date>_<time>.zip`, or `.zip.enc` when
-[encrypted](security.md#encrypted-backups)), so a destination folder can hold
-other files. On Google Drive and OneDrive, deleting is permanent: backups
-don't go to the trash or recycle bin, which would still count against your
-storage.
+its own archives (`<app>/<app>_<date>_<time>.<ext>`, the app's own file type,
+with `.enc` added when [encrypted](security.md#encrypted-backups)), so a
+destination folder can hold other files. On Google Drive and OneDrive,
+deleting is permanent: backups don't go to the trash or recycle bin, which
+would still count against your storage.
 
 To keep backups longer or shorter on one destination, set **Retention (days)**
 on its card under Settings > Destinations - for example 28 days on Local

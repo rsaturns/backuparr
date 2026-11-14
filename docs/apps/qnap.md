@@ -92,7 +92,7 @@ stops backups until you trust the new one. A certificate from a trusted CA
 Pick QNAP QuTS hero and a backup on Backuparr's **Restore** tab: it shows a
 **Download** button (the backup comes back decrypted, as QNAP's `.bin`) and
 these steps, from QNAP's
-[Restoring system settings](https://docs.qnap.com/operating-system/qts/5.2.x/en-us/restoring-system-settings-FD94EF48.html):
+[Restoring system settings](https://docs.qnap.com/operating-system/quts-hero/5.2.x/en-us/restoring-system-settings-EAE921A4.html):
 
 1. Download the backup.
 2. On a NAS running QuTS hero, the same version as the backup or newer, open

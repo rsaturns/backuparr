@@ -11,7 +11,7 @@ nav_order: 13
 |---|---|
 | `apps.<name>.enabled/url/api_key` | Per app, as on the Settings tab |
 | `apps.<name>.encrypt` | Encrypt its backups (default `true`); ignored for an app that's always encrypted - see [Encrypted backups](security.md#encrypted-backups) |
-| `apps.<radarr\|sonarr\|lidarr\|whisparr>-<suffix>` | An extra instance (e.g. `radarr-4k`): the same fields plus `name` |
+| `apps.<app>-<suffix>` | An extra instance (e.g. `radarr-4k`) of Radarr, Sonarr, Lidarr, Whisparr, Pi-hole, OPNsense, pfSense, UniFi, Immich, Home Assistant, Unraid, Synology DSM or QNAP QuTS hero: the same fields plus `name` |
 | `apps.<radarr\|sonarr\|lidarr\|whisparr\|prowlarr>.username/password` | The app's own login, only if it asks every address to log in ([note](apps/servarr.md)) |
 | `apps.bazarr.username/password` | Only if Bazarr's web auth is `Basic` |
 | `apps.nzbget.username/password` | NZBGet's Control username and password |
@@ -34,7 +34,12 @@ nav_order: 13
 | `apps.synology.device_token` | DSM's token for a trusted device after a 2-factor code (encrypted at rest), set by **Test connection** - don't edit |
 | `apps.qnap.username/password` | The login of a QuTS hero administrator or an account with the System Management role (the password encrypted at rest) - required |
 | `apps.qnap.device_token` | QuTS hero's remembered sign-in after a 2-step verification code (encrypted at rest), set by **Test connection** - don't edit |
-| `apps.<opnsense\|pfsense\|unifi\|unraid\|synology\|qnap>.trusted_cert` | The self-signed certificate trusted on the card: `{"sha256", "subject", "not_after"}`; set by **Trust** |
+| `apps.homeassistant.history` | Back up Home Assistant's history (default `true`) |
+| `apps.homeassistant.media/share/local_apps` | Back up the Media, Share and Local apps folders, on HA OS and Supervised (default `false`) |
+| `apps.homeassistant.apps` | Apps to back up, on HA OS and Supervised: `none` (the default), `all` or `chosen` |
+| `apps.homeassistant.chosen_apps` | The apps picked when `apps` is `chosen`: `[{"slug", "name"}]` |
+| `apps.homeassistant.install_type` | `core` or `supervisor`, set by **Test connection** - don't edit |
+| `apps.<opnsense\|pfsense\|unifi\|unraid\|synology\|qnap\|homeassistant\|bitwarden>.trusted_cert` | The self-signed certificate trusted on the card: `{"sha256", "subject", "not_after"}`; set by **Trust** |
 | `bazarr_backup_dir` | Bazarr's mounted config/backup folder, for restores |
 | `request_headers` | [Service authentication headers](settings.md#service-authentication-headers): `[{"name": "Proxy-Authorization", "value": "Basic …", "apps": ["radarr"]}]`; omit `apps` for every app |
 | `destinations.local.enabled/path` | Local Storage; the path defaults to `/config/backuparr/backups` |
@@ -52,6 +57,7 @@ nav_order: 13
 | `secrets_key_acknowledged` | Set once you've confirmed saving your encryption key - don't edit |
 | `encryption_notice_acknowledged` | Set once the "Backups Are Now Encrypted" notice has been seen - don't edit |
 | `upgrade_self_backup_tried`, `upgrade_self_backup_made` | Set once the first start of 3.0 has made Backuparr's own backup, and whether it worked - don't edit |
+| `removed_instances` | The ids of removed extra instances: their backups are kept, so an id isn't used again - don't edit |
 
 ## Other files
 

@@ -14,4 +14,4 @@ Install Backuparr one of these ways, then go through the first run:
 - [Build from source](getting-started/build-from-source.md)
 - [First run](getting-started/first-run.md) - create the admin account, add
   your apps and a destination
-- [Updating](getting-started/updating.md) - and what changes in 2.5.0
+- [Updating](getting-started/updating.md) - and what changes in 3.0.0-beta
