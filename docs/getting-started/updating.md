@@ -6,7 +6,7 @@ nav_order: 5
 
 # Updating
 
-> **These docs cover Backuparr 3.0.0-beta.2.** On 2.5.7? Its docs are [on GitHub](https://github.com/rsaturns/backuparr/tree/v2.5.7/docs).
+> **These docs cover Backuparr 3.0.0-beta.3.** On 2.5.7? Its docs are [on GitHub](https://github.com/rsaturns/backuparr/tree/v2.5.7/docs).
 
 With Compose:
 
@@ -15,7 +15,7 @@ docker compose pull backuparr && docker compose up -d backuparr
 ```
 
 On Unraid, click **Apply update** on the Docker tab. A pinned tag (such as
-`rsaturns/backuparr:3.0.0-beta.2`) only changes when you edit it.
+`rsaturns/backuparr:3.0.0-beta.3`) only changes when you edit it.
 
 Updating keeps your settings, login and backups. A backup Backuparr makes of
 itself can only be restored on the same or a newer version, so don't downgrade
@@ -25,10 +25,11 @@ and then restore one.
 
 3.0 changes a lot, and while it's in beta `latest` stays on 2.5.7: if you'd
 rather wait until 3.x is out of beta, do nothing. To try the beta, set the
-image to `rsaturns/backuparr:3.0.0-beta.2` (on Unraid, set **Repository** to it).
+image to `rsaturns/backuparr:3.0.0-beta.3` (on Unraid, set **Repository** to it).
 
-**On 3.0.0-beta?** Change the tag to `3.0.0-beta.2`: it fixes a security
-problem in restores (see the [changelog](https://github.com/rsaturns/backuparr/blob/{{ site.gh_edit_branch }}/CHANGELOG.md)).
+**On an earlier 3.0 beta?** Change the tag to `3.0.0-beta.3`. Coming from
+3.0.0-beta, it also fixes a security problem in restores (see the
+[changelog](https://github.com/rsaturns/backuparr/blob/{{ site.gh_edit_branch }}/CHANGELOG.md)).
 Nothing else changes - your settings, login and backups stay.
 
 ### Before you update
