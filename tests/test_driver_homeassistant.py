@@ -114,6 +114,7 @@ class FakeHA:
         self.generated = None
         self.download_status = 200
         self.delete_errors = {}
+        self.other_agents = []  # backup locations besides the local one, e.g. "cloud.cloud"
         self.restored = None
         self.down_for = 0  # connections refused after a restart
         self.after_restart = {"state": "completed", "tokens": None}
@@ -151,7 +152,8 @@ class FakeHA:
         if not self.admin:
             return ws.error(msg_id, "unauthorized", "Unauthorized")
         if kind == "backup/agents/info":
-            return ws.result(msg_id, {"agents": [{"agent_id": self.agent, "name": "This system"}]})
+            return ws.result(msg_id, {"agents": [{"agent_id": self.agent, "name": "This system"},
+                                                 *({"agent_id": a, "name": a} for a in self.other_agents)]})
         if kind == "supervisor/api":
             assert self.install == "supervisor" and message["endpoint"] == "/addons" and message["method"] == "get"
             return ws.result(msg_id, {"addons": self.addons})
@@ -461,6 +463,39 @@ def test_a_copy_home_assistant_wont_delete_is_logged_not_failed(ha, tmp_path, ca
     with caplog.at_level(logging.WARNING):
         make().backup(str(tmp_path))
     assert "couldn't delete Backuparr's copy (new12345)" in caplog.text and "Settings > System > Backups" in caplog.text
+
+
+@pytest.mark.parametrize("install", ["core", "supervisor"])
+def test_another_locations_error_doesnt_fail_the_delete(ha, tmp_path, caplog, install):
+    """#238: backup/delete asks every backup location, and Home Assistant
+    Cloud's or Synology DSM's answers "Failed to list backups" when it can't
+    be reached - Backuparr's copy, only ever in the local one, is gone."""
+    ha.install = install
+    ha.other_agents = ["cloud.cloud", "synology_dsm.nas"]
+    ha.delete_errors = {"cloud.cloud": "Failed to list backups", "synology_dsm.nas": "Failed to list backups"}
+    with caplog.at_level(logging.INFO, logger="backuparr.apps.homeassistant"):
+        make().backup(str(tmp_path))
+    assert "new12345" not in ha.backups
+    assert "couldn't delete" not in caplog.text
+    assert "deleted Backuparr's copy (new12345)" in caplog.text
+    notes = [r for r in caplog.records if "answered" in r.getMessage()]
+    assert [r.levelno for r in notes] == [logging.INFO, logging.INFO]
+    assert 'backup location cloud.cloud answered "Failed to list backups"' in notes[0].getMessage()
+
+
+def test_the_local_locations_error_still_fails_the_delete_with_others_answering(ha, tmp_path, caplog):
+    ha.other_agents = ["cloud.cloud"]
+    ha.delete_errors = {"cloud.cloud": "Failed to list backups", "backup.local": "disk is read-only"}
+    with caplog.at_level(logging.WARNING):
+        make().backup(str(tmp_path))
+    assert "couldn't delete Backuparr's copy (new12345) from Home Assistant (disk is read-only)" in caplog.text
+
+
+def test_after_a_restore_another_locations_error_doesnt_fail_the_cleanup(ha, tmp_path, caplog):
+    ha.other_agents = ["cloud.cloud"]
+    ha.delete_errors = {"cloud.cloud": "Failed to list backups"}
+    assert make().restore_from_file(make_ha_backup(tmp_path / "ha.tar"))["cleaned"] is True
+    assert "abc12345" not in ha.backups
 
 
 def test_an_untrusted_certificate_stops_before_anything_is_sent(monkeypatch):
