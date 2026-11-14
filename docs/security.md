@@ -86,7 +86,8 @@ install:
   in that folder are left alone)
 - the backup record and run logs
 
-Backups already in Google Drive, OneDrive or Dropbox are untouched.
+Backups already in Google Drive, OneDrive or Dropbox are untouched. While a
+backup or restore is running, the reset waits: try again when it finishes.
 
 The reset works without logging in, gated only by a confirmation phrase that's
 public in this repo. Other websites can't trigger it (or any other change):

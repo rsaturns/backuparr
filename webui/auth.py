@@ -386,12 +386,9 @@ def api_logout():
 RESET_CONFIRM_PHRASE = "i-want-to-reset-and-delete-files"
 
 
-@bp.post("/api/reset")
-def api_reset():
-    data = request.get_json(force=True, silent=True) or {}
-    if data.get("confirm") != RESET_CONFIRM_PHRASE:
-        return jsonify({"error": "confirmation phrase didn't match"}), 400
-
+def _reset():
+    """Deletes Backuparr's settings, login, keys, records and Local storage
+    backups. Call it holding RUN_LOCK."""
     # Resolve the local backup dir before config.json (which may record a
     # custom path) is deleted.
     local_backup_dir = None
@@ -430,5 +427,20 @@ def api_reset():
     secrets_crypto.forget_key()
     config_store.forget_secrets_key_acknowledged()
 
+
+@bp.post("/api/reset")
+def api_reset():
+    data = request.get_json(force=True, silent=True) or {}
+    if data.get("confirm") != RESET_CONFIRM_PHRASE:
+        return jsonify({"error": "confirmation phrase didn't match"}), 400
+
+    from webui import runs  # imported here: runs is loaded after this module
+
+    # A run carrying on through a reset would write its record and logs back,
+    # and finish with Backuparr's own backup of the reset install (#224).
+    with runs.RUN_LOCK:  # and none starts until the reset is done
+        if runs.busy():
+            return jsonify({"error": "A backup or restore is running - reset when it finishes"}), 409
+        _reset()
     session.clear()
     return jsonify({"ok": True})
