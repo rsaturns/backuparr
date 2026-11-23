@@ -78,8 +78,8 @@ docker run -d --name backuparr --restart unless-stopped \
 ```
 
 Published for `linux/amd64` and `linux/arm64`. `latest` is the newest full
-release; a beta (e.g. `rsaturns/backuparr:3.0.0-beta.4`) has only its own tag.
-Pin a version to control upgrades. Tags are on [Docker Hub](https://hub.docker.com/r/rsaturns/backuparr),
+release; a beta has only its own tag (such as `3.0.0-beta.4`). Pin a version
+(such as `rsaturns/backuparr:3.0.0`) to control upgrades. Tags are on [Docker Hub](https://hub.docker.com/r/rsaturns/backuparr),
 and the same images are on GitHub Container Registry as
 [`ghcr.io/rsaturns/backuparr`](https://github.com/rsaturns/backuparr/pkgs/container/backuparr).
 

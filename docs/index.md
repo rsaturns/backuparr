@@ -7,8 +7,6 @@ permalink: /
 
 # Backuparr
 
-> **These docs cover Backuparr 3.0.0-beta.4:** try it with `rsaturns/backuparr:3.0.0-beta.4`. On 2.5.7? Its docs are [on GitHub](https://github.com/rsaturns/backuparr/tree/v2.5.7/docs).
-
 **Everything you host, backed up.**
 
 Scheduled backups of the apps you host - media management, downloaders,
