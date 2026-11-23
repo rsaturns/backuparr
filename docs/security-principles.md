@@ -154,13 +154,42 @@ lists each one and why.
 
 - **Open source** under the [AGPLv3](https://github.com/rsaturns/backuparr/blob/main/LICENSE):
   anyone can read what Backuparr does with their data.
-- **Every change** runs the test suite (about 2,000 tests), a smoke test of
-  the built image and GitHub's CodeQL security analysis before it's merged.
+- **Every change** runs the test suite (over 2,000 tests, in the same
+  Alpine image the app ships in), a smoke test of the built image and
+  GitHub's CodeQL security analysis before it's merged, on both amd64 and
+  arm64. A change that adds
+  a package with a known vulnerability, or under an unexpected license,
+  fails its review.
 - **The image is scanned** with [Trivy](https://trivy.dev/) on every change,
-  for known vulnerabilities in its system packages, its Python packages and
-  rclone. A critical or high one with a fix out fails the build, so it's
-  fixed before anything is merged.
-- **Dependencies** are kept up to date with Dependabot.
+  again before each release, and every week after, for known
+  vulnerabilities in its system packages, its Python packages and rclone.
+  A critical or high one with a fix out fails the build, so it's fixed
+  before anything is merged or released, and the weekly scan catches one
+  found after a release.
+- **Dependencies** are pinned to exact versions with their hashes, and the
+  base image to its digest, so each build installs what was tested.
+  Dependabot proposes updates weekly; a new version of a package waits a
+  week first, so a hijacked release is usually caught before it gets in.
+- **Releases are built from scratch**, with no build cache, and the job
+  that holds the registry credentials runs only once the tests and the scan
+  have passed.
+
+## Checking an image
+
+Each image released after 3.0.0-beta.3 comes with signed build provenance:
+proof that it was built by this repository's release workflow, from the
+tagged code. With the [GitHub CLI](https://cli.github.com/):
+
+```bash
+gh attestation verify oci://ghcr.io/rsaturns/backuparr:<version> --owner rsaturns
+```
+
+`oci://docker.io/rsaturns/backuparr:<version>` works the same way. The image
+also lists every package in it (an SBOM):
+
+```bash
+{% raw %}docker buildx imagetools inspect rsaturns/backuparr:<version> --format '{{ json .SBOM }}'{% endraw %}
+```
 - **Built with AI, reviewed by a human.** Backuparr was written with
   substantial help from Claude (Anthropic); every change is reviewed and
   tested by its maintainer.

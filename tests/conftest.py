@@ -1,7 +1,9 @@
 """Fixtures for exercising webui/app.py against a throwaway config."""
 import importlib
+import logging
 import socket
 import sys
+import tempfile
 import threading
 
 import pytest
@@ -56,6 +58,29 @@ def sessions_in_tmp(tmp_path, monkeypatch):
     import session_store
     monkeypatch.setattr(session_store, "SESSIONS_PATH", str(tmp_path / "sessions.json"))
     monkeypatch.setattr(session_store, "_sessions", None)
+
+
+@pytest.fixture(autouse=True)
+def temp_files_in_tmp(tmp_path_factory, monkeypatch):
+    """Every temporary file or folder the code makes (tempfile) goes in a
+    folder of the test's own under pytest's temporary root, not the
+    machine's /tmp: a download a test starts and never fetches, say, would
+    otherwise be left there. Beside tmp_path, not in it, so a test listing
+    tmp_path sees only what it made."""
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path_factory.mktemp("tempfile")))
+
+
+@pytest.fixture(autouse=True)
+def logs_at_info():
+    """Backuparr logs at INFO in every test, as it does in the container by
+    default (LOG_LEVEL), whatever an earlier test set: a run log keeps those
+    lines, and with the suite split across workers no test may rely on
+    another having set the level first."""
+    logger = logging.getLogger("backuparr")
+    level = logger.level
+    logger.setLevel(logging.INFO)
+    yield
+    logger.setLevel(level)
 
 
 def sign_in(session):

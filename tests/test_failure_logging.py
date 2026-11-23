@@ -215,6 +215,8 @@ def test_an_upload_failure_shows_the_cause_not_the_whole_rclone_command(one_app_
         )
 
     monkeypatch.setattr(backup.SonarrApp, "backup", lambda self, work_dir: write_archive(work_dir))
+    # No real request to sonarr:8989 (it waited 10 s for the name to fail).
+    monkeypatch.setattr(backup.SonarrApp, "app_version", lambda self: "4.0.15.2941")
     monkeypatch.setattr(backup.rclone_util, "copyto", refuse)
     with caplog.at_level(logging.INFO):
         ok, failed = one_app_run("http://sonarr:8989")

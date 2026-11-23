@@ -1,0 +1,190 @@
+name: Security scan
+
+# Once a week, what a PR's checks can't see: a vulnerability published
+# after the code merged, or after an image shipped.
+#   branch     builds every release-* branch fresh (no cache) and scans it
+#   image      scans the published images: the newest release and :latest
+#   freshness  flags a newer rclone or Trivy (Dependabot sees neither) and a
+#              dependabot.yml entry pointing at a branch that's gone
+# Findings go to the Security tab (code scanning, beside CodeQL's). A fixable
+# CRITICAL or HIGH finding on a release branch or the newest image fails the
+# run, and so does a freshness problem; GitHub emails a failed scheduled
+# run. :latest's findings only go to the Security tab - during the 3.0 beta
+# it's 2.5.7, which gets no more fixes. Scheduled runs use main's copy of
+# this file, so it lives on main; GitHub turns schedules off in a public
+# repository after 60 days without activity.
+on:
+  schedule:
+    - cron: '41 5 * * 1'
+  workflow_dispatch:
+  # A change to the scan runs it on that PR (nothing is uploaded).
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/security-scan.yml
+      - .github/dependabot.yml
+      - scripts/security_scan.py
+
+permissions: {}
+
+# Every build here is fresh, and nothing reads or writes the Actions cache.
+cache-mode: none
+
+jobs:
+  plan:
+    name: plan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      branches: ${{ steps.plan.outputs.branches }}
+      images: ${{ steps.plan.outputs.images }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: List what to scan
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -I scripts/security_scan.py plan
+
+  branch:
+    name: branch (${{ matrix.branch }})
+    needs: plan
+    if: needs.plan.outputs.branches != '[]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: ${{ fromJSON(needs.plan.outputs.branches) }}
+    steps:
+      - name: Check out the branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ matrix.branch }}
+          persist-credentials: false
+
+      - name: Note the commit
+        id: commit
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build the image (no cache)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          no-cache: true
+          tags: backuparr:scan
+
+      - name: Scan for the Security tab
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: backuparr:scan
+          version: v0.76.2
+          cache: false
+          scanners: vuln
+          severity: CRITICAL,HIGH,MEDIUM
+          limit-severities-for-sarif: true
+          ignore-unfixed: true
+          format: sarif
+          output: trivy.sarif
+
+      - name: Upload to the Security tab
+        if: github.event_name != 'pull_request'
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: trivy.sarif
+          category: trivy-branch-${{ matrix.branch }}
+          # Filed under the scanned branch, not main.
+          ref: refs/heads/${{ matrix.branch }}
+          sha: ${{ steps.commit.outputs.sha }}
+
+      - name: Fail on a fixable CRITICAL or HIGH
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: backuparr:scan
+          version: v0.76.2
+          cache: false
+          skip-setup-trivy: true
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+  image:
+    name: image (${{ matrix.image.name }})
+    needs: plan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.plan.outputs.images) }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # From GHCR (same digest as Docker Hub), which doesn't rate-limit
+      # anonymous pulls the way Docker Hub does.
+      - name: Scan for the Security tab
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ghcr.io/${{ github.repository }}:${{ matrix.image.tag }}
+          version: v0.76.2
+          cache: false
+          scanners: vuln
+          severity: CRITICAL,HIGH,MEDIUM
+          limit-severities-for-sarif: true
+          ignore-unfixed: true
+          format: sarif
+          output: trivy.sarif
+
+      - name: Upload to the Security tab
+        if: github.event_name != 'pull_request'
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: trivy.sarif
+          category: trivy-image-${{ matrix.image.name }}
+
+      - name: Fail on a fixable CRITICAL or HIGH
+        if: matrix.image.gate
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ghcr.io/${{ github.repository }}:${{ matrix.image.tag }}
+          version: v0.76.2
+          cache: false
+          skip-setup-trivy: true
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+  freshness:
+    name: freshness
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check rclone, Trivy and the Dependabot branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -I scripts/security_scan.py freshness

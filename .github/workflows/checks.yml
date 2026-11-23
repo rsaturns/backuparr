@@ -1,0 +1,98 @@
+name: Checks
+
+# The tests, the smoke test and the Trivy gate, on amd64 and arm64 at once.
+# arm64 runs on GitHub's native arm64 runners (free for public
+# repositories), so nothing is emulated and the arm64 image is run and
+# scanned, not just built. Called by ci.yml on every PR (with the build
+# cache) and by docker-publish.yml before a release (fresh: no cache). A
+# called workflow gets no secrets unless its caller passes them, and
+# neither does.
+on:
+  workflow_call:
+    inputs:
+      fresh:
+        description: Build without any cache (releases)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: tests (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    # Actions are pinned to a commit, named in the comment; Dependabot
+    # updates both.
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # In the Dockerfile's own base image (digest-pinned), so the tests see
+      # the Python and musl the app ships with and a base-image bump tests
+      # itself. One worker per CPU (pytest-xdist).
+      - name: Run test suite
+        run: scripts/test_in_image.sh -n auto
+
+  image:
+    name: image (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build the image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: backuparr:ci
+          no-cache: ${{ inputs.fresh }}
+          cache-from: ${{ !inputs.fresh && format('type=gha,scope=image-{0}', matrix.arch) || '' }}
+          cache-to: ${{ !inputs.fresh && format('type=gha,mode=max,scope=image-{0}', matrix.arch) || '' }}
+
+      # Run the image, not just build it: catches a missing module,
+      # entrypoint errors and a failing healthcheck.
+      - name: Smoke test the container
+        run: scripts/smoke_test.sh backuparr:ci
+
+      # Known vulnerabilities in the same image: Alpine's packages, the
+      # Python packages and rclone. A CRITICAL or HIGH one with a fix out
+      # fails the build, and the log's table names it. One accepted for a
+      # reason (say, a fix rclone hasn't shipped yet) goes in .trivyignore
+      # with that reason. Trivy's own version is pinned below; Dependabot
+      # updates the action but not that - the weekly security scan
+      # (security-scan.yml) flags a newer one.
+      - name: Scan the image for known vulnerabilities (Trivy)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: backuparr:ci
+          version: v0.76.2
+          cache: ${{ !inputs.fresh }}
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"

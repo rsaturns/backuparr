@@ -2,6 +2,7 @@
 import datetime
 import http.server
 import ssl
+import sys
 import threading
 
 import pytest
@@ -44,7 +45,15 @@ def server(tmp_path):
         def log_message(self, *args):
             pass
 
-    httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    class Server(http.server.ThreadingHTTPServer):
+        def handle_error(self, request, client_address):
+            # A client that refuses the certificate, or only reads it
+            # (fetch_certificate), drops the connection without a request:
+            # with TLS 1.3 that's often a reset. Expected, so not printed.
+            if not isinstance(sys.exc_info()[1], (ConnectionError, ssl.SSLError)):
+                super().handle_error(request, client_address)
+
+    httpd = Server(("127.0.0.1", 0), Handler)
 
     def use(name):
         cert, key, der = self_signed(tmp_path, name)

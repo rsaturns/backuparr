@@ -17,8 +17,7 @@ import runlog
 # ------------------------------------------------------------- capture ----
 
 def test_capture_keeps_only_its_own_threads_lines():
-    logger = logging.getLogger("backuparr.apps.radarr")
-    logger.setLevel(logging.INFO)
+    logger = logging.getLogger("backuparr.apps.radarr")  # at INFO, as every test is (conftest)
     capture = runlog.Capture().start()
     try:
         logger.info("from the run")
@@ -36,7 +35,6 @@ def test_capture_keeps_only_its_own_threads_lines():
 def test_capture_is_bounded(monkeypatch):
     monkeypatch.setattr(runlog, "MAX_LINES", 3)
     logger = logging.getLogger("backuparr")
-    logger.setLevel(logging.INFO)
     capture = runlog.Capture().start()
     try:
         for i in range(10):
@@ -112,7 +110,6 @@ class FakeApp:
 @pytest.fixture
 def backup_run(monkeypatch):
     state = type("Run", (), {"fail_upload": set(), "app": FakeApp()})()
-    logging.getLogger("backuparr").setLevel(logging.INFO)
     monkeypatch.setattr(backup, "enabled_apps", lambda cfg: ["sabnzbd"])
     monkeypatch.setattr(backup, "enabled_destinations", lambda cfg: ["local", "gdrive"])
     monkeypatch.setattr(destination_util, "sync", lambda cfg: None)
