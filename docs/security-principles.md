@@ -160,6 +160,9 @@ lists each one and why.
   arm64. A change that adds
   a package with a known vulnerability, or under an unexpected license,
   fails its review.
+- **Code analysis findings block the merge.** A CodeQL finding of high or
+  critical severity stops a change from being merged until it's fixed, or
+  dismissed with the reason it can't be exploited.
 - **The image is scanned** with [Trivy](https://trivy.dev/) on every change,
   again before each release, and every week after, for known
   vulnerabilities in its system packages, its Python packages and rclone.
