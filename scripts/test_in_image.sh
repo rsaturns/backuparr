@@ -14,13 +14,14 @@ BASE="$(sed -n 's/^FROM[[:space:]]\{1,\}\([^[:space:]]\{1,\}\).*/\1/p' "$ROOT/Do
 TAG="backuparr-tests:$$"
 trap 'docker rmi -f "$TAG" >/dev/null 2>&1 || true' EXIT
 
-# bash for the entrypoint tests; a user with the caller's uid, so tests
-# that expect a permission error get one (root would bypass it).
+# Alpine's security updates, as the Dockerfile installs them; bash for the
+# entrypoint tests; a user with the caller's uid, so tests that expect a
+# permission error get one (root would bypass it).
 docker build -q -t "$TAG" --build-arg BASE="$BASE" --build-arg TEST_UID="$(id -u)" - >/dev/null <<'EOF'
 ARG BASE
 FROM ${BASE}
 ARG TEST_UID
-RUN apk add --no-cache bash \
+RUN apk upgrade --no-cache && apk add --no-cache bash \
     && { grep -q "^[^:]*:[^:]*:${TEST_UID}:" /etc/passwd || adduser -D -u "${TEST_UID}" tester; }
 USER ${TEST_UID}
 EOF
