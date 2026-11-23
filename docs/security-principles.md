@@ -16,7 +16,8 @@ place, and to do that it needs a key or a login for every app.
 So the question to ask of a backup tool isn't only "will my backups work?",
 but also "who else could read them, and what could they do with what it
 holds?". This page answers that for Backuparr: what it protects, how, and what
-it leaves to you.
+it leaves to you. The [threat model](threat-model.md) looks at it from an
+attacker's side.
 
 ## The principles
 
@@ -160,12 +161,19 @@ lists each one and why.
   arm64. A change that adds
   a package with a known vulnerability, or under an unexpected license,
   fails its review.
+- **Code analysis findings block the merge.** A CodeQL finding of high or
+  critical severity stops a change from being merged until it's fixed, or
+  dismissed with the reason it can't be exploited.
 - **The image is scanned** with [Trivy](https://trivy.dev/) on every change,
   again before each release, and every week after, for known
   vulnerabilities in its system packages, its Python packages and rclone.
   A critical or high one with a fix out fails the build, so it's fixed
   before anything is merged or released, and the weekly scan catches one
   found after a release.
+- **Findings that don't affect Backuparr** - such as code in rclone that
+  Backuparr never runs - are listed with the reason in a
+  [VEX document](https://github.com/rsaturns/backuparr/blob/{{ site.gh_edit_branch }}/vex/README.md),
+  which Trivy and Docker Scout can check an image against.
 - **Dependencies** are pinned to exact versions with their hashes, and the
   base image to its digest, so each build installs what was tested. Alpine's
   security updates are installed as each image is built, so they don't wait
@@ -200,5 +208,7 @@ also lists every package in it (an SBOM):
 
 Please don't open a public issue. Use GitHub's
 [private vulnerability reporting](https://github.com/rsaturns/backuparr/security/advisories/new)
-instead, so a fix can be ready before the details are public. See
+instead, so a fix can be ready before the details are public. You get a
+reply within 5 days; the fix ships before the advisory is published, and
+you're credited unless you'd rather not be. See
 [SECURITY.md](https://github.com/rsaturns/backuparr/blob/{{ site.gh_edit_branch }}/SECURITY.md).

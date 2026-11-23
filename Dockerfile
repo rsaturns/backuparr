@@ -35,7 +35,8 @@ COPY requirements.txt /app/
 RUN pip install --no-cache-dir --require-hashes -r requirements.txt \
     && pip uninstall -y pip
 
-COPY *.py entrypoint.sh VERSION /app/
+# The license travels with the image (/app/LICENSE).
+COPY *.py entrypoint.sh VERSION LICENSE /app/
 COPY apps /app/apps
 COPY webui /app/webui
 # Compiled here: the web server runs as PUID, which can't write /app, so it

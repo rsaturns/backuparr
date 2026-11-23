@@ -1,0 +1,273 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/rsaturns/backuparr/blob/main/vex/backuparr.vex.json",
+  "author": "Backuparr maintainers <https://github.com/rsaturns/backuparr>",
+  "role": "Project maintainer",
+  "timestamp": "2026-11-23T00:00:00Z",
+  "version": 1,
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "CVE-2026-97054",
+        "aliases": [
+          "GO-2026-6859"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:docker/rsaturns/backuparr@sha256:7d5a58b4b3a80a69a6c776965c4ea768b713a473e7fccb6ec6a228ce3eb7695d",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/stdlib@1.27.3"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/rsaturns/backuparr@sha256:226fbc78fc5b33a7289c327b7ecf4dd67d514a8816159a381a1fb53cffedbd45",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/stdlib@1.27.3"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/backuparr?repository_url=index.docker.io%2Frsaturns%2Fbackuparr",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/stdlib"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/backuparr?repository_url=ghcr.io%2Frsaturns%2Fbackuparr",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/stdlib"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The flaw crashes an HTTP/1 server (net/http MaxBytesReader). It is in the rclone binary, which Backuparr runs only as a client (copyto, lsjson, lsd, about, deletefile, config); it never starts rclone's servers (serve, rcd)."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-128085",
+        "aliases": [
+          "GO-2026-6974",
+          "GHSA-q7gw-24fr-5p69"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:docker/rsaturns/backuparr@sha256:7d5a58b4b3a80a69a6c776965c4ea768b713a473e7fccb6ec6a228ce3eb7695d",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/go.opentelemetry.io/otel/trace@1.45.0"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/rsaturns/backuparr@sha256:226fbc78fc5b33a7289c327b7ecf4dd67d514a8816159a381a1fb53cffedbd45",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/go.opentelemetry.io/otel/trace@1.45.0"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/backuparr?repository_url=index.docker.io%2Frsaturns%2Fbackuparr",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/go.opentelemetry.io/otel/trace"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/backuparr?repository_url=ghcr.io%2Frsaturns%2Fbackuparr",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/go.opentelemetry.io/otel/trace"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The flaw bypasses OpenTelemetry's attribute length limit when recording traces. It is in the rclone binary; Backuparr runs rclone as a client with no tracing configured, so no spans are recorded or exported."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-128086",
+        "aliases": [
+          "GO-2026-6975",
+          "GHSA-rrfc-gjm9-cgrj"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:docker/rsaturns/backuparr@sha256:7d5a58b4b3a80a69a6c776965c4ea768b713a473e7fccb6ec6a228ce3eb7695d",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/go.opentelemetry.io/otel@1.45.0"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/rsaturns/backuparr@sha256:226fbc78fc5b33a7289c327b7ecf4dd67d514a8816159a381a1fb53cffedbd45",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/go.opentelemetry.io/otel@1.45.0"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/backuparr?repository_url=index.docker.io%2Frsaturns%2Fbackuparr",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/go.opentelemetry.io/otel"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/backuparr?repository_url=ghcr.io%2Frsaturns%2Fbackuparr",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/go.opentelemetry.io/otel"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The flaw amplifies memory use when parsing W3C baggage headers on incoming requests. It is in the rclone binary, which Backuparr runs only as a client; it never serves requests."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-5932"
+      },
+      "products": [
+        {
+          "@id": "pkg:docker/rsaturns/backuparr@sha256:7d5a58b4b3a80a69a6c776965c4ea768b713a473e7fccb6ec6a228ce3eb7695d",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto@0.58.0"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/rsaturns/backuparr@sha256:226fbc78fc5b33a7289c327b7ecf4dd67d514a8816159a381a1fb53cffedbd45",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto@0.58.0"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/backuparr?repository_url=index.docker.io%2Frsaturns%2Fbackuparr",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/backuparr?repository_url=ghcr.io%2Frsaturns%2Fbackuparr",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The advisory flags the deprecated golang.org/x/crypto/openpgp package, compiled into rclone for storage backends Backuparr doesn't use. Backuparr uses rclone's Local, Google Drive, OneDrive and Dropbox backends, and never runs rclone selfupdate (which uses a maintained OpenPGP library anyway)."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-119586"
+      },
+      "products": [
+        {
+          "@id": "pkg:docker/rsaturns/backuparr@sha256:7d5a58b4b3a80a69a6c776965c4ea768b713a473e7fccb6ec6a228ce3eb7695d",
+          "subcomponents": [
+            {
+              "@id": "pkg:apk/alpine/sqlite-libs@3.53.4-r0"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/rsaturns/backuparr@sha256:226fbc78fc5b33a7289c327b7ecf4dd67d514a8816159a381a1fb53cffedbd45",
+          "subcomponents": [
+            {
+              "@id": "pkg:apk/alpine/sqlite-libs@3.53.4-r0"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/backuparr?repository_url=index.docker.io%2Frsaturns%2Fbackuparr",
+          "subcomponents": [
+            {
+              "@id": "pkg:apk/alpine/sqlite-libs"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/backuparr?repository_url=ghcr.io%2Frsaturns%2Fbackuparr",
+          "subcomponents": [
+            {
+              "@id": "pkg:apk/alpine/sqlite-libs"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The flaw is a command injection in the sqlite3 command-line shell's .recover command. The image ships only the SQLite library (sqlite-libs), which Python's sqlite3 module loads; it has no sqlite3 shell."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-107891"
+      },
+      "products": [
+        {
+          "@id": "pkg:docker/rsaturns/backuparr@sha256:7d5a58b4b3a80a69a6c776965c4ea768b713a473e7fccb6ec6a228ce3eb7695d",
+          "subcomponents": [
+            {
+              "@id": "pkg:apk/alpine/musl@1.2.6-r3"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/rsaturns/backuparr@sha256:226fbc78fc5b33a7289c327b7ecf4dd67d514a8816159a381a1fb53cffedbd45",
+          "subcomponents": [
+            {
+              "@id": "pkg:apk/alpine/musl@1.2.6-r3"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/backuparr?repository_url=index.docker.io%2Frsaturns%2Fbackuparr",
+          "subcomponents": [
+            {
+              "@id": "pkg:apk/alpine/musl@1.2.6-r3"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/backuparr?repository_url=ghcr.io%2Frsaturns%2Fbackuparr",
+          "subcomponents": [
+            {
+              "@id": "pkg:apk/alpine/musl@1.2.6-r3"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Alpine 3.24 fixed this in musl 1.2.6-r3, the version in the image (Alpine's security database for v3.24 lists it; 1.2.6-r6 is the fix on Alpine edge). Scanners that use edge's fixed version report it wrongly."
+    }
+  ]
+}
