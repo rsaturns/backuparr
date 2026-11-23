@@ -230,12 +230,12 @@ def test_restore_onto_a_fresh_install_makes_its_folders_readable(app, server, fo
         os.remove(folder / path)
     for path in ("attachments/cipher-1", "attachments", "sends/send-1", "sends"):
         os.rmdir(folder / path)
-    os.umask(0o077)  # Backuparr's own, private umask
+    old_umask = os.umask(0o077)  # Backuparr's own, private umask
     try:
         stop(server)
         app.restore_from_file(archive)
     finally:
-        os.umask(0o022)
+        os.umask(old_umask)
     assert (folder / "attachments/cipher-1").stat().st_mode & 0o777 == 0o755
     assert (folder / "attachments/cipher-1/file-1").stat().st_mode & 0o777 == 0o644
     assert (folder / "config.json").stat().st_mode & 0o777 == 0o644
