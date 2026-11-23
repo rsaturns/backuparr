@@ -249,62 +249,80 @@ async function fillStorageStats(runStat, storageStat, destIds) {
   }
   runStat.classList.remove("hidden");
 
-  // Storage needed: the room each destination's retention needs, with what
-  // Backuparr's backups use there now and, once it says, its free space.
-  // One destination reads like the other tiles; several get a line each.
+  // Storage needed: one destination reads like the other tiles, several get
+  // a line each.
   const shown = destIds.filter((id) => storage.destinations[id]);
   if (!shown.length) return;
-  const single = shown.length === 1;
-  const list = document.createElement("div");
-  list.className = single ? "" : "overview-storage-list";
-  shown.forEach((id) => {
-    const d = storage.destinations[id];
-    const row = document.createElement("div");
-    row.className = single ? "" : "overview-storage-row";
-    if (!single) {
-      const m = DESTINATION_META.find((dm) => dm.id === id);
-      if (m && m.icon) {
-        const img = document.createElement("img");
-        img.className = "app-icon";
-        img.src = `/static/icons/${m.icon}`;
-        img.alt = SHORT_DEST_LABEL[id] || destLabel(id);
-        img.title = img.alt;
-        row.appendChild(img);
-      }
-    }
-    const needed = document.createElement(single ? "div" : "span");
-    needed.className = single ? "stat-value" : "storage-part";
-    needed.textContent = d.needed != null ? `≈ ${fmtBytes(d.needed)}` : "-";
-    if (d.needed != null) {
-      needed.title = `Up to ${d.capped ? "over " : ""}${d.copies.toLocaleString()} backups of each app, kept ${daysText(d.days)}`;
-    }
-    const details = document.createElement(single ? "div" : "span");
-    details.className = single ? "stat-note" : "storage-muted";
-    const used = document.createElement("span");
-    used.className = "storage-part"; // a row wraps between its parts, not inside one
-    used.textContent = `${fmtBytes(d.used)} used`;
-    details.append(single ? "" : " · ", used);
-    if (single) {
-      row.append(needed, details);
-    } else {
-      const text = document.createElement("span"); // one run of text beside the icon
-      text.append(needed, details);
-      row.appendChild(text);
-    }
-    list.appendChild(row);
-    apiFetch(`/api/storage/${id}/space`).then((space) => {
-      if (space.free == null) return;
-      // Backuparr's own backups are already in "used", so they have
-      // free + used to grow into.
-      const short = d.needed != null && d.needed > space.free + d.used;
-      const free = document.createElement("span");
-      free.className = short ? "storage-part storage-short" : "storage-part";
-      free.textContent = `${short ? "only " : ""}${fmtBytes(space.free)} free`;
-      details.append(" · ", free);
-    }).catch(() => {}); // no free space shown; the rest stands
-  });
-  storageStat.prepend(...(single ? list.firstChild.childNodes : [list]));
+  if (shown.length === 1) {
+    storageStat.prepend(...storageFigure(shown[0], storage.destinations[shown[0]]));
+  } else {
+    const list = document.createElement("div");
+    list.className = "overview-storage-list";
+    shown.forEach((id) => list.appendChild(storageRow(id, storage.destinations[id])));
+    storageStat.prepend(list);
+  }
   storageStat.classList.remove("hidden");
+}
+
+// The room a destination's retention needs ("≈ 7.1 GB"), titled with the
+// backups of each app it keeps.
+function storageNeeded(d, element, className) {
+  const needed = document.createElement(element);
+  needed.className = className;
+  needed.textContent = d.needed != null ? `≈ ${fmtBytes(d.needed)}` : "-";
+  if (d.needed != null) {
+    needed.title = `Up to ${d.capped ? "over " : ""}${d.copies.toLocaleString()} backups of each app, kept ${daysText(d.days)}`;
+  }
+  return needed;
+}
+
+// What Backuparr's backups use there now, then the free space once the
+// destination says. Each part stays on one line: a row wraps between them.
+function storageDetails(id, d, details, separator) {
+  const used = document.createElement("span");
+  used.className = "storage-part";
+  used.textContent = `${fmtBytes(d.used)} used`;
+  details.append(separator, used);
+  apiFetch(`/api/storage/${id}/space`).then((space) => {
+    if (space.free == null) return;
+    // Backuparr's own backups are already in "used", so they have
+    // free + used to grow into.
+    const short = d.needed != null && d.needed > space.free + d.used;
+    const free = document.createElement("span");
+    free.className = short ? "storage-part storage-short" : "storage-part";
+    free.textContent = `${short ? "only " : ""}${fmtBytes(space.free)} free`;
+    details.append(" · ", free);
+  }).catch(() => {}); // no free space shown; the rest stands
+  return details;
+}
+
+// One destination: a big figure, and used and free under it.
+function storageFigure(id, d) {
+  const details = document.createElement("div");
+  details.className = "stat-note";
+  return [storageNeeded(d, "div", "stat-value"), storageDetails(id, d, details, "")];
+}
+
+// One of several destinations: its icon, then needed, used and free in one
+// run of text.
+function storageRow(id, d) {
+  const row = document.createElement("div");
+  row.className = "overview-storage-row";
+  const m = DESTINATION_META.find((dm) => dm.id === id);
+  if (m && m.icon) {
+    const img = document.createElement("img");
+    img.className = "app-icon";
+    img.src = `/static/icons/${m.icon}`;
+    img.alt = SHORT_DEST_LABEL[id] || destLabel(id);
+    img.title = img.alt;
+    row.appendChild(img);
+  }
+  const details = document.createElement("span");
+  details.className = "storage-muted";
+  const text = document.createElement("span");
+  text.append(storageNeeded(d, "span", "storage-part"), storageDetails(id, d, details, " · "));
+  row.appendChild(text);
+  return row;
 }
 
 // ---------------------------------------------------------- encryption ----
