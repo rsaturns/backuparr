@@ -1,4 +1,7 @@
-FROM python:3.15-alpine
+# Pinned by digest so every build uses the base image CI tested (and
+# scripts/test_in_image.sh runs the tests in). Dependabot opens a PR when
+# python:3.15-alpine moves, so Alpine and Python fixes arrive as tested PRs.
+FROM python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
 
 # rclone from its own GitHub release, not apk - apk's build lags
 # upstream and carries known CVEs in its bundled Go dependencies.
