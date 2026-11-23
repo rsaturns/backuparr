@@ -69,7 +69,8 @@ from apps.unifi import UnifiApp
 from apps.synology import SynologyApp
 from apps.qnap import QnapApp
 from apps.unraid import UnraidApp
-from config_store import ConfigError, app_label, app_meta, enabled_apps, enabled_destinations, encrypts, instance_type, retention_days
+from config_store import (ConfigError, app_label, app_meta, enabled_apps, enabled_destinations, encrypts, instance_type, retention_days,
+                          self_backup_on)
 from webui.version import VERSION
 
 LOG_DIR = os.environ.get("BACKUPARR_LOG_DIR", "/var/log/backuparr")
@@ -483,7 +484,7 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
         if should_cancel and should_cancel():
             raise RunCancelled()
 
-    backs_up_self = cfg.get("self_backup", True) is not False and only in (None, self_backup.FOLDER)
+    backs_up_self = self_backup_on(cfg) and only in (None, self_backup.FOLDER)
     apps = enabled_apps(cfg)
     if only == self_backup.FOLDER:
         if not backs_up_self:

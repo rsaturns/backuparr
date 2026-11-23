@@ -1144,6 +1144,18 @@ def enabled_apps(cfg):
     return [name for name in instance_ids(cfg) if cfg["apps"][name].get("enabled")]
 
 
+def self_backup_on(cfg):
+    """Whether Backuparr's own backup is on (#110): its card's switch, on
+    unless it's turned off."""
+    return cfg.get("self_backup", True) is not False
+
+
+def run_app_ids(cfg):
+    """What a full run backs up: each enabled app and instance, then
+    Backuparr itself while its own backup is on."""
+    return [*enabled_apps(cfg), *([SELF_APP["id"]] if self_backup_on(cfg) else [])]
+
+
 # These take an app or an instance id: an instance shares its app's metadata.
 def app_meta(name):
     return next((m for m in APP_META if m["id"] == instance_type(name)), None)

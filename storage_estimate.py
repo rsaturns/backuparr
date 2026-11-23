@@ -33,12 +33,6 @@ ANCHOR_DAYS = 35
 MAX_DAYS = 36_500
 
 
-def run_apps(cfg):
-    """What a scheduled run backs up: each enabled app and instance, and
-    Backuparr itself while its card is on."""
-    return [*config_store.enabled_apps(cfg), *(["backuparr"] if cfg.get("self_backup", True) is not False else [])]
-
-
 def kept_runs(schedule, days, now=None):
     """(runs, capped): the most scheduled runs a destination keeps an app's
     backups from right after a run - those in (run - days, run] - over the
@@ -120,7 +114,7 @@ def overview(cfg, now=None):
     backup yet and, for each enabled destination, its retention, the most
     backups of each app it holds, the room they need and what Backuparr's
     backups use there now."""
-    apps = run_apps(cfg)
+    apps = config_store.run_app_ids(cfg)
     largest, kept_elsewhere, used = _sizes(set(apps))
     per_run = sum(largest.values())
     schedule = cfg.get("cron_schedule", config_store.DEFAULTS["cron_schedule"])

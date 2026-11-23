@@ -13,7 +13,7 @@ import backup
 import config_store
 import runlog
 from backup import describe_failure, format_run_message, log_failure, notify, run_backup
-from config_store import enabled_apps, load_config, valid_schedule
+from config_store import load_config, valid_schedule
 from webui.body import json_object
 
 
@@ -203,7 +203,7 @@ def start_upgrade_self_backup():
         cfg = load_config()
         if cfg.get("upgrade_self_backup_tried") is True:
             return False
-        if cfg.get("self_backup", True) is False or not config_store.enabled_destinations(cfg):
+        if not config_store.self_backup_on(cfg) or not config_store.enabled_destinations(cfg):
             config_store.mark_upgrade_self_backup()
             return False
     except Exception as exc:  # an unreadable config.json: the UI says why
@@ -295,7 +295,7 @@ def start_scheduler():
 def _runnable(cfg):
     """What /api/backup/run can back up on its own: each enabled app, and
     Backuparr itself while its card is on (#165)."""
-    return [*enabled_apps(cfg), *(["backuparr"] if cfg.get("self_backup", True) is not False else [])]
+    return config_store.run_app_ids(cfg)
 
 
 @bp.post("/api/backup/run")
