@@ -142,9 +142,8 @@ App icons (`webui/static/icons/`) are from the [selfh.st icon
 collection](https://selfh.st/icons/) ([selfhst/icons on
 GitHub](https://github.com/selfhst/icons)), licensed
 [CC BY 4.0](https://github.com/selfhst/icons/blob/main/LICENSE), except
-Synology DSM's (`synology-dsm.svg`), from [Dashboard
-Icons](https://github.com/homarr-labs/dashboard-icons), licensed
-[Apache 2.0](https://github.com/homarr-labs/dashboard-icons/blob/main/LICENSE).
+Synology DSM's (`synology.png`), which is Synology's own icon from
+[synology.com](https://www.synology.com/).
 
 The Server category's icons (`server-outline.png`, `server-filled.png`):
 <a href="https://www.flaticon.com/free-icons/server" title="server icons">Server icons created by Magnific - Flaticon</a>

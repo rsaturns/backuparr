@@ -565,7 +565,7 @@ APP_META = [
     {
         "id": "synology",
         "label": "Synology DSM",
-        "icon": "synology-dsm.svg",
+        "icon": "synology.png",
         # DSM's own Configuration Backup (.dss) - its settings, not the data in
         # its shared folders - over the Control Panel's Web API calls, signed
         # in as an administrator: see apps/synology.py. A 2FA code is asked
