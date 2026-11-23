@@ -24,7 +24,7 @@ nav_order: 4
 6. Set retention and a schedule under **Schedule & Notifications**.
 7. Click **Save settings**.
 
-![Settings tab: apps grouped by category on the left, each category folding away under a header with its enabled count, Server open on Backuparr's own card, and destinations on the right]({{ '/screenshots/settings.png' | relative_url }})
+![Settings tab: apps grouped by category on the left, each category folding away under a header with its enabled count, Server open on Backuparr's own card, and destinations on the right, Local Storage's retention saying how many backups of each app it keeps and their size]({{ '/screenshots/settings.png' | relative_url }})
 
 Then click **Run backup now** on **Run & Status** to make your first backup.
 See [Backups and history](../backups.md) for the schedule, retention, logs and

@@ -29,8 +29,8 @@ If you like Backuparr, give it a ⭐ star - it helps the project grow.
 
 <table>
   <tr>
-    <td><img src="docs/screenshots/overview.png" alt="Overview tab: enabled services, destinations, schedule and retention, a line saying all 36 backups succeeded, and each app's last backup"><br><b>Overview</b></td>
-    <td><img src="docs/screenshots/settings.png" alt="Settings tab: apps grouped by category on the left, each category folding away under a header with its enabled count, Server open on Backuparr's own card, and destinations on the right"><br><b>Settings</b></td>
+    <td><img src="docs/screenshots/overview.png" alt="Overview tab: enabled services, destinations, schedule, retention, what each run uploads and the storage each destination needs beside what's used and free, a line saying all 32 backups succeeded, and each app's last backup"><br><b>Overview</b></td>
+    <td><img src="docs/screenshots/settings.png" alt="Settings tab: apps grouped by category on the left, each category folding away under a header with its enabled count, Server open on Backuparr's own card, and destinations on the right, Local Storage's retention saying how many backups of each app it keeps and their size"><br><b>Settings</b></td>
   </tr>
   <tr>
     <td><img src="docs/screenshots/run.png" alt="Run and Status tab: a backup in progress with its live log"><br><b>Run &amp; Status</b></td>
