@@ -1,6 +1,6 @@
 name: Checks
 
-# The tests, and the smoke test and Trivy gate on amd64 and arm64, at once.
+# The tests, the smoke test and the Trivy gate, on amd64 and arm64 at once.
 # arm64 runs on GitHub's native arm64 runners (free for public
 # repositories), so nothing is emulated and the arm64 image is run and
 # scanned, not just built. Called by ci.yml on every PR (with the build
@@ -28,6 +28,8 @@ jobs:
         include:
           - arch: amd64
             runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
     # Actions are pinned to a commit, named in the comment; Dependabot
     # updates both.
     steps:
