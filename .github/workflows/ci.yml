@@ -32,18 +32,14 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      # Same Python as the python:3.15-alpine image the app ships in.
-      - name: Set up Python
-        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: "3.15"
+          persist-credentials: false
 
-      - name: Install Python dependencies
-        run: pip install --require-hashes -r requirements.txt -r requirements-dev.txt
-
+      # In the Dockerfile's own base image (digest-pinned), so the tests
+      # see the Python and musl the app ships with, and a base image bump
+      # tests itself - no Python version to keep in step here.
       - name: Run test suite
-        run: pytest -q
+        run: scripts/test_in_image.sh
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
@@ -70,7 +66,8 @@ jobs:
       # fails the build, and the log's table names it. One accepted for a
       # reason (say, a fix rclone hasn't shipped yet) goes in .trivyignore
       # with that reason. Trivy's own version is pinned below; Dependabot
-      # updates the action but not that.
+      # updates the action but not that - the weekly security scan
+      # (security-scan.yml) flags a newer one.
       - name: Scan the image for known vulnerabilities (Trivy)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
