@@ -4,7 +4,7 @@
 # musl the app ships with and no second Python version has to be kept in
 # step with the Dockerfile. CI and the release workflow both use it.
 # Arguments go to pytest:
-#   scripts/test_in_image.sh
+#   scripts/test_in_image.sh -n auto        # the whole suite, a worker per CPU
 #   scripts/test_in_image.sh tests/test_schedule.py -x
 set -euo pipefail
 

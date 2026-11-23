@@ -3,3 +3,4 @@
 #   pip install --require-hashes -r requirements.txt -r requirements-dev.txt
 -c requirements.txt
 pytest>=9.2.0
+pytest-xdist>=3.8.0
