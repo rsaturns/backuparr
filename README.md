@@ -3,6 +3,7 @@
 # Backuparr
 
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/17050/badge)](https://www.bestpractices.dev/projects/17050)
+[![OpenSSF Baseline](https://www.bestpractices.dev/projects/17050/baseline)](https://www.bestpractices.dev/projects/17050)
 
 **Everything you host, backed up.**
 
