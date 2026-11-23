@@ -5,6 +5,10 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- certifi 2026.11.20 (the certificate authorities Backuparr trusts for HTTPS) and charset-normalizer 3.5.3 (#245).
+
 ### Security
 
 - Each released image comes with signed build provenance and a list of every package in it (an SBOM), and is built from scratch, tested and scanned on amd64 and arm64 before it's published: check one with `gh attestation verify oci://ghcr.io/rsaturns/backuparr:<version> --owner rsaturns` (#243). See https://rsaturns.github.io/backuparr/security-principles/#checking-an-image
