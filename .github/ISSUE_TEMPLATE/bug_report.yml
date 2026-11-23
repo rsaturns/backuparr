@@ -31,7 +31,18 @@ body:
         - Emby
         - Plex
         - Seerr
+        - Immich
         - LazyLibrarian
+        - Pi-hole
+        - Bitwarden
+        - Vaultwarden
+        - OPNsense
+        - pfSense
+        - UniFi
+        - Home Assistant
+        - Unraid
+        - Synology DSM
+        - QNAP QuTS hero
         - Web UI / general
         - Not app-specific
     validations:

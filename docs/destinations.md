@@ -10,12 +10,12 @@ Each backup is [checked before it's uploaded](backups.md#the-check-before-upload
 Each card can keep backups for its own number of days - see
 [Retention](backups.md#retention).
 
-## Local storage
+## Local Storage
 
 No setup. Backups go to `/config/backuparr/backups`, on the same volume as
 `config.json`. Set a custom path on the Local card to use another mounted
 volume, such as a NAS share. Backuparr only ever deletes its own archives
-there (`<app>/<app>_<date>_<time>.zip`), so the folder can hold other files.
+there (`<app>/<app>_<date>_<time>.<ext>`), so the folder can hold other files.
 
 A USB disk that spins down to save power is fine: before using it, Backuparr
 reads a small `.backuparr-wake` file it keeps there and waits up to 60 seconds
@@ -33,12 +33,20 @@ Set up from the Google Drive card, with no rclone config:
    register. **Publish the OAuth app** as it says - apps left in Testing lose
    their connection every 7 days.
 2. Paste the Client ID, Client Secret and API key, then **Save settings**. The
-   **Choose folder** picker needs the API key. The API key and Client Secret
-   inputs are masked on screen; the Client ID remains visible.
+   **Choose folder** picker needs the API key.
 3. Click **Connect Google Drive** and approve. Backuparr only asks for
    `drive.file` (files it created or you picked). Google warns the app is
    unverified; click **Advanced**, then **Go to (your app name) (unsafe)**.
 4. Click **Choose folder** to pick or create the backup folder.
+
+Good to know:
+
+- Publishing the app doesn't need Google's review, as `drive.file` isn't a
+  sensitive scope.
+- The API key only needs the Google Picker API, which **Choose folder**
+  uses. Leave its **Application restrictions** at **None**: restricted to
+  websites, the picker can fail with "The API developer key is invalid". The
+  API restriction already limits what the key can do.
 
 ## OneDrive
 

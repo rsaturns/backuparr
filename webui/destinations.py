@@ -1,13 +1,15 @@
 """Destinations: their test, Google Drive's OAuth flow, and connecting or
 disconnecting OneDrive and Dropbox."""
+import hmac
 import logging
 import os
+import re
 import secrets
 import threading
 import time
 import urllib.parse
 
-from flask import Blueprint, jsonify, redirect, request
+from flask import Blueprint, jsonify, redirect, request, session
 
 import destination_util
 import dropbox_oauth
@@ -16,16 +18,22 @@ import onedrive_oauth
 import rclone_token
 import rclone_util
 from backup import humanize_error, log_failure
-from config_store import DEFAULT_DEST, DEST_EDITABLE_FIELDS, DEST_NAMES, load_config, save_config
+from config_store import DEFAULT_DEST, DEST_EDITABLE_FIELDS, DEST_NAMES, editing_config, load_config
+from webui.body import json_object
+from webui.settings import destination_field_error, text_error
 
 
 bp = Blueprint("destinations", __name__)
 log = logging.getLogger("backuparr.webui")
 
 
-# CSRF state for the OAuth callback, no session store needed. state ->
-# time.monotonic() it was issued. Waitress serves requests on several
-# threads, so these dicts are only touched under their lock.
+# CSRF state for the OAuth callback: state -> time.monotonic() it was
+# issued, so each is used once and expires. Requests run on several threads
+# (webui/wsgi_asgi.py), so it's only touched under its lock. The browser
+# that started the sign-in keeps it in its session too (its last few, for a
+# second click on Connect): the callback must come back to that browser.
+_OAUTH_SESSION_KEY = "gdrive_oauth_states"
+_OAUTH_SESSION_KEEP = 3
 _OAUTH_STATE = {}
 _OAUTH_STATE_LOCK = threading.Lock()
 _OAUTH_STATE_TTL = 600
@@ -49,8 +57,12 @@ def api_test_destination(dest_id):
 
     cfg = load_config()
     dest_cfg = dict(cfg["destinations"].get(dest_id, {}))
-    data = request.get_json(force=True, silent=True) or {}
-    dest_cfg.update({k: v for k, v in data.items() if k in DEST_EDITABLE_FIELDS.get(dest_id, set())})
+    data = json_object()
+    edits = {k: v for k, v in data.items() if k in DEST_EDITABLE_FIELDS.get(dest_id, set())}
+    error = destination_field_error(dest_id, edits)
+    if error:
+        return jsonify({"ok": False, "message": error}), 400
+    dest_cfg.update(edits)
 
     try:
         if dest_id == "local":
@@ -89,13 +101,20 @@ def _oauth_state_new():
             if now - ts > _OAUTH_STATE_TTL:
                 del _OAUTH_STATE[s]
         _OAUTH_STATE[state] = now
+    mine = session.get(_OAUTH_SESSION_KEY)
+    session[_OAUTH_SESSION_KEY] = [*(mine if isinstance(mine, list) else [])][-(_OAUTH_SESSION_KEEP - 1):] + [state]
     return state
 
 
 def _oauth_state_consume(state):
+    mine = session.get(_OAUTH_SESSION_KEY)
+    mine = [s for s in mine if isinstance(s, str)] if isinstance(mine, list) else []
+    started_here = any(hmac.compare_digest(s.encode("utf-8"), state.encode("utf-8")) for s in mine)
+    if started_here:
+        session[_OAUTH_SESSION_KEY] = [s for s in mine if s != state]
     with _OAUTH_STATE_LOCK:
         ts = _OAUTH_STATE.pop(state, None)
-    return ts is not None and (time.monotonic() - ts) <= _OAUTH_STATE_TTL
+    return started_here and ts is not None and (time.monotonic() - ts) <= _OAUTH_STATE_TTL
 
 
 @bp.get("/api/destinations/gdrive/oauth/start")
@@ -132,9 +151,9 @@ def api_gdrive_oauth_callback():
         log_failure(log, "gdrive oauth exchange failed", exc, gdrive_oauth.TOKEN_URL)
         return _redirect_with_error(humanize_error(exc, gdrive_oauth.TOKEN_URL))
 
-    gdrive_cfg["refresh_token"] = tokens["refresh_token"]
-    gdrive_cfg["enabled"] = True
-    save_config(cfg)
+    with editing_config() as cfg:  # the exchange took a while: change the config as it is now
+        cfg["destinations"]["gdrive"]["refresh_token"] = tokens["refresh_token"]
+        cfg["destinations"]["gdrive"]["enabled"] = True
     destination_util.sync(cfg)
     return redirect("/?gdrive=connected")
 
@@ -149,21 +168,29 @@ def api_gdrive_access_token():
         return jsonify({"error": humanize_error(exc)}), 400
 
 
+_DRIVE_ID = re.compile(r"[A-Za-z0-9_-]{1,256}")
+
+
 @bp.post("/api/destinations/gdrive/folder")
 def api_gdrive_folder():
-    data = request.get_json(force=True, silent=True) or {}
+    data = json_object()
     folder_id = data.get("folder_id", "")
     folder_name = data.get("folder_name", "")
     if not folder_id:
         return jsonify({"error": "folder_id is required"}), 400
+    # It goes into rclone.conf: only the characters Drive's IDs use (#226).
+    if not isinstance(folder_id, str) or not _DRIVE_ID.fullmatch(folder_id):
+        return jsonify({"error": "folder_id isn't a Google Drive folder ID"}), 400
+    error = text_error(folder_name, "folder_name")
+    if error:
+        return jsonify({"error": error}), 400
 
-    cfg = load_config()
-    gdrive_cfg = cfg["destinations"]["gdrive"]
-    if not gdrive_cfg.get("refresh_token"):
+    if not load_config()["destinations"]["gdrive"].get("refresh_token"):
         return jsonify({"error": "Google Drive is not connected"}), 400
-    gdrive_cfg["folder_id"] = folder_id
-    gdrive_cfg["folder_name"] = folder_name
-    save_config(cfg)
+    with editing_config() as cfg:
+        gdrive_cfg = cfg["destinations"]["gdrive"]
+        gdrive_cfg["folder_id"] = folder_id
+        gdrive_cfg["folder_name"] = folder_name
     destination_util.sync(cfg)
     return jsonify({"ok": True})
 
@@ -174,11 +201,10 @@ def api_destination_disconnect(dest_id):
     themselves (Google Drive's OAuth client) stays."""
     if dest_id not in destination_util.REMOTES:
         return jsonify({"error": "unknown destination"}), 404
-    cfg = load_config()
     kept = DEST_EDITABLE_FIELDS[dest_id] - {"enabled"}
-    cfg["destinations"][dest_id].update(
-        {key: value for key, value in DEFAULT_DEST[dest_id].items() if key not in kept}, enabled=False)
-    save_config(cfg)
+    with editing_config() as cfg:
+        cfg["destinations"][dest_id].update(
+            {key: value for key, value in DEFAULT_DEST[dest_id].items() if key not in kept}, enabled=False)
     destination_util.sync(cfg)
     return jsonify({"ok": True})
 
@@ -188,21 +214,20 @@ def api_destination_disconnect(dest_id):
 def api_onedrive_connect():
     """Validates the pasted `rclone authorize onedrive` token and resolves
     the app folder's drive_id/drive_type via one Graph API call."""
-    data = request.get_json(force=True, silent=True) or {}
+    data = json_object()
     try:
         token_json, access_token = rclone_token.parse_token_blob(data.get("token_blob", ""), "onedrive")
         approot = onedrive_oauth.approot_metadata(access_token)
     except Exception as exc:
         return jsonify({"error": humanize_error(exc)}), 400
 
-    cfg = load_config()
-    onedrive_cfg = cfg["destinations"]["onedrive"]
-    onedrive_cfg["token"] = token_json
-    onedrive_cfg["drive_id"] = approot["parentReference"]["driveId"]
-    onedrive_cfg["drive_type"] = approot["parentReference"]["driveType"]
-    onedrive_cfg["item_id"] = approot["id"]
-    onedrive_cfg["enabled"] = True
-    save_config(cfg)
+    with editing_config() as cfg:
+        onedrive_cfg = cfg["destinations"]["onedrive"]
+        onedrive_cfg["token"] = token_json
+        onedrive_cfg["drive_id"] = approot["parentReference"]["driveId"]
+        onedrive_cfg["drive_type"] = approot["parentReference"]["driveType"]
+        onedrive_cfg["item_id"] = approot["id"]
+        onedrive_cfg["enabled"] = True
     # force=True: fresh token should win over whatever's already stored.
     onedrive_oauth.sync_rclone_remote(onedrive_cfg, force=True)
     return jsonify({"ok": True})
@@ -213,18 +238,17 @@ def api_onedrive_connect():
 def api_dropbox_connect():
     """Validates the pasted `rclone authorize dropbox` token against
     Dropbox before saving it."""
-    data = request.get_json(force=True, silent=True) or {}
+    data = json_object()
     try:
         token_json, access_token = rclone_token.parse_token_blob(data.get("token_blob", ""), "dropbox")
         dropbox_oauth.verify_access_token(access_token)
     except Exception as exc:
         return jsonify({"error": humanize_error(exc)}), 400
 
-    cfg = load_config()
-    dropbox_cfg = cfg["destinations"]["dropbox"]
-    dropbox_cfg["token"] = token_json
-    dropbox_cfg["enabled"] = True
-    save_config(cfg)
+    with editing_config() as cfg:
+        dropbox_cfg = cfg["destinations"]["dropbox"]
+        dropbox_cfg["token"] = token_json
+        dropbox_cfg["enabled"] = True
     # force=True: fresh token should win over whatever's already stored.
     dropbox_oauth.sync_rclone_remote(dropbox_cfg, force=True)
     return jsonify({"ok": True})

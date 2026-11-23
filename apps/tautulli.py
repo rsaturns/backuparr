@@ -89,7 +89,7 @@ class TautulliApp:
         if cmd == "download_database":
             if content.startswith(b"SQLite format 3\x00"):
                 return
-        elif content.strip() and not content.lstrip()[:1] in (b"{", b"<"):
+        elif content.strip() and content.lstrip()[:1] not in (b"{", b"<"):
             return
         try:
             message = json.loads(content).get("response", {}).get("message")

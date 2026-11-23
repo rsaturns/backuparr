@@ -4,8 +4,8 @@
   plan       Writes what to scan to $GITHUB_OUTPUT: every release-* branch
              (fixes are made there), and the published images - the newest
              release, whose findings fail the run, and :latest, whose
-             findings only go to the Security tab (during the 3.0 beta it's
-             2.5.7, which gets no more fixes).
+             findings only go to the Security tab (while a beta is the
+             newest release, :latest is the last full release).
   freshness  What Dependabot can't keep current, on each release branch:
              rclone (an ARG in the Dockerfile) and the Trivy version the
              workflows pin. Also fails when .github/dependabot.yml points at

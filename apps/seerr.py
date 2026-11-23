@@ -180,6 +180,8 @@ class SeerrApp:
         if names != _MEMBERS:
             unexpected = sorted(names - _MEMBERS) or sorted(_MEMBERS - names)
             raise SeerrError(f"seerr: unexpected contents in the backup: {unexpected[0]!r}")
+        # First: the folder check reads settings.json.
+        mounted.refuse_links(self.data_dir, [DATABASE, SETTINGS], SeerrError, "seerr")
         self._require_folder()
         target = self._path(*DATABASE.split("/"))
         settings = self._path(SETTINGS)
@@ -204,8 +206,8 @@ class SeerrApp:
                     "seerr: this backup comes from a newer Seerr than the one installed - update Seerr first"
                 )
             self._check_stopped()
-            mounted.copy_in_place(restored, target)
-            mounted.copy_in_place(restored_settings, settings)
+            mounted.copy_in_place(restored, self.data_dir, DATABASE, SeerrError, "seerr")
+            mounted.copy_in_place(restored_settings, self.data_dir, SETTINGS, SeerrError, "seerr")
         mounted.remove_journal_files(target)
         logger.info("seerr: restored the database and settings (client id %s) into %s - start Seerr to load them",
                     client_id or "?", self.data_dir)

@@ -10,6 +10,7 @@ import zipfile
 import pytest
 from cryptography.fernet import Fernet
 
+import archive_crypto
 import auth_store
 import config_store
 import manifest
@@ -61,7 +62,7 @@ def encrypted_zip(members, key):
     with zipfile.ZipFile(buffer, "w") as z:
         for name, data in members.items():
             z.writestr(name, data)
-    return Fernet(key.encode()).encrypt(buffer.getvalue())
+    return archive_crypto.encrypt_bytes(buffer.getvalue(), key)
 
 
 META = json.dumps({"format": 1, "backuparr_version": "2.5.0", "created": "2026-11-05T00:00:00+00:00"})
@@ -91,6 +92,24 @@ def test_a_backup_from_a_newer_backuparr_is_refused(isolated_webui, meta, messag
     archive = encrypted_zip({"backuparr-meta.json": json.dumps(meta), "config.json": "{}", "auth.json": AUTH}, key)
     with pytest.raises(self_restore.SelfRestoreError, match=message):
         self_restore.prepare(archive, key)
+
+
+@pytest.mark.parametrize("running, made_by, refused", [
+    ("3.0.0-beta", "3.0.1", True),
+    ("3.0.0-beta", "3.0.0-beta", False),
+    ("3.0.0", "3.0.0-beta", False),
+    ("3.0.1-beta", "3.0.0", False),
+])
+def test_a_beta_version_is_compared_as_its_release(isolated_webui, monkeypatch, running, made_by, refused):
+    monkeypatch.setattr(self_restore, "VERSION", running)
+    key = Fernet.generate_key().decode()
+    meta = json.dumps({"format": 1, "backuparr_version": made_by})
+    archive = encrypted_zip({"backuparr-meta.json": meta, "config.json": "{}", "auth.json": AUTH}, key)
+    if refused:
+        with pytest.raises(self_restore.SelfRestoreError, match=f"from Backuparr {made_by} and this is {running}"):
+            self_restore.prepare(archive, key)
+    else:
+        assert "config.json" in self_restore.prepare(archive, key)
 
 
 def test_a_backup_from_an_older_backuparr_is_fine(isolated_webui, monkeypatch):
@@ -155,6 +174,25 @@ def test_remotes_that_cant_be_restored_are_a_warning(old_install, monkeypatch):
     assert "couldn't write rclone.conf" in warnings[0]
 
 
+def test_only_backuparrs_own_remotes_come_back(isolated_webui, rclone, caplog):
+    # A remote of another name or type isn't Backuparr's to restore: some
+    # rclone remotes (sftp's ssh option) run a command.
+    key = secrets_crypto.current_key()
+    remotes = {
+        "backuparr-dropbox": {"type": "dropbox", "token": "t"},
+        "backuparr-gdrive": {"type": "sftp", "ssh": "sh -c 'id'"},
+        "elsewhere": {"type": "sftp", "host": "example.com"},
+    }
+    config = json.dumps(json.loads(open(config_store.CONFIG_PATH).read()) if os.path.exists(config_store.CONFIG_PATH)
+                        else config_store.DEFAULTS)
+    archive = encrypted_zip({self_backup.META: META, "config.json": config, "auth.json": AUTH,
+                             self_backup.REMOTES: json.dumps(remotes)}, key)
+    self_restore.apply(self_restore.prepare(archive, key), key)
+    assert rclone == {"backuparr-dropbox": {"type": "dropbox", "token": "t"}}
+    assert "left out the rclone remote 'backuparr-gdrive' (sftp)" in caplog.text
+    assert "'elsewhere'" in caplog.text
+
+
 # --------------------------------------------------------------- web UI ----
 
 def upload(archive, key, **extra):
@@ -182,6 +220,15 @@ def test_the_setup_restore_reports_a_wrong_key_and_bad_uploads(old_install, isol
     assert client.post("/api/setup/restore", json={"archive": "not base64!", "key": "k"}).status_code == 400
     assert client.post("/api/setup/restore", json={}).status_code == 400
     assert not auth_store.has_credentials()
+
+
+def test_a_backup_from_before_3_0_says_to_restore_it_with_2_5_7(old_install, isolated_webui):
+    _archive, key = old_install
+    legacy = Fernet(key.encode()).encrypt(b"PK as 2.5.x wrote it")
+    response = isolated_webui.app.test_client().post("/api/setup/restore", json=upload(legacy, key))
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "this backup is from before Backuparr 3.0. Restore it with Backuparr 2.5.7, then update."
+    assert not os.path.exists(config_store.CONFIG_PATH) and not auth_store.has_credentials()
 
 
 def test_an_upload_over_the_limit_is_refused(isolated_webui):
@@ -235,3 +282,11 @@ def test_no_restore_while_a_backup_runs(running_install, isolated_webui):
     finally:
         isolated_webui.runs.RUN_STATE["running"] = False
     assert response.status_code == 409 and auth_store.verify_password("newadmin", "new-admin-password")
+
+
+def test_settings_restore_of_a_backup_from_before_3_0_says_to_use_2_5_7(running_install, isolated_webui):
+    client, _archive, key = running_install
+    legacy = Fernet(key.encode()).encrypt(b"PK as 2.5.x wrote it")
+    response = client.post("/api/backuparr/restore", json=upload(legacy, key, confirm=True, password="new-admin-password"))
+    assert response.status_code == 400 and "Restore it with Backuparr 2.5.7, then update" in response.get_json()["error"]
+    assert auth_store.verify_password("newadmin", "new-admin-password")

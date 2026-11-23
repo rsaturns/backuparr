@@ -1,7 +1,9 @@
 """Fixtures for exercising webui/app.py against a throwaway config."""
 import importlib
+import logging
 import socket
 import sys
+import tempfile
 import threading
 
 import pytest
@@ -33,6 +35,79 @@ def manifest_in_tmp(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def rclone_conf_synced_afresh(monkeypatch):
+    """No test skips a sync because another one's files looked the same."""
+    import destination_util
+    monkeypatch.setattr(destination_util, "_synced", None)
+
+
+@pytest.fixture(autouse=True)
+def secrets_key_in_tmp(tmp_path, monkeypatch):
+    """Every test has its own encryption key in tmp_path - backups are
+    encrypted by default (#147), so run_backup needs one - and never the
+    real /config one."""
+    monkeypatch.delenv("BACKUPARR_SECRETS_KEY", raising=False)
+    monkeypatch.setattr(secrets_crypto, "KEY_PATH", str(tmp_path / "secrets.key"))
+    monkeypatch.setattr(secrets_crypto, "_fernet", None)
+    monkeypatch.setattr(secrets_crypto, "_key", None)
+
+
+@pytest.fixture(autouse=True)
+def sessions_in_tmp(tmp_path, monkeypatch):
+    """Every test's list of signed-in sessions lives in its own tmp_path."""
+    import session_store
+    monkeypatch.setattr(session_store, "SESSIONS_PATH", str(tmp_path / "sessions.json"))
+    monkeypatch.setattr(session_store, "_sessions", None)
+
+
+@pytest.fixture(autouse=True)
+def temp_files_in_tmp(tmp_path_factory, monkeypatch):
+    """Every temporary file or folder the code makes (tempfile) goes in a
+    folder of the test's own under pytest's temporary root, not the
+    machine's /tmp: a download a test starts and never fetches, say, would
+    otherwise be left there. Beside tmp_path, not in it, so a test listing
+    tmp_path sees only what it made."""
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path_factory.mktemp("tempfile")))
+
+
+@pytest.fixture(autouse=True)
+def logs_at_info():
+    """Backuparr logs at INFO in every test, as it does in the container by
+    default (LOG_LEVEL), whatever an earlier test set: a run log keeps those
+    lines, and with the suite split across workers no test may rely on
+    another having set the level first."""
+    logger = logging.getLogger("backuparr")
+    level = logger.level
+    logger.setLevel(logging.INFO)
+    yield
+    logger.setLevel(level)
+
+
+def sign_in(session):
+    """Marks a test client's session (from session_transaction()) signed in,
+    as a real login does: authed, with an id the server lists."""
+    import session_store
+    session["authed"] = True
+    session["sid"] = session_store.start()
+
+
+@pytest.fixture(autouse=True)
+def tls_in_tmp(tmp_path, monkeypatch):
+    """Every test's HTTPS key and certificate live in its own tmp_path (#177),
+    with no certificate of the user's, HTTPS only unset, and no server
+    listening for certificate changes."""
+    import tls
+    for name in ("BACKUPARR_TLS_CERT", "BACKUPARR_TLS_KEY", "BACKUPARR_HTTPS_ONLY"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(tls, "TLS_DIR", str(tmp_path / "tls"))
+    monkeypatch.setattr(tls, "CERT_PATH", str(tmp_path / "tls" / "cert.pem"))
+    monkeypatch.setattr(tls, "KEY_PATH", str(tmp_path / "tls" / "key.pem"))
+    monkeypatch.setattr(tls, "_listeners", [])
+    monkeypatch.setattr(tls, "_refused", {})
+    monkeypatch.setattr(tls, "_logged", {"error": None, "expired": None})
+
+
+@pytest.fixture(autouse=True)
 def skip_archive_check(request, monkeypatch):
     """Most run_backup tests use fake drivers whose placeholder archives
     aren't real backups; tests marked archive_check run the real check."""
@@ -51,10 +126,11 @@ def skip_version_check(request, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def skip_self_backup(request, monkeypatch):
-    """run_backup tests are about the apps; tests marked self_backup make
-    Backuparr's own backup for real."""
+    """run_backup tests are about the apps, so a run skips Backuparr's own
+    backup step; tests marked self_backup make it for real."""
     if request.node.get_closest_marker("self_backup") is None:
         monkeypatch.setattr(self_backup, "run", lambda dest_roots, timestamp: None)
+        monkeypatch.setattr(backup, "_self_backup_step", lambda *args, **kwargs: None)
 
 
 @pytest.fixture(autouse=True)
@@ -78,8 +154,8 @@ def load_webui():
     environment again, with the session key create_app() would load - but no
     scheduler thread and no log file."""
     # Dependencies first, so each module binds the fresh state of the next.
-    for name in ("webui.settings", "webui.services", "webui.auth", "webui.destinations", "webui.runs",
-                 "webui.backups", "webui.app"):
+    for name in ("webui.cookies", "webui.settings", "webui.services", "webui.auth", "webui.destinations", "webui.runs",
+                 "webui.backups", "webui.ha", "webui.https", "webui.app"):
         module = importlib.reload(sys.modules[name]) if name in sys.modules else importlib.import_module(name)
     module.app.secret_key = module.auth._load_or_create_secret_key()
     module.app.config.update(TESTING=True)

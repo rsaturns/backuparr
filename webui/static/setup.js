@@ -9,12 +9,12 @@ async function submitSetup() {
   const btn = document.getElementById("setup-submit-btn");
 
   if (!username || !password) {
-    resultEl.textContent = "Username and password are required";
+    resultEl.textContent = "Username and password are required.";
     resultEl.className = "save-result fail";
     return;
   }
   if (keyEl && !keyEl.value.trim()) {
-    resultEl.textContent = "Enter your encryption key";
+    resultEl.textContent = "Enter your encryption key.";
     resultEl.className = "save-result fail";
     return;
   }
@@ -40,7 +40,7 @@ async function submitSetup() {
     const shown = await showKeyPrompt(document.getElementById("key-step"), () => { window.location.href = "/"; });
     if (!shown) window.location.href = "/";
   } catch (e) {
-    resultEl.textContent = e.message;
+    resultEl.textContent = sentence(e.message);
     resultEl.className = "save-result fail";
     btn.disabled = false;
   }
@@ -68,7 +68,7 @@ async function submitRestore() {
     renderRestoreWarnings(document.getElementById("sr-warnings"), warnings);
     showStep("restored-step");
   } catch (e) {
-    resultEl.textContent = e.message;
+    resultEl.textContent = sentence(e.message);
     resultEl.className = "save-result fail";
     btn.disabled = false;
   }

@@ -1,0 +1,7 @@
+# The test suite's dependencies, pinned in requirements-dev.txt the same
+# way as requirements.in (pip-compile ... requirements-dev.in). Install both:
+#   pip install --require-hashes -r requirements.txt -r requirements-dev.txt
+-c requirements.txt
+pytest>=9.2.0
+pytest-xdist>=3.8.0
+pyflakes>=4.1.0

@@ -1,6 +1,7 @@
 """The pre-upload check (#107): an archive is only uploaded once it opens,
 reads back intact, its SQLite databases pass a quick check and the files
 the app's restore needs are there."""
+import gzip
 import io
 import json
 import os
@@ -9,6 +10,10 @@ import tarfile
 import zipfile
 
 import pytest
+from ha_backup import make_ha_backup
+from qnap_backup import make_bin
+from synology_backup import make_dss
+from unifi_backup import make_unf, make_unifi
 
 import archive_check
 import backup
@@ -74,7 +79,86 @@ def sound_archives(tmp_path):
         "seerr": make_zip(tmp_path / "seerr.zip", {"backuparr-seerr.json": j({"seerr_version": "3.5.1"}), "db/db.sqlite3": db,
                                                     "settings.json": j({"main": {}})}),
         "lazylibrarian": make_tar(tmp_path / "ll.tgz", {"lazylibrarian.db": db, "config.ini": b"[General]\n"}),
+        "pihole-2": make_zip(tmp_path / "pihole.zip", {"etc/pihole/pihole.toml": "[dns]\n", "etc/hosts": "127.0.0.1 localhost\n",
+                                                       "etc/pihole/gravity.db": db, "etc/pihole/pihole-FTL.db": db}),
+        "opnsense": str(opnsense_config(tmp_path / "config.xml")),
+        "pfsense-site2": str(pfsense_config(tmp_path / "pf.xml")),
+        "vaultwarden": make_zip(tmp_path / "vw.zip", {"backuparr-vaultwarden.json": j({"vaultwarden_version": "1.37.5"}),
+                                                      "db.sqlite3": db, "rsa_key.pem": "-----BEGIN PRIVATE KEY-----",
+                                                      "attachments/a1/f1": b"x"}),
+        "bitwarden": make_zip(tmp_path / "bw.zip", {"backuparr-bitwarden.json": j({"bitwarden_version": "2026.10.1",
+                                                    "install": "standard", "database_backup": "vault_FULL_20261112_000000.BAK"}),
+                                                    "mssql/backups/vault_FULL_20261112_000000.BAK": b"TAPE".ljust(512, b"\0") + b"ESET".ljust(512, b"\0"),
+                                                    "env/global.override.env": "globalSettings__x=1\n"}),
+        "immich-2": str(immich_dump(tmp_path / "immich.sql.gz")),
+        "unifi-site2": str(unifi_backup(tmp_path / "10.6.109.unf")),
+        "unifi": str(unifi_os_backup(tmp_path / "unifi_os_backup.unifi")),
+        "homeassistant": make_ha_backup(tmp_path / "ha.tar", database=db, folders=["ssl", "share"], addons=["core_ssh"]),
+        "unraid-2": make_zip(tmp_path / "unraid.zip", {"changes.txt": "# Version 7.4.0 2026-11-09\n",
+                                                        "config/super.dat": b"\0" * 64, "bzimage": b"k"}),
+        "synology-nas2": synology_backup(tmp_path / "synology-configuration.dss"),
+        "qnap-hero": qnap_backup(tmp_path / "qnap-settings.bin"),
     }
+
+
+def synology_backup(path, **kwargs):
+    path.write_bytes(make_dss(**kwargs))
+    return str(path)
+
+
+def qnap_backup(path):
+    path.write_bytes(make_bin(size=2 * 1024 * 1024, encrypted=1024 * 1024))
+    return str(path)
+
+
+def unifi_os_backup(path):
+    path.write_bytes(make_unifi("5.1.42"))
+    return path
+
+
+def unifi_backup(path):
+    path.write_bytes(make_unf("10.6.109"))
+    return path
+
+
+def immich_dump(path, body=b"-- PostgreSQL database dump\n\nCREATE TABLE t ();\n\n-- PostgreSQL database dump complete\n"):
+    path.write_bytes(gzip.compress(body))
+    return path
+
+
+@pytest.mark.parametrize("content, fragment", [
+    (gzip.compress(b"<html>Login</html>"), "isn't an Immich database backup"),
+    (gzip.compress(b"-- PostgreSQL database dump\nCOPY public.asset"), "incomplete"),
+    (gzip.compress(b"-- PostgreSQL database dump\n-- PostgreSQL database dump complete\n")[:-6], "damaged"),
+    (b"not gzip", "damaged"),
+])
+def test_an_immich_backup_must_be_a_whole_database_dump(tmp_path, content, fragment):
+    path = tmp_path / "immich.sql.gz"
+    path.write_bytes(content)
+    with pytest.raises(archive_check.ArchiveCheckError, match=fragment):
+        archive_check.check("immich", str(path))
+
+
+def pfsense_config(path):
+    path.write_text('<?xml version="1.0"?>\n<pfsense><version>23.3</version><system/></pfsense>\n')
+    return path
+
+
+def opnsense_config(path, body="<system><hostname>fw</hostname></system>"):
+    path.write_text(f'<?xml version="1.0"?>\n<opnsense>{body}</opnsense>\n')
+    return path
+
+
+@pytest.mark.parametrize("content, fragment", [
+    ("<html><body>Login</body></html>", "isn't an OPNsense configuration"),
+    ("<opnsense><system>", "isn't valid XML"),
+    ("", "isn't valid XML"),
+])
+def test_an_opnsense_backup_must_be_its_config_xml(tmp_path, content, fragment):
+    path = tmp_path / "config.xml"
+    path.write_text(content)
+    with pytest.raises(archive_check.ArchiveCheckError, match=fragment):
+        archive_check.check("opnsense-site2", str(path))
 
 
 def test_a_sound_backup_of_every_app_passes(tmp_path):

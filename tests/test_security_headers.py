@@ -96,4 +96,4 @@ def test_reads_and_deletes_need_no_body(authed_client, monkeypatch):
     monkeypatch.setattr(rclone_util, "delete_file", lambda path: None)
     assert authed_client.get("/api/config").status_code == 200
     # DELETE isn't a simple method: another site needs a CORS preflight to send one.
-    assert authed_client.delete("/api/history/local/radarr/radarr_1.zip").status_code == 200
+    assert authed_client.delete("/api/history/local/radarr/radarr_20260101_030000.zip").status_code == 200

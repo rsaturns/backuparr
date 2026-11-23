@@ -1,6 +1,7 @@
-# GitHub Pages builds this site from the docs/ folder on main.
+# .github/workflows/docs-site.yml builds this site from docs/ and publishes
+# it from main.
 title: Backuparr
-description: Scheduled backups and web-UI restores for your *arr stack and media servers.
+description: Scheduled, encrypted backups of the apps you host, to local storage and the cloud.
 url: https://rsaturns.github.io
 baseurl: /backuparr
 permalink: pretty
@@ -21,6 +22,8 @@ back_to_top: true
 gh_edit_link: true
 gh_edit_link_text: Edit this page on GitHub
 gh_edit_repository: https://github.com/rsaturns/backuparr
+# The branch these docs come from. The changelog and SECURITY.md links use
+# it too.
 gh_edit_branch: main
 gh_edit_source: docs
 gh_edit_view_mode: edit

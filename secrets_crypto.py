@@ -10,6 +10,7 @@ Protects against a *partial* leak (config.json alone, without the key
 file). Override BACKUPARR_SECRETS_KEY to keep the key off the volume
 entirely for stronger protection.
 """
+import base64
 import logging
 import os
 
@@ -97,13 +98,19 @@ def current_key():
     return _key.decode("ascii")
 
 
-def encrypt_bytes(data):
-    """Encrypts a whole file (Backuparr's own backup) with the key."""
-    return _get_fernet().encrypt(data)
-
-
-def decrypt_bytes(token, key=None):
-    """Reverses encrypt_bytes(), with this install's key or the one given.
-    Raises InvalidToken for a wrong key or a damaged or altered file."""
-    fernet = Fernet(key.encode("ascii") if isinstance(key, str) else key) if key else _get_fernet()
-    return fernet.decrypt(token)
+def key_bytes(key=None):
+    """The 32 random bytes of this install's key, or of the key text given
+    (archive_crypto derives each archive's key from all of them). Raises
+    ValueError for text that isn't a key."""
+    if key is None:
+        _get_fernet()
+        text = _key
+    else:
+        text = key.strip().encode("ascii") if isinstance(key, str) else key.strip()
+    try:
+        raw = base64.urlsafe_b64decode(text)
+    except (ValueError, TypeError):
+        raise ValueError("not an encryption key") from None
+    if len(raw) != 32 or base64.urlsafe_b64encode(raw) != text:
+        raise ValueError("not an encryption key")
+    return raw

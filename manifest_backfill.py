@@ -6,14 +6,21 @@ it stopped.
 
 Where each app's archive keeps its version (checked against real backups):
 the *arrs' INFO file; Profilarr's data/INFO.json; Jellyfin's manifest.json;
-Tautulli's version_info table; LazyLibrarian's config.ini (a commit); and
-for Plex, Emby, Seerr and NZBGet the backuparr-<app>.json Backuparr writes.
+Tautulli's version_info table; LazyLibrarian's config.ini (a commit);
+Pi-hole's pihole.toml header (FTL's version, as apps/pihole.py records it); and
+for Plex, Emby, Seerr, NZBGet, Vaultwarden and a standard Bitwarden the
+backuparr-<app>.json Backuparr writes; lite Bitwarden's manifest.txt (its image
+tag, when lite knew it).
 Bazarr, SABnzbd and Tdarr archives hold none, so theirs is recorded as
-unknown."""
+unknown. For Jellyfin, Emby and Plex it also records whether the backup holds
+the app's metadata (#196): Jellyfin's manifest.json lists its options, and
+Backuparr's own manifest says it for the other two. An encrypted archive (#147) is decrypted with this install's key to
+read it; one made with another key is recorded with its version unknown."""
 import configparser
 import json
 import logging
 import os
+import re
 import shutil
 import sqlite3
 import tarfile
@@ -22,15 +29,18 @@ import threading
 import time
 import zipfile
 
+import archive_crypto
 import destination_util
 import manifest
 import rclone_util
-from config_store import enabled_destinations, instance_type, load_config
+from apps import bitwarden, homeassistant, synology, unifi, unraid
+from apps.base import AppError
+from config_store import enabled_destinations, has_metadata_option, instance_type, load_config
 
 log = logging.getLogger("backuparr.manifest")
 
 _SERVARR = {"radarr", "sonarr", "lidarr", "whisparr", "prowlarr"}
-_OWN_MANIFEST = {"plex", "emby", "seerr", "nzbget"}
+_OWN_MANIFEST = {"plex", "emby", "seerr", "nzbget", "vaultwarden"}
 _MAX_MEMBER = 1024 * 1024  # A version file larger than this isn't one.
 
 _running = threading.Lock()
@@ -101,6 +111,16 @@ def _lazylibrarian_version(archive):
     return None
 
 
+# pihole.toml's first line: "# Pi-hole configuration file (v6.8)".
+_PIHOLE_TOML_VERSION = re.compile(r"#\s*Pi-hole configuration file \((v[0-9][^)\s]*)\)")
+
+
+def _pihole_version(archive):
+    text = _zip_text(archive, "etc/pihole/pihole.toml")
+    match = _PIHOLE_TOML_VERSION.match(text or "")
+    return f"FTL {match.group(1)}" if match else None
+
+
 def read_version(app_type, archive):
     """The app version recorded inside a backup archive, as written there,
     or None when it has none (or it can't be read)."""
@@ -118,12 +138,44 @@ def read_version(app_type, archive):
             return _tautulli_version(archive)
         if app_type == "lazylibrarian":
             return _lazylibrarian_version(archive)
+        if app_type == "pihole":
+            return _pihole_version(archive)
+        if app_type == "homeassistant":
+            return homeassistant.backup_version(homeassistant.read_backup_json(archive))
+        if app_type == "unifi":
+            return unifi.read_backup(archive)
+        if app_type == "unraid":
+            return unraid.backup_version(archive)
+        if app_type == "synology":
+            return synology.backup_version(archive)
+        if app_type == "bitwarden":
+            if zipfile.is_zipfile(archive):
+                text = _zip_text(archive, bitwarden.MANIFEST)
+                return json.loads(text).get("bitwarden_version") if text else None
+            return bitwarden.lite_image_tag(bitwarden.read_lite_manifest(archive))
         if app_type in _OWN_MANIFEST:
             text = _zip_text(archive, f"backuparr-{app_type}.json")
             return json.loads(text).get(f"{app_type}_version") if text else None
     except (OSError, ValueError, AttributeError, zipfile.BadZipFile, tarfile.TarError, sqlite3.Error,
-            configparser.Error) as exc:
+            configparser.Error, AppError) as exc:
         log.warning("manifest: couldn't read the version inside %s (%s)", os.path.basename(archive), type(exc).__name__)
+    return None
+
+
+def read_metadata(app_type, archive):
+    """Whether a Jellyfin, Emby or Plex backup holds the app's metadata,
+    from the manifest inside it; None for any other app, or when it can't
+    be read. A backup made before the switch has none."""
+    if not has_metadata_option(app_type):
+        return None
+    try:
+        if app_type == "jellyfin":
+            text = _zip_text(archive, "manifest.json")
+            return (json.loads(text).get("Options") or {}).get("Metadata") is True if text else None
+        text = _zip_text(archive, f"backuparr-{app_type}.json")
+        return json.loads(text).get("metadata") is True if text else None
+    except (OSError, ValueError, AttributeError, zipfile.BadZipFile) as exc:
+        log.warning("manifest: couldn't read what %s holds (%s)", os.path.basename(archive), type(exc).__name__)
     return None
 
 
@@ -139,18 +191,42 @@ def _backups_on(root):
 
 
 def _examine(dest_id, root, app, name, tmp_dir):
-    """(app_version, sha256) of one archive. A local destination's file is
-    read where it is; any other is downloaded to tmp_dir first."""
+    """(app_version, metadata, sha256, encrypted) of one archive. A local destination's
+    file is read where it is; any other is downloaded to tmp_dir first. The
+    SHA-256 is of the file as stored."""
     if dest_id == "local":
         local = os.path.join(root, app, name)
     else:
         local = os.path.join(tmp_dir, name)
         rclone_util.copyto(f"{root}/{app}/{name}", local)
     try:
-        return manifest.normalise_version(instance_type(app), read_version(instance_type(app), local)), manifest.file_sha256(local)
+        sha256 = manifest.file_sha256(local)
+        encrypted = archive_crypto.is_encrypted(local)
+        return (*_details_in(app, name, local, tmp_dir, encrypted), sha256, encrypted)
     finally:
         if dest_id != "local":
             os.remove(local)
+
+
+def _details(app, archive):
+    app_type = instance_type(app)
+    return manifest.normalise_version(app_type, read_version(app_type, archive)), read_metadata(app_type, archive)
+
+
+def _details_in(app, name, local, tmp_dir, encrypted):
+    """(app_version, metadata) read inside one archive."""
+    if not encrypted:
+        return _details(app, local)
+    plain = os.path.join(tmp_dir, "plain-" + archive_crypto.plain_name(name))
+    try:
+        archive_crypto.decrypt_file(local, plain)
+    except archive_crypto.ArchiveCryptoError as exc:
+        log.warning("manifest: couldn't read the version inside %s (%s)", name, exc)
+        return None, None
+    try:
+        return _details(app, plain)
+    finally:
+        os.remove(plain)
 
 
 def backfill_destination(dest_id, root, expected_generation, should_stop=None, should_pause=None):
@@ -168,17 +244,19 @@ def backfill_destination(dest_id, root, expected_generation, should_stop=None, s
                 continue
             if entry and entry.get("sha256") and entry.get("size") == size:
                 # The same run's archive, already read from another destination.
-                version, sha256 = entry.get("app_version"), entry["sha256"]
+                version, metadata = entry.get("app_version"), entry.get("metadata")
+                sha256, encrypted = entry["sha256"], entry.get("encrypted", False)
             else:
                 try:
-                    version, sha256 = _examine(dest_id, root, app, name, tmp_dir)
+                    version, metadata, sha256, encrypted = _examine(dest_id, root, app, name, tmp_dir)
                 except (OSError, rclone_util.RcloneError) as exc:
                     # Gone since the listing, or unreachable: tried again next start.
                     log.warning("manifest: skipped %s/%s on %s: %s", app, name, dest_id,
                                 getattr(exc, "detail", None) or getattr(exc, "strerror", None) or type(exc).__name__)
                     continue
             if not manifest.add_found(app, name, dest_id, app_version=version, sha256=sha256, size=size,
-                                      expected_generation=expected_generation):
+                                      expected_generation=expected_generation, encrypted=encrypted,
+                                      metadata=metadata):
                 return None
             added += 1
     finally:

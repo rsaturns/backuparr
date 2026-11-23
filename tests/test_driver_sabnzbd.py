@@ -3,7 +3,6 @@ import json
 import pytest
 import requests
 
-from apps import sabnzbd
 from apps.sabnzbd import MASKED, SabnzbdApp, SabnzbdError
 
 KEY = "sabnzbd-secret-key"

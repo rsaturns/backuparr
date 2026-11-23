@@ -11,9 +11,14 @@ on:
       - "release-*"
     paths:
       - "docs/**"
-  # While 3.0 is in beta the site is published from release-3.0.0 (its copy
-  # of this workflow), so main doesn't deploy: a 2.5.x release would put
-  # 2.5's docs over the beta's. 3.0.0 brings the main trigger back.
+  # The site is published from main, the newest full release. During a
+  # long beta (3.0) it was published from the release branch instead, so
+  # the beta's links (every card's ?, the CHANGELOG) found their pages.
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/**"
   workflow_dispatch:
 
 # One deploy at a time, and never cancel one mid-way.
@@ -33,6 +38,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # The same Jekyll build (github-pages gem) GitHub runs for
       # branch-published sites.

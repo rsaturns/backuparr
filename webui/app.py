@@ -4,39 +4,41 @@ docker-compose env vars by hand. The routes live in the blueprint modules
 next to this one; this module builds the app around them.
 """
 import logging
-import os
 from datetime import timedelta
 
 from flask import Flask, jsonify, render_template, request
-from werkzeug.middleware.proxy_fix import ProxyFix
+from flask.sessions import SecureCookieSessionInterface
 
 import backup
 import manifest_backfill
 from backup import describe_failure
-from config_store import APP_META, ConfigError, DESTINATION_META, DISCOVERABLE_APPS
-from webui import auth, backups, destinations, runs, services, settings
+from config_store import APP_CATEGORIES, APP_META, ConfigError, DESTINATION_META, DISCOVERABLE_APPS, SELF_APP
+from webui import auth, backups, cookies, destinations, ha, https, runs, serve, services, settings
 from webui.version import VERSION
 
 app = Flask(__name__)
 log = logging.getLogger("backuparr.webui")
-for _blueprint in (auth.bp, settings.bp, services.bp, destinations.bp, runs.bp, backups.bp):
+for _blueprint in (auth.bp, settings.bp, services.bp, destinations.bp, runs.bp, backups.bp, ha.bp, https.bp):
     app.register_blueprint(_blueprint)
 
-# Off by default - the documented deployment is plain HTTP on a trusted
-# LAN, where a Secure-only cookie would just break login. Set this if
-# Backuparr sits behind your own TLS-terminating reverse proxy - it also
-# makes the app trust that proxy's X-Forwarded-Proto/-For, so redirect
-# URIs built for OAuth (Google Drive) come out https:// instead of the
-# http:// this container actually listens on, and login-lockout tracking
-# sees the real client IP instead of the proxy's.
-_BEHIND_HTTPS_PROXY = os.environ.get("BACKUPARR_FORCE_HTTPS", "").lower() in ("1", "true", "yes")
-if _BEHIND_HTTPS_PROXY:
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_for=1)
+# The session cookie is Secure over HTTPS, and named per scheme so signing
+# in over HTTP after HTTPS still works (webui/cookies.py, #177). Behind your
+# own TLS reverse proxy (BACKUPARR_FORCE_HTTPS) it's always Secure; the
+# proxy's X-Forwarded-* headers are applied by webui/forwarded.py, which
+# the server (webui/serve.py) puts in front of this app.
+class _SessionInterface(SecureCookieSessionInterface):
+    def get_cookie_name(self, app):
+        return cookies.name(super().get_cookie_name(app))
 
+    def get_cookie_secure(self, app):
+        return cookies.secure()
+
+
+app.session_interface = _SessionInterface()
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
-    SESSION_COOKIE_SECURE=_BEHIND_HTTPS_PROXY,
+    SESSION_COOKIE_SECURE=cookies.BEHIND_HTTPS_PROXY,
     PERMANENT_SESSION_LIFETIME=timedelta(days=30),
     # Nothing sent here is large; the biggest is Backuparr's own backup,
     # uploaded as base64 to restore it (#111).
@@ -91,35 +93,35 @@ def _operational_error(exc):
 # --------------------------------------------------------------- pages ----
 @app.get("/")
 def index():
-    # Prowlarr and the apps it discovers lead the Settings list, side by side.
-    # Once an app is enabled and saved, app.js groups the cards by Enabled.
+    # Settings lists the apps by category (#148). Within one, Prowlarr and the
+    # apps it discovers lead, side by side, until an app is enabled and saved;
+    # app.js then puts the enabled ones first.
     lead = ("prowlarr", *DISCOVERABLE_APPS)
     apps = sorted(APP_META, key=lambda m: lead.index(m["id"]) if m["id"] in lead else len(lead))
-    return render_template("index.html", app_meta=apps, destination_meta=DESTINATION_META, version=VERSION,
+    categories = [{**c, "apps": [m for m in apps if m["category"] == c["id"]]} for c in APP_CATEGORIES]
+    # Backuparr's own card (#165) heads its category, which shows even with
+    # no other app in it.
+    shown = [c for c in categories if c["apps"] or c["id"] == SELF_APP["category"]]
+    return render_template("index.html", app_categories=shown, self_app=SELF_APP,
+                           destination_meta=DESTINATION_META, version=VERSION,
                            auth_disabled=auth._AUTH_DISABLED, username=auth.auth_store.username() or "",
-                           ui_meta={"apps": APP_META, "destinations": DESTINATION_META})
+                           ui_meta={"apps": APP_META, "categories": APP_CATEGORIES, "destinations": DESTINATION_META,
+                                    "self_app": SELF_APP})
 
 
 # ------------------------------------------------------------- startup ----
 def create_app():
     """The app, ready to serve: logging set up, the session key loaded, the
     scheduler running and existing backups being added to the manifest
-    (paused while a backup or restore runs). Importing this module does none of that; waitress
-    calls this (entrypoint.sh), once."""
+    (paused while a backup or restore runs). Importing this module does none of that; the
+    server (webui/serve.py) calls this, once."""
     backup.configure_logging()
     if auth._AUTH_DISABLED:
         log.warning("BACKUPARR_DISABLE_AUTH is set: local authentication is DISABLED. "
-                    "Anyone who can reach this port has full access - make sure an "
-                    "authenticating reverse proxy protects it and direct access is blocked.")
+                    "Anyone who can reach port %s or %s has full access - make sure an "
+                    "authenticating reverse proxy protects them and direct access to both is blocked.",
+                    serve.http_port(), serve.https_port())
     app.secret_key = auth._load_or_create_secret_key()
     runs.start_scheduler()
     manifest_backfill.start(should_pause=runs.busy)
     return app
-
-
-if __name__ == "__main__":
-    create_app().run(
-        host=os.environ.get("WEBUI_HOST") or "0.0.0.0",
-        port=int(os.environ.get("WEBUI_PORT", 8990)),
-        debug=False,
-    )

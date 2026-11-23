@@ -1,6 +1,6 @@
 """Consistent copies of a SQLite database another program keeps writing to,
 for the drivers that read an app's mounted data folder (Emby, Plex, Seerr,
-LazyLibrarian)."""
+LazyLibrarian, Vaultwarden)."""
 import logging
 import os
 import re

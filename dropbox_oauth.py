@@ -8,6 +8,7 @@ import requests
 import rclone_util
 
 REMOTE_NAME = "backuparr-dropbox"
+RCLONE_TYPE = "dropbox"
 TOKEN_FIELD = "token"
 
 # Backups go in this folder instead of the Dropbox root, which the built-in
@@ -57,4 +58,4 @@ def sync_rclone_remote(dest_cfg, force=False, remotes=None):
     if not dest_cfg.get("token"):
         return
     if force or remote is None:
-        rclone_util.config_set(REMOTE_NAME, "dropbox", {"token": dest_cfg["token"]}, force=force)
+        rclone_util.config_set(REMOTE_NAME, RCLONE_TYPE, {"token": dest_cfg["token"]}, force=force)

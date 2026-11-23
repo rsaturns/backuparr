@@ -23,6 +23,13 @@ python3 -m venv .venv
 .venv/bin/python -m pytest -q
 ```
 
+To run the suite exactly as CI does - in the image's own Alpine Python, a
+worker per CPU - you only need Docker:
+
+```sh
+scripts/test_in_image.sh -n auto
+```
+
 To try your change in the real app, build the image and run it as in the
 [Quick start](README.md#quick-start):
 
@@ -35,8 +42,13 @@ scripts/smoke_test.sh backuparr:dev    # the same container check CI runs
 
 - Branch off `main` and keep each pull request to one change. Small PRs get
   reviewed and merged much faster.
-- **Add or update tests** in `tests/`. The suite must pass without the
-  `rclone` binary (CI doesn't have it), so stub `rclone_util` calls in tests.
+- **Add or update tests** in `tests/`: new functionality and bug fixes come
+  with tests that cover them. The suite must pass without the `rclone`
+  binary (CI doesn't have it), so stub `rclone_util` calls in tests, and
+  without a network: tests talk only to servers they start on localhost.
+- The suite runs [pyflakes](https://github.com/PyCQA/pyflakes) over the code
+  (`tests/test_lint.py`), so an unused import or an undefined name fails it
+  like any other test.
 - **Test against the real app** when you change how one is backed up or
   restored, and say which version you used in the PR.
 - The web UI is plain JavaScript and CSS with no framework or build step -
