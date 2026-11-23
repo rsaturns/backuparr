@@ -1,17 +1,18 @@
 name: Docker Publish
 
 # Deploy step: runs only on a v* tag push (a formal version release) -
-# merging to main does not publish an image. Two jobs:
-#   check    the tests, the smoke test and the Trivy gate, in a job that
-#            holds no secrets and can't write anything - so a compromised
-#            test dependency or scanner gets nothing worth stealing
-#            (trivy-action's own tags were hijacked in March 2026; a pinned
-#            commit is what kept this repository safe). Tag pushes don't go
-#            through ci.yml's PR gate, and a vulnerability can be published
-#            between the merge and the tag.
-#   publish  only once check passes: builds and pushes the multi-arch image
-#            with its SBOM and provenance, signs the provenance, and creates
-#            the GitHub Release.
+# merging to main does not publish an image. Two steps:
+#   checks   checks.yml, the same tests, smoke test and Trivy gate as every
+#            PR, on amd64 and arm64, built fresh. Its jobs hold no secrets
+#            and can't write anything, so a compromised test dependency or
+#            scanner gets nothing worth stealing (trivy-action's own tags
+#            were hijacked in March 2026; a pinned commit is what kept this
+#            repository safe). Tag pushes don't go through ci.yml's PR gate,
+#            and a vulnerability can be published between the merge and the
+#            tag.
+#   publish  only once every check passes: builds and pushes the
+#            multi-arch image with its SBOM and provenance, signs the
+#            provenance, and creates the GitHub Release.
 # Both build from scratch: no build cache to carry a stale Alpine package
 # (or anything else) into a release, and nothing reads the Actions cache.
 on:
@@ -30,53 +31,19 @@ permissions: {}
 cache-mode: none
 
 jobs:
-  check:
-    name: check
-    runs-on: ubuntu-latest
+  checks:
+    name: checks
+    # ./ is resolved from this same commit for a reusable workflow; GitHub's
+    # newer $/ form isn't understood by every tool yet (actionlint 1.7.12).
+    uses: ./.github/workflows/checks.yml  # zizmor: ignore[self-repository]
+    with:
+      fresh: true
     permissions:
       contents: read
-    # Actions are pinned to a commit, named in the comment; Dependabot
-    # updates both.
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      # In the Dockerfile's own base image, like ci.yml.
-      - name: Run test suite
-        run: scripts/test_in_image.sh
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Build Docker image for the smoke test
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          load: true
-          no-cache: true
-          tags: backuparr:release
-
-      - name: Smoke test the container
-        run: scripts/smoke_test.sh backuparr:release
-
-      # Same gate as ci.yml: a CRITICAL or HIGH vulnerability with a fix out
-      # stops the release.
-      - name: Scan the image for known vulnerabilities (Trivy)
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: backuparr:release
-          version: v0.76.2
-          cache: false
-          scanners: vuln
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
-          exit-code: "1"
 
   publish:
     name: publish
-    needs: check
+    needs: checks
     runs-on: ubuntu-latest
     # contents: write for the GitHub Release step below, packages: write
     # for the push to GitHub Container Registry, id-token and attestations
