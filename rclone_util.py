@@ -175,6 +175,25 @@ def lsjson(remote_dir, recursive=False, include=()):
     return json.loads(out) if out.strip() else []
 
 
+# How long the Overview waits for a destination's free space: one quick
+# call for a cloud, a statfs for Local storage.
+ABOUT_TIMEOUT = 60
+
+
+def about(remote):
+    """A destination's space from `rclone about`: {"total", "free"} in bytes,
+    each None when the backend doesn't say (an account with no quota has no
+    total). For a cloud it's the whole account's, not one folder's."""
+    data = json.loads(_run(["about", "--json", remote], timeout=ABOUT_TIMEOUT) or "{}")
+    data = data if isinstance(data, dict) else {}
+
+    def number(key):
+        value = data.get(key)
+        return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+    return {"total": number("total"), "free": number("free")}
+
+
 def check_remote(remote_dir):
     """Raises RcloneError if the remote can't be reached. Checks just the
     remote's own root, not any folder in the path - rclone creates that

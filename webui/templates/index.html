@@ -294,6 +294,7 @@
                 <label class="field">
                   <span class="field-label">Retention (days) <span class="muted">(optional - blank uses the default)</span></span>
                   <input type="number" class="d-retention" min="1" step="1">
+                  <span class="hint storage-hint d-retention-hint hidden"></span>
                 </label>
                 {% if m.id == 'local' %}
                 <label class="field">
@@ -361,6 +362,7 @@
           <div class="field">
             <span class="field-label">Default retention (days)</span>
             <input type="number" id="s-retention_days" min="1" step="1">
+            <span class="hint storage-hint hidden" id="s-retention-hint"></span>
           </div>
           <div class="field">
             <span class="field-label">Backup schedule</span>

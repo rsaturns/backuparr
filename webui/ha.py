@@ -26,7 +26,7 @@ import secrets
 from flask import Blueprint, jsonify, request
 
 import runlog
-from config_store import app_label, editing_config, enabled_apps, load_config
+from config_store import app_label, editing_config, enabled_apps, load_config, self_backup_on
 from webui import auth
 from webui.runs import RUN_STATE
 from webui.version import VERSION
@@ -89,7 +89,7 @@ def _when(run):
 
 
 def _apps(cfg):
-    ids = ([SELF_ID] if cfg.get("self_backup", True) is not False else []) + enabled_apps(cfg)
+    ids = ([SELF_ID] if self_backup_on(cfg) else []) + enabled_apps(cfg)
     runs = runlog.all_runs()
     apps = {}
     for app_id in ids:

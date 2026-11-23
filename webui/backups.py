@@ -19,6 +19,7 @@ import rclone_util
 import runlog
 import restore_actions as ra
 import restore_version as rv
+import storage_estimate
 from apps.http_headers import app_connection_config, same_origin
 from backup import branded, humanize_error, log_failure
 from config_store import (DEST_NAMES, SECRET_EXTRA_FIELDS, app_meta, instance_ids, instance_type, key_required, load_config,
@@ -123,6 +124,87 @@ def api_history(dest_id):
     for entries in history.values():
         entries.sort(key=lambda e: _when(e["mod_time"]), reverse=True)
     return jsonify(history)
+
+
+@bp.get("/api/storage")
+def api_storage():
+    """The Overview's Storage tiles: storage_estimate.overview() for the
+    saved settings."""
+    return jsonify(storage_estimate.overview(load_config()))
+
+
+# The apps a run backs up: a few dozen.
+_MAX_APPS = 1000
+
+
+def _positive_days(value):
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 1
+
+
+@bp.post("/api/storage/estimate")
+def api_storage_estimate():
+    """The hints under Settings' retention fields, for what's on the form
+    before it's saved: {"cron_schedule", "retention_days" (the default),
+    "destinations": {dest_id: {"enabled", "retention_days" (its own, or
+    null)}}, "apps": [app or instance id, ...]} - the apps a run backs up,
+    Backuparr included."""
+    data = json_object()
+    schedule = data.get("cron_schedule")
+    if not isinstance(schedule, str):
+        return jsonify({"error": "cron_schedule must be text"}), 400
+    default_days = data.get("retention_days")
+    if not _positive_days(default_days):
+        return jsonify({"error": "retention_days must be a positive number"}), 400
+    destinations = data.get("destinations")
+    if (not isinstance(destinations, dict)
+            or not all(dest_id in DEST_NAMES and isinstance(d, dict) and isinstance(d.get("enabled"), bool)
+                       and (d.get("retention_days") is None or _positive_days(d.get("retention_days")))
+                       for dest_id, d in destinations.items())):
+        return jsonify({"error": "destinations must map each destination to enabled and retention_days"}), 400
+    apps = data.get("apps")
+    if (not isinstance(apps, list) or len(apps) > _MAX_APPS
+            or not all(isinstance(a, str) and destination_util.is_backup_folder(a) for a in apps)):
+        return jsonify({"error": "apps must be a list of app ids"}), 400
+    return jsonify(storage_estimate.estimate(
+        schedule, default_days, {dest_id: (d["enabled"], d.get("retention_days")) for dest_id, d in destinations.items()},
+        list(dict.fromkeys(apps))))
+
+
+# A destination's space is asked at most once a minute: every Overview view
+# asks, and a view while rclone is still answering waits for that answer
+# instead of starting rclone again. A failure is kept as long, so a cloud
+# that doesn't answer costs one try a minute.
+_SPACE_TTL = 60
+_space = {}  # dest_id -> (root, time.monotonic(), answer)
+_space_locks = {}
+_space_locks_lock = threading.Lock()
+
+
+def _destination_space(dest_id, root):
+    """{"total", "free"}, or {"error"} when rclone failed - at most a minute old."""
+    with _space_locks_lock:
+        lock = _space_locks.setdefault(dest_id, threading.Lock())
+    with lock:
+        cached = _space.get(dest_id)
+        if cached is None or cached[0] != root or time.monotonic() - cached[1] >= _SPACE_TTL:
+            try:
+                answer = rclone_util.about(root)
+            except rclone_util.RcloneError as exc:
+                answer = {"error": humanize_error(exc)}
+            cached = _space[dest_id] = (root, time.monotonic(), answer)
+        return cached[2]
+
+
+@bp.get("/api/storage/<dest_id>/space")
+def api_storage_space(dest_id):
+    """A destination's total and free space, for the Overview's Storage
+    tile: {"total", "free"}, each None when it doesn't say."""
+    cfg = load_config()
+    root, error = _destination_root_or_error(cfg, dest_id)
+    if error:
+        return error
+    space = _destination_space(dest_id, root)
+    return jsonify(space), 502 if "error" in space else 200
 
 
 def _not_a_backup(app_name, filename):

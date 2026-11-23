@@ -1198,6 +1198,45 @@ code {
   height: 20px;
 }
 
+/* Each run's apps not backed up yet, under its size. */
+.overview-stat .stat-note {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* Storage needed per destination: icon, then needed, used and free. */
+.overview-storage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.overview-storage-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.overview-storage-row .app-icon {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+
+.overview-storage-row .storage-muted { font-weight: 500; color: var(--text-muted); }
+.overview-stat .storage-short { font-weight: 700; color: var(--warn); }
+.overview-stat .storage-part { white-space: nowrap; }
+
+/* Under a retention field: the backups it keeps and their size. */
+.hint.storage-hint {
+  display: block;
+  margin: 6px 0 0;
+  font-size: 13.5px;
+}
+
 .overview-apps {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));

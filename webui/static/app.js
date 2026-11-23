@@ -61,7 +61,7 @@ function toast(message, kind) {
 
 function fmtBytes(n) {
   if (n == null) return "-";
-  const units = ["B", "KB", "MB", "GB"];
+  const units = ["B", "KB", "MB", "GB", "TB"];
   let v = n;
   let i = 0;
   while (v >= 1024 && i < units.length - 1) {
@@ -212,6 +212,117 @@ function destinationsStat(destIds) {
   label.textContent = "Destinations";
   div.append(row, label);
   return div;
+}
+
+// The Each run and Storage needed tiles (storage_estimate.py): empty and hidden
+// until /api/storage answers, so a reload's answer can only fill its own.
+function storageStats() {
+  return ["Each run", "Storage needed"].map((text) => {
+    const div = document.createElement("div");
+    div.className = "overview-stat hidden";
+    const label = document.createElement("div");
+    label.className = "stat-label";
+    label.textContent = text;
+    div.appendChild(label);
+    return div;
+  });
+}
+
+async function fillStorageStats(runStat, storageStat, destIds) {
+  let storage;
+  try {
+    storage = await apiFetch("/api/storage");
+  } catch (e) {
+    return; // the other tiles say enough; History has the sizes
+  }
+  // Each run: what one run uploads, its apps' largest backups added up.
+  const value = document.createElement("div");
+  value.className = "stat-value";
+  value.textContent = storage.per_run ? `≈ ${fmtBytes(storage.per_run)}` : "-";
+  runStat.prepend(value);
+  if (storage.missing.length) {
+    const note = document.createElement("div");
+    note.className = "stat-note";
+    note.textContent = `${storage.missing.length} not backed up yet`;
+    note.title = storage.missing.map(appLabel).join(", ");
+    value.after(note);
+  }
+  runStat.classList.remove("hidden");
+
+  // Storage needed: one destination reads like the other tiles, several get
+  // a line each.
+  const shown = destIds.filter((id) => storage.destinations[id]);
+  if (!shown.length) return;
+  if (shown.length === 1) {
+    storageStat.prepend(...storageFigure(shown[0], storage.destinations[shown[0]]));
+  } else {
+    const list = document.createElement("div");
+    list.className = "overview-storage-list";
+    shown.forEach((id) => list.appendChild(storageRow(id, storage.destinations[id])));
+    storageStat.prepend(list);
+  }
+  storageStat.classList.remove("hidden");
+}
+
+// The room a destination's retention needs ("≈ 7.1 GB"), titled with the
+// backups of each app it keeps.
+function storageNeeded(d, element, className) {
+  const needed = document.createElement(element);
+  needed.className = className;
+  needed.textContent = d.needed != null ? `≈ ${fmtBytes(d.needed)}` : "-";
+  if (d.needed != null) {
+    needed.title = `Up to ${d.capped ? "over " : ""}${d.copies.toLocaleString()} backups of each app, kept ${daysText(d.days)}`;
+  }
+  return needed;
+}
+
+// What Backuparr's backups use there now, then the free space once the
+// destination says. Each part stays on one line: a row wraps between them.
+function storageDetails(id, d, details, separator) {
+  const used = document.createElement("span");
+  used.className = "storage-part";
+  used.textContent = `${fmtBytes(d.used)} used`;
+  details.append(separator, used);
+  apiFetch(`/api/storage/${id}/space`).then((space) => {
+    if (space.free == null) return;
+    // Backuparr's own backups are already in "used", so they have
+    // free + used to grow into.
+    const short = d.needed != null && d.needed > space.free + d.used;
+    const free = document.createElement("span");
+    free.className = short ? "storage-part storage-short" : "storage-part";
+    free.textContent = `${short ? "only " : ""}${fmtBytes(space.free)} free`;
+    details.append(" · ", free);
+  }).catch(() => {}); // no free space shown; the rest stands
+  return details;
+}
+
+// One destination: a big figure, and used and free under it.
+function storageFigure(id, d) {
+  const details = document.createElement("div");
+  details.className = "stat-note";
+  return [storageNeeded(d, "div", "stat-value"), storageDetails(id, d, details, "")];
+}
+
+// One of several destinations: its icon, then needed, used and free in one
+// run of text.
+function storageRow(id, d) {
+  const row = document.createElement("div");
+  row.className = "overview-storage-row";
+  const m = DESTINATION_META.find((dm) => dm.id === id);
+  if (m && m.icon) {
+    const img = document.createElement("img");
+    img.className = "app-icon";
+    img.src = `/static/icons/${m.icon}`;
+    img.alt = SHORT_DEST_LABEL[id] || destLabel(id);
+    img.title = img.alt;
+    row.appendChild(img);
+  }
+  const details = document.createElement("span");
+  details.className = "storage-muted";
+  const text = document.createElement("span");
+  text.append(storageNeeded(d, "span", "storage-part"), storageDetails(id, d, details, " · "));
+  row.appendChild(text);
+  return row;
 }
 
 // ---------------------------------------------------------- encryption ----
@@ -548,7 +659,9 @@ async function loadOverview() {
       div.append(value, label);
       return div;
     });
-    summaryEl.append(enabledStat, destinationsStat(destIds), cronStat, retentionStat(cfg, destIds));
+    const [runStat, storageStat] = storageStats();
+    summaryEl.append(enabledStat, destinationsStat(destIds), cronStat, retentionStat(cfg, destIds), runStat, storageStat);
+    fillStorageStats(runStat, storageStat, destIds);
     showScheduleWarning("overview-schedule-warning", cfg.schedule_valid);
 
     const statusItems = [
@@ -1189,6 +1302,7 @@ function removeInstanceCard(card) {
   APP_DISCOVERY_UPDATES.delete(appId);
   card.remove();
   refreshHeaderScopes();
+  scheduleStorageHints();
   toast(`${label} removed - save settings to apply. Its backups are kept.`, "ok");
 }
 
@@ -1227,6 +1341,7 @@ function initInstanceAddRows() {
       }
       close();
       const card = addInstanceCard(newInstanceId(type, name), { name, enabled: true });
+      scheduleStorageHints();
       card.querySelector(".f-url").focus();
     });
   });
@@ -1693,6 +1808,88 @@ function updateRetentionPlaceholders() {
   document.querySelectorAll(".d-retention").forEach((input) => { input.placeholder = `Default (${days})`; });
 }
 
+// ------------------------------------------------- storage hints ----
+// Under each retention field, how many backups of each app it keeps and
+// the room they need (storage_estimate.py), for what's on the form now:
+// its schedule, retention days and apps, saved or not.
+let STORAGE_HINT_TIMER = null;
+let STORAGE_HINT_SEQ = 0;
+
+function formRetentionDays(input, fallback) {
+  const days = Number(input.value);
+  return input.value.trim() !== "" && Number.isInteger(days) && days >= 1 ? days : fallback;
+}
+
+function storageHintText(estimate, perRun, missing) {
+  if (!estimate || estimate.copies == null) return ""; // a schedule that isn't valid has its own warning
+  const keeps = `Keeps ${estimate.capped ? "over" : "up to"} ${estimate.copies.toLocaleString()} backups of each app`;
+  if (!perRun) return `${keeps} (the size shows after the first backup).`;
+  const more = missing ? `, plus ${missing === 1 ? "1 app" : `${missing} apps`} not backed up yet` : "";
+  return `${keeps}: ≈ ${fmtBytes(estimate.needed)}${more}.`;
+}
+
+function scheduleStorageHints() {
+  clearTimeout(STORAGE_HINT_TIMER);
+  STORAGE_HINT_TIMER = setTimeout(updateStorageHints, 400);
+}
+
+async function updateStorageHints() {
+  // Each destination's own retention, or null for the default - and
+  // whether it's on: only backups on the destinations that are on count.
+  const destinations = {};
+  const hints = [[document.getElementById("s-retention-hint"), null]];
+  document.querySelectorAll(".dest-card[data-dest]").forEach((card) => {
+    const input = card.querySelector(".d-retention");
+    destinations[card.dataset.dest] = {
+      enabled: card.querySelector(".d-enabled").checked,
+      retention_days: input ? formRetentionDays(input, null) : null,
+    };
+    const hint = card.querySelector(".d-retention-hint");
+    if (hint) hints.push([hint, card.dataset.dest]);
+  });
+  const apps = [...document.querySelectorAll(".app-card[data-app]")]
+    .filter((card) => card.querySelector(".f-enabled")?.checked)
+    .map((card) => card.dataset.app);
+  if (document.getElementById("s-self_backup").checked) apps.push("backuparr");
+  const seq = ++STORAGE_HINT_SEQ;
+  let result = null;
+  try {
+    result = await apiFetch("/api/storage/estimate", {
+      method: "POST",
+      body: JSON.stringify({
+        cron_schedule: document.getElementById("s-cron_schedule").value.trim(),
+        retention_days: formRetentionDays(document.getElementById("s-retention_days"), 7),
+        destinations,
+        apps,
+      }),
+    });
+  } catch (e) {
+    // No hints rather than a toast: Settings works without them.
+  }
+  if (seq !== STORAGE_HINT_SEQ) return; // a later edit's answer fills them
+  hints.forEach(([hint, destId]) => {
+    const estimate = result && (destId ? result.destinations[destId] : result.default);
+    const text = estimate ? storageHintText(estimate, result.per_run, result.missing) : "";
+    hint.textContent = text;
+    hint.classList.toggle("hidden", !text);
+  });
+}
+
+// What changes the hints: retention, the schedule (typed or picked), which
+// destinations are on, and which apps are - instance cards included, which
+// come and go.
+function initStorageHintEvents() {
+  const panel = document.getElementById("tab-settings");
+  panel.addEventListener("input", (e) => {
+    if (e.target.matches("#s-retention_days, .d-retention, #s-cron_schedule")) scheduleStorageHints();
+  });
+  panel.addEventListener("change", (e) => {
+    if (e.target.matches(".f-enabled, .d-enabled, #s-self_backup, #sched-frequency, #sched-time, #sched-weekday, #sched-interval-hours")) {
+      scheduleStorageHints();
+    }
+  });
+}
+
 function updateGdriveUI(gdriveCfg) {
   const statusEl = document.getElementById("gdrive-status");
   const connectBtn = document.getElementById("gdrive-connect-btn");
@@ -1891,6 +2088,7 @@ async function loadConfig() {
   Object.keys(cfg.destinations || {}).forEach((destId) => fillDestCard(destId, cfg.destinations[destId]));
   sortAppCards();
   snapshotSettingsState();
+  updateStorageHints();
   return cfg;
 }
 
@@ -2757,6 +2955,7 @@ function initSettingsEvents() {
   initInstanceAddRows();
   document.getElementById("notify-test-btn").addEventListener("click", testNotifyUrl);
   initScheduleEvents();
+  initStorageHintEvents();
 
   document.querySelectorAll(".test-dest-btn").forEach((btn) => {
     btn.addEventListener("click", () => testDestination(btn.closest(".dest-card").dataset.dest));

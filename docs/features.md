@@ -72,6 +72,9 @@ See [Apps](apps/index.md) for how each one is backed up and restored.
   and the app shows as failed with the reason.
 - Retention by age, set once or per destination, always keeping each app's
   newest backup.
+- How much room backups need: what each run uploads and, on each destination,
+  the room its retention needs beside what's used and free. Settings shows it
+  under each retention field as you change it.
 - A live log while a backup runs, and each app's log from every run, kept with
   its backups.
 - **History** lists, downloads and deletes backups on each destination, with

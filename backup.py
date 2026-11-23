@@ -69,7 +69,8 @@ from apps.unifi import UnifiApp
 from apps.synology import SynologyApp
 from apps.qnap import QnapApp
 from apps.unraid import UnraidApp
-from config_store import ConfigError, app_label, app_meta, enabled_apps, enabled_destinations, encrypts, instance_type, retention_days
+from config_store import (ConfigError, app_label, app_meta, enabled_apps, enabled_destinations, encrypts, instance_type, retention_days,
+                          self_backup_on)
 from webui.version import VERSION
 
 LOG_DIR = os.environ.get("BACKUPARR_LOG_DIR", "/var/log/backuparr")
@@ -375,6 +376,16 @@ def format_run_message(ok, failed):
     return "\n".join(lines)
 
 
+def retention_now(timestamp):
+    """The time a run's retention measures backups' age from: the end of the
+    minute the run started, from its timestamp. A scheduled run starts some
+    seconds into its minute - the scheduler looks every 20 s - so measured
+    from when retention runs, a quick run could leave the backup from the
+    same slot days ago, started a few seconds later in its minute, for one
+    more run. From the minute, a daily run with 7 days keeps 7, always."""
+    return datetime.strptime(timestamp, "%Y%m%d_%H%M%S").replace(second=0) + timedelta(minutes=1)
+
+
 def apply_retention(root, retention_days, now=None, only=None, dest_id=None):
     """Deletes each app's backups older than retention_days from one
     destination, always keeping its newest - so an app that keeps failing,
@@ -483,7 +494,7 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
         if should_cancel and should_cancel():
             raise RunCancelled()
 
-    backs_up_self = cfg.get("self_backup", True) is not False and only in (None, self_backup.FOLDER)
+    backs_up_self = self_backup_on(cfg) and only in (None, self_backup.FOLDER)
     apps = enabled_apps(cfg)
     if only == self_backup.FOLDER:
         if not backs_up_self:
@@ -633,10 +644,11 @@ def run_backup(cfg, on_progress=None, should_cancel=None, only=None):
 
     keep = {dest_id: retention_days(cfg, dest_id) for dest_id in dest_roots}
     log.info("Applying retention: %s", ", ".join(f"{dest_id} {days}d" for dest_id, days in keep.items()))
+    since = retention_now(timestamp)
     for dest_id, root in dest_roots.items():
-        apply_retention(root, keep[dest_id], only=only, dest_id=dest_id)
+        apply_retention(root, keep[dest_id], now=since, only=only, dest_id=dest_id)
     # A run's log stays while any destination still keeps its backup.
-    runlog.prune(max(keep.values()))
+    runlog.prune(max(keep.values()), now=since)
 
     # Last, so its manifest and run logs include this run. A single app's run
     # leaves Backuparr's backup as it was.

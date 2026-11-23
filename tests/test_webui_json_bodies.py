@@ -13,6 +13,7 @@ OBJECT_ROUTES = [
     "/api/trust-certificate/opnsense", "/api/test-notify",
     "/api/test-destination/local", "/api/destinations/gdrive/folder", "/api/destinations/onedrive/connect",
     "/api/destinations/dropbox/connect", "/api/https/only", "/api/backup/run", "/api/test/radarr", "/api/config",
+    "/api/storage/estimate",
 ]
 
 

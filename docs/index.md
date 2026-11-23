@@ -27,7 +27,7 @@ explains what Backuparr protects, how, and what it leaves to you.
 [Get started](getting-started.md){: .btn .btn-primary }
 [View on GitHub](https://github.com/rsaturns/backuparr){: .btn }
 
-![Overview tab: enabled services, destinations, schedule and retention, a line saying all 36 backups succeeded, and each app's last backup](screenshots/overview.png)
+![Overview tab: enabled services, destinations, schedule, retention, what each run uploads and the storage each destination needs beside what's used and free, a line saying all 32 backups succeeded, and each app's last backup](screenshots/overview.png)
 
 ## Where to find things
 

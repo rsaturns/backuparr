@@ -5,6 +5,14 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- How much room backups need: the Overview shows what each run uploads and, for each destination, the room its retention needs, what Backuparr's backups use there and its free space ("only ... free" when it won't fit), and a line under each retention field in Settings says how many backups of each app it keeps and their size, as you change it (#248). See https://rsaturns.github.io/backuparr/backups/#how-much-room-backups-need
+
+### Fixed
+
+- Retention measures a backup's age from the minute its run started, so a quick run (under 20 seconds) no longer leaves one more backup from the same time days ago: a daily schedule with 7 days' retention keeps 7 backups of each app, not sometimes 8 (#248).
+
 ## [3.0.0-beta.4] - 2026-11-23
 
 ### Changed

@@ -25,7 +25,8 @@ The **Settings** tab holds, from top to bottom:
 - **Destinations** - see [Destinations](destinations.md). Each card can set
   its own [retention](backups.md#retention). Click its heading to fold it.
 - **Schedule & Notifications** - the default retention, the schedule and the
-  [Notify URL](notifications.md).
+  [Notify URL](notifications.md). Under each retention field, a line says
+  [how much room](backups.md#how-much-room-backups-need) its backups need.
 - **Service Authentication** - see [below](#service-authentication-headers).
 - **Restore Backuparr** - see [Restoring Backuparr itself](restoring.md#restoring-backuparr-itself).
 
