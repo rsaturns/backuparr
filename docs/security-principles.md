@@ -16,7 +16,8 @@ place, and to do that it needs a key or a login for every app.
 So the question to ask of a backup tool isn't only "will my backups work?",
 but also "who else could read them, and what could they do with what it
 holds?". This page answers that for Backuparr: what it protects, how, and what
-it leaves to you.
+it leaves to you. The [threat model](threat-model.md) looks at it from an
+attacker's side.
 
 ## The principles
 
