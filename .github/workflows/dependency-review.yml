@@ -1,0 +1,30 @@
+name: Dependency Review
+
+# On every PR: fails when the PR brings in a package version with a known
+# HIGH or CRITICAL vulnerability, or a package under a license outside the
+# list below. That list is the permissive licenses (and certifi's MPL-2.0)
+# that can ship inside an AGPL-3.0 app; a new license needs a decision
+# before it's added. A package whose license GitHub can't tell is reported
+# without failing.
+on:
+  pull_request:
+    branches:
+      - main
+      - 'release-*'
+
+permissions: {}
+
+jobs:
+  dependency-review:
+    name: dependency-review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Review the PR's dependency changes
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          allow-licenses: >-
+            0BSD, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, MIT, MIT-0,
+            MPL-2.0, PSF-2.0, Python-2.0, Unlicense
