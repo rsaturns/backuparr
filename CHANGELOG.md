@@ -5,6 +5,8 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [3.0.0-beta.4] - 2026-11-23
+
 ### Changed
 
 - certifi 2026.11.20 (the certificate authorities Backuparr trusts for HTTPS) and charset-normalizer 3.5.3 (#245).
