@@ -36,7 +36,9 @@ def test_runs_kept_after_a_run(schedule, days, runs):
 ])
 def test_the_estimate_matches_what_retention_keeps(monkeypatch, schedule, days):
     """Weeks of scheduled runs through the real apply_retention, in a run's
-    order - the apps' uploads, retention, then Backuparr's own: the most
+    order - the apps' uploads, retention from the run's start, then
+    Backuparr's own - each started a different number of seconds into its
+    minute: the most
     backups of an app it leaves after a run is kept_runs, one more is there
     while a run uploads, and Backuparr's own never has more than kept_runs."""
     files = []
@@ -49,12 +51,17 @@ def test_the_estimate_matches_what_retention_keeps(monkeypatch, schedule, days):
 
     runs = croniter(schedule, NOW - timedelta(days=days + 1))
     most_after = most_during = most_own = 0
+    tick = 0
     while (when := runs.get_next(datetime)) <= NOW + timedelta(days=storage_estimate.ANCHOR_DAYS):
-        files.append(f"radarr/radarr_{when:%Y%m%d_%H%M%S}.zip")
+        # The scheduler starts a run some seconds into its minute, a different
+        # number each time; a quick run's retention follows a few seconds later.
+        tick += 1
+        stamp = f"{when + timedelta(seconds=(tick * 7) % 20):%Y%m%d_%H%M%S}"
+        files.append(f"radarr/radarr_{stamp}.zip")
         if when >= NOW:
             most_during = max(most_during, count("radarr"))
-        backup.apply_retention("dest:", days, now=when + timedelta(minutes=2))  # after the run's uploads
-        files.append(f"backuparr/backuparr_{when:%Y%m%d_%H%M%S}.zip")
+        backup.apply_retention("dest:", days, now=backup.retention_now(stamp))
+        files.append(f"backuparr/backuparr_{stamp}.zip")
         if when >= NOW:
             most_after = max(most_after, count("radarr"))
             most_own = max(most_own, count("backuparr"))

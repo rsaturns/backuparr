@@ -140,16 +140,24 @@ class _FakeApp:
 @pytest.fixture
 def run(monkeypatch):
     state = type("Run", (), {})()
-    state.retention, state.pruned = [], []
+    state.retention, state.pruned, state.since, state.uploaded = [], [], [], []
     monkeypatch.setattr(backup, "enabled_apps", lambda cfg: ["sabnzbd"])
     monkeypatch.setattr(backup, "enabled_destinations", lambda cfg: ["local", "gdrive", "dropbox"])
     monkeypatch.setattr(destination_util, "sync", lambda cfg: None)
     monkeypatch.setattr(destination_util, "remote_root", lambda dest_id, cfg: f"{dest_id}:")
     monkeypatch.setattr(backup, "build_app", lambda name, app_cfg: _FakeApp())
-    monkeypatch.setattr(backup.rclone_util, "copyto", lambda src, dst: None)
-    monkeypatch.setattr(backup, "apply_retention",
-                        lambda root, days, only=None, dest_id=None: state.retention.append((dest_id, days, only)))
-    monkeypatch.setattr(backup.runlog, "prune", lambda days: state.pruned.append(days))
+    monkeypatch.setattr(backup.rclone_util, "copyto", lambda src, dst: state.uploaded.append(dst))
+
+    def apply_retention(root, days, now=None, only=None, dest_id=None):
+        state.retention.append((dest_id, days, only))
+        state.since.append(now)
+
+    def prune(days, now=None):
+        state.pruned.append(days)
+        state.since.append(now)
+
+    monkeypatch.setattr(backup, "apply_retention", apply_retention)
+    monkeypatch.setattr(backup.runlog, "prune", prune)
     state.cfg = {"retention_days": 7, "apps": {"sabnzbd": {"url": "http://sabnzbd:8080", "api_key": "k"}},
                  "destinations": {"local": {"retention_days": 28}, "gdrive": {"retention_days": None}, "dropbox": {"retention_days": 3}}}
     return state
@@ -178,3 +186,28 @@ def test_with_no_destination_days_everything_uses_the_global_retention(run):
 def test_a_single_app_run_uses_each_destinations_days_for_that_app_alone(run):
     backup.run_backup(run.cfg, only="sabnzbd")
     assert run.retention == [("local", 28, "sabnzbd"), ("gdrive", 7, "sabnzbd"), ("dropbox", 3, "sabnzbd")]
+
+
+def test_a_runs_retention_measures_age_from_the_minute_it_started(run):
+    backup.run_backup(run.cfg)
+    stamp = run.uploaded[0].rsplit("_", 2)[-2] + "_" + run.uploaded[0].rsplit("_", 1)[-1].split(".")[0]
+    assert run.since == [backup.retention_now(stamp)] * 4  # three destinations, then the run logs
+
+
+def test_retention_now_is_the_end_of_the_minute_the_run_started():
+    assert backup.retention_now("20261029_030002") == datetime(2026, 10, 29, 3, 1)
+    assert backup.retention_now("20261029_235959") == datetime(2026, 10, 30, 0, 0)
+
+
+def test_last_weeks_run_goes_however_the_seconds_fall(remote):
+    """The same 03:00 slot 7 days ago started 19 s into its minute, today's 2 s
+    in, and today's run took 8 s. Measured from when retention ran, last
+    week's backup was a few seconds short of 7 days old and stayed for a
+    day; measured from the end of the minute the run started, it goes. The
+    next minute's, a manual run say, is younger than 7 days and stays."""
+    remote.files = ["radarr/radarr_20261022_030019.zip", "radarr/radarr_20261022_030100.zip",
+                    "radarr/radarr_20261029_030002.zip"]
+    backup.apply_retention("dest:", 7, now=datetime(2026, 10, 29, 3, 0, 10))
+    assert remote.deleted == []
+    backup.apply_retention("dest:", 7, now=backup.retention_now("20261029_030002"))
+    assert remote.deleted == ["dest:/radarr/radarr_20261022_030019.zip"]

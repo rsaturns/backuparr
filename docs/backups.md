@@ -34,7 +34,7 @@ backup runs it says "Backing up...", and it updates when the run ends.
 ## Retention
 
 **Default retention (days)** deletes each app's backups older than that,
-separately on each destination. Each app's newest backup is always kept, so a
+counted from when the run started, separately on each destination. Each app's newest backup is always kept, so a
 run of failed backups never removes the last good one. Backuparr only deletes
 its own archives (`<app>/<app>_<date>_<time>.<ext>`, the app's own file type,
 with `.enc` added when [encrypted](security.md#encrypted-backups)), so a

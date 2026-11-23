@@ -200,7 +200,7 @@ def test_backuparr_can_be_backed_up_on_its_own(full_run, monkeypatch):
     """Run & Status's picker (#165): no app is backed up, and retention only
     touches Backuparr's own backups."""
     retained = []
-    monkeypatch.setattr(backup, "apply_retention", lambda root, days, only=None, dest_id=None: retained.append(only))
+    monkeypatch.setattr(backup, "apply_retention", lambda root, days, now=None, only=None, dest_id=None: retained.append(only))
     monkeypatch.setattr(backup, "build_app", lambda *a: pytest.fail("no app is backed up"))
     assert backup.run_backup(cfg(), only="backuparr") == (["backuparr"], [])
     assert len(full_run.calls) == 1 and retained == ["backuparr"]
