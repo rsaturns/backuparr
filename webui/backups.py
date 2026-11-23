@@ -170,6 +170,31 @@ def api_storage_estimate():
         list(dict.fromkeys(apps))))
 
 
+# A destination's space is asked at most once a minute: every Overview view
+# asks, and a view while rclone is still answering waits for that answer
+# instead of starting rclone again. A failure is kept as long, so a cloud
+# that doesn't answer costs one try a minute.
+_SPACE_TTL = 60
+_space = {}  # dest_id -> (root, time.monotonic(), answer)
+_space_locks = {}
+_space_locks_lock = threading.Lock()
+
+
+def _destination_space(dest_id, root):
+    """{"total", "free"}, or {"error"} when rclone failed - at most a minute old."""
+    with _space_locks_lock:
+        lock = _space_locks.setdefault(dest_id, threading.Lock())
+    with lock:
+        cached = _space.get(dest_id)
+        if cached is None or cached[0] != root or time.monotonic() - cached[1] >= _SPACE_TTL:
+            try:
+                answer = rclone_util.about(root)
+            except rclone_util.RcloneError as exc:
+                answer = {"error": humanize_error(exc)}
+            cached = _space[dest_id] = (root, time.monotonic(), answer)
+        return cached[2]
+
+
 @bp.get("/api/storage/<dest_id>/space")
 def api_storage_space(dest_id):
     """A destination's total and free space, for the Overview's Storage
@@ -178,10 +203,8 @@ def api_storage_space(dest_id):
     root, error = _destination_root_or_error(cfg, dest_id)
     if error:
         return error
-    try:
-        return jsonify(rclone_util.about(root))
-    except rclone_util.RcloneError as exc:
-        return jsonify({"error": humanize_error(exc)}), 502
+    space = _destination_space(dest_id, root)
+    return jsonify(space), 502 if "error" in space else 200
 
 
 def _not_a_backup(app_name, filename):

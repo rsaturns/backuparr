@@ -2,6 +2,7 @@
 checked against what retention really keeps, and the room they need, from
 the backup record (manifest)."""
 import copy
+import threading
 from datetime import datetime, timedelta
 
 import pytest
@@ -292,3 +293,54 @@ def test_space_route_when_rclone_fails(authed_client, isolated_webui, monkeypatc
     monkeypatch.setattr(isolated_webui.backups.rclone_util, "about", fail)
     response = authed_client.get("/api/storage/local/space")
     assert response.status_code == 502 and "couldn't connect" in response.get_json()["error"]
+
+
+def test_space_is_asked_once_a_minute(authed_client, isolated_webui, monkeypatch):
+    backups = isolated_webui.backups
+    calls = []
+    clock = [1000.0]
+    monkeypatch.setattr(backups.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(backups.rclone_util, "about", lambda root: calls.append(root) or {"total": 1000, "free": 600})
+    for _ in range(3):
+        assert authed_client.get("/api/storage/local/space").get_json() == {"total": 1000, "free": 600}
+    assert len(calls) == 1
+    clock[0] += backups._SPACE_TTL
+    authed_client.get("/api/storage/local/space")
+    assert len(calls) == 2
+    backups._destination_space("local", "/elsewhere")  # Local storage's folder changed
+    assert calls[-1] == "/elsewhere" and len(calls) == 3
+
+
+def test_a_failure_is_kept_for_a_minute_too(authed_client, isolated_webui, monkeypatch):
+    calls = []
+
+    def fail(root):
+        calls.append(root)
+        raise rclone_util.RcloneError("rclone about failed: couldn't connect", "couldn't connect")
+
+    monkeypatch.setattr(isolated_webui.backups.rclone_util, "about", fail)
+    for _ in range(2):
+        response = authed_client.get("/api/storage/local/space")
+        assert response.status_code == 502 and "couldn't connect" in response.get_json()["error"]
+    assert len(calls) == 1
+
+
+def test_two_views_at_once_start_rclone_once(isolated_webui, monkeypatch):
+    backups = isolated_webui.backups
+    started, release, calls, answers = threading.Event(), threading.Event(), [], []
+
+    def about(root):
+        calls.append(root)
+        started.set()
+        release.wait(5)
+        return {"total": 1000, "free": 600}
+
+    monkeypatch.setattr(backups.rclone_util, "about", about)
+    threads = [threading.Thread(target=lambda: answers.append(backups._destination_space("local", "/x"))) for _ in range(2)]
+    threads[0].start()
+    assert started.wait(5)
+    threads[1].start()  # waits for the first one's answer
+    release.set()
+    for thread in threads:
+        thread.join(5)
+    assert calls == ["/x"] and answers == [{"total": 1000, "free": 600}] * 2
