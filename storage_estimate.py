@@ -1,18 +1,20 @@
 """How much room backups take on a destination: the Overview's Storage
 tiles and the hints under Settings' retention fields.
 
-A run uploads each app's backup, and Backuparr's own, to every destination,
-and retention keeps an app's backups there for the destination's retention
-days (always its newest). So a destination holds, of each app, the scheduled
-runs in its retention window - and one more while a run uploads, before
-retention deletes the oldest. An app's size is its largest backup still kept,
-so a backup that grows is covered; an app that's switched off, or a removed
-instance, still has its newest backup kept, so that counts too. An app with
-no backup yet isn't counted.
+A run uploads each app's backup to every destination, then retention keeps
+an app's backups there for the destination's retention days (always its
+newest), then Backuparr's own backup is uploaded. So a destination holds, of
+each app, the scheduled runs in its retention window - and one more while a
+run uploads, before retention deletes the oldest; Backuparr's own isn't
+uploaded until after it. An app's size is its largest backup still kept, so
+a backup that grows is covered; an app that's switched off, or a removed
+instance, still has its newest backup kept on each destination, so that
+counts there too. An app with no backup yet isn't counted.
 
 Sizes come from the backup record (manifest.py), so nothing is listed or
-downloaded. Manual runs aren't in the schedule: one adds a copy until it
-ages out.
+downloaded - and only its backups on enabled destinations count: retention
+never lists a destination that's off, so its entries are never tidied.
+Manual runs aren't in the schedule: one adds a copy until it ages out.
 """
 from datetime import datetime, timedelta
 
@@ -31,15 +33,16 @@ ANCHOR_DAYS = 35
 # Settings takes any positive number of days; a window this long (a century)
 # keeps the dates in range.
 MAX_DAYS = 36_500
+SELF = destination_util.SELF_BACKUP_FOLDER
 
 
 def kept_runs(schedule, days, now=None):
     """(runs, capped): the most scheduled runs a destination keeps an app's
-    backups from right after a run - those in (run - days, run] - over the
-    runs of the next ANCHOR_DAYS, or the next run when there's none sooner
-    (a weekday-only schedule keeps more after Friday's run than after
-    Monday's). (None, False) for a schedule that isn't valid or never runs.
-    capped: there are more than MAX_RUNS."""
+    backups from right after a run - those in (run - days, run], to the
+    minute - over the runs of the next ANCHOR_DAYS, or the next run when
+    there's none sooner (a weekday-only schedule keeps more after Friday's
+    run than after Monday's). (None, False) for a schedule that isn't valid
+    or never runs. capped: there are more than MAX_RUNS."""
     if not config_store.valid_schedule(schedule):
         return None, False
     now = (now or datetime.now()).replace(second=0, microsecond=0)
@@ -71,42 +74,77 @@ def kept_runs(schedule, days, now=None):
     return most, False
 
 
-def _sizes(apps):
-    """(largest, kept_elsewhere, used): each app in apps' largest backup still
-    kept; the newest backup of each other app or instance, which retention
-    keeps; and the size of every backup on each destination."""
+def _record(apps, enabled):
+    """What the backup record says, counting only backups on the enabled
+    destinations: (largest, kept_elsewhere, used) - each app in apps' largest
+    backup still kept; per destination, the newest backup of each other app
+    or instance on it, which retention keeps; and per destination, the size
+    of every backup on it."""
     largest, newest, used = {}, {}, {}
     for entry in manifest.backups().values():
-        app, name, size, dests = entry.get("app"), entry.get("file"), entry.get("size"), entry.get("destinations")
+        app, name, size = entry.get("app"), entry.get("file"), entry.get("size")
+        dests = [d for d in entry.get("destinations") or [] if d in enabled]
         if not isinstance(size, int) or isinstance(size, bool) or size < 0 or not dests or not isinstance(name, str):
             continue
         if not destination_util.is_backup_folder(app or ""):
             continue
-        for dest_id in dests:
-            used[dest_id] = used.get(dest_id, 0) + size
         if app in apps:
             largest[app] = max(largest.get(app, 0), size)
-        elif app not in newest or name > newest[app][0]:  # same prefix, so the timestamp decides
-            newest[app] = (name, size)
-    return largest, sum(size for _name, size in newest.values()), used
+        for dest_id in dests:
+            used[dest_id] = used.get(dest_id, 0) + size
+            # The same prefix, so the timestamp decides which is newest.
+            if app not in apps and ((dest_id, app) not in newest or name > newest[dest_id, app][0]):
+                newest[dest_id, app] = (name, size)
+    kept_elsewhere = {}
+    for (dest_id, _app), (_name, size) in newest.items():
+        kept_elsewhere[dest_id] = kept_elsewhere.get(dest_id, 0) + size
+    return largest, kept_elsewhere, used
 
 
-def estimate(schedule, days_list, apps, now=None):
-    """Settings' hints: for each number of days, the most backups of each app
-    a destination holds and the room they need, for these apps and this
-    schedule. missing: how many of the apps have no backup yet."""
-    largest, kept_elsewhere, _used = _sizes(set(apps))
-    per_run = sum(largest.values())
-    estimates = {}
-    for days in days_list:
-        runs, capped = kept_runs(schedule, days, now)
-        copies = None if runs is None else runs + 1
-        estimates[str(days)] = {
-            "copies": copies,
-            "capped": capped,
-            "needed": None if copies is None else per_run * copies + kept_elsewhere,
-        }
-    return {"per_run": per_run, "missing": sum(1 for app in apps if app not in largest), "estimates": estimates}
+def _room(largest, runs, kept_elsewhere):
+    """The room a destination needs at most: each app's largest backup times
+    runs + 1 copies, the next run's upload landing before retention deletes
+    the oldest - Backuparr's own times runs, uploaded after retention - and
+    what it keeps of the apps that are off. None with no runs."""
+    if runs is None:
+        return None
+    own = largest.get(SELF, 0)
+    return (sum(largest.values()) - own) * (runs + 1) + own * runs + kept_elsewhere
+
+
+def _estimates(schedule, largest, now):
+    """destination(days, kept_elsewhere): one destination's estimate, each
+    number of days' runs counted once."""
+    runs_for = {}
+
+    def destination(days, kept_elsewhere):
+        if days not in runs_for:
+            runs_for[days] = kept_runs(schedule, days, now)
+        runs, capped = runs_for[days]
+        return {"days": days, "copies": None if runs is None else runs + 1, "capped": capped,
+                "needed": _room(largest, runs, kept_elsewhere)}
+
+    return destination
+
+
+def estimate(schedule, default_days, destinations, apps, now=None):
+    """Settings' hints, for what's on the form: destinations is {dest_id:
+    (enabled, its own retention days or None)}. For each destination, and
+    for the default retention, the most backups of each app it holds and the
+    room they need - the default's for the enabled destinations that use it
+    (the most any of them keeps of the apps that are off). missing: how many
+    of the apps have no backup yet."""
+    enabled = {dest_id for dest_id, (on, _days) in destinations.items() if on}
+    largest, kept_elsewhere, _used = _record(set(apps), enabled)
+    destination = _estimates(schedule, largest, now)
+    using_default = [dest_id for dest_id in enabled if destinations[dest_id][1] is None]
+    return {
+        "per_run": sum(largest.values()),
+        "missing": sum(1 for app in apps if app not in largest),
+        "default": destination(default_days, max((kept_elsewhere.get(d, 0) for d in using_default), default=0)),
+        "destinations": {dest_id: destination(days or default_days, kept_elsewhere.get(dest_id, 0))
+                         for dest_id, (_on, days) in destinations.items()},
+    }
 
 
 def overview(cfg, now=None):
@@ -115,23 +153,15 @@ def overview(cfg, now=None):
     backups of each app it holds, the room they need and what Backuparr's
     backups use there now."""
     apps = config_store.run_app_ids(cfg)
-    largest, kept_elsewhere, used = _sizes(set(apps))
-    per_run = sum(largest.values())
-    schedule = cfg.get("cron_schedule", config_store.DEFAULTS["cron_schedule"])
-    destinations = {}
-    for dest_id in config_store.enabled_destinations(cfg):
-        days = config_store.retention_days(cfg, dest_id)
-        runs, capped = kept_runs(schedule, days, now)
-        copies = None if runs is None else runs + 1
-        destinations[dest_id] = {
-            "days": days,
-            "copies": copies,
-            "capped": capped,
-            "needed": None if copies is None else per_run * copies + kept_elsewhere,
-            "used": used.get(dest_id, 0),
-        }
+    enabled = config_store.enabled_destinations(cfg)
+    largest, kept_elsewhere, used = _record(set(apps), set(enabled))
+    destination = _estimates(cfg.get("cron_schedule", config_store.DEFAULTS["cron_schedule"]), largest, now)
     return {
-        "per_run": per_run,
+        "per_run": sum(largest.values()),
         "missing": [app for app in apps if app not in largest],
-        "destinations": destinations,
+        "destinations": {
+            dest_id: {**destination(config_store.retention_days(cfg, dest_id), kept_elsewhere.get(dest_id, 0)),
+                      "used": used.get(dest_id, 0)}
+            for dest_id in enabled
+        },
     }

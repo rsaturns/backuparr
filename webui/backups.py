@@ -133,31 +133,41 @@ def api_storage():
     return jsonify(storage_estimate.overview(load_config()))
 
 
-# Settings sends its default retention and each destination's (a handful),
-# and the apps a run backs up (a few dozen).
-_MAX_ESTIMATES = 10
+# The apps a run backs up: a few dozen.
 _MAX_APPS = 1000
+
+
+def _positive_days(value):
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 1
 
 
 @bp.post("/api/storage/estimate")
 def api_storage_estimate():
     """The hints under Settings' retention fields, for what's on the form
-    before it's saved: {"cron_schedule", "retention_days": [days, ...],
-    "apps": [app or instance id, ...]} - the apps a run backs up, Backuparr
-    included."""
+    before it's saved: {"cron_schedule", "retention_days" (the default),
+    "destinations": {dest_id: {"enabled", "retention_days" (its own, or
+    null)}}, "apps": [app or instance id, ...]} - the apps a run backs up,
+    Backuparr included."""
     data = json_object()
     schedule = data.get("cron_schedule")
     if not isinstance(schedule, str):
         return jsonify({"error": "cron_schedule must be text"}), 400
-    days_list = data.get("retention_days")
-    if (not isinstance(days_list, list) or len(days_list) > _MAX_ESTIMATES
-            or not all(isinstance(d, int) and not isinstance(d, bool) and d >= 1 for d in days_list)):
-        return jsonify({"error": "retention_days must be a list of positive numbers"}), 400
+    default_days = data.get("retention_days")
+    if not _positive_days(default_days):
+        return jsonify({"error": "retention_days must be a positive number"}), 400
+    destinations = data.get("destinations")
+    if (not isinstance(destinations, dict)
+            or not all(dest_id in DEST_NAMES and isinstance(d, dict) and isinstance(d.get("enabled"), bool)
+                       and (d.get("retention_days") is None or _positive_days(d.get("retention_days")))
+                       for dest_id, d in destinations.items())):
+        return jsonify({"error": "destinations must map each destination to enabled and retention_days"}), 400
     apps = data.get("apps")
     if (not isinstance(apps, list) or len(apps) > _MAX_APPS
             or not all(isinstance(a, str) and destination_util.is_backup_folder(a) for a in apps)):
         return jsonify({"error": "apps must be a list of app ids"}), 400
-    return jsonify(storage_estimate.estimate(schedule, list(dict.fromkeys(days_list)), list(dict.fromkeys(apps))))
+    return jsonify(storage_estimate.estimate(
+        schedule, default_days, {dest_id: (d["enabled"], d.get("retention_days")) for dest_id, d in destinations.items()},
+        list(dict.fromkeys(apps))))
 
 
 @bp.get("/api/storage/<dest_id>/space")

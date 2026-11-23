@@ -1816,12 +1816,18 @@ function scheduleStorageHints() {
 }
 
 async function updateStorageHints() {
-  const defaultDays = formRetentionDays(document.getElementById("s-retention_days"), 7);
-  const hints = [[document.getElementById("s-retention-hint"), defaultDays]];
+  // Each destination's own retention, or null for the default - and
+  // whether it's on: only backups on the destinations that are on count.
+  const destinations = {};
+  const hints = [[document.getElementById("s-retention-hint"), null]];
   document.querySelectorAll(".dest-card[data-dest]").forEach((card) => {
     const input = card.querySelector(".d-retention");
+    destinations[card.dataset.dest] = {
+      enabled: card.querySelector(".d-enabled").checked,
+      retention_days: input ? formRetentionDays(input, null) : null,
+    };
     const hint = card.querySelector(".d-retention-hint");
-    if (input && hint) hints.push([hint, formRetentionDays(input, defaultDays)]);
+    if (hint) hints.push([hint, card.dataset.dest]);
   });
   const apps = [...document.querySelectorAll(".app-card[data-app]")]
     .filter((card) => card.querySelector(".f-enabled")?.checked)
@@ -1834,7 +1840,8 @@ async function updateStorageHints() {
       method: "POST",
       body: JSON.stringify({
         cron_schedule: document.getElementById("s-cron_schedule").value.trim(),
-        retention_days: [...new Set(hints.map(([, days]) => days))],
+        retention_days: formRetentionDays(document.getElementById("s-retention_days"), 7),
+        destinations,
         apps,
       }),
     });
@@ -1842,22 +1849,24 @@ async function updateStorageHints() {
     // No hints rather than a toast: Settings works without them.
   }
   if (seq !== STORAGE_HINT_SEQ) return; // a later edit's answer fills them
-  hints.forEach(([hint, days]) => {
-    const text = result ? storageHintText(result.estimates[String(days)], result.per_run, result.missing) : "";
+  hints.forEach(([hint, destId]) => {
+    const estimate = result && (destId ? result.destinations[destId] : result.default);
+    const text = estimate ? storageHintText(estimate, result.per_run, result.missing) : "";
     hint.textContent = text;
     hint.classList.toggle("hidden", !text);
   });
 }
 
-// What changes the hints: retention, the schedule (typed or picked), and
-// which apps are on - instance cards included, which come and go.
+// What changes the hints: retention, the schedule (typed or picked), which
+// destinations are on, and which apps are - instance cards included, which
+// come and go.
 function initStorageHintEvents() {
   const panel = document.getElementById("tab-settings");
   panel.addEventListener("input", (e) => {
     if (e.target.matches("#s-retention_days, .d-retention, #s-cron_schedule")) scheduleStorageHints();
   });
   panel.addEventListener("change", (e) => {
-    if (e.target.matches(".f-enabled, #s-self_backup, #sched-frequency, #sched-time, #sched-weekday, #sched-interval-hours")) {
+    if (e.target.matches(".f-enabled, .d-enabled, #s-self_backup, #sched-frequency, #sched-time, #sched-weekday, #sched-interval-hours")) {
       scheduleStorageHints();
     }
   });

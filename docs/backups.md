@@ -54,8 +54,8 @@ backup still kept, Backuparr's own included, added up. An app with no backup
 yet isn't counted; the tile says how many there are.
 
 **Storage needed** is the room on each destination: each run times the most
-backups of each app its retention keeps, plus the newest backup of each app
-that's switched off, which retention keeps too. Retention keeps the scheduled
+backups of each app its retention keeps, plus the newest backup there of each
+app that's switched off, which retention keeps too. Retention keeps the scheduled
 runs within its days, and one more while a run uploads, before it deletes the
 oldest: a daily schedule with 7 days' retention keeps up to 8 backups of each
 app. Beside it are what Backuparr's backups use there now and the destination's

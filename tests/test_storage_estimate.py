@@ -34,24 +34,32 @@ def test_runs_kept_after_a_run(schedule, days, runs):
     ("0 3 * * *", 7), ("0 */6 * * *", 7), ("0 3 * * 1-5", 10), ("0 3 1,15 * *", 20), ("30 2 * * 0,3", 9),
 ])
 def test_the_estimate_matches_what_retention_keeps(monkeypatch, schedule, days):
-    """Weeks of scheduled runs through the real apply_retention: the most
-    backups it leaves after a run is kept_runs, and one more is there while
-    a run uploads."""
+    """Weeks of scheduled runs through the real apply_retention, in a run's
+    order - the apps' uploads, retention, then Backuparr's own: the most
+    backups of an app it leaves after a run is kept_runs, one more is there
+    while a run uploads, and Backuparr's own never has more than kept_runs."""
     files = []
     monkeypatch.setattr(backup.rclone_util, "lsjson", lambda root, recursive=False, include=(): [
         {"Path": p, "Name": p.rsplit("/", 1)[-1], "IsDir": False} for p in files])
     monkeypatch.setattr(backup.rclone_util, "delete_file", lambda path: files.remove(path.removeprefix("dest:/")))
+
+    def count(app):
+        return sum(1 for p in files if p.startswith(f"{app}/"))
+
     runs = croniter(schedule, NOW - timedelta(days=days + 1))
-    most_after = most_during = 0
+    most_after = most_during = most_own = 0
     while (when := runs.get_next(datetime)) <= NOW + timedelta(days=storage_estimate.ANCHOR_DAYS):
         files.append(f"radarr/radarr_{when:%Y%m%d_%H%M%S}.zip")
         if when >= NOW:
-            most_during = max(most_during, len(files))
+            most_during = max(most_during, count("radarr"))
         backup.apply_retention("dest:", days, now=when + timedelta(minutes=2))  # after the run's uploads
+        files.append(f"backuparr/backuparr_{when:%Y%m%d_%H%M%S}.zip")
         if when >= NOW:
-            most_after = max(most_after, len(files))
+            most_after = max(most_after, count("radarr"))
+            most_own = max(most_own, count("backuparr"))
     assert storage_estimate.kept_runs(schedule, days, NOW) == (most_after, False)
     assert most_during == most_after + 1
+    assert most_own == most_after
 
 
 @pytest.mark.parametrize("schedule", ["", "not cron", "0 3 * *", "61 3 * * *", "0 0 30 2 *"])
@@ -80,28 +88,77 @@ def recorded():
     _record("radarr", "20261123_030000", 200, ("local", "dropbox"))
     _record("sonarr", "20261123_030000", 50)
     _record("backuparr", "20261123_030000", 10)
-    _record("lidarr", "20261001_030000", 70)     # switched off: its newest stays
+    _record("lidarr", "20261001_030000", 70)     # switched off: its newest stays, on Local only
     _record("lidarr", "20261002_030000", 40)
 
 
+# radarr 300 + sonarr 50 copies + 1 times, Backuparr's own 10 copies times (it's
+# uploaded after retention), and Lidarr's newest where it is.
+def _needed(runs, kept_elsewhere=0, apps=350, own=10):
+    return apps * (runs + 1) + own * runs + kept_elsewhere
+
+
+FORM = {"local": (True, None), "dropbox": (True, 3), "gdrive": (False, None), "onedrive": (False, 14)}
+
+
 def test_settings_estimate(recorded):
-    result = storage_estimate.estimate("0 3 * * *", [7, 30], ["radarr", "sonarr", "backuparr", "prowlarr"], NOW)
-    per_run = 300 + 50 + 10
+    result = storage_estimate.estimate("0 3 * * *", 7, FORM, ["radarr", "sonarr", "backuparr", "prowlarr"], NOW)
     assert result == {
-        "per_run": per_run,
+        "per_run": 300 + 50 + 10,
         "missing": 1,  # prowlarr
-        "estimates": {
-            "7": {"copies": 8, "capped": False, "needed": per_run * 8 + 40},
-            "30": {"copies": 31, "capped": False, "needed": per_run * 31 + 40},
+        "default": {"days": 7, "copies": 8, "capped": False, "needed": _needed(7, 40)},
+        "destinations": {
+            "local": {"days": 7, "copies": 8, "capped": False, "needed": _needed(7, 40)},
+            "dropbox": {"days": 3, "copies": 4, "capped": False, "needed": _needed(3)},  # no Lidarr there
+            "gdrive": {"days": 7, "copies": 8, "capped": False, "needed": _needed(7)},   # off: holds nothing that counts
+            "onedrive": {"days": 14, "copies": 15, "capped": False, "needed": _needed(14)},
         },
     }
 
 
+def test_the_default_hint_counts_the_most_any_destination_using_it_keeps(recorded):
+    _record("lidarr", "20261003_030000", 25, ("dropbox",))
+    form = {"local": (True, 30), "dropbox": (True, None), "gdrive": (True, None)}
+    result = storage_estimate.estimate("0 3 * * *", 7, form, ["radarr", "sonarr", "backuparr"], NOW)
+    assert result["destinations"]["local"]["needed"] == _needed(30, 40)
+    assert result["destinations"]["dropbox"]["needed"] == _needed(7, 25)
+    assert result["default"]["needed"] == _needed(7, 25)  # Local has its own retention
+    form["local"] = (True, None)
+    assert storage_estimate.estimate("0 3 * * *", 7, form, ["radarr"], NOW)["default"]["needed"] == (
+        300 * 8 + 50 + 10 + 40)  # Local's Sonarr, Backuparr's own and Lidarr: not in the run, newest kept
+
+
+def test_backups_on_a_destination_thats_off_dont_count():
+    """Retention never lists a destination that's off, so its entries in the
+    record are never tidied: its old backups mustn't count forever."""
+    _record("plex", "20260901_030000", 5000, ("gdrive",))   # with metadata, to Drive, now off
+    _record("plex", "20261123_030000", 450)
+    _record("lidarr", "20260901_030000", 900, ("gdrive",))  # switched off, and only on Drive
+    form = {"local": (True, None), "gdrive": (False, None)}
+    result = storage_estimate.estimate("0 3 * * *", 7, form, ["plex", "sonarr"], NOW)
+    assert result["per_run"] == 450 and result["missing"] == 1
+    assert result["destinations"]["local"]["needed"] == result["destinations"]["gdrive"]["needed"] == 450 * 8
+    form["gdrive"] = (True, None)
+    result = storage_estimate.estimate("0 3 * * *", 7, form, ["plex", "sonarr"], NOW)
+    assert result["per_run"] == 5000
+    assert result["destinations"]["gdrive"]["needed"] == 5000 * 8 + 900
+    cfg = _cfg(self_backup=False)
+    cfg["apps"]["plex"]["enabled"] = True
+    assert storage_estimate.overview(cfg, NOW)["destinations"]["local"]["used"] == 450
+
+
+def test_backuparrs_own_backup_keeps_one_copy_fewer():
+    _record("backuparr", "20261123_030000", 10)
+    result = storage_estimate.estimate("0 3 * * *", 7, {"local": (True, None)}, ["backuparr"], NOW)
+    assert result["default"] == {"days": 7, "copies": 8, "capped": False, "needed": 10 * 7}
+
+
 def test_settings_estimate_with_no_backups_or_no_schedule():
-    assert storage_estimate.estimate("0 3 * * *", [7], ["radarr"], NOW) == {
-        "per_run": 0, "missing": 1, "estimates": {"7": {"copies": 8, "capped": False, "needed": 0}}}
-    assert storage_estimate.estimate("bad", [7], ["radarr"], NOW)["estimates"] == {
-        "7": {"copies": None, "capped": False, "needed": None}}
+    assert storage_estimate.estimate("0 3 * * *", 7, {"local": (True, None)}, ["radarr"], NOW) == {
+        "per_run": 0, "missing": 1, "default": {"days": 7, "copies": 8, "capped": False, "needed": 0},
+        "destinations": {"local": {"days": 7, "copies": 8, "capped": False, "needed": 0}}}
+    assert storage_estimate.estimate("bad", 7, {"local": (True, None)}, ["radarr"], NOW)["default"] == {
+        "days": 7, "copies": None, "capped": False, "needed": None}
 
 
 def test_a_record_entry_that_isnt_a_kept_backup_is_left_out():
@@ -114,9 +171,9 @@ def test_a_record_entry_that_isnt_a_kept_backup_is_left_out():
     entries["../x/x_20261123_030000.zip"] = {"app": "../x", "file": "x_20261123_030000.zip",
                                              "destinations": ["local"], "size": 5}
     manifest._write(entries)
-    result = storage_estimate.estimate("0 3 * * *", [7], ["radarr", "sonarr"], NOW)
+    result = storage_estimate.estimate("0 3 * * *", 7, {"local": (True, None)}, ["radarr", "sonarr"], NOW)
     assert result["per_run"] == 300 and result["missing"] == 1
-    assert result["estimates"]["7"]["needed"] == 300 * 8
+    assert result["default"]["needed"] == 300 * 8
 
 
 def _cfg(**overrides):
@@ -130,14 +187,13 @@ def _cfg(**overrides):
 
 def test_overview(recorded):
     result = storage_estimate.overview(_cfg(), NOW)
-    per_run = 300 + 50 + 10
     assert result == {
-        "per_run": per_run,
+        "per_run": 300 + 50 + 10,
         "missing": ["prowlarr"],
         "destinations": {
-            "local": {"days": 7, "copies": 8, "capped": False, "needed": per_run * 8 + 40,
+            "local": {"days": 7, "copies": 8, "capped": False, "needed": _needed(7, 40),
                       "used": 100 + 300 + 200 + 50 + 10 + 70 + 40},
-            "dropbox": {"days": 3, "copies": 4, "capped": False, "needed": per_run * 4 + 40, "used": 200},
+            "dropbox": {"days": 3, "copies": 4, "capped": False, "needed": _needed(3), "used": 200},
         },
     }
 
@@ -146,7 +202,7 @@ def test_overview_without_backuparrs_own_backup(recorded):
     result = storage_estimate.overview(_cfg(self_backup=False), NOW)
     assert result["per_run"] == 300 + 50
     # Backuparr's own backups are still there: like a switched-off app's, its newest is kept.
-    assert result["destinations"]["local"]["needed"] == (300 + 50) * 8 + 40 + 10
+    assert result["destinations"]["local"]["needed"] == _needed(7, 40 + 10, own=0)
 
 
 @pytest.mark.parametrize("output, expected", [
@@ -175,29 +231,43 @@ def test_overview_route(authed_client, isolated_webui):
 def test_estimate_route(authed_client):
     _record("radarr", "20261123_030000", 300)
     response = authed_client.post("/api/storage/estimate", json={
-        "cron_schedule": "0 */6 * * *", "retention_days": [7, 7, 2], "apps": ["radarr", "radarr-4k", "backuparr"]})
+        "cron_schedule": "0 */6 * * *", "retention_days": 7,
+        "destinations": {"local": {"enabled": True, "retention_days": 2},
+                         "dropbox": {"enabled": False, "retention_days": None}},
+        "apps": ["radarr", "radarr-4k", "radarr"]})
     assert response.status_code == 200
-    assert response.get_json() == {"per_run": 300, "missing": 2, "estimates": {
-        "7": {"copies": 29, "capped": False, "needed": 300 * 29},
-        "2": {"copies": 9, "capped": False, "needed": 300 * 9}}}
+    assert response.get_json() == {"per_run": 300, "missing": 1, "default": {
+        "days": 7, "copies": 29, "capped": False, "needed": 300 * 29}, "destinations": {
+        "local": {"days": 2, "copies": 9, "capped": False, "needed": 300 * 9},
+        "dropbox": {"days": 7, "copies": 29, "capped": False, "needed": 300 * 29}}}
 
 
-@pytest.mark.parametrize("body, error", [
-    ({"retention_days": [7], "apps": []}, "cron_schedule must be text"),
-    ({"cron_schedule": 5, "retention_days": [7], "apps": []}, "cron_schedule must be text"),
-    ({"cron_schedule": "0 3 * * *", "apps": []}, "retention_days must be a list of positive numbers"),
-    ({"cron_schedule": "0 3 * * *", "retention_days": [0], "apps": []}, "retention_days must be a list of positive numbers"),
-    ({"cron_schedule": "0 3 * * *", "retention_days": ["7"], "apps": []}, "retention_days must be a list of positive numbers"),
-    ({"cron_schedule": "0 3 * * *", "retention_days": [True], "apps": []}, "retention_days must be a list of positive numbers"),
-    ({"cron_schedule": "0 3 * * *", "retention_days": list(range(1, 12)), "apps": []},
-     "retention_days must be a list of positive numbers"),
-    ({"cron_schedule": "0 3 * * *", "retention_days": [7]}, "apps must be a list of app ids"),
-    ({"cron_schedule": "0 3 * * *", "retention_days": [7], "apps": ["../etc"]}, "apps must be a list of app ids"),
-    ({"cron_schedule": "0 3 * * *", "retention_days": [7], "apps": [5]}, "apps must be a list of app ids"),
-    ({"cron_schedule": "0 3 * * *", "retention_days": [7], "apps": ["radarr"] * 1001}, "apps must be a list of app ids"),
+_OK = {"cron_schedule": "0 3 * * *", "retention_days": 7, "destinations": {}, "apps": []}
+_DESTINATIONS_ERROR = "destinations must map each destination to enabled and retention_days"
+
+
+@pytest.mark.parametrize("change, error", [
+    ({"cron_schedule": None}, "cron_schedule must be text"),
+    ({"cron_schedule": 5}, "cron_schedule must be text"),
+    ({"retention_days": None}, "retention_days must be a positive number"),
+    ({"retention_days": 0}, "retention_days must be a positive number"),
+    ({"retention_days": "7"}, "retention_days must be a positive number"),
+    ({"retention_days": True}, "retention_days must be a positive number"),
+    ({"destinations": None}, _DESTINATIONS_ERROR),
+    ({"destinations": ["local"]}, _DESTINATIONS_ERROR),
+    ({"destinations": {"nowhere": {"enabled": True, "retention_days": None}}}, _DESTINATIONS_ERROR),
+    ({"destinations": {"local": True}}, _DESTINATIONS_ERROR),
+    ({"destinations": {"local": {"retention_days": None}}}, _DESTINATIONS_ERROR),
+    ({"destinations": {"local": {"enabled": "yes", "retention_days": None}}}, _DESTINATIONS_ERROR),
+    ({"destinations": {"local": {"enabled": True, "retention_days": 0}}}, _DESTINATIONS_ERROR),
+    ({"destinations": {"local": {"enabled": True, "retention_days": "3"}}}, _DESTINATIONS_ERROR),
+    ({"apps": None}, "apps must be a list of app ids"),
+    ({"apps": ["../etc"]}, "apps must be a list of app ids"),
+    ({"apps": [5]}, "apps must be a list of app ids"),
+    ({"apps": ["radarr"] * 1001}, "apps must be a list of app ids"),
 ])
-def test_estimate_route_checks_its_body(authed_client, body, error):
-    response = authed_client.post("/api/storage/estimate", json=body)
+def test_estimate_route_checks_its_body(authed_client, change, error):
+    response = authed_client.post("/api/storage/estimate", json={**_OK, **change})
     assert response.status_code == 400 and response.get_json() == {"error": error}
 
 
