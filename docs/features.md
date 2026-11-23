@@ -56,6 +56,9 @@ See [Apps](apps/index.md) for how each one is backed up and restored.
   [QNAP QuTS hero](apps/qnap.md#2-step-verification).
 - Works with apps behind an authenticating reverse proxy. See
   [Service authentication headers](settings.md#service-authentication-headers).
+- An app's self-signed HTTPS certificate is trusted on its card by its
+  fingerprint (pinned), never skipped; a changed one stops backups until it's
+  trusted again. See [Trusting a certificate](settings.md#trusting-a-certificate).
 
 ## Destinations
 
@@ -86,10 +89,10 @@ See [Backups and history](backups.md).
 
 ## Restores
 
-- Restore from the web UI, with live progress and a log. Every app can be
-  restored this way except Profilarr and Tautulli's database, which are
-  restored by hand; for Profilarr the Restore tab gives the download and the
-  steps.
+- Restore from the web UI, with live progress and a log. Apps restored in
+  their own UI - Profilarr, OPNsense, pfSense, UniFi, Bitwarden, Unraid,
+  Synology DSM and QNAP QuTS hero - get the download (decrypted) and the steps
+  on the Restore tab instead, and Tautulli's database is imported by hand.
 - A backup is only restored onto the exact app version it came from. When the
   versions differ, the message names the version to install.
 - Each download is checked against the checksum recorded when the backup was
@@ -128,6 +131,8 @@ See [Restoring Backuparr itself](restoring.md#restoring-backuparr-itself).
   per app, except for apps that are always encrypted. See
   [Encrypted backups](security.md#encrypted-backups).
 - API keys, passwords and cloud tokens are encrypted at rest.
+- HTTPS on port 8991 with a certificate Backuparr makes and renews itself, or
+  your own; **HTTPS only** closes plain HTTP. See [HTTPS](security.md#https).
 - Local login can be turned off behind an authenticating reverse proxy.
 
 See [Login and security](security.md).
@@ -135,7 +140,8 @@ See [Login and security](security.md).
 ## Install
 
 - A Docker image for `linux/amd64` and `linux/arm64`, on Docker Hub and GitHub
-  Container Registry.
+  Container Registry, with signed build provenance and a list of every
+  package in it (an SBOM). See [Checking an image](security-principles.md#checking-an-image).
 - An Unraid template in Community Applications.
 
 See [Getting started](getting-started.md).
