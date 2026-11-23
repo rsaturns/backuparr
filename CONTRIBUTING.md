@@ -46,9 +46,8 @@ scripts/smoke_test.sh backuparr:dev    # the same container check CI runs
   with tests that cover them. The suite must pass without the `rclone`
   binary (CI doesn't have it), so stub `rclone_util` calls in tests, and
   without a network: tests talk only to servers they start on localhost.
-- The suite runs [pyflakes](https://github.com/PyCQA/pyflakes) over the code
-  (`tests/test_lint.py`), so an unused import or an undefined name fails it
-  like any other test.
+- Follow the [coding standard](#coding-standard) below; the suite checks the
+  Python part, so a finding fails it like any other test.
 - **Test against the real app** when you change how one is backed up or
   restored, and say which version you used in the PR.
 - The web UI is plain JavaScript and CSS with no framework or build step -
@@ -58,6 +57,21 @@ scripts/smoke_test.sh backuparr:dev    # the same container check CI runs
   or setup changes, and add a line under `## [Unreleased]` in
   [CHANGELOG.md](CHANGELOG.md) for anything users will notice. Contributors
   are credited there.
+
+### Coding standard
+
+- **Python** follows [PEP 8](https://peps.python.org/pep-0008/), without a
+  fixed line length: wrap a line where that makes it easier to read. The
+  suite checks it with [ruff](https://docs.astral.sh/ruff/)
+  (`tests/test_lint.py`, rules in `ruff.toml`): pycodestyle's E and W rules,
+  and pyflakes' F rules for unused imports, undefined names and the like.
+  Run it on its own with `.venv/bin/ruff check .`.
+- **JavaScript and CSS** are plain, with no framework or build step. No
+  inline scripts or event handlers - the Content Security Policy blocks
+  them - and API calls that change state send JSON. Not checked by a tool
+  yet.
+- **Shell scripts** start with `set -euo pipefail` and quote their variables.
+  Not checked by a tool yet.
 
 ### Adding an app
 

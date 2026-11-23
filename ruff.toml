@@ -1,0 +1,6 @@
+# The Python coding standard in CONTRIBUTING.md, checked by tests/test_lint.py:
+# PEP 8 (pycodestyle's E and W rules) without a fixed line length, and
+# pyflakes' F rules (unused imports and variables, undefined names).
+[lint]
+select = ["E", "W", "F"]
+ignore = ["E501"]

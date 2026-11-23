@@ -1,6 +1,6 @@
-import os
 """Tests for rclone_util._run()'s secret redaction and config_set()'s use
 of SENSITIVE_FIELDS to drive it."""
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
