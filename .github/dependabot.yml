@@ -1,10 +1,10 @@
 version: 2
 # Dependabot reads this file from main (the default branch) only, and each
-# entry watches one branch. During the 3.0 beta main is the 2.5.x line,
-# which gets no more fixes, so every entry watches release-3.0.0, where the
-# work happens. A new long-lived release line needs its own entries (a
-# short patch branch off main doesn't), and at 3.0.0 final these go back
-# to main. The weekly security scan (.github/workflows/security-scan.yml)
+# entry watches one branch: main, the newest full release. A long-lived
+# release line (such as the 3.0 beta, when main was the 2.5.x line and got
+# no more fixes) gets target-branch: release-X.Y.Z on each entry, and they
+# come back to main at its final release; a short patch branch off main
+# needs none. The weekly security scan (.github/workflows/security-scan.yml)
 # fails while an entry names a branch that no longer exists.
 #
 # One grouped PR per ecosystem a week. A new pip or Actions version waits
@@ -20,7 +20,6 @@ version: 2
 updates:
   - package-ecosystem: "pip"
     directory: "/"
-    target-branch: "release-3.0.0"
     schedule:
       interval: "weekly"
     cooldown:
@@ -35,7 +34,6 @@ updates:
 
   - package-ecosystem: "docker"
     directory: "/"
-    target-branch: "release-3.0.0"
     schedule:
       interval: "weekly"
     groups:
@@ -44,7 +42,6 @@ updates:
 
   - package-ecosystem: "github-actions"
     directory: "/"
-    target-branch: "release-3.0.0"
     schedule:
       interval: "weekly"
     cooldown:

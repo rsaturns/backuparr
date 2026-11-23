@@ -25,6 +25,37 @@ backups and credentials are kept safe:
 
 If you like Backuparr, give it a ⭐ star - it helps the project grow.
 
+## Features
+
+- **The apps you host:** Radarr, Sonarr, SABnzbd, Plex, Jellyfin and the
+  rest of your media stack, plus your network, passwords, smart home, photos
+  and servers - Pi-hole, OPNsense, pfSense, UniFi, Vaultwarden, Bitwarden,
+  Home Assistant, Immich, Unraid, Synology DSM and QNAP QuTS hero. See the
+  [full list](https://rsaturns.github.io/backuparr/apps/).
+- **Every destination at once:** Local Storage, Google Drive, OneDrive and
+  Dropbox, connected in the web UI, with retention set once or per
+  destination.
+- **Encrypted with your key** before upload - always for sensitive apps such
+  as password managers, firewalls and Home Assistant - and the image's
+  `decrypt` command opens a backup without Backuparr.
+- **Restores from the web UI** for most apps, onto the app version the backup
+  came from. Apps restored in their own UI, such as firewalls, UniFi and
+  Unraid, get the download and the steps on the Restore tab.
+- **How much room backups need:** what each run uploads, and the storage each
+  destination's retention needs beside what's used and free.
+- **Secure by default:** HTTPS on port 8991 with a certificate Backuparr
+  makes itself, self-signed app certificates pinned rather than skipped,
+  credentials encrypted at rest, and signed images with an SBOM. See
+  [Security principles](https://rsaturns.github.io/backuparr/security-principles/).
+- **At a glance:** the Overview sums up every app's last backup, a summary
+  after each run goes to Discord, Slack, Telegram, Gotify, ntfy or a webhook,
+  and the [Home Assistant integration](https://github.com/rsaturns/ha-backuparr)
+  gives a sensor per app that turns on when its backup fails.
+- **Backs itself up:** Backuparr's own settings, login and backup record,
+  encrypted, restored from the setup screen on a new install.
+
+All of it is in [Features](https://rsaturns.github.io/backuparr/features/).
+
 ## Screenshots
 
 <table>
@@ -78,8 +109,8 @@ docker run -d --name backuparr --restart unless-stopped \
 ```
 
 Published for `linux/amd64` and `linux/arm64`. `latest` is the newest full
-release; a beta (e.g. `rsaturns/backuparr:3.0.0-beta.4`) has only its own tag.
-Pin a version to control upgrades. Tags are on [Docker Hub](https://hub.docker.com/r/rsaturns/backuparr),
+release; a beta gets only its own tag, so `latest` never moves to one. Pin a
+version (such as `rsaturns/backuparr:3.0.0`) to control upgrades. Tags are on [Docker Hub](https://hub.docker.com/r/rsaturns/backuparr),
 and the same images are on GitHub Container Registry as
 [`ghcr.io/rsaturns/backuparr`](https://github.com/rsaturns/backuparr/pkgs/container/backuparr).
 

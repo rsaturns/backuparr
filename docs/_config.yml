@@ -1,5 +1,5 @@
 # .github/workflows/docs-site.yml builds this site from docs/ and publishes
-# it: from release-3.0.0 while 3.0 is in beta, from main otherwise.
+# it from main.
 title: Backuparr
 description: Scheduled, encrypted backups of the apps you host, to local storage and the cloud.
 url: https://rsaturns.github.io
@@ -22,9 +22,9 @@ back_to_top: true
 gh_edit_link: true
 gh_edit_link_text: Edit this page on GitHub
 gh_edit_repository: https://github.com/rsaturns/backuparr
-# The branch these docs come from: release-3.0.0 while 3.0 is in beta, main
-# again at 3.0.0. The changelog and SECURITY.md links use it too.
-gh_edit_branch: release-3.0.0
+# The branch these docs come from. The changelog and SECURITY.md links use
+# it too.
+gh_edit_branch: main
 gh_edit_source: docs
 gh_edit_view_mode: edit
 footer_content: "Backuparr is licensed under the <a href=\"https://github.com/rsaturns/backuparr/blob/main/LICENSE\">GNU AGPLv3</a>."

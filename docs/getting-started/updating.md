@@ -6,8 +6,6 @@ nav_order: 5
 
 # Updating
 
-> **These docs cover Backuparr 3.0.0-beta.4.** On 2.5.7? Its docs are [on GitHub](https://github.com/rsaturns/backuparr/tree/v2.5.7/docs).
-
 With Compose:
 
 ```sh
@@ -15,30 +13,29 @@ docker compose pull backuparr && docker compose up -d backuparr
 ```
 
 On Unraid, click **Apply update** on the Docker tab. A pinned tag (such as
-`rsaturns/backuparr:3.0.0-beta.4`) only changes when you edit it.
+`rsaturns/backuparr:3.0.0`) only changes when you edit it.
 
 Updating keeps your settings, login and backups. A backup Backuparr makes of
 itself can only be restored on the same or a newer version, so don't downgrade
 and then restore one.
 
-## Updating to 3.0.0-beta
+<span id="updating-to-300-beta"></span>
 
-3.0 changes a lot, and while it's in beta `latest` stays on 2.5.7: if you'd
-rather wait until 3.x is out of beta, do nothing. To try the beta, set the
-image to `rsaturns/backuparr:3.0.0-beta.4` (on Unraid, set **Repository** to it).
+## Updating to 3.0.0
 
-**On an earlier 3.0 beta?** Change the tag to `3.0.0-beta.4`. Coming from
-3.0.0-beta, it also fixes a security problem in restores (see the
-[changelog](https://github.com/rsaturns/backuparr/blob/{{ site.gh_edit_branch }}/CHANGELOG.md)).
-Nothing else changes - your settings, login and backups stay.
+3.0 changes a lot, so read this before you update. A container that follows
+`latest` gets 3.0.0 the next time it updates. The
+[changelog](https://github.com/rsaturns/backuparr/blob/{{ site.gh_edit_branch }}/CHANGELOG.md)
+lists everything that's new.
+
+**On a 3.0 beta?** Set the tag to `latest` or `3.0.0`: a beta's tag doesn't
+move. Nothing else changes - your settings, login and backups stay.
 
 ### Before you update
 
 - **Find your encryption key.** From 3.0 every backup is encrypted with it,
   and restoring one on another install needs it. See
   [Your encryption key](../security.md#your-encryption-key).
-- **Run a full backup on 2.5.7.** Should you go back, those are backups 2.5.7
-  can restore, Backuparr's own included.
 
 ### Your container
 
@@ -74,18 +71,6 @@ Nothing else changes - your settings, login and backups stay.
   starts at a field's maximum, such as `59/15` or `6/1`, now means just that
   value, not "every": use `*/15` for every 15 minutes. The schedule picker
   never writes these.
-
-### Going back to 2.5.7
-
-Set the image back to `rsaturns/backuparr:2.5.7` (or `latest`, while 3.0 is
-in beta). Your settings, login and backups stay, with two limits:
-
-- **Backups 3.0 made are encrypted**, and 2.5.7 can't restore them. Restore
-  them with 3.0, or decrypt one with a 3.0 image's `decrypt` command
-  (see [Decrypting without Backuparr](../security.md#decrypting-without-backuparr))
-  and restore it in the app.
-- **Apps only 3.0 backs up**, such as OPNsense or Pi-hole, don't show in
-  2.5.7, and saving Settings there removes them.
 
 ## Updating to 2.5.0
 

@@ -9,8 +9,9 @@ name: Security scan
 # Findings go to the Security tab (code scanning, beside CodeQL's). A fixable
 # CRITICAL or HIGH finding on a release branch or the newest image fails the
 # run, and so does a freshness problem; GitHub emails a failed scheduled
-# run. :latest's findings only go to the Security tab - during the 3.0 beta
-# it's 2.5.7, which gets no more fixes. Scheduled runs use main's copy of
+# run. :latest's findings only go to the Security tab - while a beta is the
+# newest release, :latest is the last full release (2.5.7 during the 3.0
+# beta, which got no more fixes). Scheduled runs use main's copy of
 # this file, so it lives on main; GitHub turns schedules off in a public
 # repository after 60 days without activity.
 on:
