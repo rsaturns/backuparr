@@ -8,10 +8,15 @@ FROM python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15d
 ARG RCLONE_VERSION=1.76.0
 ARG TARGETARCH
 
+# Alpine's security updates first: they ship between rebuilds of the python
+# image (in November 2026 the pinned one still had zlib 1.3.2 and OpenSSL
+# 3.5.9-r0, with fixes out in zlib 1.4 and 3.5.9-r1). scripts/test_in_image.sh
+# installs the same updates, so the tests still run on what ships.
 # su-exec (from the community repo, enabled in python:alpine) drops from root
 # to the PUID/PGID entrypoint.sh resolves at startup. rclone's zip is
 # checksum-verified against its own SHA256SUMS.
-RUN apk add --no-cache bash tzdata su-exec \
+RUN apk upgrade --no-cache \
+    && apk add --no-cache bash tzdata su-exec \
     && cd /tmp \
     && wget -q "https://downloads.rclone.org/v${RCLONE_VERSION}/rclone-v${RCLONE_VERSION}-linux-${TARGETARCH}.zip" \
     && wget -q "https://downloads.rclone.org/v${RCLONE_VERSION}/SHA256SUMS" \

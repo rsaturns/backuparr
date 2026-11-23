@@ -7,7 +7,6 @@ import sys
 import pytest
 
 import runlog
-from conftest import load_webui
 
 
 def enable(client):

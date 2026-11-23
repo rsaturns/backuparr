@@ -155,7 +155,7 @@ lists each one and why.
 - **Open source** under the [AGPLv3](https://github.com/rsaturns/backuparr/blob/main/LICENSE):
   anyone can read what Backuparr does with their data.
 - **Every change** runs the test suite (over 2,000 tests, in the same
-  Alpine image the app ships in), a smoke test of the built image and
+  Alpine image the app ships in, with a linter), a smoke test of the built image and
   GitHub's CodeQL security analysis before it's merged, on both amd64 and
   arm64. A change that adds
   a package with a known vulnerability, or under an unexpected license,
@@ -167,7 +167,9 @@ lists each one and why.
   before anything is merged or released, and the weekly scan catches one
   found after a release.
 - **Dependencies** are pinned to exact versions with their hashes, and the
-  base image to its digest, so each build installs what was tested.
+  base image to its digest, so each build installs what was tested. Alpine's
+  security updates are installed as each image is built, so they don't wait
+  for a new base image.
   Dependabot proposes updates weekly; a new version of a package waits a
   week first, so a hijacked release is usually caught before it gets in.
 - **Releases are built from scratch**, with no build cache, and the job

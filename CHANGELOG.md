@@ -8,6 +8,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Security
 
 - Each released image comes with signed build provenance and a list of every package in it (an SBOM), and is built from scratch, tested and scanned on amd64 and arm64 before it's published: check one with `gh attestation verify oci://ghcr.io/rsaturns/backuparr:<version> --owner rsaturns` (#243). See https://rsaturns.github.io/backuparr/security-principles/#checking-an-image
+- The image installs Alpine's security updates when it's built, so fixes no longer wait for a new Python base image: it now has zlib 1.4 and OpenSSL 3.5.9-r1 (CVE-2026-4738, CVE-2026-95691, CVE-2026-95692, CVE-2026-107496) (#244).
 
 ## [3.0.0-beta.3] - 2026-11-14
 

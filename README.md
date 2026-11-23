@@ -129,7 +129,12 @@ live, **History** lists, downloads and deletes backups, and **Restore** restores
 - [Home Assistant](https://rsaturns.github.io/backuparr/home-assistant/) - the [Backuparr integration](https://github.com/rsaturns/ha-backuparr) and a read-only status
 - [Environment variables](https://rsaturns.github.io/backuparr/environment-variables/) and the [configuration reference](https://rsaturns.github.io/backuparr/configuration/)
 
-Want to help? See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).
+## Feedback and contributing
+
+- **Found a bug?** Open a [bug report](https://github.com/rsaturns/backuparr/issues/new?template=bug_report.yml).
+- **Want a feature or another app?** Open a [feature request](https://github.com/rsaturns/backuparr/issues/new?template=feature_request.yml).
+- **Found a security problem?** Don't open an issue - report it privately, as [SECURITY.md](SECURITY.md) explains.
+- **Want to help?** See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Credits
 
