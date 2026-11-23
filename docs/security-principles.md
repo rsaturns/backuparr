@@ -156,7 +156,8 @@ lists each one and why.
   anyone can read what Backuparr does with their data.
 - **Every change** runs the test suite (over 2,000 tests, in the same
   Alpine image the app ships in), a smoke test of the built image and
-  GitHub's CodeQL security analysis before it's merged. A change that adds
+  GitHub's CodeQL security analysis before it's merged, on both amd64 and
+  arm64. A change that adds
   a package with a known vulnerability, or under an unexpected license,
   fails its review.
 - **The image is scanned** with [Trivy](https://trivy.dev/) on every change,
