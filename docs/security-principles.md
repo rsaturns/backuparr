@@ -169,6 +169,10 @@ lists each one and why.
   A critical or high one with a fix out fails the build, so it's fixed
   before anything is merged or released, and the weekly scan catches one
   found after a release.
+- **Findings that don't affect Backuparr** - such as code in rclone that
+  Backuparr never runs - are listed with the reason in a
+  [VEX document](https://github.com/rsaturns/backuparr/blob/{{ site.gh_edit_branch }}/vex/README.md),
+  which Trivy and Docker Scout can check an image against.
 - **Dependencies** are pinned to exact versions with their hashes, and the
   base image to its digest, so each build installs what was tested. Alpine's
   security updates are installed as each image is built, so they don't wait
