@@ -8,6 +8,13 @@ Instead, use GitHub's [private vulnerability reporting](https://github.com/rsatu
 
 Include what you'd include in a bug report: affected version/commit, steps to reproduce, and the impact.
 
+## What happens next
+
+1. **Within 5 days**, you get a reply in the private advisory acknowledging your report.
+2. We confirm the problem with you, prepare the fix in private, and agree with you when the details go public. You're kept up to date in the advisory.
+3. The fix ships in a new release. Then the advisory is published, with a CVE where one applies, and the changelog's Security section links it.
+4. You're credited in the advisory and the changelog, unless you'd rather not be named.
+
 ## Known, accepted risks
 
 A few things are intentionally not "fixed" - they're documented trade-offs for this project's single-trusted-admin threat model, not oversights:
