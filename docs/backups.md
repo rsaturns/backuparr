@@ -28,6 +28,9 @@ backup that failed on one destination counts as failed. An app with no backup
 yet isn't a failure: the line says how many aren't backed up yet. While a
 backup runs it says "Backing up...", and it updates when the run ends.
 
+**Each run** and **Storage needed** say how much room your backups take: see
+[How much room backups need](#how-much-room-backups-need).
+
 ## Retention
 
 **Default retention (days)** deletes each app's backups older than that,
@@ -43,6 +46,33 @@ To keep backups longer or shorter on one destination, set **Retention (days)**
 on its card under Settings > Destinations - for example 28 days on Local
 Storage and 7 on Google Drive. Left blank, a destination uses the default. Once
 a destination has its own, the Overview shows each destination's retention.
+
+## How much room backups need
+
+On the Overview, **Each run** is what one run uploads: each app's largest
+backup still kept, Backuparr's own included, added up. An app with no backup
+yet isn't counted; the tile says how many there are.
+
+**Storage needed** is the room on each destination: each run times the most
+backups of each app its retention keeps, plus the newest backup of each app
+that's switched off, which retention keeps too. Retention keeps the scheduled
+runs within its days, and one more while a run uploads, before it deletes the
+oldest: a daily schedule with 7 days' retention keeps up to 8 backups of each
+app. Beside it are what Backuparr's backups use there now and the destination's
+free space, shown as "only ... free" when it isn't enough. On Google Drive,
+OneDrive and Dropbox, the free space is the whole account's.
+
+Under each retention field in Settings, a line says how many backups of each
+app it keeps and the room they need. It changes as you change the retention,
+the schedule or which apps are on, before you save.
+
+It's an estimate:
+
+- Each app counts at its largest backup still kept. After Plex, Jellyfin or
+  Emby stop backing up their metadata, say, the estimate stays high until
+  retention deletes the larger backups.
+- **Run backup now** adds a backup of each app it backs up, kept until it's
+  older than the retention.
 
 ## The check before upload
 

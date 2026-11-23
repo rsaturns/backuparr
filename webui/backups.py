@@ -19,6 +19,7 @@ import rclone_util
 import runlog
 import restore_actions as ra
 import restore_version as rv
+import storage_estimate
 from apps.http_headers import app_connection_config, same_origin
 from backup import branded, humanize_error, log_failure
 from config_store import (DEST_NAMES, SECRET_EXTRA_FIELDS, app_meta, instance_ids, instance_type, key_required, load_config,
@@ -123,6 +124,54 @@ def api_history(dest_id):
     for entries in history.values():
         entries.sort(key=lambda e: _when(e["mod_time"]), reverse=True)
     return jsonify(history)
+
+
+@bp.get("/api/storage")
+def api_storage():
+    """The Overview's Storage tiles: storage_estimate.overview() for the
+    saved settings."""
+    return jsonify(storage_estimate.overview(load_config()))
+
+
+# Settings sends its default retention and each destination's (a handful),
+# and the apps a run backs up (a few dozen).
+_MAX_ESTIMATES = 10
+_MAX_APPS = 1000
+
+
+@bp.post("/api/storage/estimate")
+def api_storage_estimate():
+    """The hints under Settings' retention fields, for what's on the form
+    before it's saved: {"cron_schedule", "retention_days": [days, ...],
+    "apps": [app or instance id, ...]} - the apps a run backs up, Backuparr
+    included."""
+    data = json_object()
+    schedule = data.get("cron_schedule")
+    if not isinstance(schedule, str):
+        return jsonify({"error": "cron_schedule must be text"}), 400
+    days_list = data.get("retention_days")
+    if (not isinstance(days_list, list) or len(days_list) > _MAX_ESTIMATES
+            or not all(isinstance(d, int) and not isinstance(d, bool) and d >= 1 for d in days_list)):
+        return jsonify({"error": "retention_days must be a list of positive numbers"}), 400
+    apps = data.get("apps")
+    if (not isinstance(apps, list) or len(apps) > _MAX_APPS
+            or not all(isinstance(a, str) and destination_util.is_backup_folder(a) for a in apps)):
+        return jsonify({"error": "apps must be a list of app ids"}), 400
+    return jsonify(storage_estimate.estimate(schedule, list(dict.fromkeys(days_list)), list(dict.fromkeys(apps))))
+
+
+@bp.get("/api/storage/<dest_id>/space")
+def api_storage_space(dest_id):
+    """A destination's total and free space, for the Overview's Storage
+    tile: {"total", "free"}, each None when it doesn't say."""
+    cfg = load_config()
+    root, error = _destination_root_or_error(cfg, dest_id)
+    if error:
+        return error
+    try:
+        return jsonify(rclone_util.about(root))
+    except rclone_util.RcloneError as exc:
+        return jsonify({"error": humanize_error(exc)}), 502
 
 
 def _not_a_backup(app_name, filename):

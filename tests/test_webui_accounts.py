@@ -150,6 +150,7 @@ PROTECTED = [
     ("POST", "/api/backup/run"), ("POST", "/api/backup/cancel"), ("GET", "/api/backup/status"),
     ("GET", "/api/history/local"), ("DELETE", "/api/history/local/radarr/a.zip"),
     ("GET", "/api/history/local/radarr/a.zip/download"),
+    ("GET", "/api/storage"), ("POST", "/api/storage/estimate"), ("GET", "/api/storage/local/space"),
     ("GET", "/api/restore/status"), ("GET", "/api/restore/local/radarr/backups"),
     ("POST", "/api/restore/local/sabnzbd/preview"), ("POST", "/api/restore/local/radarr"), ("POST", "/api/restore/local/radarr/check"),
     ("GET", "/api/runlogs"), ("GET", "/api/secrets-key"), ("POST", "/api/backuparr/restore"), ("POST", "/api/password"), ("POST", "/api/secrets-key/acknowledge"), ("GET", "/api/runlogs/radarr/radarr_20261101_030000"),
