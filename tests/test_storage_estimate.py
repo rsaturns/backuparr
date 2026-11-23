@@ -155,6 +155,53 @@ def test_backups_on_a_destination_thats_off_dont_count():
     assert storage_estimate.overview(cfg, NOW)["destinations"]["local"]["used"] == 450
 
 
+def _switched_off(dests=("local",)):
+    _record("lidarr", "20261001_030000", 70, dests)   # older than the retention and not its newest: goes next run
+    _record("lidarr", "20261120_030000", 30, dests)   # younger than 7 days: ages out over the coming days
+    _record("lidarr", "20261122_030000", 20, dests)   # its newest: kept for good
+    _record("radarr", "20261123_030000", 100, dests)
+
+
+@pytest.mark.parametrize("days, kept", [(1, 20), (7, 30 + 20), (60, 70 + 30 + 20)])
+def test_a_switched_off_apps_backups_count_until_they_age_out(days, kept):
+    """Retention keeps a switched-off app's backups younger than the days, and
+    its newest for good: the room needed counts what it keeps, not only the
+    newest, or it says less than is used until the others age out."""
+    _switched_off()
+    result = storage_estimate.estimate("0 3 * * *", days, {"local": (True, None)}, ["radarr"], NOW)
+    runs = storage_estimate.kept_runs("0 3 * * *", days, NOW)[0]
+    assert result["default"]["needed"] == result["destinations"]["local"]["needed"] == 100 * (runs + 1) + kept
+
+
+def test_each_destination_counts_switched_off_apps_with_its_own_days():
+    _switched_off(("local", "dropbox"))
+    form = {"local": (True, 60), "dropbox": (True, None), "onedrive": (True, None)}
+    result = storage_estimate.estimate("0 3 * * *", 7, form, ["radarr"], NOW)
+    assert result["destinations"]["local"]["needed"] == 100 * 61 + 70 + 30 + 20
+    assert result["destinations"]["dropbox"]["needed"] == 100 * 8 + 30 + 20
+    assert result["destinations"]["onedrive"]["needed"] == 100 * 8  # each run goes there too; none of Lidarr's is there
+    assert result["default"]["needed"] == 100 * 8 + 30 + 20  # the most a destination using the default keeps
+
+
+def test_a_backup_whose_date_retention_cant_read_always_counts():
+    _record("lidarr", "20261122_030000", 20)
+    manifest.record("lidarr", "lidarr_20261399_030000.zip", ["local"], app_version="1", sha256="a", size=5,
+                    backuparr_version="3")  # month 13: retention never deletes it
+    result = storage_estimate.estimate("0 3 * * *", 7, {"local": (True, None)}, [], NOW)
+    assert result["default"]["needed"] == 20 + 5
+
+
+def test_needed_covers_used_once_an_app_is_switched_off():
+    """The lab's case: Unraid switched off with three recent backups on Local."""
+    for stamp in ("20261121_030000", "20261122_030000", "20261123_030000"):
+        _record("unraid", stamp, 1000)
+    _record("radarr", "20261123_030000", 100)
+    cfg = _cfg(self_backup=False)
+    result = storage_estimate.overview(cfg, NOW)["destinations"]["local"]
+    assert result["used"] == 3100 and result["needed"] >= result["used"]
+    assert result["needed"] == 100 * 8 + 3000
+
+
 def test_backuparrs_own_backup_keeps_one_copy_fewer():
     _record("backuparr", "20261123_030000", 10)
     result = storage_estimate.estimate("0 3 * * *", 7, {"local": (True, None)}, ["backuparr"], NOW)
