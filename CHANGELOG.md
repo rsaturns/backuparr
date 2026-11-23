@@ -5,74 +5,23 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Added
+## [3.0.0] - 2026-11-23
 
-- How much room backups need: the Overview shows what each run uploads and, for each destination, the room its retention needs, what Backuparr's backups use there and its free space ("only ... free" when it won't fit), and a line under each retention field in Settings says how many backups of each app it keeps and their size, as you change it (#248). See https://rsaturns.github.io/backuparr/backups/#how-much-room-backups-need
-
-### Fixed
-
-- Retention measures a backup's age from the minute its run started, so a quick run (under 20 seconds) no longer leaves one more backup from the same time days ago: a daily schedule with 7 days' retention keeps 7 backups of each app, not sometimes 8 (#248).
-
-## [3.0.0-beta.4] - 2026-11-23
-
-### Changed
-
-- certifi 2026.11.20 (the certificate authorities Backuparr trusts for HTTPS) and charset-normalizer 3.5.3 (#245).
-
-### Security
-
-- Each released image comes with signed build provenance and a list of every package in it (an SBOM), and is built from scratch, tested and scanned on amd64 and arm64 before it's published: check one with `gh attestation verify oci://ghcr.io/rsaturns/backuparr:<version> --owner rsaturns` (#243). See https://rsaturns.github.io/backuparr/security-principles/#checking-an-image
-- The image installs Alpine's security updates when it's built, so fixes no longer wait for a new Python base image: it now has zlib 1.4 and OpenSSL 3.5.9-r1 (CVE-2026-4738, CVE-2026-95691, CVE-2026-95692, CVE-2026-107496) (#244).
-
-## [3.0.0-beta.3] - 2026-11-14
-
-### Fixed
-
-- Home Assistant: a backup no longer ends with "couldn't delete Backuparr's copy (Failed to list backups)" when another of Home Assistant's backup locations, such as Home Assistant Cloud or Synology DSM, can't be reached: the copy was deleted, and only the local location's answer now counts. The log names the location that couldn't be reached (#238).
-
-## [3.0.0-beta.2] - 2026-11-14
-
-### Changed
-
-- At most two password checks and two uploads of Backuparr's own backup run at once, so a burst of sign-ins or uploads can't use up a small server's memory or disk; another upload is told "Busy - try again in a moment" (#228).
-- Backuparr's own files (its settings, login and keys) are flushed to disk when they're written, so a power cut can't leave one empty, and a destination listing, delete or connection change from the web UI ends after 5 minutes (#229).
-- Every Python package in the image is pinned to an exact version with its hashes, so each build installs what was tested (#230).
-- History, retention and backups do less work: the backup record and run logs are read again only when they change, retention updates the record once, an encrypted backup isn't read again for its checksum, and History syncs rclone's settings only when they changed (#231).
-- The docs read better, on a phone too: the Features page lists the apps in two columns, the Apps page has a short table for each category, What each restore does is two lists, the Configuration reference is split into sections, long sections are broken up, and trusting a self-signed certificate is one section in Settings (#218, #219, #220, #221). See https://rsaturns.github.io/backuparr/apps/
-- The setup guides on the destination cards are shorter, one or two sentences a step; the docs' Destinations page has the reasons (#222). See https://rsaturns.github.io/backuparr/destinations/
-
-### Fixed
-
-- History lists, downloads and deletes only Backuparr's own backups: a file kept in an app's folder, or one in a subfolder, is no longer listed, so it can't be deleted from History (#223).
-- Reset waits for a running backup or restore ("A backup or restore is running - reset when it finishes") instead of letting it write back what the reset cleared (#224).
-- Restore to a different target no longer sends the Service Authentication headers to a different scheme, host or port, as with the saved key and passwords (#225).
-- A request whose body isn't a JSON object gets a plain error instead of a server error, and every text setting is checked to be text (#226).
-- Run & Status shows only the run's own log lines, and a scheduled backup skipped because one is already running is logged (#227).
-- Google Drive's setup guide opens again after another destination's guide was open: it stopped with an error until the page was reloaded.
-- Docs: the Plex page's Backups and restores section no longer shows inside a bullet; archive names, the Configuration reference, Encryption at rest and QNAP QuTS hero's restore link are right for 3.0; and the docs' changelog, SECURITY.md and Edit this page links open the 3.0 beta's files, not 2.5.x's (#216, #217).
-
-### Security
-
-- Restoring Emby, Plex, Seerr, LazyLibrarian, Vaultwarden, Jellyfin or Bazarr no longer writes through a symbolic link in the app's mounted folder: a link at a file or folder the restore writes stops the restore before anything is written, so a compromised app can't use a restore to overwrite files outside its folder, such as Backuparr's own login. 3.0.0-beta, 2.5.7 and earlier are affected, and 2.5.x won't get a fix: update to 3.0.0-beta.2. See https://github.com/rsaturns/backuparr/security/advisories/GHSA-r2gf-f7v8-j7g2
-
-## [3.0.0-beta] - 2026-11-13
-
-**"You get a backup! And YOU get a backup! Everything you host gets a backup!"** 3.0.0-beta is the biggest Backuparr yet: it grows past the media apps to the rest of what you host.
+**"You get a backup! And YOU get a backup! Everything you host gets a backup!"** 3.0.0 is the biggest Backuparr yet: it grows past the media apps to the rest of what you host.
 
 **More of your stack:** your network, passwords, smart home, photos and servers join the party - Pi-hole, OPNsense, pfSense, UniFi, Vaultwarden, self-hosted Bitwarden, Home Assistant, Immich, Unraid, Synology DSM and QNAP QuTS hero.
 
-**Locked down:** every backup is encrypted with your key before it's uploaded, and the web UI gets HTTPS on port 8991 with a certificate Backuparr makes itself.
+**Locked down:** every backup is encrypted with your key before it's uploaded, the web UI gets HTTPS on port 8991 with a certificate Backuparr makes itself, and every image comes with signed build provenance.
 
 **Friends with Home Assistant:** an integration with a sensor for every app that lights up when its backup fails.
 
-**Tidier:** apps grouped by category, a ? on every card that opens its setup guide, an At a Glance line on the Overview, and History picks several backups at once.
+**Tidier:** apps grouped by category, a ? on every card that opens its setup guide, an At a Glance line on the Overview, how much room your backups need, and History picks several backups at once.
 
-**Beta testers wanted:** 3.0 has been through a small army of test VMs, but your setup is weirder than ours (that's a compliment). Take it for a spin with `rsaturns/backuparr:3.0.0-beta`, especially if you run one of the new apps, and tell us what breaks: https://github.com/rsaturns/backuparr/issues
-
-**Not sure? Stay on 2.5.7.** 3.0 changes a lot - a new port, encrypted backups, everyone signs in once more - so if you'd rather not be first through the door, wait until 3.x is out of beta. `latest` stays on 2.5.7 until then, so automatic updates won't move you. Updating? Read this first: https://rsaturns.github.io/backuparr/getting-started/updating/#updating-to-300-beta
+**Updating from 2.5.x? Read this first:** 3.0 changes a lot - a new port, encrypted backups, everyone signs in once more - and `latest` moves to 3.0.0, so a container that follows it updates at its next pull; to stay on 2.5.7 for now, set its image to `rsaturns/backuparr:2.5.7`. https://rsaturns.github.io/backuparr/getting-started/updating/#updating-to-300
 
 ### Added
 
+- How much room backups need: the Overview shows what each run uploads and, for each destination, the room its retention needs, what Backuparr's backups use there and its free space ("only ... free" when it won't fit), and a line under each retention field in Settings says how many backups of each app it keeps and their size, as you change it (#248). See https://rsaturns.github.io/backuparr/backups/#how-much-room-backups-need
 - Include metadata on the Jellyfin, Emby and Plex cards, off by default: backups also take the server's metadata - posters, artwork and people images, artwork set by hand, and Jellyfin's and Emby's saved metadata - so a restored server doesn't download it all again. Jellyfin's comes from its own backup's Metadata option (Jellyfin 10.11.7 and newer); Emby's metadata folder and Plex's Metadata folder are read from their mounted data folder (Plex's Media folder of preview thumbnails stays out). History and the Restore tab show which backups have it. Thanks to @zenmaster14 for the suggestion (#196). See https://rsaturns.github.io/backuparr/apps/jellyfin/
 - A ? on every app's card in Settings opens its page in the docs, at Setting it up: where the app's API key or login comes from, the least access Backuparr needs and any folder to mount. Every app's page now has that section, SABnzbd has a page of its own, and the Backuparr menu in the lower right links the docs. App icons can follow the theme: QNAP QuTS hero's switches to a light one in the dark theme (#199). See https://rsaturns.github.io/backuparr/apps/
 - QNAP QuTS hero (h5.2 and newer) backups of its system configuration file - its settings (general settings, users and groups, shared folder settings and privileges, network, the list of installed apps), not the data in its shared folders - with the Control Panel's own export, signed in as an administrator or an account with the System Management role. An account with 2-step verification gives a code once on Test connection, then QuTS hero remembers the sign-in. Always encrypted, restored by hand in the Control Panel with the Restore tab's download and steps; a self-signed certificate is trusted on the card (#169). See https://rsaturns.github.io/backuparr/apps/qnap/
@@ -81,7 +30,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A Security principles page in the docs: how Backuparr protects your backups and credentials, what leaves your network, and what's left to you (#163). See https://rsaturns.github.io/backuparr/security-principles/
 - Unraid backups of the boot device (USB flash drive or internal boot), with Unraid's own Boot Device Backup signed in as root: the zip Unraid makes, kept whole so the USB Flash Creator's Use custom restores it, with the license, password hashes, SSH and WireGuard keys that Unraid Connect's backup leaves out. Always encrypted, restored by hand with the Restore tab's download and steps; a self-signed certificate is trusted on the card (#152). See https://rsaturns.github.io/backuparr/apps/unraid/
 - UniFi backups, signed in as a local admin: on UniFi OS (consoles and UniFi OS Server) UniFi OS's own backup of everything (a Super Admin) or, as an option, UniFi Network's only (Network: Full Management); on the standalone UniFi Network Server its Network backup. A Network backup's History option keeps settings only or 7, 30, 90 or 365 days or all of the statistics. Always encrypted, restored by hand with the Restore tab's download and steps; a self-signed certificate is trusted on the card (#161). See https://rsaturns.github.io/backuparr/apps/unifi/
-- Home Assistant (2025.5 and newer) backups and restores over its own backup API, with an administrator's long-lived access token: the card has the options of Home Assistant's backup page (Settings, History, and on HA OS and Supervised Media, Share folder, Local apps folder and Apps), Backuparr deletes the copy it makes in Home Assistant, and backups are always encrypted. A restore uploads the backup and Home Assistant restarts to finish it, also onto a new install that isn't set up yet; a self-signed certificate is trusted on the card (#155). See https://rsaturns.github.io/backuparr/apps/homeassistant/
+- Home Assistant (2025.5 and newer) backups and restores over its own backup API, with an administrator's long-lived access token: the card has the options of Home Assistant's backup page (Settings, History, and on HA OS and Supervised Media, Share folder, Local apps folder and Apps), Backuparr deletes the copy it makes in Home Assistant (another backup location that can't be reached, such as Home Assistant Cloud, doesn't fail that; the log names it), and backups are always encrypted. A restore uploads the backup and Home Assistant restarts to finish it, also onto a new install that isn't set up yet; a self-signed certificate is trusted on the card (#155, #238). See https://rsaturns.github.io/backuparr/apps/homeassistant/
 - Immich (2.5.0 and newer) database backups and restores over its API: Backuparr runs Immich's database dump job, downloads the dump and deletes it in Immich; a restore runs in Immich's maintenance mode, also onto a new install that has no admin yet. The API key needs job.create, queue.read, maintenance, backup.download, backup.upload and backup.delete; photos and videos aren't in the backup (#154). See https://rsaturns.github.io/backuparr/apps/immich/
 - OPNsense (24.7 and newer) backups of config.xml over its API, with an API key whose user needs only Diagnostics: Configuration History and Lobby: Dashboard (for the firmware version recorded with each backup); always encrypted, restored by hand with the Restore tab's download and steps (#153). See https://rsaturns.github.io/backuparr/apps/opnsense/
 - pfSense (CE and Plus) backups of config.xml from its web UI's Backup & Restore page, signed in the way Netgate documents for scripted backups, as a user with WebCfg - Diagnostics: Backup & Restore and WebCfg - System: Login / Logout / Dashboard (for the version); always encrypted, restored by hand with the Restore tab's download and steps (#153). See https://rsaturns.github.io/backuparr/apps/pfsense/
@@ -99,9 +48,15 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- At most two password checks and two uploads of Backuparr's own backup run at once, so a burst of sign-ins or uploads can't use up a small server's memory or disk; another upload is told "Busy - try again in a moment" (#228).
+- Backuparr's own files (its settings, login and keys) are flushed to disk when they're written, so a power cut can't leave one empty, and a destination listing, delete or connection change from the web UI ends after 5 minutes (#229).
+- Every Python package in the image is pinned to an exact version with its hashes, so each build installs what was tested (#230).
+- History, retention and backups do less work: the backup record and run logs are read again only when they change, retention updates the record once, an encrypted backup isn't read again for its checksum, and History syncs rclone's settings only when they changed (#231).
+- The docs read better, on a phone too: the Features page lists the apps in two columns, the Apps page has a short table for each category, What each restore does is two lists, the Configuration reference is split into sections, long sections are broken up, and trusting a self-signed certificate is one section in Settings (#216-#221). See https://rsaturns.github.io/backuparr/apps/
+- The setup guides on the destination cards are shorter, one or two sentences a step; the docs' Destinations page has the reasons (#222). See https://rsaturns.github.io/backuparr/destinations/
 - Signing out ends the session on the server too, so a copy of its cookie stops working; the server keeps the list of signed-in browsers in sessions.json. Sign in again once after updating. See https://rsaturns.github.io/backuparr/security/#login
-- Restore to a different target needs that app's key when its URL isn't the app's own: the saved key, login and passwords only go to the app's own URL. See https://rsaturns.github.io/backuparr/restoring/
-- Settings checks what it saves: an enabled app's URL and a changed Notify URL must start with http:// or https://, and an app's URL, key, username and password must be text.
+- Restore to a different target needs that app's key when its URL isn't the app's own: the saved key, login, passwords and Service Authentication headers only go to the app's own URL, with the same scheme, host and port (#225). See https://rsaturns.github.io/backuparr/restoring/
+- Settings checks what it saves: an enabled app's URL and a changed Notify URL must start with http:// or https://, and every text setting must be text; a request whose body isn't a JSON object gets a plain error instead of a server error (#226).
 - Messages in the web UI name each app as its card does, with the product's own capitalisation: "OPNsense: ...", "pfSense 2.8.1 reachable", "SABnzbd restore complete", and Run & Status's OK and Failed lists say "Radarr (4K)" in place of the app's id (#191).
 - Settings shows a certificate's SHA-256 fingerprint in a tooltip on the ? next to SHA-256, as four rows of 8 bytes, on the Backuparr card and on the cards of apps with a self-signed certificate (#189).
 - The Server category has its own icon in place of an emoji, outlined on the light theme and filled on the dark; the Run & Status and Restore pickers head each category with its name in bold, without an emoji (#189).
@@ -114,13 +69,18 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Backuparr's own backup has its own Backuparr card under Server, in place of the checkbox in Schedule & Notifications; Run & Status can back it up on its own, a full run lists it with the apps, and History shows its backups under Server (#165).
 - Headings in title case, e.g. Run & Status, Schedule & Notifications, Media Management, Local Storage (#148).
 - New tagline: "Everything you host, backed up.", as Backuparr covers more than media apps.
-- rclone 1.76.0 (from 1.75.0, taking the security fixes in 1.75.1 and 1.75.2), croniter 7.0.0, and the release workflow's docker/login-action 4.8.0 and softprops/action-gh-release 3.0.4 (#166).
+- croniter 7.0.0 (#166), certifi 2026.11.20 (the certificate authorities Backuparr trusts for HTTPS) and charset-normalizer 3.5.3 (#245); rclone stays at 1.76.0, as in 2.5.7.
 - With croniter 7.0, a hand-typed schedule step that starts at a field's maximum, such as `59/15`, means only that value; schedules made with the picker are unchanged (#166).
 - Deleting on Google Drive and OneDrive (retention, History) is now permanent, so deleted backups no longer fill your cloud storage from the trash or recycle bin, which both count against it.
-- The `latest` image tag follows full releases only: a beta such as 3.0.0-beta is published under its own tag, so containers that update from `latest` stay on the last full release.
+- The `latest` image tag follows full releases only: a beta is published under its own tag (such as 3.0.0-beta.4), so containers that update from `latest` stay on the last full release.
 
 ### Fixed
 
+- Retention measures a backup's age from the minute its run started, so a quick run (under 20 seconds) no longer leaves one more backup from the same time days ago: a daily schedule with 7 days' retention keeps 7 backups of each app, not sometimes 8 (#248).
+- History lists, downloads and deletes only Backuparr's own backups: a file kept in an app's folder, or one in a subfolder, is no longer listed, so it can't be deleted from History (#223).
+- Reset waits for a running backup or restore ("A backup or restore is running - reset when it finishes") instead of letting it write back what the reset cleared (#224).
+- Run & Status shows only the run's own log lines, and a scheduled backup skipped because one is already running is logged (#227).
+- Google Drive's setup guide opens again after another destination's guide was open: it stopped with an error until the page was reloaded.
 - A saved schedule that isn't valid no longer just stops backups without a word: the Overview and Run & Status say "Your backup schedule isn't valid any more. Check it in Settings.", and the log says so once (#166).
 - On a phone, Prowlarr's card no longer runs off the screen: its buttons wrap onto a second line.
 - On a phone, Run & Status no longer scrolls sideways during a run: its buttons wrap onto a second line.
@@ -129,6 +89,12 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The footer says "Update Available" only when the latest release is newer, not for a newer build or a beta.
 - A full Dropbox or OneDrive now gets the "the destination is out of space" hint.
 - An app answering HTTP 401 or 403 now also points at the Service Authentication headers when some are set: a proxy refusing a request looks the same as a wrong API key.
+
+### Security
+
+- Restoring Emby, Plex, Seerr, LazyLibrarian, Vaultwarden, Jellyfin or Bazarr no longer writes through a symbolic link in the app's mounted folder: a link at a file or folder the restore writes stops the restore before anything is written, so a compromised app can't use a restore to overwrite files outside its folder, such as Backuparr's own login. 2.5.7 and earlier (and 3.0.0-beta) are affected, and 2.5.x won't get a fix: update to 3.0.0. See https://github.com/rsaturns/backuparr/security/advisories/GHSA-r2gf-f7v8-j7g2
+- Each released image comes with signed build provenance and a list of every package in it (an SBOM), and is built from scratch, tested and scanned on amd64 and arm64 before it's published: check one with `gh attestation verify oci://ghcr.io/rsaturns/backuparr:<version> --owner rsaturns` (#243). See https://rsaturns.github.io/backuparr/security-principles/#checking-an-image
+- The image installs Alpine's security updates when it's built, so fixes no longer wait for a new Python base image: it now has zlib 1.4 and OpenSSL 3.5.9-r1 (CVE-2026-4738, CVE-2026-95691, CVE-2026-95692, CVE-2026-107496) (#244).
 
 ## [2.5.7] - 2026-11-13
 
