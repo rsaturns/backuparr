@@ -10,7 +10,7 @@ import zipfile
 
 from datetime import datetime, timezone
 
-from flask import after_this_request, Blueprint, jsonify, request, send_file
+from flask import after_this_request, Blueprint, jsonify, send_file
 
 import archive_crypto
 import destination_util
