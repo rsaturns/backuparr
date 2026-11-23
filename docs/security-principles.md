@@ -178,7 +178,7 @@ lists each one and why.
 
 ## Checking an image
 
-Each image released after 3.0.0-beta.3 comes with signed build provenance:
+Each image from 3.0.0-beta.4 on comes with signed build provenance:
 proof that it was built by this repository's release workflow, from the
 tagged code. With the [GitHub CLI](https://cli.github.com/):
 
