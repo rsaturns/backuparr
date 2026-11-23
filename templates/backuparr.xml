@@ -66,7 +66,7 @@
 - Backuparr's own backup has its own Backuparr card under Server, in place of the checkbox in Schedule &amp; Notifications; Run &amp; Status can back it up on its own, a full run lists it with the apps, and History shows its backups under Server (#165).
 - Headings in title case, e.g. Run &amp; Status, Schedule &amp; Notifications, Media Management, Local Storage (#148).
 - New tagline: "Everything you host, backed up.", as Backuparr covers more than media apps.
-- croniter 7.0.0 (#166), certifi 2026.11.20 (the certificate authorities Backuparr trusts for HTTPS) and charset-normalizer 3.5.3 (#245); rclone stays at 1.76.0, as in 2.5.7.
+- croniter 7.0.0 (#166), certifi 2026.11.20 (the certificate authorities Backuparr trusts for HTTPS) and charset-normalizer 3.5.3 (#245).
 - With croniter 7.0, a hand-typed schedule step that starts at a field's maximum, such as 59/15, means only that value; schedules made with the picker are unchanged (#166).
 - Deleting on Google Drive and OneDrive (retention, History) is now permanent, so deleted backups no longer fill your cloud storage from the trash or recycle bin, which both count against it.
 - The latest image tag follows full releases only: a beta is published under its own tag (such as 3.0.0-beta.4), so containers that update from latest stay on the last full release.

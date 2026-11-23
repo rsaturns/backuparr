@@ -17,7 +17,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Tidier:** apps grouped by category, a ? on every card that opens its setup guide, an At a Glance line on the Overview, how much room your backups need, and History picks several backups at once.
 
-**Updating from 2.5.x? Read this first:** 3.0 changes a lot - a new port, encrypted backups, everyone signs in once more - and `latest` moves to 3.0.0, so a container that follows it updates at its next pull; to stay on 2.5.7 for now, set its image to `rsaturns/backuparr:2.5.7`. https://rsaturns.github.io/backuparr/getting-started/updating/#updating-to-300
+**Updating from 2.5.x? Read this first:** 3.0 changes a lot - a new port, encrypted backups, everyone signs in once more - and `latest` moves to 3.0.0, so a container that follows it updates at its next pull. https://rsaturns.github.io/backuparr/getting-started/updating/#updating-to-300
 
 ### Added
 
@@ -69,7 +69,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Backuparr's own backup has its own Backuparr card under Server, in place of the checkbox in Schedule & Notifications; Run & Status can back it up on its own, a full run lists it with the apps, and History shows its backups under Server (#165).
 - Headings in title case, e.g. Run & Status, Schedule & Notifications, Media Management, Local Storage (#148).
 - New tagline: "Everything you host, backed up.", as Backuparr covers more than media apps.
-- croniter 7.0.0 (#166), certifi 2026.11.20 (the certificate authorities Backuparr trusts for HTTPS) and charset-normalizer 3.5.3 (#245); rclone stays at 1.76.0, as in 2.5.7.
+- croniter 7.0.0 (#166), certifi 2026.11.20 (the certificate authorities Backuparr trusts for HTTPS) and charset-normalizer 3.5.3 (#245).
 - With croniter 7.0, a hand-typed schedule step that starts at a field's maximum, such as `59/15`, means only that value; schedules made with the picker are unchanged (#166).
 - Deleting on Google Drive and OneDrive (retention, History) is now permanent, so deleted backups no longer fill your cloud storage from the trash or recycle bin, which both count against it.
 - The `latest` image tag follows full releases only: a beta is published under its own tag (such as 3.0.0-beta.4), so containers that update from `latest` stay on the last full release.
