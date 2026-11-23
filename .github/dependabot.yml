@@ -1,16 +1,54 @@
 version: 2
+# Dependabot reads this file from main (the default branch) only, and each
+# entry watches one branch. During the 3.0 beta main is the 2.5.x line,
+# which gets no more fixes, so every entry watches release-3.0.0, where the
+# work happens. A new long-lived release line needs its own entries (a
+# short patch branch off main doesn't), and at 3.0.0 final these go back
+# to main. The weekly security scan (.github/workflows/security-scan.yml)
+# fails while an entry names a branch that no longer exists.
+#
+# One grouped PR per ecosystem a week. A new pip or Actions version waits
+# 7 days before Dependabot proposes it, so a hijacked release is usually
+# caught and pulled before it reaches us. Docker keeps GitHub's 3-day
+# default: the python image comes from Docker's official-images builds and
+# carries the Alpine and Python fixes we want sooner. GitHub's security
+# updates don't wait, but they only ever target main.
+#
+# Not covered: rclone (the Dockerfile's RCLONE_VERSION is an ARG Dependabot
+# can't see) and the Trivy version the workflows pin - the weekly scan
+# flags a newer one of either.
 updates:
   - package-ecosystem: "pip"
     directory: "/"
+    target-branch: "release-3.0.0"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
+    # Every package requirements*.txt pins, not just the ones the .in
+    # files name.
+    allow:
+      - dependency-type: "all"
+    groups:
+      pip:
+        patterns: ["*"]
 
   - package-ecosystem: "docker"
     directory: "/"
+    target-branch: "release-3.0.0"
     schedule:
       interval: "weekly"
+    groups:
+      docker:
+        patterns: ["*"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
+    target-branch: "release-3.0.0"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
+    groups:
+      github-actions:
+        patterns: ["*"]
