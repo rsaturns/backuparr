@@ -7,7 +7,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Security
 
-- Each released image comes with signed build provenance and a list of every package in it (an SBOM), and is built from scratch and scanned before it's published: check one with `gh attestation verify oci://ghcr.io/rsaturns/backuparr:<version> --owner rsaturns` (#243). See https://rsaturns.github.io/backuparr/security-principles/#checking-an-image
+- Each released image comes with signed build provenance and a list of every package in it (an SBOM), and is built from scratch, tested and scanned on amd64 and arm64 before it's published: check one with `gh attestation verify oci://ghcr.io/rsaturns/backuparr:<version> --owner rsaturns` (#243). See https://rsaturns.github.io/backuparr/security-principles/#checking-an-image
 
 ## [3.0.0-beta.3] - 2026-11-14
 
