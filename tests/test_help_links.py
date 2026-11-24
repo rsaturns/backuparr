@@ -100,4 +100,4 @@ def test_a_dark_theme_icon_is_shown_next_to_the_light_one(authed_client):
 
 def test_the_dark_icon_reaches_the_ui_metadata(authed_client):
     html = authed_client.get("/").get_data(as_text=True)
-    assert '"icon_dark": "qnap-light.svg"' in html and '"help_url": "https://rsaturns.github.io/backuparr/apps/qnap/#setting-it-up"' in html
+    assert '"icon_dark": "qnap-light.svg"' in html and '"help_url": "https://docs.backuparr.com/apps/qnap/#setting-it-up"' in html

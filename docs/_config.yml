@@ -2,8 +2,8 @@
 # it from main.
 title: Backuparr
 description: Scheduled, encrypted backups of the apps you host, to local storage and the cloud.
-url: https://rsaturns.github.io
-baseurl: /backuparr
+url: https://docs.backuparr.com
+baseurl: ""
 permalink: pretty
 
 remote_theme: just-the-docs/just-the-docs@v0.12.0

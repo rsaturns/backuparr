@@ -53,7 +53,7 @@ scripts/smoke_test.sh backuparr:dev    # the same container check CI runs
 - The web UI is plain JavaScript and CSS with no framework or build step -
   please keep it that way. API calls that change state must send JSON.
 - Update the docs in `docs/` (published as the
-  [documentation site](https://rsaturns.github.io/backuparr/)) when behaviour
+  [documentation site](https://docs.backuparr.com/)) when behaviour
   or setup changes, and add a line under `## [Unreleased]` in
   [CHANGELOG.md](CHANGELOG.md) for anything users will notice. Contributors
   are credited there.

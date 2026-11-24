@@ -743,7 +743,7 @@ def test_every_manual_restore_has_steps_and_a_docs_page():
     assert [m["id"] for m in manual] == ["profilarr", "opnsense", "pfsense", "unifi", "bitwarden", "qnap", "synology", "unraid"]
     for meta in manual:
         info = meta["manual_restore"]
-        assert info["docs"].startswith("https://rsaturns.github.io/backuparr/apps/")
+        assert info["docs"].startswith("https://docs.backuparr.com/apps/")
         assert info["steps"] and all(group["title"] and group["steps"] for group in info["steps"])
         assert all(isinstance(step, str) and step.endswith((".", '."')) for group in info["steps"] for step in group["steps"])
         # Backuparr itself never restores it.
