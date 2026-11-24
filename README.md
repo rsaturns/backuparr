@@ -24,7 +24,7 @@ their folder mounted into Backuparr. See the
 backups and credentials are kept safe:
 [Security principles](https://rsaturns.github.io/backuparr/security-principles/).
 
-**[Documentation](https://rsaturns.github.io/backuparr/)** · [Changelog](CHANGELOG.md)
+**[Website](https://backuparr.com)** · **[Documentation](https://rsaturns.github.io/backuparr/)** · [Changelog](CHANGELOG.md)
 
 If you like Backuparr, give it a ⭐ star - it helps the project grow.
 
