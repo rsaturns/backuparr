@@ -916,14 +916,20 @@ _key_acknowledged = False
 
 def secrets_key_acknowledged():
     """Checked on every API request, so it reads only this one field and
-    remembers a yes."""
+    remembers a yes. No config.json yet is a new install: not saved. One
+    that can't be read counts as saved, as in holds_settings() (#262):
+    otherwise the key would be shown again and every call refused with
+    that, hiding the real error. That yes isn't remembered, so once the
+    file is fixed, or deleted to start over, its own answer counts."""
     global _key_acknowledged
     if not _key_acknowledged:
         try:
             with open(CONFIG_PATH, encoding="utf-8") as f:
                 _key_acknowledged = json.load(f).get("secrets_key_acknowledged") is True
-        except (OSError, ValueError, AttributeError):
+        except FileNotFoundError:
             return False
+        except (OSError, ValueError, AttributeError):
+            return True
     return _key_acknowledged
 
 
