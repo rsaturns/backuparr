@@ -3,8 +3,8 @@
   "@id": "https://github.com/rsaturns/backuparr/blob/main/vex/backuparr.vex.json",
   "author": "Backuparr maintainers <https://github.com/rsaturns/backuparr>",
   "role": "Project maintainer",
-  "timestamp": "2026-11-23T00:00:00Z",
-  "version": 1,
+  "timestamp": "2026-11-24T00:00:00Z",
+  "version": 2,
   "statements": [
     {
       "vulnerability": {
@@ -24,6 +24,22 @@
         },
         {
           "@id": "pkg:docker/rsaturns/backuparr@sha256:226fbc78fc5b33a7289c327b7ecf4dd67d514a8816159a381a1fb53cffedbd45",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/stdlib@1.27.3"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/rsaturns/backuparr@sha256:8950a0e6c42385044117610ec6ca864ca52b4211496b0a0e3433ff3f333572b8",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/stdlib@1.27.3"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/rsaturns/backuparr@sha256:1a1bcdcb84913fcfade7bf02128d0f108734cee7389c1792838788352930cd49",
           "subcomponents": [
             {
               "@id": "pkg:golang/stdlib@1.27.3"
@@ -77,6 +93,22 @@
           ]
         },
         {
+          "@id": "pkg:docker/rsaturns/backuparr@sha256:8950a0e6c42385044117610ec6ca864ca52b4211496b0a0e3433ff3f333572b8",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/go.opentelemetry.io/otel/trace@1.45.0"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/rsaturns/backuparr@sha256:1a1bcdcb84913fcfade7bf02128d0f108734cee7389c1792838788352930cd49",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/go.opentelemetry.io/otel/trace@1.45.0"
+            }
+          ]
+        },
+        {
           "@id": "pkg:oci/backuparr?repository_url=index.docker.io%2Frsaturns%2Fbackuparr",
           "subcomponents": [
             {
@@ -116,6 +148,22 @@
         },
         {
           "@id": "pkg:docker/rsaturns/backuparr@sha256:226fbc78fc5b33a7289c327b7ecf4dd67d514a8816159a381a1fb53cffedbd45",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/go.opentelemetry.io/otel@1.45.0"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/rsaturns/backuparr@sha256:8950a0e6c42385044117610ec6ca864ca52b4211496b0a0e3433ff3f333572b8",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/go.opentelemetry.io/otel@1.45.0"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/rsaturns/backuparr@sha256:1a1bcdcb84913fcfade7bf02128d0f108734cee7389c1792838788352930cd49",
           "subcomponents": [
             {
               "@id": "pkg:golang/go.opentelemetry.io/otel@1.45.0"
@@ -165,6 +213,22 @@
           ]
         },
         {
+          "@id": "pkg:docker/rsaturns/backuparr@sha256:8950a0e6c42385044117610ec6ca864ca52b4211496b0a0e3433ff3f333572b8",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto@0.58.0"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/rsaturns/backuparr@sha256:1a1bcdcb84913fcfade7bf02128d0f108734cee7389c1792838788352930cd49",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto@0.58.0"
+            }
+          ]
+        },
+        {
           "@id": "pkg:oci/backuparr?repository_url=index.docker.io%2Frsaturns%2Fbackuparr",
           "subcomponents": [
             {
@@ -207,6 +271,22 @@
           ]
         },
         {
+          "@id": "pkg:docker/rsaturns/backuparr@sha256:8950a0e6c42385044117610ec6ca864ca52b4211496b0a0e3433ff3f333572b8",
+          "subcomponents": [
+            {
+              "@id": "pkg:apk/alpine/sqlite-libs@3.53.4-r0"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/rsaturns/backuparr@sha256:1a1bcdcb84913fcfade7bf02128d0f108734cee7389c1792838788352930cd49",
+          "subcomponents": [
+            {
+              "@id": "pkg:apk/alpine/sqlite-libs@3.53.4-r0"
+            }
+          ]
+        },
+        {
           "@id": "pkg:oci/backuparr?repository_url=index.docker.io%2Frsaturns%2Fbackuparr",
           "subcomponents": [
             {
@@ -242,6 +322,22 @@
         },
         {
           "@id": "pkg:docker/rsaturns/backuparr@sha256:226fbc78fc5b33a7289c327b7ecf4dd67d514a8816159a381a1fb53cffedbd45",
+          "subcomponents": [
+            {
+              "@id": "pkg:apk/alpine/musl@1.2.6-r3"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/rsaturns/backuparr@sha256:8950a0e6c42385044117610ec6ca864ca52b4211496b0a0e3433ff3f333572b8",
+          "subcomponents": [
+            {
+              "@id": "pkg:apk/alpine/musl@1.2.6-r3"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/rsaturns/backuparr@sha256:1a1bcdcb84913fcfade7bf02128d0f108734cee7389c1792838788352930cd49",
           "subcomponents": [
             {
               "@id": "pkg:apk/alpine/musl@1.2.6-r3"

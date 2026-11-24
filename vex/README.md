@@ -17,14 +17,14 @@ but that don't affect Backuparr, each with the reason (`impact_statement`):
 [Trivy](https://trivy.dev/):
 
 ```sh
-trivy image --vex vex/backuparr.vex.json rsaturns/backuparr:3.0.0
+trivy image --vex vex/backuparr.vex.json rsaturns/backuparr:3.0.1
 ```
 
 [Docker Scout](https://docs.docker.com/scout/) only accepts statements from
 the authors you allow, and only hides `not_affected` findings when asked:
 
 ```sh
-docker scout cves registry://rsaturns/backuparr:3.0.0 \
+docker scout cves registry://rsaturns/backuparr:3.0.1 \
   --vex-location vex/ --vex-author '.*' --only-vex-affected
 ```
 
