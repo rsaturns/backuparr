@@ -1237,7 +1237,9 @@ function newInstanceId(type, name) {
 function updateInstanceCardLabel(card) {
   const meta = appMeta(card.dataset.app);
   const name = card.querySelector(".f-name").value.trim();
-  card.querySelector("h3").textContent = `${meta ? meta.label : card.dataset.app} (${name || "unnamed"})`;
+  const label = `${meta ? meta.label : card.dataset.app} (${name || "unnamed"})`;
+  card.querySelector("h3").textContent = label;
+  card.querySelector(".f-enabled").setAttribute("aria-label", `Back up ${label}`);
 }
 
 function addInstanceCard(appId, values = {}) {
@@ -3883,7 +3885,7 @@ async function loadSabnzbdPreview() {
     note.textContent = "SABnzbd never returns real passwords over its API - enter each server's password to restore it, or leave blank to set it manually later.";
     container.appendChild(note);
     res.servers.forEach((s) => {
-      const row = document.createElement("div");
+      const row = document.createElement("label");
       row.className = "server-pw-row";
       const label = document.createElement("span");
       label.className = "server-label";

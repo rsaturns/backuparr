@@ -8,7 +8,7 @@ nav_order: 2.6
 [Security principles](security-principles.md) says how Backuparr protects
 your backups and credentials. This page looks at it from the other side:
 what an attacker would want, where they could come from, what stops them,
-and what's left. It covers Backuparr 3.0.0 and is reviewed when a change
+and what's left. It covers Backuparr 3.0.1 and is reviewed when a change
 adds a way in, such as a new app, destination or API route.
 
 ## What's worth attacking

@@ -13,7 +13,7 @@ docker compose pull backuparr && docker compose up -d backuparr
 ```
 
 On Unraid, click **Apply update** on the Docker tab. A pinned tag (such as
-`rsaturns/backuparr:3.0.0`) only changes when you edit it.
+`rsaturns/backuparr:3.0.1`) only changes when you edit it.
 
 Updating keeps your settings, login and backups. A backup Backuparr makes of
 itself can only be restored on the same or a newer version, so don't downgrade
@@ -28,7 +28,7 @@ and then restore one.
 [changelog](https://github.com/rsaturns/backuparr/blob/{{ site.gh_edit_branch }}/CHANGELOG.md)
 lists everything that's new.
 
-**On a 3.0 beta?** Set the tag to `latest` or `3.0.0`: a beta's tag doesn't
+**On a 3.0 beta?** Set the tag to `latest` or `3.0.1`: a beta's tag doesn't
 move. Nothing else changes - your settings, login and backups stay.
 
 ### Before you update

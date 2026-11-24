@@ -137,6 +137,12 @@ See [Restoring Backuparr itself](restoring.md#restoring-backuparr-itself).
 
 See [Login and security](security.md).
 
+## Accessibility
+
+- Every switch and field in the web UI has a name screen readers announce,
+  and its text meets the WCAG AA contrast minimum in the light and dark
+  themes.
+
 ## Install
 
 - A Docker image for `linux/amd64` and `linux/arm64`, on Docker Hub and GitHub
