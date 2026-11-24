@@ -21,7 +21,7 @@ def feedback_links(html):
 def test_menu_offers_the_docs_then_bug_report_and_feature_request(index_html):
     labels = [label.strip() for _href, label in feedback_links(index_html)]
     assert labels == ["Documentation", "Report a bug", "Request a feature"]
-    assert feedback_links(index_html)[0][0] == "https://rsaturns.github.io/backuparr/"  # #199
+    assert feedback_links(index_html)[0][0] == "https://docs.backuparr.com/"  # #199
 
 
 def test_links_point_at_templates_that_exist(index_html):
