@@ -10,6 +10,8 @@ remote_theme: just-the-docs/just-the-docs@v0.12.0
 plugins:
   - jekyll-remote-theme
   - jekyll-relative-links
+  # /sitemap.xml for search engines, and a /robots.txt pointing to it.
+  - jekyll-sitemap
 
 logo: https://raw.githubusercontent.com/rsaturns/backuparr/main/webui/static/logo.png
 search_enabled: true
