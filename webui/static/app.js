@@ -3885,7 +3885,7 @@ async function loadSabnzbdPreview() {
     note.textContent = "SABnzbd never returns real passwords over its API - enter each server's password to restore it, or leave blank to set it manually later.";
     container.appendChild(note);
     res.servers.forEach((s) => {
-      const row = document.createElement("div");
+      const row = document.createElement("label");
       row.className = "server-pw-row";
       const label = document.createElement("span");
       label.className = "server-label";

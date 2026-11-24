@@ -106,7 +106,7 @@ def test_every_field_on_the_setup_and_login_pages_has_a_name(isolated_webui):
 def test_the_card_switches_say_what_they_switch(authed_client):
     html = authed_client.get("/").get_data(as_text=True)
     assert 'class="f-enabled" aria-label="Back up Radarr"' in html
-    assert 'class="d-enabled" aria-label="Upload to Google Drive"' in html
+    assert 'class="d-enabled" aria-label="Back up to Google Drive"' in html
 
 
 def test_names_start_with_the_text_they_show(authed_client):
@@ -122,13 +122,26 @@ def test_names_start_with_the_text_they_show(authed_client):
     assert checked  # the account button, at least
 
 
+def _tokens(block):
+    return dict(re.findall(r"--([a-z-]+):\s*(#[0-9a-fA-F]{6})", block))
+
+
 def _colours():
     """{theme: {token: hex}} from the stylesheet's light and dark blocks."""
     css = STYLE.read_text()
     light = re.search(r"^:root \{(.*?)^\}", css, re.S | re.M).group(1)
     dark = re.search(r'^:root\[data-theme="dark"\] \{(.*?)^\}', css, re.S | re.M).group(1)
-    tokens = lambda block: dict(re.findall(r"--([a-z-]+):\s*(#[0-9a-fA-F]{6})", block))  # noqa: E731
-    return {"light": tokens(light), "dark": tokens(dark)}
+    return {"light": _tokens(light), "dark": _tokens(dark)}
+
+
+def test_the_system_dark_theme_matches_the_dark_toggle():
+    """The dark colours are written twice: for a system set to dark, and for
+    the theme toggle. The contrast tests read the toggle's, so the two must
+    stay the same."""
+    css = STYLE.read_text()
+    system = re.search(r'@media \(prefers-color-scheme: dark\) \{\s*:root:not\(\[data-theme="light"\]\) \{(.*?)\}',
+                       css, re.S).group(1)
+    assert _tokens(system) == _colours()["dark"] != {}
 
 
 def _contrast(fg, bg):
