@@ -132,7 +132,7 @@ APP_META = [
         # it restarts - no API. The Restore tab offers the download and these
         # steps instead (#151), from https://profilarr.com/installation/backups.
         "manual_restore": {
-            "docs": "https://rsaturns.github.io/backuparr/apps/profilarr/",
+            "docs": "https://docs.backuparr.com/apps/profilarr/",
             "steps": [
                 {"title": "Restore in Profilarr", "steps": [
                     "Download the backup.",
@@ -311,7 +311,7 @@ APP_META = [
         "always_encrypted": True,
         "pins_certificate": True,
         "manual_restore": {
-            "docs": "https://rsaturns.github.io/backuparr/apps/opnsense/",
+            "docs": "https://docs.backuparr.com/apps/opnsense/",
             "steps": [
                 {"title": "Firewall still running", "steps": [
                     "Download the backup.",
@@ -349,7 +349,7 @@ APP_META = [
         "always_encrypted": True,
         "pins_certificate": True,
         "manual_restore": {
-            "docs": "https://rsaturns.github.io/backuparr/apps/pfsense/",
+            "docs": "https://docs.backuparr.com/apps/pfsense/",
             "steps": [
                 {"title": "Firewall still running", "steps": [
                     "Download the backup.",
@@ -398,7 +398,7 @@ APP_META = [
         "always_encrypted": True,
         "pins_certificate": True,
         "manual_restore": {
-            "docs": "https://rsaturns.github.io/backuparr/apps/unifi/",
+            "docs": "https://docs.backuparr.com/apps/unifi/",
             "steps": [
                 {"title": "UniFi OS", "steps": [
                     "Download the backup: a .unifi file holds everything, a .unf file UniFi Network only.",
@@ -436,7 +436,7 @@ APP_META = [
         "always_encrypted": True,
         "pins_certificate": True,
         "manual_restore": {
-            "docs": "https://rsaturns.github.io/backuparr/apps/bitwarden/",
+            "docs": "https://docs.backuparr.com/apps/bitwarden/",
             "steps": [
                 {"title": "Standard install", "steps": [
                     "Stop Bitwarden with ./bitwarden.sh stop. On a new server, download bitwarden.sh but don't run its install.",
@@ -550,7 +550,7 @@ APP_META = [
         "always_encrypted": True,
         "pins_certificate": True,
         "manual_restore": {
-            "docs": "https://rsaturns.github.io/backuparr/apps/qnap/",
+            "docs": "https://docs.backuparr.com/apps/qnap/",
             "steps": [
                 {"title": "QuTS hero h5.2 or later", "steps": [
                     "Download the backup: QNAP's .bin system configuration file. It holds the NAS's settings, not the data in its shared folders.",
@@ -586,7 +586,7 @@ APP_META = [
         "always_encrypted": True,
         "pins_certificate": True,
         "manual_restore": {
-            "docs": "https://rsaturns.github.io/backuparr/apps/synology/",
+            "docs": "https://docs.backuparr.com/apps/synology/",
             "steps": [
                 {"title": "DSM 7", "steps": [
                     "Download the backup: DSM's .dss configuration file. It holds DSM's settings, not the files in its shared folders.",
@@ -622,7 +622,7 @@ APP_META = [
         "always_encrypted": True,
         "pins_certificate": True,
         "manual_restore": {
-            "docs": "https://rsaturns.github.io/backuparr/apps/unraid/",
+            "docs": "https://docs.backuparr.com/apps/unraid/",
             "steps": [
                 {"title": "New or replacement drive", "steps": [
                     "Download the backup: a .zip of the whole boot device.",
@@ -650,7 +650,7 @@ SELF_APP = {"id": "backuparr", "label": "Backuparr", "icon": "logo.png", "catego
 # Each card's "?" opens its app's page on the docs site at "Setting it up".
 # Radarr, Sonarr, Lidarr and Prowlarr share one page; every other app's page
 # is named after its id. Backuparr's card links to its own backup's section.
-DOCS_URL = "https://rsaturns.github.io/backuparr/"
+DOCS_URL = "https://docs.backuparr.com/"
 SETUP_SECTION = "setting-it-up"
 _DOCS_PAGE = {"radarr": "servarr", "sonarr": "servarr", "lidarr": "servarr", "prowlarr": "servarr"}
 
