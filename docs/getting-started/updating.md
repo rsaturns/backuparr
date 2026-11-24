@@ -28,7 +28,7 @@ and then restore one.
 [changelog](https://github.com/rsaturns/backuparr/blob/{{ site.gh_edit_branch }}/CHANGELOG.md)
 lists everything that's new.
 
-**On a 3.0 beta?** Set the tag to `latest` or `3.0.0`: a beta's tag doesn't
+**On a 3.0 beta?** Set the tag to `latest` or `3.0.1`: a beta's tag doesn't
 move. Nothing else changes - your settings, login and backups stay.
 
 ### Before you update
