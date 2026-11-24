@@ -20,7 +20,12 @@
   <Screenshot>https://raw.githubusercontent.com/rsaturns/backuparr/main/docs/screenshots/settings.png</Screenshot>
   <Screenshot>https://raw.githubusercontent.com/rsaturns/backuparr/main/docs/screenshots/run.png</Screenshot>
   <Screenshot>https://raw.githubusercontent.com/rsaturns/backuparr/main/docs/screenshots/history.png</Screenshot>
-  <Changes>### 3.0.0 (2026-11-23)
+  <Changes>### 3.0.1 (2026-11-24)
+- After a restart with a config.json Backuparr can't read, the web UI says what's wrong with the file instead of showing the encryption key again and asking for it to be saved (#262).
+- Accessibility: screen readers name every switch and field in the web UI (each app's and destination's on/off switch, the schedule, History and Restore choices, SABnzbd's server passwords on restore), the account button's name starts with the name it shows, and all text in the light theme meets the WCAG AA contrast minimum - its grey, blue, red, green and amber text is a shade darker (#261).
+- The documentation moved to https://docs.backuparr.com (old links redirect), and the project has a website: https://backuparr.com.
+
+### 3.0.0 (2026-11-23)
 - How much room backups need: the Overview shows what each run uploads and, for each destination, the room its retention needs, what Backuparr's backups use there and its free space ("only ... free" when it won't fit), and a line under each retention field in Settings says how many backups of each app it keeps and their size, as you change it (#248). See https://docs.backuparr.com/backups/#how-much-room-backups-need
 - Include metadata on the Jellyfin, Emby and Plex cards, off by default: backups also take the server's metadata - posters, artwork and people images, artwork set by hand, and Jellyfin's and Emby's saved metadata - so a restored server doesn't download it all again. Jellyfin's comes from its own backup's Metadata option (Jellyfin 10.11.7 and newer); Emby's metadata folder and Plex's Metadata folder are read from their mounted data folder (Plex's Media folder of preview thumbnails stays out). History and the Restore tab show which backups have it. Thanks to @zenmaster14 for the suggestion (#196). See https://docs.backuparr.com/apps/jellyfin/
 - A ? on every app's card in Settings opens its page in the docs, at Setting it up: where the app's API key or login comes from, the least access Backuparr needs and any folder to mount. Every app's page now has that section, SABnzbd has a page of its own, and the Backuparr menu in the lower right links the docs. App icons can follow the theme: QNAP QuTS hero's switches to a light one in the dark theme (#199). See https://docs.backuparr.com/apps/
@@ -92,20 +97,8 @@
 - The image no longer has pip, which Backuparr doesn't use once its packages are in: pip's own copies of urllib3, msgpack and setuptools were the scan's other 5 high findings.
 - The release workflow's docker/login-action 4.8.0 and softprops/action-gh-release 3.0.4, as Dependabot proposed (#159, #160).
 
-### 2.5.6 (2026-11-07)
-- Google's script for the Drive folder picker loads only when you choose a folder, not on every page.
-- Downloading a backup from Local storage starts straight away: it's no longer copied inside the container first, which for a large Plex or Emby backup took time and as much disk space again.
-- Local storage on a USB disk that spins down to save power no longer fails with an I/O error: Backuparr waits up to 60 seconds for the disk to wake before writing to it (#140). Thanks to u/Neither_Rutabaga_627 on Reddit for the report: https://www.reddit.com/r/SideProject/comments/1xnc98k/comment/19s90yr7r7tnp/
-- Retention, History and the startup check of existing backups work when Local storage is the root of a disk: they no longer fail on a folder there that Backuparr can't read, such as ext4's lost+found. They now list only Backuparr's own folders (#143).
-- While a sleeping Local disk wakes, the Overview, History and Restore tabs, Test and Reset say "Waiting for storage to be ready..." instead of looking stuck.
-- The Restore tab lists only Backuparr's own backups of the app: another file or a folder kept in that app's folder no longer shows up, or gets picked as the latest backup.
-- A destination's Test shows the reason it failed, not rclone's command line or a raw "[Errno 13]" error.
-- A Google Drive connection error containing "%" is shown, instead of stopping the page's startup before it.
-- The Reset dialog says backups on Dropbox are kept too, as on Google Drive and OneDrive.
-- A SABnzbd restore no longer writes a nameless server's host and username to the log.
-
 View all changes: https://github.com/rsaturns/backuparr/blob/main/CHANGELOG.md</Changes>
-  <Date>2026-11-23</Date>
+  <Date>2026-11-24</Date>
   <Config Name="WebUI" Target="8990" Default="8990" Mode="tcp" Description="HTTP port of the Backuparr web UI." Type="Port" Display="always" Required="true" Mask="false">8990</Config>
   <Config Name="WebUI HTTPS" Target="8991" Default="8991" Mode="tcp" Description="HTTPS port of the Backuparr web UI, with a self-signed certificate: your browser warns the first time. See https://docs.backuparr.com/security/#https" Type="Port" Display="always" Required="true" Mask="false">8991</Config>
   <Config Name="Appdata" Target="/config/backuparr" Default="/mnt/user/appdata/backuparr" Mode="rw" Description="Backuparr's settings, encrypted credentials and, with the Local destination, the backups themselves. Back this folder up or keep a cloud destination enabled." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/backuparr</Config>

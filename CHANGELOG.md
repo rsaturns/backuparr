@@ -3,7 +3,7 @@
 All notable changes to this project are documented in this file. The
 format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [3.0.1] - 2026-11-24
 
 - After a restart with a config.json Backuparr can't read, the web UI says what's wrong with the file instead of showing the encryption key again and asking for it to be saved (#262).
 - Accessibility: screen readers name every switch and field in the web UI (each app's and destination's on/off switch, the schedule, History and Restore choices, SABnzbd's server passwords on restore), the account button's name starts with the name it shows, and all text in the light theme meets the WCAG AA contrast minimum - its grey, blue, red, green and amber text is a shade darker (#261).
