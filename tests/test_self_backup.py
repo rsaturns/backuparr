@@ -301,6 +301,34 @@ def test_confirming_lets_everything_through_and_the_key_is_never_shown_again(aut
 
 
 @pytest.mark.key_prompt
+def test_an_unreadable_config_shows_its_error_not_the_key_again(authed_client):
+    """#262: after a restart with a config.json Backuparr can't read, the key
+    isn't shown again, and calls answer with what's actually wrong."""
+    assert authed_client.post("/api/secrets-key/acknowledge", json={"confirm": True}).status_code == 200
+    with open(config_store.CONFIG_PATH, "w") as f:
+        f.write('{"broken": ')
+    config_store.forget_secrets_key_acknowledged()  # as after a restart
+    assert authed_client.get("/api/secrets-key").get_json() == {"acknowledged": True}
+    response = authed_client.get("/api/config")
+    assert response.status_code == 500 and "isn't valid JSON" in response.get_json()["error"]
+
+
+@pytest.mark.key_prompt
+@pytest.mark.parametrize("unreadable", ["not json", "a list", "no permission"])
+def test_an_unreadable_config_isnt_remembered_as_a_saved_key(isolated_webui, unreadable):
+    if unreadable == "no permission" and os.geteuid() == 0:
+        pytest.skip("root reads any file")
+    with open(config_store.CONFIG_PATH, "w") as f:
+        f.write({"not json": "{not json", "a list": "[1]", "no permission": "{}"}[unreadable])
+    if unreadable == "no permission":
+        os.chmod(config_store.CONFIG_PATH, 0)
+    assert config_store.secrets_key_acknowledged() is True
+    os.chmod(config_store.CONFIG_PATH, 0o600)
+    os.remove(config_store.CONFIG_PATH)  # deleted to start over, as the error suggests
+    assert config_store.secrets_key_acknowledged() is False  # a new install's key is shown
+
+
+@pytest.mark.key_prompt
 def test_a_key_from_the_environment_is_shown_the_same_way(authed_client, monkeypatch):
     key = Fernet.generate_key().decode()
     monkeypatch.setenv("BACKUPARR_SECRETS_KEY", key)
