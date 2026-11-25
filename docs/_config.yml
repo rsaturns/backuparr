@@ -20,6 +20,8 @@ aux_links:
   Website: https://backuparr.com
   GitHub: https://github.com/rsaturns/backuparr
   Docker Hub: https://hub.docker.com/r/rsaturns/backuparr
+  # Bug reports, feature requests and security reports without a GitHub account.
+  Report an issue: https://backuparr.com/report/
 aux_links_new_tab: true
 back_to_top: true
 gh_edit_link: true

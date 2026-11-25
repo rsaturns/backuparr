@@ -168,6 +168,7 @@ live, **History** lists, downloads and deletes backups, and **Restore** restores
 - **Found a bug?** Open a [bug report](https://github.com/rsaturns/backuparr/issues/new?template=bug_report.yml).
 - **Want a feature or another app?** Open a [feature request](https://github.com/rsaturns/backuparr/issues/new?template=feature_request.yml).
 - **Found a security problem?** Don't open an issue - report it privately, as [SECURITY.md](SECURITY.md) explains.
+- **No GitHub account?** Send any of these from [backuparr.com/report](https://backuparr.com/report/). The maintainer reads each one first.
 - **Want to help?** See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Credits

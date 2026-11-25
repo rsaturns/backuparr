@@ -210,5 +210,8 @@ Please don't open a public issue. Use GitHub's
 [private vulnerability reporting](https://github.com/rsaturns/backuparr/security/advisories/new)
 instead, so a fix can be ready before the details are public. You get a
 reply within 5 days; the fix ships before the advisory is published, and
-you're credited unless you'd rather not be. See
+you're credited unless you'd rather not be. No GitHub account? Use the
+[security report form](https://backuparr.com/report/security/) on
+backuparr.com: it reaches the maintainer privately too, and the reply comes
+by email. See
 [SECURITY.md](https://github.com/rsaturns/backuparr/blob/{{ site.gh_edit_branch }}/SECURITY.md).
