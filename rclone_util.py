@@ -18,7 +18,7 @@ class RcloneError(RuntimeError):
 _DIR_NOT_FOUND = 3
 
 
-SENSITIVE_FIELDS = {"client_secret", "token", "password", "pass"}
+SENSITIVE_FIELDS = {"client_secret", "token", "password", "pass", "secret_access_key"}
 
 # rclone logs one timestamped line per retry attempt (default 3 retries) on
 # failure, each repeating the same underlying cause and often wrapping a
