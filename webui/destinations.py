@@ -44,6 +44,8 @@ def _not_connected_message(dest_id, request_data):
     yet connected (the UI sends token_pasted) gets a pointer to Connect."""
     if dest_id == "gdrive":
         return "Not connected yet - click Connect Google Drive first"
+        if dest_id == "s3":
+            return "Not connected yet - choose a provider and fill in the bucket and both keys first"
     if request_data.get("token_pasted"):
         label = {"onedrive": "OneDrive", "dropbox": "Dropbox"}[dest_id]
         return f"The pasted token isn't used until you click Connect {label} - connect first, then test"
