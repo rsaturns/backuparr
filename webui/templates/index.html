@@ -343,6 +343,48 @@
                 <div class="app-card-actions">
                   <button type="button" class="btn btn-ghost btn-sm setup-guide-btn" data-dest="{{ m.id }}">Setup guide</button>
                 </div>
+                {% elif m.id == 's3' %}
+                <label class="field">
+                  <span class="field-label">Storage provider</span>
+                  <select class="d-field" data-field="provider">
+                    <option value="">Choose a provider...</option>
+                    <option value="aws">AWS S3</option>
+                    <option value="backblaze">Backblaze B2</option>
+                    <option value="cloudflare">Cloudflare R2</option>
+                    <option value="wasabi">Wasabi</option>
+                    <option value="minio">MinIO</option>
+                    <option value="other">Other S3-compatible</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span class="field-label">Endpoint URL <span class="muted">(optional - blank uses the provider's default)</span></span>
+                  <input type="text" class="d-field" data-field="endpoint" placeholder="https://&lt;account-id&gt;.r2.cloudflarestorage.com" autocomplete="off">
+                </label>
+                <label class="field">
+                  <span class="field-label">Region <span class="muted">(optional - blank uses the provider's default)</span></span>
+                  <input type="text" class="d-field" data-field="region" placeholder="us-east-1" autocomplete="off">
+                </label>
+                <label class="field">
+                  <span class="field-label">Bucket</span>
+                  <input type="text" class="d-field" data-field="bucket" autocomplete="off">
+                </label>
+                <label class="field">
+                  <span class="field-label">Path prefix <span class="muted">(optional - defaults to Backuparr)</span></span>
+                  <input type="text" class="d-field" data-field="path_prefix" placeholder="Backuparr" autocomplete="off">
+                </label>
+                <label class="field">
+                  <span class="field-label">Access key ID</span>
+                  <input type="text" class="d-field" data-field="access_key_id" autocomplete="off">
+                </label>
+                <label class="field">
+                  <span class="field-label">Secret access key</span>
+                  <input type="password" class="d-field" data-field="secret_access_key" autocomplete="off">
+                </label>
+                <div class="app-card-actions">
+                  <button type="button" class="btn btn-ghost btn-sm setup-guide-btn" data-dest="{{ m.id }}">Setup guide</button>
+                  <button type="button" class="btn btn-ghost btn-sm test-dest-btn">Test</button>
+                  <span class="test-result"></span>
+                </div>
                 {% else %}
                 <div class="app-card-actions">
                   <button type="button" class="btn btn-ghost btn-sm setup-guide-btn" data-dest="{{ m.id }}">Setup guide</button>
@@ -673,7 +715,6 @@
   <div class="modal">
     <div class="modal-head">
       <h3 id="password-modal-title">Change Password</h3>
-      <button type="button" class="icon-btn modal-close" id="password-modal-close" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body">
       <form id="password-form">
