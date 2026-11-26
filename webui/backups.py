@@ -190,7 +190,9 @@ def _destination_space(dest_id, root):
             try:
                 answer = rclone_util.about(root)
             except rclone_util.RcloneError as exc:
-                answer = {"error": humanize_error(exc)}
+                # The s3 backend never answers `rclone about`, so its free
+              # space is unknown, not an error.
+              answer = {"total": None, "free": None} if dest_id == "s3" else {"error": humanize_error(exc)}
             cached = _space[dest_id] = (root, time.monotonic(), answer)
         return cached[2]
 
