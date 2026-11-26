@@ -64,6 +64,32 @@ def test_google_drive_credentials_use_appropriate_input_types(authed_client, fie
     assert f'type="{input_type}"' in tag.group(0)
     assert 'class="d-field"' in tag.group(0)
 
+@pytest.mark.parametrize("field, input_type", [
+                            ("endpoint", "text"),
+                         ("region", "text"),
+                         ("bucket", "text"),
+                         ("path_prefix", "text"),
+                         ("access_key_id", "text"),
+                         ("secret_access_key", "password"),
+])
+def test_cloud_storage_credentials_use_appropriate_input_types(authed_client, field, input_type):
+    response = authed_client.get("/")
+    assert response.status_code == 200
+    page = response.get_data(as_text=True)
+    tag = re.search(rf'<input\b[^>]*data-field="{field}"[^>]*>', page)
+    assert tag is not None
+    assert f'type="{input_type}"' in tag.group(0)
+    assert 'class="d-field"' in tag.group(0)
+
+def test_cloud_storage_provider_is_a_select_with_the_six_providers(authed_client):
+    response = authed_client.get("/")
+    assert response.status_code == 200
+    page = response.get_data(as_text=True)
+    tag = re.search(r'<select\b[^>]*data-field="provider"[^>]*>(.*?)</select>', page, re.S)
+    assert tag is not None
+    assert 'class="d-field"' in tag.group(0)
+    for value in ("aws", "backblaze", "cloudflare", "wasabi", "minio", "other"):
+        assert f'<option value="{value}"' in tag.group(1)
 
 # --- validation ------------------------------------------------------------
 
@@ -89,6 +115,11 @@ def test_google_drive_credentials_use_appropriate_input_types(authed_client, fie
     ({"destinations": {"dropbox": {"enabled": True}}}, "connect it first"),
     ({"destinations": {"gdrive": {"enabled": True}}}, "Client ID is required"),
     ({"destinations": {"onedrive": {"enabled": True}}}, "connect it first"),
+    ({"destinations": {"s3": {"enabled": True}}}, "choose a storage provider"),
+    ({"destinations": {"s3": {"enabled": True, "provider": "cloudflare", "bucket": "b", "access_key_id": "a", "secret_access_key": "s"}}}, "an endpoint URL is required"),
+    ({"destinations": {"s3": {"enabled": True, "provider": "aws", "access_key_id": "a", "secret_access_key": "s"}}}, "a bucket is required"),
+    ({"destinations": {"s3": {"enabled": True, "provider": "aws", "bucket": "b", "secret_access_key": "s"}}}, "an access key ID is required"),
+    ({"destinations": {"s3": {"enabled": True, "provider": "aws", "bucket": "b", "access_key_id": "a"}}}, "a secret access key is required"),
 ])
 def test_invalid_settings_are_refused_and_nothing_is_saved(authed_client, isolated_webui, body, fragment):
     before = authed_client.get("/api/config").get_json()
@@ -199,13 +230,14 @@ def test_unknown_and_non_editable_fields_are_ignored(authed_client, isolated_web
 def test_secrets_are_encrypted_on_disk_but_the_ui_gets_them_back(authed_client, isolated_webui):
     save(authed_client, {
         "apps": {"radarr": {"enabled": True, "url": "http://r", "api_key": "radarr-key"}},
-        "destinations": {"gdrive": {"client_secret": "google-secret"}},
+        "destinations": {"gdrive": {"client_secret": "google-secret"}, "s3": {"secret_access_key": "s3-secret"}},
     })
     raw = open(isolated_webui.auth.CONFIG_PATH).read()
-    assert "radarr-key" not in raw and "google-secret" not in raw and "enc:v1:" in raw
+    assert "radarr-key" not in raw and "google-secret" not in raw and "s3-secret" not in raw and "enc:v1:" in raw
     cfg = authed_client.get("/api/config").get_json()
     assert cfg["apps"]["radarr"]["api_key"] == "radarr-key"
     assert cfg["destinations"]["gdrive"]["client_secret"] == "google-secret"
+    assert cfg["destinations"]["s3"]["secret_access_key"] == "s3-secret"
 
 
 def test_saving_resyncs_the_rclone_remotes(authed_client, isolated_webui, monkeypatch):
@@ -342,6 +374,7 @@ def test_local_destination_test_explains_a_folder_it_cant_write(authed_client, t
 def test_cloud_destinations_must_be_connected_first(authed_client):
     assert "Connect Google Drive" in authed_client.post("/api/test-destination/gdrive", json={}).get_json()["message"]
     assert "rclone authorize onedrive" in authed_client.post("/api/test-destination/onedrive", json={}).get_json()["message"]
+    assert "choose a provider" in authed_client.post("/api/test-destination/s3", json={}).get_json()["message"]
 
 
 @pytest.mark.parametrize("dest_id, label", [("onedrive", "OneDrive"), ("dropbox", "Dropbox")])
@@ -371,6 +404,7 @@ def test_cloud_destination_test_checks_the_remote(authed_client, isolated_webui,
     cfg["destinations"]["gdrive"].update(refresh_token="rt", folder_name="Backups")
     cfg["destinations"]["onedrive"].update(token="{}")
     cfg["destinations"]["dropbox"].update(token="{}")
+    cfg["destinations"]["s3"].update(provider="aws", bucket="my-bucket", access_key_id="AKID", secret_access_key="s3-secret")
     isolated_webui.settings.save_config(cfg)
     drive_result = authed_client.post("/api/test-destination/gdrive", json={}).get_json()
     assert drive_result["ok"] is True and '"Backups"' in drive_result["message"]
@@ -378,7 +412,9 @@ def test_cloud_destination_test_checks_the_remote(authed_client, isolated_webui,
     assert one_result["ok"] is True and "OneDrive" in one_result["message"]
     dropbox_result = authed_client.post("/api/test-destination/dropbox", json={}).get_json()
     assert dropbox_result["ok"] is True and "Dropbox" in dropbox_result["message"]
-    assert checked == ["backuparr-gdrive:", "backuparr-onedrive:", "backuparr-dropbox:Backuparr"]
+    s3_result = authed_client.post("/api/test-destination/s3", json={}).get_json()
+    assert s3_result["ok"] is True and "my-bucket" in s3_result["message"] and "AWS S3" in s3_result["message"]
+    assert checked == ["backuparr-gdrive:", "backuparr-onedrive:", "backuparr-dropbox:Backuparr", "backuparr-s3:my-bucket/Backuparr"]
 
 
 def test_cloud_destination_test_reports_a_rejected_remote(authed_client, isolated_webui, monkeypatch):
@@ -548,6 +584,7 @@ def test_every_destination_card_has_a_retention_field(authed_client):
     ({"apps": {"radarr": {"password": "x" * 4097}}}, "radarr: password must be at most 4096 characters"),
     ({"destinations": {"local": {"path": ["/backups"]}}}, "local: path must be text"),
     ({"destinations": {"gdrive": {"client_secret": 5}}}, "gdrive: client_secret must be text"),
+    ({"destinations": {"s3": {"secret_access_key": 5}}}, "s3: secret_access_key must be text"),
 ])
 def test_settings_fields_must_be_the_right_kind(authed_client, body, message):
     authed_client.post("/api/secrets-key/acknowledge", json={"confirm": True})
