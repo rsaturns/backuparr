@@ -5,6 +5,8 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- New contributors: @avaldivieso-meraki made their first contribution in #273.
+
 ## [3.0.1] - 2026-11-24
 
 - After a restart with a config.json Backuparr can't read, the web UI says what's wrong with the file instead of showing the encryption key again and asking for it to be saved (#262).
