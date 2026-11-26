@@ -29,6 +29,7 @@ def rclone(monkeypatch):
         if args[:2] == ["config", "delete"]:
             state["remotes"].pop(args[2], None)
         return ""
+
     monkeypatch.setattr(rclone_util, "_run", run)
     return state
 
@@ -49,9 +50,9 @@ def test_deletes_are_permanent_on_google_drive_and_onedrive(rclone):
     # Remotes from before, without the setting: the next sync adds it, and
     # keeps the OneDrive token rclone has rotated since.
     rclone["remotes"] = {"backuparr-onedrive": {"type": "onedrive", "token": "rotated", "drive_id": "d",
-                                                "drive_type": "personal", "root_folder_id": "i"}}
+                                                 "drive_type": "personal", "root_folder_id": "i"}}
     destination_util.sync(config(gdrive={"client_id": "c", "client_secret": "s", "refresh_token": "rt"},
-                                 onedrive={"token": '{"refresh_token":"o"}', "drive_id": "d", "drive_type": "personal",
+                                 onedrive={"token": '{"refresh_token": "o"}', "drive_id": "d", "drive_type": "personal",
                                            "item_id": "i"}))
     onedrive = rclone["remotes"]["backuparr-onedrive"]
     assert onedrive["hard_delete"] == "true" and onedrive["token"] == "rotated"
@@ -60,8 +61,8 @@ def test_deletes_are_permanent_on_google_drive_and_onedrive(rclone):
 
 def test_an_unchanged_setup_costs_one_dump(rclone):
     cfg = config(gdrive={"client_id": "c", "client_secret": "s", "refresh_token": "rt"},
-                 onedrive={"token": '{"refresh_token":"o"}', "drive_id": "d", "drive_type": "personal", "item_id": "i"},
-                 dropbox={"token": '{"refresh_token":"x"}'})
+                 onedrive={"token": '{"refresh_token": "o"}', "drive_id": "d", "drive_type": "personal", "item_id": "i"},
+                 dropbox={"token": '{"refresh_token": "x"}'})
     destination_util.sync(cfg)
     assert len([c for c in rclone["calls"] if c != ["config", "dump"]]) == 3
     rclone["calls"].clear()
@@ -72,3 +73,15 @@ def test_an_unchanged_setup_costs_one_dump(rclone):
     rclone["calls"].clear()
     destination_util.sync(cfg)
     assert ["config", "update"] in rclone["calls"] and rclone["remotes"]["backuparr-onedrive"]["root_folder_id"] == "other"
+
+
+def test_an_unchanged_setup_with_s3_costs_one_dump(rclone):
+    cfg = config(gdrive={"client_id": "c", "client_secret": "s", "refresh_token": "rt"},
+                 onedrive={"token": '{"refresh_token": "o"}', "drive_id": "d", "drive_type": "personal", "item_id": "i"},
+                 dropbox={"token": '{"refresh_token": "x"}'},
+                 s3={"provider": "aws", "bucket": "my-bucket", "access_key_id": "AKID", "secret_access_key": "SECRET"})
+    destination_util.sync(cfg)
+    assert len([c for c in rclone["calls"] if c != ["config", "dump"]]) == 4
+    rclone["calls"].clear()
+    destination_util.sync(cfg)
+    assert rclone["calls"] == [["config", "dump"]]
