@@ -6,6 +6,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 - New contributors: @avaldivieso-meraki made their first contribution in #273.
+- The docs site has a light/dark toggle in the top bar; it follows the device setting until changed.
 
 ## [3.0.1] - 2026-11-24
 
