@@ -1285,3 +1285,4 @@ def retention_days(cfg, dest_id):
     if isinstance(own, int) and not isinstance(own, bool) and own >= 1:
         return own
     return int(cfg.get("retention_days", DEFAULTS["retention_days"]))
+
