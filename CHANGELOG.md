@@ -5,7 +5,8 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-- New contributors: @avaldivieso-meraki made their first contribution in #273.
+- **Cloud Storage:** add an S3-compatible backup destination (AWS S3, Backblaze B2, Cloudflare R2, Wasabi, MinIO and other S3-compatible storage) backed by the rclone `s3` backend (#268).
+- - New contributors: @avaldivieso-meraki made their first contribution in #273.
 
 ## [3.0.1] - 2026-11-24
 
