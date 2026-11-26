@@ -105,6 +105,24 @@ def test_dropbox_token_is_encrypted_at_rest():
     reloaded = config_store.load_config()
     assert reloaded["destinations"]["dropbox"]["token"] == "plain-dropbox-token"
     assert config_store.enabled_destinations(reloaded) == ["local", "dropbox"]
+def test_a_config_saved_before_s3_existed_loads_with_the_s3_defaults():
+    import json
+    with open(config_store.CONFIG_PATH, "w") as f:
+        json.dump({"destinations": {"local": {"enabled": True}}}, f)
+    cfg = config_store.load_config()
+    assert cfg["destinations"]["s3"] == config_store.DEFAULT_DEST["s3"]
+    assert config_store.enabled_destinations(cfg) == ["local"]
+
+
+def test_s3_secret_access_key_is_encrypted_at_rest():
+    cfg = config_store.load_config()
+    cfg["destinations"]["s3"].update(enabled=True, secret_access_key="plain-s3-secret")
+    config_store.save_config(cfg)
+    with open(config_store.CONFIG_PATH) as f:
+        assert "plain-s3-secret" not in f.read()
+    reloaded = config_store.load_config()
+    assert reloaded["destinations"]["s3"]["secret_access_key"] == "plain-s3-secret"
+    assert config_store.enabled_destinations(reloaded) == ["local", "s3"]
 
 
 @pytest.mark.parametrize("content", ["{not json", "", "[1, 2]", '"text"'])
