@@ -95,7 +95,16 @@ def test_config_set_redacts_sensitive_fields_via_run(monkeypatch):
             rclone_util.config_set("gdrive", "drive", {"client_secret": secret})
 
     assert secret not in str(exc_info.value)
-
+def test_config_set_redacts_the_s3_secret_access_key(monkeypatch):
+    secret = "plain-s3-secret-access-key"
+    fake_result = MagicMock()
+    fake_result.returncode = 1
+    fake_result.stderr = f"create failed: secret_access_key {secret} was invalid"
+    monkeypatch.setattr(rclone_util, "config_dump", lambda: {})
+    with patch("rclone_util.subprocess.run", return_value=fake_result):
+        with pytest.raises(rclone_util.RcloneError) as exc_info:
+            rclone_util.config_set("backuparr-s3", "s3", {"provider": "AWS", "secret_access_key": secret})
+    assert secret not in str(exc_info.value)
 
 @pytest.mark.parametrize("root, expected", [
     ("backuparr-gdrive:", "backuparr-gdrive:"),
@@ -103,6 +112,8 @@ def test_config_set_redacts_sensitive_fields_via_run(monkeypatch):
     ("backuparr-dropbox:Backuparr", "backuparr-dropbox:"),
     ("backuparr-dropbox:Backuparr/radarr", "backuparr-dropbox:"),
     ("backuparr-onedrive", "backuparr-onedrive:"),
+    ("backuparr-s3:my-bucket/Backuparr", "backuparr-s3:"),
+    ("backuparr-s3:my-bucket/Backuparr/radarr", "backuparr-s3:"),
 ])
 def test_check_remote_lists_only_the_remote_itself(monkeypatch, root, expected):
     calls = []
