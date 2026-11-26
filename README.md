@@ -13,8 +13,8 @@
 
 Scheduled backups of the apps you host - media management, downloaders,
 media servers, network, security, home automation and server apps - sent to
-every destination you enable: Local Storage, Google Drive, OneDrive and
-Dropbox. Backups are encrypted with your own key by default, and most apps
+every destination you enable: Local Storage, Google Drive, OneDrive,
+Dropbox and Cloud Storage. Backups are encrypted with your own key by default, and most apps
 restore from the web UI. Everything - apps, destinations, schedule, retention
 and restores - is set up in the web UI, not env vars.
 
@@ -35,8 +35,8 @@ If you like Backuparr, give it a ⭐ star - it helps the project grow.
   and servers - Pi-hole, OPNsense, pfSense, UniFi, Vaultwarden, Bitwarden,
   Home Assistant, Immich, Unraid, Synology DSM and QNAP QuTS hero. See the
   [full list](https://docs.backuparr.com/apps/).
-- **Every destination at once:** Local Storage, Google Drive, OneDrive and
-  Dropbox, connected in the web UI, with retention set once or per
+- **Every destination at once:** Local Storage, Google Drive, OneDrive,
+  Dropbox and Cloud Storage, connected in the web UI, with retention set once or per
   destination.
 - **Encrypted with your key** before upload - always for sensitive apps such
   as password managers, firewalls and Home Assistant - and the image's
@@ -154,7 +154,7 @@ live, **History** lists, downloads and deletes backups, and **Restore** restores
 - [Features](https://docs.backuparr.com/features/) - everything Backuparr does, in one list
 - [Getting started](https://docs.backuparr.com/getting-started/)
 - [Apps](https://docs.backuparr.com/apps/) - how each app is backed up and restored
-- [Destinations](https://docs.backuparr.com/destinations/) - Local Storage, Google Drive, OneDrive, Dropbox
+- [Destinations](https://docs.backuparr.com/destinations/) - Local Storage, Google Drive, OneDrive, Dropbox and Cloud Storage
 - [Settings](https://docs.backuparr.com/settings/) - Prowlarr discovery, multiple instances of an app, reverse-proxy headers
 - [Backups and history](https://docs.backuparr.com/backups/) - schedule, retention, run logs, History
 - [Restoring](https://docs.backuparr.com/restoring/) - apps, the version check, and Backuparr itself
