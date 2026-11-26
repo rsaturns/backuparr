@@ -93,6 +93,7 @@ _APP_CATEGORY = {
     "bitwarden": "security", "vaultwarden": "security",
     "homeassistant": "home-automation",
     "qnap": "server", "synology": "server", "unraid": "server",
+        "reactive-resume": "productivity",
 }
 
 # An app's "icon_dark", if any, replaces its "icon" in the dark theme: the
