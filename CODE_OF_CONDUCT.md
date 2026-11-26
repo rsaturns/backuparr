@@ -37,7 +37,7 @@ contributed doesn't exempt you.
 
 ## Reporting
 
-Email **conduct@tripplehelix.net**. Reports are read by the maintainer and kept
+Email **conduct@backuparr.com**. Reports are read by the maintainer and kept
 confidential. You can also use GitHub's **Report content** option on any
 issue, pull request or comment.
 
