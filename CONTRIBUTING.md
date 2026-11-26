@@ -40,8 +40,11 @@ scripts/smoke_test.sh backuparr:dev    # the same container check CI runs
 
 ## Making a change
 
-- Branch off `main` and keep each pull request to one change. Small PRs get
-  reviewed and merged much faster.
+- Branch off the open release branch if there is one: a
+  [`release-X.Y.Z` branch](https://github.com/rsaturns/backuparr/branches/all?query=release-),
+  with a draft "Release X.Y.Z" pull request. Open your pull request against
+  it. Otherwise branch off `main`. Keep each pull request to one change:
+  small PRs get reviewed and merged much faster.
 - **Add or update tests** in `tests/`: new functionality and bug fixes come
   with tests that cover them. The suite must pass without the `rclone`
   binary (CI doesn't have it), so stub `rclone_util` calls in tests, and
@@ -95,5 +98,6 @@ it, test it, and say in the PR that AI helped.
 ## Pull requests
 
 Opening a PR fills in a short template - answer each section. CI runs the
-tests and a container smoke test, and PRs are squash-merged once they pass and
-have been reviewed.
+tests and a container smoke test, and PRs are merged once they pass and have
+been reviewed. A PR merged into a release branch ships with that release, and
+we close its issue then: `Closes #N` only works for pull requests into `main`.

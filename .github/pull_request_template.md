@@ -12,7 +12,7 @@ If you haven't been able to test something, say so. -->
 
 ## Checklist
 
-- [ ] One focused change, branched from an up-to-date `main`
+- [ ] One focused change, branched from an up-to-date `main`, or from the open `release-X.Y.Z` branch if there is one
 - [ ] `pytest -q` passes, and tests are added or updated for the change
 - [ ] README and `CHANGELOG.md` (`## [Unreleased]`) updated if users will notice
 - [ ] If AI tools helped, I've reviewed and tested every line and said so above
