@@ -5,6 +5,7 @@ import re
 from flask import Blueprint, jsonify, request
 
 import destination_util
+import s3
 from apps import cert_pin
 from apps.http_headers import headers_for_app, refusal_hint, RequestHeadersError, validate_request_headers
 from backup import branded, build_app, humanize_error, notify
@@ -86,6 +87,8 @@ def api_get_config():
     # The UI only needs to know a destination's OAuth token is there. Only the
     # connect and disconnect routes write it, so it never has to come back.
     for dest, remote in destination_util.REMOTES.items():
+        if remote.TOKEN_FIELD in DEST_EDITABLE_FIELDS.get(dest, set()):
+            continue  # S3's keys are typed on its card, so they come back as they are.
         cfg["destinations"][dest][remote.TOKEN_FIELD] = bool(cfg["destinations"][dest][remote.TOKEN_FIELD])
     # For the Overview's warning; Save never sends it back.
     cfg["schedule_valid"] = valid_schedule(cfg.get("cron_schedule"))
@@ -250,6 +253,10 @@ def _validate_config(data, cfg):
             return "OneDrive: connect it first (paste a token from `rclone authorize onedrive`) before enabling"
         if name == "dropbox" and dest_data.get("enabled") and not cfg["destinations"]["dropbox"].get("token"):
             return "Dropbox: connect it first (paste a token from `rclone authorize dropbox`) before enabling"
+        if name == "s3" and dest_data.get("enabled"):
+            error = s3.enable_error({**cfg["destinations"]["s3"], **dest_data})
+            if error:
+                return error
     return None
 
 
