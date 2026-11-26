@@ -30,7 +30,7 @@ class ConfigError(RuntimeError):
     truncated by a full disk, ...). The message says what to do about it."""
 
 
-APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr", "lazylibrarian", "pihole", "vaultwarden", "opnsense", "pfsense", "immich", "homeassistant", "unifi", "unraid", "bitwarden", "synology", "qnap"]
+APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr", "lazylibrarian", "pihole", "vaultwarden", "opnsense", "pfsense", "immich", "homeassistant", "unifi", "unraid", "bitwarden", "synology", "qnap", "reactive-resume"]
 
 # encrypt: whether its backups are encrypted (#147) - on unless turned off,
 # and ignored for an app whose APP_META sets always_encrypted.
@@ -41,7 +41,7 @@ DEFAULT_APP = {"enabled": False, "url": "", "api_key": "", "username": "", "pass
 # archive names never change; each extra one is "<app>-<suffix>" (radarr-4k),
 # an id fixed when it's added because it names the instance's backup folder.
 # Only its display name can change later.
-MULTI_INSTANCE_APPS = ("radarr", "sonarr", "lidarr", "whisparr", "pihole", "opnsense", "pfsense", "immich", "homeassistant", "unifi", "unraid", "synology", "qnap")
+MULTI_INSTANCE_APPS = ("radarr", "sonarr", "lidarr", "whisparr", "pihole", "opnsense", "pfsense", "immich", "homeassistant", "unifi", "unraid", "synology", "qnap", "reactive-resume")
 MAX_EXTRA_INSTANCES = 10
 _EXTRA_INSTANCE_ID = re.compile(rf"({'|'.join(MULTI_INSTANCE_APPS)})-([a-z0-9]+(?:-[a-z0-9]+)*)")
 _MAX_INSTANCE_ID_LENGTH = 40
@@ -79,6 +79,7 @@ APP_CATEGORIES = [
     {"id": "security", "label": "Security", "emoji": "🛡️"},
     {"id": "home-automation", "label": "Home Automation", "emoji": "🏠"},
     {"id": "server", "label": "Server", "icon": "server"},
+        {"id": "productivity", "label": "Productivity", "emoji": "💼",}
 ]
 # Each app's category: a new app adds one line here.
 _APP_CATEGORY = {
@@ -640,6 +641,32 @@ APP_META = [
                 ]},
             ],
         },
+    },
+    {
+            "id": "reactive-resume",
+            "label": "Reactive Resume",
+            "icon": "reactive-resume.svg",
+            "icon_dark": "reactive-resume-light.svg",
+            # Reactive Resume has no account import: each resume and cover
+            # letter is imported from its own JSON file - see apps/reactive_resume.py.
+            "key_required": True,
+            "key_help": "Settings > Developer > API keys - make a Read only key",
+            "url_placeholder": "http://reactive-resume:3000",
+            "extra_fields": [],
+            "multi_instance": True,
+            "max_extra_instances": MAX_EXTRA_INSTANCES,
+            "always_encrypted": True,
+            "manual_restore": {
+                        "docs": "https://docs.backuparr.com/apps/reactive-resume/",
+                        "steps": [
+                                        {"title": "Restore in Reactive Resume", "steps": [
+                                                            "Download the backup.",
+                                                            "Unzip it: it holds the account export in the same layout as Reactive Resume's Export everything zip.",
+                                                            "In Reactive Resume, open a resume and import its JSON file from resumes/ - each one becomes a new document; do the same for a cover letter from letters/.",
+                                                            "Add photos again by hand, and re-enter account settings, sharing settings and application links: the export doesn't hold them.",
+                                        ]},
+                        ],
+            },
     },
 ]
 # Backuparr's own backup, shown as an app card in Server (#165). Not an
