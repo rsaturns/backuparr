@@ -72,3 +72,20 @@ Uses rclone's built-in Dropbox app - no developer account.
    machine --->" into the Dropbox card and click **Connect Dropbox**.
 
 Backups go to a `Backuparr` folder.
+
+## Cloud Storage
+
+Back up to any S3-compatible object storage - AWS S3, Backblaze B2, Cloudflare R2, Wasabi, MinIO, or any other S3-compatible service - through rclone's `s3` backend. The card takes an access key ID and a secret access key, which Backuparr encrypts at rest; there is no OAuth sign-in.
+
+1. On the Cloud Storage card, pick the provider, then fill in the endpoint URL and region. A field left blank uses the provider's default: AWS uses its own endpoint with region `us-east-1`; Wasabi uses `https://s3.wasabisys.com` with region `us-east-1`; Backblaze B2 uses region `us-west-000` and endpoint `https://s3.us-west-000.backblazeb2.com` (change both for another B2 region); Cloudflare R2 uses region `auto` and needs your account's endpoint (`https://<account-id>.r2.cloudflarestorage.com`); MinIO and other S3-compatible services need an endpoint URL.
+2. Enter the bucket, and a path prefix if the backups should live under a folder other than `Backuparr`.
+3. Enter the access key ID and secret access key, then **Save settings**. For AWS, make them in IAM; for Cloudflare R2, make an API token with Object Read & Write on the bucket.
+4. Click **Test** to check the bucket is reachable.
+
+Backups go to the `Backuparr` folder in the bucket (or the path prefix you set).
+
+Good to know:
+
+- The S3 backend never answers `rclone about`, so the Overview's Storage tile shows the free space as unknown, not as an error.
+- Backblaze B2 keeps old versions of overwritten files by default, so deleting backups there can hide them without freeing space. Set a lifecycle rule on the bucket, or use rclone's native `b2` backend with a hard delete.
+- The secret access key is never shown again after saving and never appears in error messages.
