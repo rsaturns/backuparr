@@ -666,7 +666,7 @@ for _meta in APP_META:
     _meta["category"] = _APP_CATEGORY[_meta["id"]]
     _meta["help_url"] = f"{DOCS_URL}apps/{docs_page(_meta['id'])}/#{SETUP_SECTION}"
 
-DEST_NAMES = ["local", "gdrive", "onedrive", "dropbox"]
+DEST_NAMES = ["local", "gdrive", "onedrive", "dropbox", "s3"]
 
 # Default local-destination backup path - same volume as config.json.
 DEFAULT_LOCAL_DIR = "/config/backuparr/backups"
@@ -693,6 +693,17 @@ DEFAULT_DEST = {
         "item_id": "",
         "retention_days": None,
     },
+    "s3": {
+        "enabled": False,
+        "provider": "",
+        "endpoint": "",
+        "region": "",
+        "bucket": "",
+        "path_prefix": "Backuparr",
+        "access_key_id": "",
+        "secret_access_key": "",
+        "retention_days": None,
+    },
 }
 
 # Fields POST /api/config can write per destination - excludes OAuth
@@ -702,6 +713,7 @@ DEST_EDITABLE_FIELDS = {
     "gdrive": {"enabled", "client_id", "client_secret", "developer_key", "retention_days"},
     "dropbox": {"enabled", "retention_days"},
     "onedrive": {"enabled", "retention_days"},
+    "s3": {"enabled", "provider", "endpoint", "region", "bucket", "path_prefix", "access_key_id", "secret_access_key", "retention_days"},
 }
 
 # Drives the Settings > Destinations card generically.
@@ -867,6 +879,39 @@ DESTINATION_META = [
             ],
         },
     },
+    {
+        "id": "s3",
+        "label": "Cloud Storage",
+        "icon": "cloud-storage.svg",
+        "description": "Backed up to a bucket in any S3-compatible storage: AWS S3, Backblaze B2, Cloudflare R2, Wasabi, MinIO or your own. Uses rclone's s3 backend - no app registration.",
+        "setup_help": {
+            "title": "Connect Cloud Storage",
+            "intro": "Pick your storage provider below and fill in its bucket and access keys. rclone's s3 backend writes the backups.",
+            "steps": [
+                {
+                    "text": "Choose your provider above. The endpoint and region fill in from the provider's defaults when left blank; R2, MinIO and other providers need an endpoint URL.",
+                    "link": None,
+                },
+                {
+                    "text": "Create a bucket in your storage, and an access key pair with permission to read and write it.",
+                    "link": None,
+                },
+                {
+                    "text": "For Cloudflare R2, the endpoint is your account's S3 endpoint and the keys are R2 API tokens.",
+                    "link": {"label": "Cloudflare R2 docs", "url": "https://developers.cloudflare.com/r2/"},
+                },
+                {
+                    "text": "Paste the bucket name and both keys below, save, and click Test. Backups are written to a Backuparr folder in the bucket, or the path prefix you set.",
+                    "link": None,
+                },
+            ],
+            "links": [
+                {"label": "rclone's S3 docs", "url": "https://rclone.org/s3/"},
+                {"label": "Cloudflare R2 docs", "url": "https://developers.cloudflare.com/r2/"},
+                {"label": "Create an AWS access key", "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html"},
+            ],
+        },
+    },
 ]
 
 def valid_schedule(schedule):
@@ -1003,7 +1048,7 @@ def _secret_fields(cfg):
             if key in app:  # extra fields aren't in DEFAULT_APP until a card saves one
                 fields.append((("apps", instance_id, key), app, key))
     for dest, key in (("gdrive", "client_secret"), ("gdrive", "developer_key"), ("gdrive", "refresh_token"),
-                      ("onedrive", "token"), ("dropbox", "token")):
+                      ("onedrive", "token"), ("dropbox", "token"), ("s3", "secret_access_key")):
         fields.append((("destinations", dest, key), cfg["destinations"][dest], key))
     fields.append((("notify_url",), cfg, "notify_url"))
     rows = cfg.get("request_headers", [])
@@ -1240,4 +1285,3 @@ def retention_days(cfg, dest_id):
     if isinstance(own, int) and not isinstance(own, bool) and own >= 1:
         return own
     return int(cfg.get("retention_days", DEFAULTS["retention_days"]))
-
