@@ -69,6 +69,7 @@ from apps.unifi import UnifiApp
 from apps.synology import SynologyApp
 from apps.qnap import QnapApp
 from apps.unraid import UnraidApp
+from apps.reactive_resume import ReactiveResumeApp
 from config_store import (ConfigError, app_label, app_meta, enabled_apps, enabled_destinations, encrypts, instance_type, retention_days,
                           self_backup_on)
 from webui.version import VERSION
@@ -288,6 +289,7 @@ DRIVERS = {
     "unraid": UnraidApp,
     "synology": SynologyApp,
     "qnap": QnapApp,
+      "reactive-resume": ReactiveResumeApp,
 }
 
 
