@@ -45,7 +45,13 @@
     return choice === "dark" ? "screen" : choice === "light" ? "not all" : deviceMedia;
   }
 
-  document.write('<link rel="stylesheet" href="' + href + '" id="theme-dark" media="' + media() + '">');
+  // The two values come from head_custom.html's attributes, so they're
+  // escaped before they go into the page as HTML.
+  function attr(value) {
+    return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  }
+
+  document.write('<link rel="stylesheet" href="' + attr(href) + '" id="theme-dark" media="' + attr(media()) + '">');
   var sheet = document.getElementById("theme-dark");
   if (!sheet) return;
 
