@@ -9,8 +9,8 @@ Backuparr is one container. It reaches each app the way the app itself
 offers a backup, and sends the result through [rclone](https://rclone.org/)
 to the destinations you enable.
 
-![The apps you host, in a box per category - Media Management, Downloaders, Media Servers, Network, Security, Home Automation and Server, where Backuparr's own backup sits too - each feed Backuparr; Backuparr uploads each backup via rclone to Local Storage, Google Drive, Microsoft OneDrive and Dropbox]({{ '/architecture-diagram.png' | relative_url }}){: .light-only loading="lazy" }
-![The apps you host, in a box per category - Media Management, Downloaders, Media Servers, Network, Security, Home Automation and Server, where Backuparr's own backup sits too - each feed Backuparr; Backuparr uploads each backup via rclone to Local Storage, Google Drive, Microsoft OneDrive and Dropbox]({{ '/architecture-diagram-dark.png' | relative_url }}){: .dark-only loading="lazy" }
+![The apps you host, in a box per category - Media Management, Downloaders, Media Servers, Network, Security, Home Automation and Server, where Backuparr's own backup sits too - each feed Backuparr; Backuparr uploads each backup via rclone to Local Storage, Google Drive, Microsoft OneDrive and Dropbox]({{ '/architecture-diagram.png' | relative_url }}){: .light-only loading="lazy" width="1200" height="948" }
+![The apps you host, in a box per category - Media Management, Downloaders, Media Servers, Network, Security, Home Automation and Server, where Backuparr's own backup sits too - each feed Backuparr; Backuparr uploads each backup via rclone to Local Storage, Google Drive, Microsoft OneDrive and Dropbox]({{ '/architecture-diagram-dark.png' | relative_url }}){: .dark-only loading="lazy" width="1200" height="948" }
 
 ## How a backup runs
 

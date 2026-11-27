@@ -36,9 +36,10 @@
     return choice || (device && device.matches ? "dark" : "light");
   }
 
-  // The dark stylesheet applies always, never, or on a dark device.
+  // The dark stylesheet applies always, never, or on a dark device - on
+  // screen only, so a page prints light.
   function media() {
-    return choice === "dark" ? "all" : choice === "light" ? "not all" : DEVICE_DARK;
+    return choice === "dark" ? "screen" : choice === "light" ? "not all" : "screen and " + DEVICE_DARK;
   }
 
   document.write('<link rel="stylesheet" href="' + href + '" id="theme-dark" media="' + media() + '">');

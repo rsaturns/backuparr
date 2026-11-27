@@ -46,10 +46,10 @@ THEMES = {
         "card": "#ffffff",
         "card_hub": "#eef2ff",
         "border": "#e2e5ea",
-        "border_hub": "#3b6bf6",
+        "border_hub": "#3866ea",
         "text": "#1a1d23",
-        "muted": "#6b7280",
-        "accent": "#3b6bf6",
+        "muted": "#646b78",
+        "accent": "#3866ea",
         "shadow": "#10182b",
         "shadow_opacity": 0.10,
     }),
@@ -67,9 +67,20 @@ THEMES = {
     }),
 }
 
-# Black, one-colour icons: white in the dark diagram (style.css inverts them
-# in the web UI's dark theme too).
-INVERT_IN_DARK = {"vaultwarden.svg"}
+
+def _inverted_in_dark():
+    """Black, one-colour icons, which the web UI's dark theme turns white
+    with a filter: invert(1) rule in style.css: white in the dark diagram
+    too. Read from style.css, so the two can't disagree."""
+    with open(os.path.join(STATIC, "style.css")) as f:
+        css = f.read()
+    names = set(re.findall(r'img\[src\$="/([^"/]+)"\]\s*\{\s*filter:\s*invert\(1\)', css))
+    if not names:
+        raise SystemExit("No filter: invert(1) icon rules found in style.css - update _inverted_in_dark()")
+    return names
+
+
+INVERT_IN_DARK = _inverted_in_dark()
 
 W = 1200
 # Space reserved above/below content for the caption and bottom margin,

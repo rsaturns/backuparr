@@ -55,13 +55,14 @@
   display: flex;
 }
 
-// An image in both themes ({: .light-only } and {: .dark-only }, the
-// architecture diagram): each stylesheet shows the one that fits. The dark
-// one applies on top of the light one, so it undoes the light one's rule.
-.light-only {
+// An image in both themes ({: .light-only } and {: .dark-only } on an
+// image, the architecture diagram): each stylesheet shows the one that fits.
+// The dark one applies on top of the light one, so it undoes the light one's
+// rule. Images only: inline is an image's own display.
+img.light-only {
   display: if($color-scheme == dark, none, inline);
 }
 
-.dark-only {
+img.dark-only {
   display: if($color-scheme == dark, inline, none);
 }
