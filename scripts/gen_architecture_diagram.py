@@ -12,7 +12,10 @@ icon/logo assets it embeds change.
 
 The two differ only in their colours, the web UI's for each theme, and in
 the icons: the dark one uses an app's dark-theme icon (APP_META icon_dark)
-and turns the one-colour black ones white, as the web UI does.
+and turns the one-colour black ones white, as the web UI does. Both come
+from webui/static/style.css, so the diagram follows the web UI. It also
+writes the diagrams' size into docs/architecture.md, so the page keeps
+their space while they load (tests/test_architecture_diagram.py checks it).
 
 The diagram is drawn as an SVG, then rendered to a PNG at twice its size by
 Chromium. A PNG shows the same everywhere: GitHub serves an SVG opened on
@@ -37,50 +40,73 @@ sys.path.insert(0, REPO)
 from config_store import APP_CATEGORIES, APP_META, SELF_APP  # noqa: E402
 ICONS = os.path.join(REPO, "webui", "static", "icons")
 STATIC = os.path.join(REPO, "webui", "static")
+DOCS = os.path.join(REPO, "docs")
 
-# Each theme's file name and colours, which follow the web UI's light and
-# dark themes (style.css).
+
+def _style_css():
+    """The web UI's style.css, without its comments."""
+    with open(os.path.join(STATIC, "style.css")) as f:
+        return re.sub(r"/\*.*?\*/", "", f.read(), flags=re.S)
+
+
+def _tokens(css, selector):
+    """The colours style.css sets for one theme: the custom properties in the
+    first block for selector."""
+    m = re.search(re.escape(selector) + r"\s*\{([^{}]*)\}", css)
+    if not m:
+        raise SystemExit(f"style.css has no {selector} block - update _tokens()")
+    return {k: v.strip() for k, v in re.findall(r"(--[\w-]+):\s*([^;]+);", m.group(1))}
+
+
+def _colors(tokens, own):
+    """A theme's colours: the web UI's, plus the diagram's own (the
+    Backuparr box's tint and the shadow, which style.css has no colour for)."""
+    try:
+        web = {"bg": tokens["--bg"], "card": tokens["--bg-elevated"], "border": tokens["--border"],
+               "text": tokens["--text"], "muted": tokens["--text-muted"], "accent": tokens["--accent"],
+               "border_hub": tokens["--accent"]}
+    except KeyError as e:
+        raise SystemExit(f"style.css has no {e} - update _colors()") from None
+    return {**web, **own}
+
+
+def _inverted_in_dark(css):
+    """Black, one-colour icons, which the web UI's dark theme turns white
+    with a filter: invert() rule in style.css: white in the dark diagram
+    too. The device's dark theme and the toggle's each have such rules; they
+    must name the same icons."""
+    def icons(theme_selector):
+        names = set()
+        for selectors, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css):
+            if theme_selector in selectors and re.search(r"filter:[^;]*invert\(", body):
+                names |= set(re.findall(r'img\[src\$="/([^"/]+)"\]', selectors))
+        return names
+
+    by_device = icons(':root:not([data-theme="light"])')
+    by_toggle = icons(':root[data-theme="dark"]')
+    if not by_toggle or by_device != by_toggle:
+        raise SystemExit(f"style.css's dark-theme invert rules don't match (device {sorted(by_device)}, "
+                         f"toggle {sorted(by_toggle)}) - update _inverted_in_dark()")
+    return by_toggle
+
+
+STYLE_CSS = _style_css()
+
+# Each theme's file name and colours.
 THEMES = {
-    "light": ("architecture-diagram.png", {
-        "bg": "#f5f6f8",
-        "card": "#ffffff",
+    "light": ("architecture-diagram.png", _colors(_tokens(STYLE_CSS, ":root"), {
         "card_hub": "#eef2ff",
-        "border": "#e2e5ea",
-        "border_hub": "#3866ea",
-        "text": "#1a1d23",
-        "muted": "#646b78",
-        "accent": "#3866ea",
         "shadow": "#10182b",
         "shadow_opacity": 0.10,
-    }),
-    "dark": ("architecture-diagram-dark.png", {
-        "bg": "#14161a",
-        "card": "#1c1f26",
+    })),
+    "dark": ("architecture-diagram-dark.png", _colors(_tokens(STYLE_CSS, ':root[data-theme="dark"]'), {
         "card_hub": "#1a2236",
-        "border": "#2b2f38",
-        "border_hub": "#5b8bff",
-        "text": "#e7e9ed",
-        "muted": "#9096a2",
-        "accent": "#5b8bff",
         "shadow": "#000000",
         "shadow_opacity": 0.35,
-    }),
+    })),
 }
 
-
-def _inverted_in_dark():
-    """Black, one-colour icons, which the web UI's dark theme turns white
-    with a filter: invert(1) rule in style.css: white in the dark diagram
-    too. Read from style.css, so the two can't disagree."""
-    with open(os.path.join(STATIC, "style.css")) as f:
-        css = f.read()
-    names = set(re.findall(r'img\[src\$="/([^"/]+)"\]\s*\{\s*filter:\s*invert\(1\)', css))
-    if not names:
-        raise SystemExit("No filter: invert(1) icon rules found in style.css - update _inverted_in_dark()")
-    return names
-
-
-INVERT_IN_DARK = _inverted_in_dark()
+INVERT_IN_DARK = _inverted_in_dark(STYLE_CSS)
 
 W = 1200
 # Space reserved above/below content for the caption and bottom margin,
@@ -259,6 +285,19 @@ def build(theme):
     return "\n".join(parts)
 
 
+def write_size(md_path, name, width, height):
+    """Writes a diagram's size (in CSS pixels) into its image's attributes in
+    architecture.md, so the page keeps its space while the lazy image loads."""
+    with open(md_path) as f:
+        md = f.read()
+    pattern = r"(\{\{ '/" + re.escape(name) + r"' \| relative_url \}\}\)\{:[^}]*?)width=\"\d+\" height=\"\d+\""
+    md, n = re.subn(pattern, rf'\g<1>width="{width}" height="{height}"', md)
+    if n != 1:
+        raise SystemExit(f"{md_path}: no width/height for {name} - update write_size()")
+    with open(md_path, "w") as f:
+        f.write(md)
+
+
 def render_png(svg, out_path):
     """Renders the SVG with Chromium at 2x, for sharp text on high-DPI screens."""
     from playwright.sync_api import sync_playwright
@@ -272,7 +311,10 @@ def render_png(svg, out_path):
 
 
 if __name__ == "__main__":
+    md_path = os.path.join(DOCS, "architecture.md")
     for theme, (name, _) in THEMES.items():
-        out_path = os.path.join(REPO, "docs", name)
+        out_path = os.path.join(DOCS, name)
         render_png(build(theme), out_path)
-        print("wrote", out_path)
+        width, height = Image.open(out_path).size
+        write_size(md_path, name, width // 2, height // 2)
+        print("wrote", out_path, f"({width // 2}x{height // 2})")

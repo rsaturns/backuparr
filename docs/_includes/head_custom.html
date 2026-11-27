@@ -7,10 +7,16 @@
 
   The preload fetches the dark stylesheet for a dark device alongside the
   light one, not only once theme.js has run after the theme's own scripts.
+  It can't see the button's choice: a dark device whose visitor chose light
+  still fetches it early, and a dark choice on a light device fetches it
+  only once theme.js runs (usually from the cache by then).
+
+  dark_media is the dark device's query for all three: the preload, the
+  noscript copy, and theme.js (data-dark-media).
 {%- endcomment -%}
 {%- assign dark_css = '/assets/css/just-the-docs-dark.css' | relative_url -%}
 {%- assign dark_media = 'screen and (prefers-color-scheme: dark)' -%}
 <meta name="color-scheme" content="light dark">
 <link rel="preload" as="style" href="{{ dark_css }}" media="{{ dark_media }}">
-<script src="{{ '/assets/js/theme.js' | relative_url }}" data-dark-css="{{ dark_css }}"></script>
+<script src="{{ '/assets/js/theme.js' | relative_url }}" data-dark-css="{{ dark_css }}" data-dark-media="{{ dark_media }}"></script>
 <noscript><link rel="stylesheet" href="{{ dark_css }}" media="{{ dark_media }}"></noscript>

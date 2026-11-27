@@ -16,7 +16,10 @@
   var DEVICE_DARK = "(prefers-color-scheme: dark)";
   var script = document.currentScript;
   var href = script && script.getAttribute("data-dark-css");
-  if (!href) return;
+  // The dark device's media query, the same one the preload and the
+  // noscript copy use (head_custom.html).
+  var deviceMedia = script && script.getAttribute("data-dark-media");
+  if (!href || !deviceMedia) return;
   var meta = document.querySelector('meta[name="color-scheme"]');
   var device = window.matchMedia ? window.matchMedia(DEVICE_DARK) : null;
 
@@ -39,7 +42,7 @@
   // The dark stylesheet applies always, never, or on a dark device - on
   // screen only, so a page prints light.
   function media() {
-    return choice === "dark" ? "screen" : choice === "light" ? "not all" : "screen and " + DEVICE_DARK;
+    return choice === "dark" ? "screen" : choice === "light" ? "not all" : deviceMedia;
   }
 
   document.write('<link rel="stylesheet" href="' + href + '" id="theme-dark" media="' + media() + '">');
