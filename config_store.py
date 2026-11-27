@@ -30,7 +30,7 @@ class ConfigError(RuntimeError):
     truncated by a full disk, ...). The message says what to do about it."""
 
 
-APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr", "lazylibrarian", "pihole", "vaultwarden", "opnsense", "pfsense", "immich", "homeassistant", "unifi", "unraid", "bitwarden", "synology", "qnap"]
+APP_NAMES = ["radarr", "sonarr", "lidarr", "whisparr", "prowlarr", "profilarr", "bazarr", "tdarr", "sabnzbd", "nzbget", "tautulli", "jellyfin", "emby", "plex", "seerr", "lazylibrarian", "pihole", "vaultwarden", "opnsense", "pfsense", "immich", "homeassistant", "unifi", "unraid", "bitwarden", "synology", "qnap", "gitlab"]
 
 # encrypt: whether its backups are encrypted (#147) - on unless turned off,
 # and ignored for an app whose APP_META sets always_encrypted.
@@ -79,9 +79,11 @@ APP_CATEGORIES = [
     {"id": "security", "label": "Security", "emoji": "🛡️"},
     {"id": "home-automation", "label": "Home Automation", "emoji": "🏠"},
     {"id": "server", "label": "Server", "icon": "server"},
+        {"id": "productivity", "label": "Productivity", "emoji": "💼"},
 ]
 # Each app's category: a new app adds one line here.
 _APP_CATEGORY = {
+    
     "prowlarr": "media-management", "radarr": "media-management", "sonarr": "media-management",
     "lidarr": "media-management", "whisparr": "media-management", "profilarr": "media-management",
     "bazarr": "media-management", "tdarr": "media-management", "lazylibrarian": "media-management",
@@ -92,6 +94,7 @@ _APP_CATEGORY = {
     "bitwarden": "security", "vaultwarden": "security",
     "homeassistant": "home-automation",
     "qnap": "server", "synology": "server", "unraid": "server",
+    "gitlab": "productivity",
 }
 
 # An app's "icon_dark", if any, replaces its "icon" in the dark theme: the
@@ -641,6 +644,36 @@ APP_META = [
             ],
         },
     },
+        {
+            "id": "gitlab",
+            "label": "GitLab",
+            "icon": "gitlab.svg",
+        # GitLab makes its own backup on its own schedule: Backuparr copies
+            # the newest *_gitlab_backup.tar and config/gitlab_config_*.tar
+            # from GitLab's backups folder, mounted read-only - see apps/gitlab.py.
+                "key_required": True,
+            "key_label": "Personal access token",
+            "key_help": "User settings > Access tokens - make one with only the read_user scope",
+            "url_placeholder": "http://gitlab:8080",
+            "extra_fields": [
+                {"name": "data_dir", "label": "Data folder", "type": "text", "required": True,
+                  "placeholder": "/mnt/gitlab-backups",
+                 "help": "GitLab's backups folder, mounted read-only (its /var/opt/gitlab/backups, or $GITLAB_HOME/data/backups in Docker)"},
+            ],
+            "always_encrypted": True,
+            "manual_restore": {
+                "docs": "https://docs.backuparr.com/apps/gitlab/",
+                "steps": [
+                    {"title": "Same version and type", "steps": [
+                        "Download the backup: the *_gitlab_backup.tar archive and the config/gitlab_config_*.tar archive.",
+                        "Restore only to the exact same GitLab version and type (CE or EE) on a working install.",
+                        "Stop Puma and Sidekiq on the GitLab server.",
+                        "Run gitlab-backup restore BACKUP=<backup-id> (in Docker: docker exec -t <container> gitlab-backup restore BACKUP=<backup-id>).",
+                        "Restore gitlab-secrets.json from the config archive to /etc/gitlab, then restart GitLab.",
+                    ]},
+                ],
+            },
+        },
 ]
 # Backuparr's own backup, shown as an app card in Server (#165). Not an
 # APP_META app: it has no URL or key, its switch is cfg["self_backup"], and
