@@ -1,7 +1,7 @@
 ---
 title: Tdarr
 parent: Apps
-nav_order: 20
+nav_order: 21
 ---
 
 # Tdarr
