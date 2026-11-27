@@ -1,0 +1,11 @@
+{%- comment -%}
+  The dark theme (#272). Just the Docs builds a dark stylesheet next to the
+  light one but gives every visitor the light one; theme.js adds the dark one
+  on top, for a device set to dark or for the choice made with the button in
+  header_custom.html, before the page paints. Without JavaScript the
+  noscript copy follows the device.
+{%- endcomment -%}
+{%- assign dark_css = '/assets/css/just-the-docs-dark.css' | relative_url -%}
+<meta name="color-scheme" content="light dark">
+<script src="{{ '/assets/js/theme.js' | relative_url }}" data-dark-css="{{ dark_css }}"></script>
+<noscript><link rel="stylesheet" href="{{ dark_css }}" media="(prefers-color-scheme: dark)"></noscript>

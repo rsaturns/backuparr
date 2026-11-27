@@ -14,3 +14,54 @@
     padding-top: 0.25em;
   }
 }
+
+// The light/dark button in the top bar (#272, header_custom.html). Hidden
+// without JavaScript, which it needs (theme.js sets .has-theme-toggle). Its
+// icon is the theme it switches to: each theme's stylesheet has its own
+// $color-scheme, so the icon follows whichever applies - the button's
+// choice or the device's setting.
+.theme-toggle {
+  display: none;
+  flex-shrink: 0;
+  align-self: center;
+  align-items: center;
+  justify-content: center;
+  width: 2.125rem;
+  height: 2.125rem;
+  margin: $sp-2 $gutter-spacing-sm;
+  padding: 0;
+  border: $border $border-color;
+  border-radius: 999px;
+  background: $body-background-color;
+  color: $body-text-color;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+
+  &::before {
+    content: if($color-scheme == dark, "\2600", "\263D");
+  }
+
+  &:hover {
+    border-color: $link-color;
+  }
+
+  @include mq(md) {
+    margin: 0 0 0 $sp-4;
+  }
+}
+
+.has-theme-toggle .theme-toggle {
+  display: flex;
+}
+
+// An image in both themes ({: .light-only } and {: .dark-only }, the
+// architecture diagram): each stylesheet shows the one that fits. The dark
+// one applies on top of the light one, so it undoes the light one's rule.
+.light-only {
+  display: if($color-scheme == dark, none, inline);
+}
+
+.dark-only {
+  display: if($color-scheme == dark, inline, none);
+}

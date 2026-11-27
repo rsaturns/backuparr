@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
-"""Regenerates docs/architecture-diagram.png, the docs site's
-architecture reference diagram (apps -> Backuparr -> destinations). It lives
-with the docs, so the site shows the diagram of the branch it's published
-from.
+"""Regenerates docs/architecture-diagram.png and
+docs/architecture-diagram-dark.png, the docs site's architecture reference
+diagram (apps -> Backuparr -> destinations) in its light and dark themes
+(#272). It lives with the docs, so the site shows the diagram of the branch
+it's published from.
 
 The apps come from config_store: a box per Settings category, holding the
 icons of its apps (#163), so a new app only adds an icon to its box. Re-run
 this after adding/removing an app or destination, or after any of the
 icon/logo assets it embeds change.
+
+The two differ only in their colours, the web UI's for each theme, and in
+the icons: the dark one uses an app's dark-theme icon (APP_META icon_dark)
+and turns the one-colour black ones white, as the web UI does.
 
 The diagram is drawn as an SVG, then rendered to a PNG at twice its size by
 Chromium. A PNG shows the same everywhere: GitHub serves an SVG opened on
@@ -33,16 +38,38 @@ from config_store import APP_CATEGORIES, APP_META, SELF_APP  # noqa: E402
 ICONS = os.path.join(REPO, "webui", "static", "icons")
 STATIC = os.path.join(REPO, "webui", "static")
 
-COLOR = {
-    "bg": "#f5f6f8",
-    "card": "#ffffff",
-    "card_hub": "#eef2ff",
-    "border": "#e2e5ea",
-    "border_hub": "#3b6bf6",
-    "text": "#1a1d23",
-    "muted": "#6b7280",
-    "accent": "#3b6bf6",
+# Each theme's file name and colours, which follow the web UI's light and
+# dark themes (style.css).
+THEMES = {
+    "light": ("architecture-diagram.png", {
+        "bg": "#f5f6f8",
+        "card": "#ffffff",
+        "card_hub": "#eef2ff",
+        "border": "#e2e5ea",
+        "border_hub": "#3b6bf6",
+        "text": "#1a1d23",
+        "muted": "#6b7280",
+        "accent": "#3b6bf6",
+        "shadow": "#10182b",
+        "shadow_opacity": 0.10,
+    }),
+    "dark": ("architecture-diagram-dark.png", {
+        "bg": "#14161a",
+        "card": "#1c1f26",
+        "card_hub": "#1a2236",
+        "border": "#2b2f38",
+        "border_hub": "#5b8bff",
+        "text": "#e7e9ed",
+        "muted": "#9096a2",
+        "accent": "#5b8bff",
+        "shadow": "#000000",
+        "shadow_opacity": 0.35,
+    }),
 }
+
+# Black, one-colour icons: white in the dark diagram (style.css inverts them
+# in the web UI's dark theme too).
+INVERT_IN_DARK = {"vaultwarden.svg"}
 
 W = 1200
 # Space reserved above/below content for the caption and bottom margin,
@@ -62,11 +89,11 @@ def _icon_path(icon_file):
     return in_icons if os.path.exists(in_icons) else os.path.join(STATIC, icon_file)
 
 
-# (category label, [(app label, icon path, kind)]) in Settings' order, with
-# Backuparr's own backup first in its category as on the Settings tab; a
-# category with no apps yet isn't drawn.
+# (category label, [(app label, icon file, dark-theme icon file)]) in
+# Settings' order, with Backuparr's own backup first in its category as on
+# the Settings tab; a category with no apps yet isn't drawn.
 CATEGORIES = [
-    (c["label"], [(m["label"], _icon_path(m["icon"]), _kind(m["icon"]))
+    (c["label"], [(m["label"], m["icon"], m.get("icon_dark") or m["icon"])
                   for m in ([SELF_APP] if SELF_APP["category"] == c["id"] else []) + APP_META
                   if m["category"] == c["id"]])
     for c in APP_CATEGORIES
@@ -94,7 +121,7 @@ RIGHT_X = W - 40 - DEST_W
 FOLDER_PATH = "M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"
 
 
-def inner_svg(path, x, y, size):
+def inner_svg(path, x, y, size, invert=False):
     """Strips the outer <svg ...>...</svg> wrapper from an icon file and
     re-wraps its inner content in a fresh nested <svg> positioned/sized for
     the diagram - avoids id/class collisions between icons entirely (each
@@ -102,7 +129,8 @@ def inner_svg(path, x, y, size):
     with open(path) as f:
         content = f.read()
     inner = re.search(r"<svg[^>]*>(.*)</svg>\s*$", content, re.DOTALL).group(1)
-    return f'<svg x="{x}" y="{y}" width="{size}" height="{size}" viewBox="0 0 512 512">{inner}</svg>'
+    style = ' style="filter:invert(1)"' if invert else ""
+    return f'<svg x="{x}" y="{y}" width="{size}" height="{size}" viewBox="0 0 512 512"{style}>{inner}</svg>'
 
 
 def image_tag(path, x, y, size, max_px):
@@ -116,14 +144,14 @@ def image_tag(path, x, y, size, max_px):
     return f'<image x="{x}" y="{y}" width="{size}" height="{size}" href="{uri}" preserveAspectRatio="xMidYMid meet"/>'
 
 
-def icon(path, kind, x, y, size, max_px=128):
+def icon(path, kind, x, y, size, color, invert=False, max_px=128):
     if kind == "svg":
-        return inner_svg(path, x, y, size)
+        return inner_svg(path, x, y, size, invert)
     if kind == "png":
         return image_tag(path, x, y, size, max_px)
     if kind == "local":
         scale = size / 24
-        return f'<g transform="translate({x},{y}) scale({scale})"><path d="{FOLDER_PATH}" fill="{COLOR["accent"]}"/></g>'
+        return f'<g transform="translate({x},{y}) scale({scale})"><path d="{FOLDER_PATH}" fill="{color["accent"]}"/></g>'
     raise ValueError(kind)
 
 
@@ -132,7 +160,10 @@ def box_height(apps):
     return BOX_TITLE_H + rows * ICON_SIZE + (rows - 1) * ICON_GAP + BOX_PAD
 
 
-def build():
+def build(theme):
+    """The diagram's SVG in the "light" or "dark" theme."""
+    color = THEMES[theme][1]
+    dark = theme == "dark"
     src_block_h = sum(box_height(apps) for _, apps in CATEGORIES) + (len(CATEGORIES) - 1) * BOX_GAP
     dest_block_h = len(DESTS) * DEST_H + (len(DESTS) - 1) * DEST_GAP
     # All three columns share one vertical center line, sized to the tallest.
@@ -147,40 +178,43 @@ def build():
         f'''font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif">''',
         f'''<defs>
   <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-    <path d="M0,0 L10,5 L0,10 z" fill="{COLOR['accent']}"/>
+    <path d="M0,0 L10,5 L0,10 z" fill="{color['accent']}"/>
   </marker>
   <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
-    <feDropShadow dx="0" dy="1" stdDeviation="2.2" flood-color="#10182b" flood-opacity="0.10"/>
+    <feDropShadow dx="0" dy="1" stdDeviation="2.2" flood-color="{color['shadow']}" flood-opacity="{color['shadow_opacity']}"/>
   </filter>
 </defs>''',
-        f'<rect x="0" y="0" width="{W}" height="{H}" fill="{COLOR["bg"]}"/>',
-        f'<text x="40" y="42" font-size="13" letter-spacing="1.5" font-weight="600" fill="{COLOR["muted"]}">BACKUPARR &#8212; ARCHITECTURE</text>',
-        f'<text x="40" y="64" font-size="13" fill="{COLOR["muted"]}">Each app\'s own backup in - over its API or web UI, or from its mounted folder - and rclone out.</text>',
+        f'<rect x="0" y="0" width="{W}" height="{H}" fill="{color["bg"]}"/>',
+        f'<text x="40" y="42" font-size="13" letter-spacing="1.5" font-weight="600" fill="{color["muted"]}">BACKUPARR &#8212; ARCHITECTURE</text>',
+        f'<text x="40" y="64" font-size="13" fill="{color["muted"]}">Each app\'s own backup in - over its API or web UI, or from its mounted folder - and rclone out.</text>',
     ]
 
     y = centered_start(src_block_h)
     src_anchor = []
     for label, apps in CATEGORIES:
         h = box_height(apps)
-        parts.append(f'<rect x="{LEFT_X}" y="{y}" width="{BOX_W}" height="{h}" rx="12" fill="{COLOR["card"]}" stroke="{COLOR["border"]}" stroke-width="1.4" filter="url(#shadow)"/>')
-        parts.append(f'<text x="{LEFT_X + BOX_PAD}" y="{y + 27}" font-size="15" font-weight="600" fill="{COLOR["text"]}">{label}</text>')
-        for i, (app_label, path, kind) in enumerate(apps):
+        parts.append(f'<rect x="{LEFT_X}" y="{y}" width="{BOX_W}" height="{h}" rx="12" fill="{color["card"]}" stroke="{color["border"]}" stroke-width="1.4" filter="url(#shadow)"/>')
+        parts.append(f'<text x="{LEFT_X + BOX_PAD}" y="{y + 27}" font-size="15" font-weight="600" fill="{color["text"]}">{label}</text>')
+        for i, (app_label, icon_light, icon_dark) in enumerate(apps):
             row, col = divmod(i, ICONS_PER_ROW)
             ix = LEFT_X + BOX_PAD + col * (ICON_SIZE + ICON_GAP)
             iy = y + BOX_TITLE_H + row * (ICON_SIZE + ICON_GAP)
-            parts.append(f'<g><title>{app_label}</title>{icon(path, kind, ix, iy, ICON_SIZE)}</g>')
+            icon_file = icon_dark if dark else icon_light
+            img = icon(_icon_path(icon_file), _kind(icon_file), ix, iy, ICON_SIZE, color,
+                       invert=dark and icon_file in INVERT_IN_DARK)
+            parts.append(f'<g><title>{app_label}</title>{img}</g>')
         src_anchor.append((LEFT_X + BOX_W, y + h / 2))
         y += h + BOX_GAP
 
     hub_y = centered_start(HUB_H)
-    parts.append(f'<rect x="{HUB_X}" y="{hub_y}" width="{HUB_W}" height="{HUB_H}" rx="16" fill="{COLOR["card_hub"]}" stroke="{COLOR["border_hub"]}" stroke-width="2.2" filter="url(#shadow)"/>')
+    parts.append(f'<rect x="{HUB_X}" y="{hub_y}" width="{HUB_W}" height="{HUB_H}" rx="16" fill="{color["card_hub"]}" stroke="{color["border_hub"]}" stroke-width="2.2" filter="url(#shadow)"/>')
     logo_size = 76
     logo_x, logo_y = HUB_X + (HUB_W - logo_size) / 2, hub_y + 26
     parts.append(image_tag(os.path.join(STATIC, "logo.png"), logo_x, logo_y, logo_size, 256))
-    parts.append(f'<text x="{HUB_X + HUB_W / 2}" y="{logo_y + logo_size + 34}" font-size="22" font-weight="700" text-anchor="middle" fill="{COLOR["text"]}">Backuparr</text>')
+    parts.append(f'<text x="{HUB_X + HUB_W / 2}" y="{logo_y + logo_size + 34}" font-size="22" font-weight="700" text-anchor="middle" fill="{color["text"]}">Backuparr</text>')
     ty = logo_y + logo_size + 56
     for line in ("Backs up each app, checks", "and encrypts it, uploads it", "with rclone, prunes old ones"):
-        parts.append(f'<text x="{HUB_X + HUB_W / 2}" y="{ty}" font-size="13" text-anchor="middle" fill="{COLOR["muted"]}">{line}</text>')
+        parts.append(f'<text x="{HUB_X + HUB_W / 2}" y="{ty}" font-size="13" text-anchor="middle" fill="{color["muted"]}">{line}</text>')
         ty += 17
     hub_in = (HUB_X, hub_y + HUB_H / 2)
     hub_out = (HUB_X + HUB_W, hub_y + HUB_H / 2)
@@ -189,11 +223,11 @@ def build():
     dest_anchor = []
     for i, (label, path, kind, sub) in enumerate(DESTS):
         y = dest_start_y + i * (DEST_H + DEST_GAP)
-        parts.append(f'<rect x="{RIGHT_X}" y="{y}" width="{DEST_W}" height="{DEST_H}" rx="12" fill="{COLOR["card"]}" stroke="{COLOR["border"]}" stroke-width="1.4" filter="url(#shadow)"/>')
+        parts.append(f'<rect x="{RIGHT_X}" y="{y}" width="{DEST_W}" height="{DEST_H}" rx="12" fill="{color["card"]}" stroke="{color["border"]}" stroke-width="1.4" filter="url(#shadow)"/>')
         ix, iy = RIGHT_X + 18, y + (DEST_H - DEST_ICON) / 2
-        parts.append(icon(path, kind, ix, iy, DEST_ICON))
-        parts.append(f'<text x="{ix + DEST_ICON + 16}" y="{y + DEST_H / 2 - 2}" font-size="16" font-weight="600" fill="{COLOR["text"]}">{label}</text>')
-        parts.append(f'<text x="{ix + DEST_ICON + 16}" y="{y + DEST_H / 2 + 18}" font-size="12.5" fill="{COLOR["muted"]}">{sub}</text>')
+        parts.append(icon(path, kind, ix, iy, DEST_ICON, color))
+        parts.append(f'<text x="{ix + DEST_ICON + 16}" y="{y + DEST_H / 2 - 2}" font-size="16" font-weight="600" fill="{color["text"]}">{label}</text>')
+        parts.append(f'<text x="{ix + DEST_ICON + 16}" y="{y + DEST_H / 2 + 18}" font-size="12.5" fill="{color["muted"]}">{sub}</text>')
         dest_anchor.append((RIGHT_X, y + DEST_H / 2))
 
     # Converging lines share one arrowhead at the merge point instead of each
@@ -201,14 +235,14 @@ def build():
     for ax, ay in src_anchor:
         bx, by = hub_in
         c1x, c2x = ax + (bx - ax) * 0.55, ax + (bx - ax) * 0.85
-        parts.append(f'<path d="M{ax},{ay} C{c1x},{ay} {c2x},{by} {bx - 14},{by}" fill="none" stroke="{COLOR["accent"]}" stroke-width="2.2" stroke-opacity="0.55"/>')
+        parts.append(f'<path d="M{ax},{ay} C{c1x},{ay} {c2x},{by} {bx - 14},{by}" fill="none" stroke="{color["accent"]}" stroke-width="2.2" stroke-opacity="0.55"/>')
     hx, hy = hub_in
-    parts.append(f'<path d="M{hx - 14},{hy - 7} L{hx},{hy} L{hx - 14},{hy + 7} Z" fill="{COLOR["accent"]}"/>')
+    parts.append(f'<path d="M{hx - 14},{hy - 7} L{hx},{hy} L{hx - 14},{hy + 7} Z" fill="{color["accent"]}"/>')
 
     for ax, ay in dest_anchor:
         bx, by = hub_out
         c1x, c2x = bx + (ax - bx) * 0.15, bx + (ax - bx) * 0.5
-        parts.append(f'<path d="M{bx},{by} C{c1x},{by} {c2x},{ay} {ax - 6},{ay}" fill="none" stroke="{COLOR["accent"]}" stroke-width="2.4" marker-end="url(#arrow)"/>')
+        parts.append(f'<path d="M{bx},{by} C{c1x},{by} {c2x},{ay} {ax - 6},{ay}" fill="none" stroke="{color["accent"]}" stroke-width="2.4" marker-end="url(#arrow)"/>')
 
     parts.append("</svg>")
     return "\n".join(parts)
@@ -227,6 +261,7 @@ def render_png(svg, out_path):
 
 
 if __name__ == "__main__":
-    out_path = os.path.join(REPO, "docs", "architecture-diagram.png")
-    render_png(build(), out_path)
-    print("wrote", out_path)
+    for theme, (name, _) in THEMES.items():
+        out_path = os.path.join(REPO, "docs", name)
+        render_png(build(theme), out_path)
+        print("wrote", out_path)
