@@ -73,10 +73,16 @@ in, it needs its login on the card or **Disabled for Local Addresses** - see
 | [Synology DSM](synology.md) (7 and 6.2) | Its settings, not your data, from its web UI | By hand |
 | [QNAP QuTS hero](qnap.md) (h5.2+) | Its settings, not your data, from its web UI | By hand |
 
+## Productivity
+
+| App | Backed up | Restored |
+| --- | --- | --- |
+| [GitLab](gitlab.md) | Its backup archive and config tar, from its mounted folder | By hand |
+
 ## Good to know
 
 - Backups of Pi-hole, Bitwarden, Vaultwarden, OPNsense, pfSense, UniFi, Home
-  Assistant, Unraid, Synology DSM and QNAP QuTS hero are always encrypted -
+  Assistant, Unraid, Synology DSM and QNAP QuTS hero and GitLab are always encrypted -
   see [Encrypted backups](../security.md#encrypted-backups).
 - [What each restore does](../restoring.md#what-each-restore-does) lists what
   happens when each app is restored.
