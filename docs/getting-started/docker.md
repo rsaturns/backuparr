@@ -51,6 +51,8 @@ services:
       #- /share/Container/bitwarden/bwdata:/mnt/bitwarden:ro
       # Needed to back up Vaultwarden - its /data folder (see the Vaultwarden note).
       #- /share/Container/vaultwarden/data:/mnt/vaultwarden:ro
+      # Needed to back up GitLab - its backups folder (see the GitLab note).
+      #- /share/Container/gitlab/data/backups:/mnt/gitlab-backups:ro
 ```
 
 ```sh
