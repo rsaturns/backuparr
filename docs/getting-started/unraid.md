@@ -15,3 +15,66 @@ timezone as `TZ`. Apps are reached at your server's IP and each app's port,
 e.g. `http://192.168.1.10:7878`.
 
 Then go through the [first run](first-run.md).
+
+## The template's fields
+
+What each field on Unraid's install page does, in the order Unraid shows
+them. A required field can't be left empty.
+
+### Container
+
+| Field | Required | What it does |
+|---|---|---|
+| **Name** | Yes | The container's name, `backuparr`. |
+| **Repository** | Yes | The image, `rsaturns/backuparr:latest`. `latest` follows full releases; a version tag such as `rsaturns/backuparr:3.0.2` stays put (see [Updating](updating.md)). |
+| **Network Type** | Yes | `Bridge`: the web UI is reached at your server's IP on the two ports below. |
+| **Use Tailscale** | No | Off. Unraid's own option to put the container on your Tailscale network; Backuparr doesn't need it. |
+| **Console shell command** | No | The shell the container's **Console** opens: `Bash`. |
+| **Privileged** | No | Off. Backuparr needs no extra access to the server. |
+
+Unraid's **Advanced View** switch, top right, shows more of its own fields,
+such as **WebUI** (where the container's **WebUI** link goes: the HTTPS
+port), **Extra Parameters**, **Post Arguments** and **CPU Pinning**.
+Backuparr needs none of them changed.
+
+### Ports and folders
+
+| Field | Required | What it does |
+|---|---|---|
+| **WebUI** | Yes | The server's port for the web UI over plain HTTP, `8990`. |
+| **WebUI HTTPS** | Yes | The server's port for the web UI over [HTTPS](../security.md#https), `8991`, with a self-signed certificate: your browser warns the first time. |
+| **Appdata** | Yes | Backuparr's settings, encrypted credentials and keys. With Local Storage, the backups too, in its `backups` folder. Back it up, or keep a cloud destination on. |
+| **Jellyfin backups folder** | No | Needed to back up [Jellyfin](../apps/jellyfin.md): the folder Jellyfin writes its backups to. |
+| **Emby config folder** | No | Needed to back up [Emby](../apps/emby.md): Emby's `/config` folder. Read only; to restore from the web UI, **Edit** it and set **Access Mode** to **Read/Write**. |
+| **Plex data folder** | No | Needed to back up [Plex](../apps/plex.md): its `Plex Media Server` folder. Read only; set **Read/Write** to restore from the web UI. |
+| **Seerr config folder** | No | Needed to back up [Seerr](../apps/seerr.md): Seerr's `/app/config` folder. Read only; set **Read/Write** to restore from the web UI. |
+| **LazyLibrarian config folder** | No | Needed to back up [LazyLibrarian](../apps/lazylibrarian.md): its `/config` folder. Read/write, so each backup's file is removed from it and restores work. |
+| **Bitwarden folder** | No | Needed to back up [Bitwarden](../apps/bitwarden.md): a standard install's `bwdata` folder, or Bitwarden lite's `/backups` folder. Read only is enough. |
+| **Vaultwarden data folder** | No | Needed to back up [Vaultwarden](../apps/vaultwarden.md): its `/data` folder. Read only; set **Read/Write** to restore from the web UI. |
+| **Bazarr backup folder** | No | Needed only to restore [Bazarr](../apps/bazarr.md): its backup folder. Its backups don't need it. |
+
+Most folders' descriptions on the install page give an example path.
+
+### Show more settings
+
+These are under **Show more settings**. See
+[Environment variables](../environment-variables.md) for more on each.
+
+| Field | Required | What it does |
+|---|---|---|
+| **PUID** | Yes | The user the container runs as: `99`, Unraid's `nobody`. |
+| **PGID** | Yes | The group it runs as: `100`, Unraid's `users`. |
+| **UMASK** | No | Permissions of new files. `077` lets only that user read backups; `022` lets other users read them too. |
+| **LOG_LEVEL** | No | How much backup and restore runs log: `INFO`, or `DEBUG` for more. |
+| **BACKUPARR_<wbr>FORCE_<wbr>HTTPS** | No | `true` only behind your own HTTPS reverse proxy. Leave it empty on plain HTTP, or login fails. |
+| **BACKUPARR_<wbr>HTTPS_<wbr>ONLY** | No | `true` closes plain HTTP, so only the HTTPS port answers; `false` keeps it open. Empty leaves it to the **HTTPS only** switch on the Backuparr card in Settings. |
+| **BACKUPARR_<wbr>TLS_<wbr>CERT** | No | Your own certificate in place of the self-signed one: a PEM file's path inside the container, e.g. `/config/backuparr/cert.pem`. Needs `BACKUPARR_TLS_KEY`. |
+| **BACKUPARR_<wbr>TLS_<wbr>KEY** | No | The certificate's unencrypted PEM key, e.g. `/config/backuparr/key.pem`. |
+| **BACKUPARR_<wbr>TRUSTED_<wbr>PROXY** | No | With `BACKUPARR_FORCE_HTTPS`: your reverse proxy's IP address, so the login lockout sees each visitor's own address. |
+| **BACKUPARR_<wbr>DISABLE_<wbr>AUTH** | No | `true` turns off Backuparr's [login](../security.md#login): only when an authenticating reverse proxy protects the whole web UI and its ports can't be reached any other way. |
+| **BACKUPARR_<wbr>SECRETS_<wbr>KEY** | No | Your [encryption key](../security.md#your-encryption-key) in place of the generated `secrets.key`. It encrypts your backups and the credentials in Backuparr's settings. Leave it empty to use the generated one. |
+| **RCLONE_<wbr>CONFIG_<wbr>PASS** | No | Replaces the generated password that encrypts `rclone.conf`, rclone's settings for the cloud destinations. Leave it empty to use the generated one. |
+
+Other [environment variables](../environment-variables.md), such as
+`RCLONE_BWLIMIT`, can be added with **Add another Path, Port, Variable, Label
+or Device** at the bottom of the page.
