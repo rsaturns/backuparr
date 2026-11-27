@@ -83,7 +83,6 @@ APP_CATEGORIES = [
 ]
 # Each app's category: a new app adds one line here.
 _APP_CATEGORY = {
-    
     "prowlarr": "media-management", "radarr": "media-management", "sonarr": "media-management",
     "lidarr": "media-management", "whisparr": "media-management", "profilarr": "media-management",
     "bazarr": "media-management", "tdarr": "media-management", "lazylibrarian": "media-management",
