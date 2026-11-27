@@ -33,6 +33,7 @@ These are under `apps.<id>` too, for one app:
 | `lazylibrarian.data_dir` | LazyLibrarian's mounted data folder (its `/config`) - required |
 | `bitwarden.data_dir` | Bitwarden's mounted `bwdata` folder (standard install) or lite's mounted backups folder - required |
 | `vaultwarden.data_dir` | Vaultwarden's mounted data folder (its `/data`) - required |
+| `gitlab.data_dir` | GitLab's mounted backups folder (its `/var/opt/gitlab/backups`) - required |
 | `opnsense.api_secret` | The secret of OPNsense's API key (encrypted at rest) - required |
 | `unifi.backup` | On UniFi OS: `everything` (UniFi OS's own backup, the default; needs a Super Admin) or `network` (UniFi Network's) |
 | `unifi.history` | Statistics kept in a UniFi Network backup: `settings` (the default), `7`, `30`, `90`, `365` (days) or `all` |
