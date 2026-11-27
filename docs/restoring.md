@@ -18,7 +18,7 @@ The restore shows live progress and a log.
 
 ![Restore tab: Radarr and a backup picked, with the check saying the backup is from the installed Radarr version]({{ '/screenshots/restore.png' | relative_url }})
 
-An app Backuparr can't restore itself (Profilarr, OPNsense, pfSense, UniFi, Unraid, Synology DSM, QNAP QuTS hero, Bitwarden) is listed too: picking it
+An app Backuparr can't restore itself (Profilarr, OPNsense, pfSense, UniFi, Unraid, Synology DSM, QNAP QuTS hero, Bitwarden, GitLab) is listed too: picking it
 shows a **Download** button (decrypted, like History's), the steps for
 restoring it by hand and a link to its page here, in place of **Restore**.
 
@@ -84,7 +84,7 @@ restore never leaves an app half-migrated.
 [OPNsense](apps/opnsense.md), [pfSense](apps/pfsense.md),
 [UniFi](apps/unifi.md), [Bitwarden](apps/bitwarden.md),
 [Unraid](apps/unraid.md), [Synology DSM](apps/synology.md) and
-[QNAP QuTS hero](apps/qnap.md). The Restore tab gives the download and the
+[QNAP QuTS hero](apps/qnap.md) and [GitLab](apps/gitlab.md). The Restore tab gives the download and the
 steps, and each app's page here has them too.
 
 ## Restoring Backuparr itself
