@@ -10,8 +10,8 @@ backups, and a full run ends with Backuparr's own backup (self_backup).
 Most apps are backed up over their HTTP API (Home Assistant over its
 WebSocket API). A few need their folder mounted into this container:
 Jellyfin's and LazyLibrarian's APIs can't download the backup they create,
-so it's picked up from the mounted folder; Emby, Seerr, Vaultwarden and
-Bitwarden have no backup API, so their files are read from their mounted
+so it's picked up from the mounted folder; Emby, Seerr, Vaultwarden,
+Bitwarden and GitLab have no backup API, so their files are read from their mounted
 folders; and Plex's settings and server identity come from its mounted data
 folder. Settings come from config_store, not environment variables.
 """
@@ -69,9 +69,11 @@ from apps.unifi import UnifiApp
 from apps.synology import SynologyApp
 from apps.qnap import QnapApp
 from apps.unraid import UnraidApp
+from apps.gitlab import GitLabApp
 from config_store import (ConfigError, app_label, app_meta, enabled_apps, enabled_destinations, encrypts, instance_type, retention_days,
                           self_backup_on)
 from webui.version import VERSION
+
 
 LOG_DIR = os.environ.get("BACKUPARR_LOG_DIR", "/var/log/backuparr")
 LOG_FILE = os.path.join(LOG_DIR, "backup.log")
@@ -288,6 +290,7 @@ DRIVERS = {
     "unraid": UnraidApp,
     "synology": SynologyApp,
     "qnap": QnapApp,
+  "gitlab": GitLabApp,
 }
 
 
