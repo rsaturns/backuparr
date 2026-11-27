@@ -17,7 +17,7 @@ or an extra instance's (`radarr-4k`).
 |---|---|
 | `enabled`, `url`, `api_key` | As on the Settings tab |
 | `encrypt` | Encrypt its backups (default `true`); ignored for an app that's always encrypted - see [Encrypted backups](security.md#encrypted-backups) |
-| `name` | An extra instance's name. Radarr, Sonarr, Lidarr, Whisparr, Pi-hole, OPNsense, pfSense, UniFi, Immich, Home Assistant, Unraid, Synology DSM and QNAP QuTS hero can have [extra instances](settings.md#more-than-one-instance), with the same fields as the first |
+| `name` | An extra instance's name. Radarr, Sonarr, Lidarr, Whisparr, Pi-hole, OPNsense, pfSense, UniFi, Immich, Home Assistant, Unraid, Synology DSM, QNAP QuTS hero and Reactive Resume can have [extra instances](settings.md#more-than-one-instance), with the same fields as the first |
 | `username`, `password` | A login: Radarr's, Sonarr's, Lidarr's, Whisparr's and Prowlarr's own, only if it asks every address to log in ([note](apps/servarr.md)); Bazarr's, only if its web auth is `Basic`; NZBGet's Control user; the pfSense, UniFi, Synology DSM and QNAP QuTS hero account; Unraid's root `password`. Passwords are encrypted at rest |
 | `trusted_cert` | The self-signed certificate trusted on the card, for OPNsense, pfSense, UniFi, Unraid, Synology DSM, QNAP QuTS hero, Home Assistant and Bitwarden: `{"sha256", "subject", "not_after"}`; set by **Trust** |
 
