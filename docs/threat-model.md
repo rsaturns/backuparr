@@ -87,6 +87,9 @@ everything; that's outside what Backuparr can defend.
   elsewhere (GHSA-r2gf-f7v8-j7g2). Error messages never repeat an app's
   address or key.
 
+  - **The GitLab token.** It is read_user only, sent in the `PRIVATE-TOKEN` header, and goes only to the same host.
+  The backups folder is mounted read-only. The backup holds the database, repositories and uploads, and the config tar holds the database encryption key - so it is always encrypted.
+
 ### Your backups
 
 - **Reading backups where they're stored.** Each backup is encrypted with
