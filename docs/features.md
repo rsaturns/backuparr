@@ -7,7 +7,7 @@ nav_order: 2
 
 ## Apps
 
-Backuparr backs up 27 apps:
+Backuparr backs up 28 apps:
 
 - Radarr
 - Sonarr
@@ -36,6 +36,7 @@ Backuparr backs up 27 apps:
 - Unraid (its boot device)
 - Synology DSM (its settings)
 - QNAP QuTS hero (its settings)
+- Reactive Resume (its account export)
 {: .columns-2 }
 
 See [Apps](apps/index.md) for how each one is backed up and restored.
@@ -46,7 +47,7 @@ See [Apps](apps/index.md) for how each one is backed up and restored.
 - **Include metadata** on Jellyfin, Emby and Plex adds their posters, artwork
   and saved metadata, custom artwork too. History shows which backups have it.
 - Up to 10 extra instances each of Radarr, Sonarr, Lidarr, Whisparr, Pi-hole,
-  OPNsense, pfSense, UniFi, Immich, Home Assistant, Unraid, Synology DSM and QNAP QuTS hero, such as a 4K Radarr or a second firewall. See [More than one instance](settings.md#more-than-one-instance).
+  OPNsense, pfSense, UniFi, Immich, Home Assistant, Unraid, Synology DSM, QNAP QuTS hero and Reactive Resume, such as a 4K Radarr or a second firewall. See [More than one instance](settings.md#more-than-one-instance).
 - **Prowlarr discovery** fills in the apps Prowlarr already knows, API keys
   included. See [Prowlarr discovery](settings.md#prowlarr-discovery).
 - **Test connection** on every app card.
