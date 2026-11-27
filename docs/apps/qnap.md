@@ -1,7 +1,7 @@
 ---
 title: QNAP QuTS hero
 parent: Apps
-nav_order: 14
+nav_order: 15
 ---
 
 # QNAP QuTS hero
