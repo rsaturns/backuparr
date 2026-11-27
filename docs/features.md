@@ -7,7 +7,7 @@ nav_order: 2
 
 ## Apps
 
-Backuparr backs up 27 apps:
+Backuparr backs up 28 apps:
 
 - Radarr
 - Sonarr
@@ -36,6 +36,7 @@ Backuparr backs up 27 apps:
 - Unraid (its boot device)
 - Synology DSM (its settings)
 - QNAP QuTS hero (its settings)
+- GitLab (its backup archive and config tar)
 {: .columns-2 }
 
 See [Apps](apps/index.md) for how each one is backed up and restored.
