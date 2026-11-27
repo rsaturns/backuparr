@@ -74,7 +74,6 @@ from config_store import (ConfigError, app_label, app_meta, enabled_apps, enable
                           self_backup_on)
 from webui.version import VERSION
 
-
 LOG_DIR = os.environ.get("BACKUPARR_LOG_DIR", "/var/log/backuparr")
 LOG_FILE = os.path.join(LOG_DIR, "backup.log")
 
