@@ -86,7 +86,9 @@ everything; that's outside what Backuparr can defend.
   and stopped if a symbolic link in the app's folder would send a write
   elsewhere (GHSA-r2gf-f7v8-j7g2). Error messages never repeat an app's
   address or key.
-  - **The Reactive Resume key.** It is Read only, sent in the `x-api-key` header, and goes only to the same host. The backup holds resumes, job applications and contacts - personal data - so it is always encrypted.
+
+- **The Reactive Resume key.** It is Read only, sent in the `x-api-key` header, and goes only to the same host.
+The backup holds resumes, job applications and contacts - personal data - so it is always encrypted.
 
 ### Your backups
 
