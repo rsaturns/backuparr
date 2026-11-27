@@ -11,11 +11,13 @@ this after adding/removing an app or destination, or after any of the
 icon/logo assets it embeds change.
 
 The two differ only in their colours, the web UI's for each theme, and in
-the icons: the dark one uses an app's dark-theme icon (APP_META icon_dark)
-and turns the one-colour black ones white, as the web UI does. Both come
-from webui/static/style.css, so the diagram follows the web UI. It also
-writes the diagrams' size into docs/architecture.md, so the page keeps
-their space while they load (tests/test_architecture_diagram.py checks it).
+the icons: the dark one uses an app's dark-theme icon (APP_META icon_dark),
+and each icon gets the filter the web UI gives it in that theme (the
+one-colour black ones turn white in dark). Chromium reads both from
+webui/static/style.css as the web UI's browser applies it, so the diagram
+follows the web UI. It also writes the diagrams' size into
+docs/architecture.md, so the page keeps their space while they load
+(tests/test_architecture_diagram.py checks it).
 
 The diagram is drawn as an SVG, then rendered to a PNG at twice its size by
 Chromium. A PNG shows the same everywhere: GitHub serves an SVG opened on
@@ -28,6 +30,7 @@ app itself, and a Chromium: Playwright's (`playwright install chromium`), or
 a system one named in CHROMIUM (e.g. CHROMIUM=/usr/bin/chromium).
 """
 import base64
+import html
 import io
 import os
 import re
@@ -43,70 +46,27 @@ STATIC = os.path.join(REPO, "webui", "static")
 DOCS = os.path.join(REPO, "docs")
 
 
-def _style_css():
-    """The web UI's style.css, without its comments."""
-    with open(os.path.join(STATIC, "style.css")) as f:
-        return re.sub(r"/\*.*?\*/", "", f.read(), flags=re.S)
-
-
-def _tokens(css, selector):
-    """The colours style.css sets for one theme: the custom properties in the
-    first block for selector."""
-    m = re.search(re.escape(selector) + r"\s*\{([^{}]*)\}", css)
-    if not m:
-        raise SystemExit(f"style.css has no {selector} block - update _tokens()")
-    return {k: v.strip() for k, v in re.findall(r"(--[\w-]+):\s*([^;]+);", m.group(1))}
-
-
-def _colors(tokens, own):
-    """A theme's colours: the web UI's, plus the diagram's own (the
-    Backuparr box's tint and the shadow, which style.css has no colour for)."""
-    try:
-        web = {"bg": tokens["--bg"], "card": tokens["--bg-elevated"], "border": tokens["--border"],
-               "text": tokens["--text"], "muted": tokens["--text-muted"], "accent": tokens["--accent"],
-               "border_hub": tokens["--accent"]}
-    except KeyError as e:
-        raise SystemExit(f"style.css has no {e} - update _colors()") from None
-    return {**web, **own}
-
-
-def _inverted_in_dark(css):
-    """Black, one-colour icons, which the web UI's dark theme turns white
-    with a filter: invert() rule in style.css: white in the dark diagram
-    too. The device's dark theme and the toggle's each have such rules; they
-    must name the same icons."""
-    def icons(theme_selector):
-        names = set()
-        for selectors, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css):
-            if theme_selector in selectors and re.search(r"filter:[^;]*invert\(", body):
-                names |= set(re.findall(r'img\[src\$="/([^"/]+)"\]', selectors))
-        return names
-
-    by_device = icons(':root:not([data-theme="light"])')
-    by_toggle = icons(':root[data-theme="dark"]')
-    if not by_toggle or by_device != by_toggle:
-        raise SystemExit(f"style.css's dark-theme invert rules don't match (device {sorted(by_device)}, "
-                         f"toggle {sorted(by_toggle)}) - update _inverted_in_dark()")
-    return by_toggle
-
-
-STYLE_CSS = _style_css()
-
-# Each theme's file name and colours.
+# Each theme's file name, and the diagram's own colours: the Backuparr box's
+# tint and the shadow, which style.css has no colour for. The rest are the
+# web UI's (web_ui_theme()).
 THEMES = {
-    "light": ("architecture-diagram.png", _colors(_tokens(STYLE_CSS, ":root"), {
+    "light": ("architecture-diagram.png", {
         "card_hub": "#eef2ff",
         "shadow": "#10182b",
         "shadow_opacity": 0.10,
-    })),
-    "dark": ("architecture-diagram-dark.png", _colors(_tokens(STYLE_CSS, ':root[data-theme="dark"]'), {
+    }),
+    "dark": ("architecture-diagram-dark.png", {
         "card_hub": "#1a2236",
         "shadow": "#000000",
         "shadow_opacity": 0.35,
-    })),
+    }),
 }
 
-INVERT_IN_DARK = _inverted_in_dark(STYLE_CSS)
+# The diagram's colours and the web UI's custom properties they come from.
+WEB_UI_COLORS = {
+    "bg": "--bg", "card": "--bg-elevated", "border": "--border", "text": "--text",
+    "muted": "--text-muted", "accent": "--accent", "border_hub": "--accent",
+}
 
 W = 1200
 # Space reserved above/below content for the caption and bottom margin,
@@ -124,6 +84,12 @@ def _icon_path(icon_file):
     """App icons are in icons/; Backuparr's own logo is in static/."""
     in_icons = os.path.join(ICONS, icon_file)
     return in_icons if os.path.exists(in_icons) else os.path.join(STATIC, icon_file)
+
+
+def _icon_url(icon_file):
+    """The icon's URL in the web UI, which style.css's rules match on."""
+    in_icons = os.path.exists(os.path.join(ICONS, icon_file))
+    return f"/static/icons/{icon_file}" if in_icons else f"/static/{icon_file}"
 
 
 # (category label, [(app label, icon file, dark-theme icon file)]) in
@@ -158,7 +124,11 @@ RIGHT_X = W - 40 - DEST_W
 FOLDER_PATH = "M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"
 
 
-def inner_svg(path, x, y, size, invert=False):
+def _style(css_filter):
+    return f' style="filter:{html.escape(css_filter)}"' if css_filter else ""
+
+
+def inner_svg(path, x, y, size, css_filter=None):
     """Strips the outer <svg ...>...</svg> wrapper from an icon file and
     re-wraps its inner content in a fresh nested <svg> positioned/sized for
     the diagram - avoids id/class collisions between icons entirely (each
@@ -166,11 +136,10 @@ def inner_svg(path, x, y, size, invert=False):
     with open(path) as f:
         content = f.read()
     inner = re.search(r"<svg[^>]*>(.*)</svg>\s*$", content, re.DOTALL).group(1)
-    style = ' style="filter:invert(1)"' if invert else ""
-    return f'<svg x="{x}" y="{y}" width="{size}" height="{size}" viewBox="0 0 512 512"{style}>{inner}</svg>'
+    return f'<svg x="{x}" y="{y}" width="{size}" height="{size}" viewBox="0 0 512 512"{_style(css_filter)}>{inner}</svg>'
 
 
-def image_tag(path, x, y, size, max_px):
+def image_tag(path, x, y, size, max_px, css_filter=None):
     """Downscales a raster asset and inlines it as a data: URI, so the
     diagram is a single self-contained file with no external references."""
     img = Image.open(path).convert("RGBA")
@@ -178,14 +147,14 @@ def image_tag(path, x, y, size, max_px):
     buf = io.BytesIO()
     img.save(buf, format="PNG", optimize=True)
     uri = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
-    return f'<image x="{x}" y="{y}" width="{size}" height="{size}" href="{uri}" preserveAspectRatio="xMidYMid meet"/>'
+    return f'<image x="{x}" y="{y}" width="{size}" height="{size}" href="{uri}" preserveAspectRatio="xMidYMid meet"{_style(css_filter)}/>'
 
 
-def icon(path, kind, x, y, size, color, invert=False, max_px=128):
+def icon(path, kind, x, y, size, color, css_filter=None, max_px=128):
     if kind == "svg":
-        return inner_svg(path, x, y, size, invert)
+        return inner_svg(path, x, y, size, css_filter)
     if kind == "png":
-        return image_tag(path, x, y, size, max_px)
+        return image_tag(path, x, y, size, max_px, css_filter)
     if kind == "local":
         scale = size / 24
         return f'<g transform="translate({x},{y}) scale({scale})"><path d="{FOLDER_PATH}" fill="{color["accent"]}"/></g>'
@@ -197,9 +166,56 @@ def box_height(apps):
     return BOX_TITLE_H + rows * ICON_SIZE + (rows - 1) * ICON_GAP + BOX_PAD
 
 
-def build(theme):
-    """The diagram's SVG in the "light" or "dark" theme."""
-    color = THEMES[theme][1]
+def icon_files():
+    """Every icon file the diagram may draw, in either theme."""
+    files = {f for _, apps in CATEGORIES for _, light, dark in apps for f in (light, dark)}
+    return sorted(files | {os.path.basename(path) for _, path, _, _ in DESTS if path})
+
+
+def web_ui_theme(browser, theme):
+    """The web UI's colours and icon filters in theme ("light" or "dark"), as
+    Chromium applies style.css: each colour's custom property on :root, and
+    each icon's filter on an <img> with the web UI's URL for it. The web UI
+    gets a theme two ways - the device's setting, and the toggle's
+    data-theme on a device set the other way - which must agree."""
+    css_path = os.path.join(STATIC, "style.css")
+    files = icon_files()
+    seen = []
+    for device, data_theme in ((theme, None), ("dark" if theme == "light" else "light", theme)):
+        page = browser.new_page(color_scheme=device)
+        page.set_content("<html><head></head><body></body></html>")
+        page.add_style_tag(path=css_path)
+        seen.append(page.evaluate("""([dataTheme, props, icons]) => {
+          const root = document.documentElement;
+          if (dataTheme) root.setAttribute("data-theme", dataTheme);
+          const cs = getComputedStyle(root);
+          const colors = Object.fromEntries(props.map(p => [p, cs.getPropertyValue(p).trim()]));
+          const filters = {};
+          for (const [file, url] of icons) {
+            const img = document.createElement("img");
+            img.setAttribute("src", url);
+            document.body.append(img);
+            const f = getComputedStyle(img).filter;
+            if (f !== "none") filters[file] = f;
+            img.remove();
+          }
+          return {colors, filters};
+        }""", [data_theme, sorted(set(WEB_UI_COLORS.values())), [[f, _icon_url(f)] for f in files]]))
+        page.close()
+    by_device, by_toggle = seen
+    if by_device != by_toggle:
+        raise SystemExit(f"style.css's {theme} theme differs between the device's setting and the toggle:\n"
+                         f"  device {by_device}\n  toggle {by_toggle}")
+    missing = [p for p, v in by_toggle["colors"].items() if not v]
+    if missing:
+        raise SystemExit(f"style.css sets no {', '.join(missing)} in its {theme} theme - update WEB_UI_COLORS")
+    colors = {key: by_toggle["colors"][prop] for key, prop in WEB_UI_COLORS.items()}
+    return colors, by_toggle["filters"]
+
+
+def build(theme, color, filters):
+    """The diagram's SVG in the "light" or "dark" theme, in its colours, with
+    each icon's CSS filter (web_ui_theme())."""
     dark = theme == "dark"
     src_block_h = sum(box_height(apps) for _, apps in CATEGORIES) + (len(CATEGORIES) - 1) * BOX_GAP
     dest_block_h = len(DESTS) * DEST_H + (len(DESTS) - 1) * DEST_GAP
@@ -238,7 +254,7 @@ def build(theme):
             iy = y + BOX_TITLE_H + row * (ICON_SIZE + ICON_GAP)
             icon_file = icon_dark if dark else icon_light
             img = icon(_icon_path(icon_file), _kind(icon_file), ix, iy, ICON_SIZE, color,
-                       invert=dark and icon_file in INVERT_IN_DARK)
+                       filters.get(icon_file))
             parts.append(f'<g><title>{app_label}</title>{img}</g>')
         src_anchor.append((LEFT_X + BOX_W, y + h / 2))
         y += h + BOX_GAP
@@ -262,7 +278,7 @@ def build(theme):
         y = dest_start_y + i * (DEST_H + DEST_GAP)
         parts.append(f'<rect x="{RIGHT_X}" y="{y}" width="{DEST_W}" height="{DEST_H}" rx="12" fill="{color["card"]}" stroke="{color["border"]}" stroke-width="1.4" filter="url(#shadow)"/>')
         ix, iy = RIGHT_X + 18, y + (DEST_H - DEST_ICON) / 2
-        parts.append(icon(path, kind, ix, iy, DEST_ICON, color))
+        parts.append(icon(path, kind, ix, iy, DEST_ICON, color, filters.get(os.path.basename(path or ""))))
         parts.append(f'<text x="{ix + DEST_ICON + 16}" y="{y + DEST_H / 2 - 2}" font-size="16" font-weight="600" fill="{color["text"]}">{label}</text>')
         parts.append(f'<text x="{ix + DEST_ICON + 16}" y="{y + DEST_H / 2 + 18}" font-size="12.5" fill="{color["muted"]}">{sub}</text>')
         dest_anchor.append((RIGHT_X, y + DEST_H / 2))
@@ -298,23 +314,29 @@ def write_size(md_path, name, width, height):
         f.write(md)
 
 
-def render_png(svg, out_path):
+def render_png(browser, svg, out_path):
     """Renders the SVG with Chromium at 2x, for sharp text on high-DPI screens."""
+    page = browser.new_page(viewport={"width": W, "height": 100}, device_scale_factor=2)
+    page.set_content(f'<html><body style="margin:0">{svg}</body></html>')
+    page.locator("svg").first.screenshot(path=out_path)
+    page.close()
+
+
+def main():
     from playwright.sync_api import sync_playwright
 
+    md_path = os.path.join(DOCS, "architecture.md")
     with sync_playwright() as p:
         browser = p.chromium.launch(executable_path=os.environ.get("CHROMIUM") or None)
-        page = browser.new_page(viewport={"width": W, "height": 100}, device_scale_factor=2)
-        page.set_content(f'<html><body style="margin:0">{svg}</body></html>')
-        page.locator("svg").first.screenshot(path=out_path)
+        for theme, (name, own_colors) in THEMES.items():
+            colors, filters = web_ui_theme(browser, theme)
+            out_path = os.path.join(DOCS, name)
+            render_png(browser, build(theme, {**colors, **own_colors}, filters), out_path)
+            width, height = Image.open(out_path).size
+            write_size(md_path, name, width // 2, height // 2)
+            print("wrote", out_path, f"({width // 2}x{height // 2})", "filters:", filters or "none")
         browser.close()
 
 
 if __name__ == "__main__":
-    md_path = os.path.join(DOCS, "architecture.md")
-    for theme, (name, _) in THEMES.items():
-        out_path = os.path.join(DOCS, name)
-        render_png(build(theme), out_path)
-        width, height = Image.open(out_path).size
-        write_size(md_path, name, width // 2, height // 2)
-        print("wrote", out_path, f"({width // 2}x{height // 2})")
+    main()

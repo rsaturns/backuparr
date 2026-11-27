@@ -13,15 +13,15 @@
   "use strict";
 
   var KEY = "backuparr-theme";
-  var DEVICE_DARK = "(prefers-color-scheme: dark)";
   var script = document.currentScript;
   var href = script && script.getAttribute("data-dark-css");
   // The dark device's media query, the same one the preload and the
-  // noscript copy use (head_custom.html).
+  // noscript copy use (head_custom.html). It also tells the button whether
+  // the device's setting is dark.
   var deviceMedia = script && script.getAttribute("data-dark-media");
   if (!href || !deviceMedia) return;
   var meta = document.querySelector('meta[name="color-scheme"]');
-  var device = window.matchMedia ? window.matchMedia(DEVICE_DARK) : null;
+  var device = window.matchMedia ? window.matchMedia(deviceMedia) : null;
 
   function saved() {
     try {
