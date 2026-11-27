@@ -33,7 +33,7 @@ If you like Backuparr, give it a ⭐ star - it helps the project grow.
 - **The apps you host:** Radarr, Sonarr, SABnzbd, Plex, Jellyfin and the
   rest of your media stack, plus your network, passwords, smart home, photos
   and servers - Pi-hole, OPNsense, pfSense, UniFi, Vaultwarden, Bitwarden,
-  Home Assistant, Immich, Unraid, Synology DSM and QNAP QuTS hero. See the
+  Home Assistant, Immich, Unraid, Synology DSM, QNAP QuTS hero and Reactive Resume. See the
   [full list](https://docs.backuparr.com/apps/).
 - **Every destination at once:** Local Storage, Google Drive, OneDrive and
   Dropbox, connected in the web UI, with retention set once or per
