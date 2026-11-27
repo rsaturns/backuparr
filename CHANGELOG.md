@@ -6,6 +6,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 - New contributors: @avaldivieso-meraki made their first contribution in #273.
+- Back up GitLab: its backup archive and config tar, from its mounted folder.
 
 ## [3.0.1] - 2026-11-24
 
