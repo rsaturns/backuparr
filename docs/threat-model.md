@@ -17,6 +17,7 @@ adds a way in, such as a new app, destination or API route.
 |---|---|---|
 | Your apps' API keys and logins | `config.json`, encrypted | Control of every app Backuparr backs up |
 | Cloud tokens | `rclone.conf`, encrypted | Your backups in the cloud, and for OneDrive and Dropbox more of the account |
+| Cloud Storage access keys | `config.json` and `rclone.conf`, encrypted | Read and write access to the bucket, subject to the key's permissions |
 | The encryption key | `secrets.key`, or `BACKUPARR_SECRETS_KEY` | Opens the stored credentials and every encrypted backup |
 | Backups | Your destinations | A full copy of each app: password vaults, firewall configs, your smart home |
 | The admin login | `auth.json` (an Argon2id hash) and server-side sessions | Everything above, through the web UI |

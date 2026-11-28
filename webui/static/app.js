@@ -125,7 +125,7 @@ function destLabel(destId) {
 }
 
 // Short labels for the small icon row - destLabel()'s full names are too long there.
-const SHORT_DEST_LABEL = { local: "Local", gdrive: "Google Drive", onedrive: "OneDrive", dropbox: "Dropbox" };
+const SHORT_DEST_LABEL = { local: "Local", gdrive: "Google Drive", onedrive: "OneDrive", dropbox: "Dropbox", s3: "Cloud Storage" };
 
 function enabledDestinationIds(cfg) {
   // Order from DESTINATION_META, not Object.keys - jsonify() sorts keys
@@ -284,7 +284,10 @@ function storageDetails(id, d, details, separator) {
   used.textContent = `${fmtBytes(d.used)} used`;
   details.append(separator, used);
   apiFetch(`/api/storage/${id}/space`).then((space) => {
-    if (space.free == null) return;
+    if (space.free == null) {
+      if (id === "s3") details.append(" · ", "Free space unknown");
+      return;
+    }
     // Backuparr's own backups are already in "used", so they have
     // free + used to grow into.
     const short = d.needed != null && d.needed > space.free + d.used;
@@ -1777,6 +1780,84 @@ function destCard(destId) {
   return document.querySelector(`.dest-card[data-dest="${destId}"]`);
 }
 
+const S3_META = DESTINATION_META.find((dest) => dest.id === "s3");
+let S3_SAVED_CONNECTION = null;
+
+function updateS3Provider(card) {
+  const provider = S3_META.providers[card.querySelector('[data-field="provider"]').value];
+  card.querySelector(".d-provider-fields").classList.toggle("hidden", !provider);
+  const { icon, icon_dark: dark } = provider || S3_META;
+  card.querySelector(".d-provider-icon").replaceChildren(
+    ...appIconImgs(`/static/icons/${icon}`, dark && `/static/icons/${dark}`),
+  );
+  for (const field of ["endpoint", "region"]) {
+    const input = card.querySelector(`[data-field="${field}"]`);
+    input.disabled = !provider?.[field];
+    input.closest(".field").classList.toggle("hidden", input.disabled);
+    const optional = field === "endpoint" ? provider?.endpoint_optional : provider?.default_region;
+    input.required = !input.disabled && !optional;
+    card.querySelector(`.d-${field}-optional`).classList.toggle("hidden", input.disabled || !optional);
+  }
+  updateS3LocationPlaceholders(card, provider);
+}
+
+function updateS3LocationPlaceholders(card, provider) {
+  const endpoint = card.querySelector('[data-field="endpoint"]');
+  const region = card.querySelector('[data-field="region"]');
+  const signingRegion = region.value.trim();
+  endpoint.placeholder = provider?.endpoint || "";
+  if (provider?.endpoint && !provider.endpoint_optional) {
+    endpoint.placeholder = `Example: ${provider.endpoint}`;
+  } else if (provider?.regional_host && signingRegion && signingRegion !== provider.default_region) {
+    endpoint.placeholder = `https://s3.${signingRegion}.${provider.regional_host}`;
+  }
+  region.placeholder = provider?.region ? provider.default_region : "";
+  if (provider?.regional_host && endpoint.value.trim()) {
+    region.placeholder = `From endpoint or ${provider.default_region}`;
+  }
+}
+
+function sameS3Connection(current, saved) {
+  if (!["provider", "endpoint", "access_key_id"].every((field) => (current[field] || "") === (saved[field] || ""))) {
+    return false;
+  }
+  const provider = S3_META.providers[current.provider];
+  if (!provider?.regional_host || current.endpoint) return true;
+  return (current.region || provider.default_region) === (saved.region || provider.default_region);
+}
+
+function updateS3Secret(card) {
+  const saved = S3_SAVED_CONNECTION && sameS3Connection(readDestCard("s3"), S3_SAVED_CONNECTION);
+  const input = card.querySelector('[data-field="secret_access_key"]');
+  // A display-only mask keeps the real key and its length out of the page.
+  input.placeholder = saved ? "\u2022".repeat(8) : "";
+  input.required = !saved;
+  if (saved) input.setAttribute("aria-describedby", "s3-secret-description");
+  else input.removeAttribute("aria-describedby");
+}
+
+function initS3Events() {
+  const card = destCard("s3");
+  if (!card) return;
+  card.querySelector('[data-field="provider"]').addEventListener("change", () => {
+    for (const field of ["endpoint", "region", "access_key_id", "secret_access_key"]) {
+      card.querySelector(`[data-field="${field}"]`).value = "";
+    }
+    updateS3Provider(card);
+    updateS3Secret(card);
+  });
+  card.addEventListener("input", (event) => {
+    const field = event.target.dataset.field;
+    if (field === "endpoint" || field === "region") {
+      const provider = S3_META.providers[card.querySelector('[data-field="provider"]').value];
+      updateS3LocationPlaceholders(card, provider);
+    }
+    if (["endpoint", "region", "access_key_id"].includes(field)) updateS3Secret(card);
+    card.querySelector(".test-result").textContent = "";
+    card.querySelector(".status-dot").dataset.state = "idle";
+  });
+}
+
 function fillDestCard(destId, cfg) {
   const card = destCard(destId);
   if (!card) return;
@@ -1790,6 +1871,11 @@ function fillDestCard(destId, cfg) {
   if (body) body.classList.toggle("hidden", !cfg.enabled);
   if (destId === "gdrive") updateGdriveUI(cfg);
   if (TOKEN_DESTS[destId]) updateTokenDestUI(destId, cfg);
+  if (destId === "s3") {
+    S3_SAVED_CONNECTION = cfg.has_secret_access_key ? cfg : null;
+    updateS3Provider(card);
+    updateS3Secret(card);
+  }
 }
 
 function readDestCard(destId) {
@@ -1798,6 +1884,7 @@ function readDestCard(destId) {
   card.querySelectorAll(".d-field").forEach((input) => {
     out[input.dataset.field] = input.value.trim();
   });
+  if (destId === "s3" && !out.secret_access_key) delete out.secret_access_key;
   // Blank (or not a number) leaves it to the default retention.
   const retention = card.querySelector(".d-retention");
   if (retention) out.retention_days = retention.value.trim() === "" || Number.isNaN(Number(retention.value)) ? null : Number(retention.value);
@@ -2330,6 +2417,18 @@ async function saveSettings() {
       method: "POST",
       body: JSON.stringify(cfg),
     });
+    const savedS3 = cfg.destinations.s3;
+    if (savedS3) {
+      const { secret_access_key: newSecret, ...connection } = savedS3;
+      const card = destCard("s3");
+      const current = readDestCard("s3");
+      const keepsSavedSecret = S3_SAVED_CONNECTION && sameS3Connection(connection, S3_SAVED_CONNECTION);
+      S3_SAVED_CONNECTION = newSecret || keepsSavedSecret ? connection : null;
+      if (newSecret && current.secret_access_key === newSecret && sameS3Connection(current, connection)) {
+        card.querySelector('[data-field="secret_access_key"]').value = "";
+      }
+      updateS3Secret(card);
+    }
     REMOVED_INSTANCES.forEach((appId) => RETIRED_INSTANCES.add(appId));
     REMOVED_INSTANCES.clear();
     rememberSavedInstances(cfg.apps);
@@ -2958,6 +3057,7 @@ function initSettingsEvents() {
   document.getElementById("notify-test-btn").addEventListener("click", testNotifyUrl);
   initScheduleEvents();
   initStorageHintEvents();
+  initS3Events();
 
   document.querySelectorAll(".test-dest-btn").forEach((btn) => {
     btn.addEventListener("click", () => testDestination(btn.closest(".dest-card").dataset.dest));

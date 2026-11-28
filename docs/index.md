@@ -11,9 +11,9 @@ permalink: /
 
 Scheduled backups of the apps you host - media management, downloaders,
 media servers, network, security, home automation and server apps - sent to
-every destination you enable: Local Storage, Google Drive, OneDrive and
-Dropbox. Backups are encrypted with your own key by default, and most apps
-restore from the web UI. Everything - apps, destinations, schedule, retention
+every destination you enable: Local Storage, Google Drive, OneDrive, Dropbox
+and S3-compatible Cloud Storage. Backups are encrypted with your own key by
+default, and most apps restore from the web UI. Everything - apps, destinations, schedule, retention
 and restores - is set up in the web UI, not env vars.
 
 Most apps are backed up through their own API or web UI; some also need
@@ -36,8 +36,8 @@ explains what Backuparr protects, how, and what it leaves to you.
   [first run](getting-started/first-run.md) and [updating](getting-started/updating.md).
 - [Apps](apps/index.md) - how each app is backed up and restored, with notes
   for the apps that need extra setup.
-- [Destinations](destinations.md) - Local Storage, Google Drive, OneDrive and
-  Dropbox.
+- [Destinations](destinations.md) - Local Storage, Google Drive, OneDrive,
+  Dropbox and S3-compatible Cloud Storage.
 - [Backups and history](backups.md) - the schedule, retention, the check
   before upload, run logs and the History tab.
 - [Restoring](restoring.md) - restoring an app, the version check, and

@@ -203,6 +203,8 @@ def api_storage_space(dest_id):
     root, error = _destination_root_or_error(cfg, dest_id)
     if error:
         return error
+    if dest_id == "s3":
+        return jsonify({"total": None, "free": None})
     space = _destination_space(dest_id, root)
     return jsonify(space), 502 if "error" in space else 200
 

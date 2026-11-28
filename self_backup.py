@@ -35,6 +35,7 @@ import config_store
 import destination_util
 import manifest
 import rclone_util
+import s3_storage
 import runlog
 import tls
 from apps.base import AppError
@@ -67,12 +68,15 @@ def _read(path):
 
 def build():
     """The encrypted archive, as bytes."""
+    # S3 credentials are already in config.json and have no refreshed token.
+    remotes = {name: fields for name, fields in rclone_util.config_dump().items()
+               if not s3_storage.managed_remote(name)}
     files = {
         "config.json": _read(config_store.CONFIG_PATH),
         "auth.json": _read(auth_store.AUTH_PATH),
         "manifest.json": _read(manifest.path()),
         "run_logs.json": _read(runlog.path()),
-        REMOTES: json.dumps(rclone_util.config_dump(), indent=1).encode("utf-8"),
+        REMOTES: json.dumps(remotes, indent=1).encode("utf-8"),
         META: json.dumps({"format": FORMAT, "backuparr_version": VERSION,
                           "created": datetime.now(timezone.utc).isoformat(timespec="seconds")}).encode("utf-8"),
         **tls.backup_files(),

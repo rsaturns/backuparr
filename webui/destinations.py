@@ -17,6 +17,7 @@ import gdrive_oauth
 import onedrive_oauth
 import rclone_token
 import rclone_util
+import s3_storage
 from backup import humanize_error, log_failure
 from config_store import DEFAULT_DEST, DEST_EDITABLE_FIELDS, DEST_NAMES, editing_config, load_config
 from webui.body import json_object
@@ -62,7 +63,10 @@ def api_test_destination(dest_id):
     error = destination_field_error(dest_id, edits)
     if error:
         return jsonify({"ok": False, "message": error}), 400
-    dest_cfg.update(edits)
+    if dest_id == "s3":
+        dest_cfg = s3_storage.merge_settings(dest_cfg, edits)
+    else:
+        dest_cfg.update(edits)
 
     try:
         if dest_id == "local":
@@ -73,13 +77,19 @@ def api_test_destination(dest_id):
             os.remove(probe)
             return jsonify({"ok": True, "message": f"{path} is writable"})
 
-        remote = destination_util.REMOTES[dest_id]
+        if dest_id == "s3":
+            s3_storage.test_connection(dest_cfg)
+            return jsonify({"ok": True, "message": f"can list {s3_storage.backup_target(dest_cfg)}"})
+
+        remote = destination_util.OAUTH_REMOTES[dest_id]
         if not dest_cfg.get(remote.TOKEN_FIELD):
             return jsonify({"ok": False, "message": _not_connected_message(dest_id, data)})
         cfg["destinations"][dest_id] = dest_cfg
         destination_util.sync(cfg)
         rclone_util.check_remote(destination_util.remote_root(dest_id, dest_cfg))
         return jsonify({"ok": True, "message": f"connected, backing up to {remote.backup_target(dest_cfg)}"})
+    except s3_storage.S3StorageError as exc:
+        return jsonify({"ok": False, "message": str(exc)}), 400
     except (rclone_util.RcloneError, destination_util.DestinationError, OSError) as exc:
         return jsonify({"ok": False, "message": humanize_error(exc)})
 
@@ -199,7 +209,7 @@ def api_gdrive_folder():
 def api_destination_disconnect(dest_id):
     """Forgets a connected destination's account; what the user entered
     themselves (Google Drive's OAuth client) stays."""
-    if dest_id not in destination_util.REMOTES:
+    if dest_id not in destination_util.OAUTH_REMOTES:
         return jsonify({"error": "unknown destination"}), 404
     kept = DEST_EDITABLE_FIELDS[dest_id] - {"enabled"}
     with editing_config() as cfg:

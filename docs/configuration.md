@@ -47,7 +47,7 @@ These are under `apps.<id>` too, for one app:
 ## Destinations
 
 Each destination's settings are under `destinations.<id>`: `local`,
-`gdrive`, `onedrive` or `dropbox`.
+`gdrive`, `onedrive`, `dropbox` or `s3`.
 
 | Field | Purpose |
 |---|---|
@@ -58,6 +58,10 @@ Each destination's settings are under `destinations.<id>`: `local`,
 | `gdrive.refresh_token`, `gdrive.folder_id`, `gdrive.folder_name` | Set by **Connect Google Drive** and **Choose folder** - don't edit |
 | `onedrive.token`, `onedrive.drive_id`, `onedrive.drive_type`, `onedrive.item_id` | Set by **Connect OneDrive** - don't edit |
 | `dropbox.token` | Set by **Connect Dropbox** - don't edit |
+| `s3.provider` | `aws`, `backblaze`, `cloudflare`, `wasabi`, `minio`, or `other` |
+| `s3.endpoint`, `s3.region` | Provider's S3 API endpoint and bucket region, where applicable |
+| `s3.bucket`, `s3.prefix` | Existing bucket and relative path within it. A blank prefix uses `Backuparr` |
+| `s3.access_key_id`, `s3.secret_access_key` | Bucket access key pair, encrypted at rest |
 
 ## Schedule and other settings
 

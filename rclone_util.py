@@ -18,7 +18,7 @@ class RcloneError(RuntimeError):
 _DIR_NOT_FOUND = 3
 
 
-SENSITIVE_FIELDS = {"client_secret", "token", "password", "pass"}
+SENSITIVE_FIELDS = {"client_secret", "token", "password", "pass", "access_key_id", "secret_access_key"}
 
 # rclone logs one timestamped line per retry attempt (default 3 retries) on
 # failure, each repeating the same underlying cause and often wrapping a
@@ -80,16 +80,19 @@ def _env(args):
 TIMEOUT = 300
 
 
-def _run(args, redact=(), timeout=TIMEOUT):
+def _run(args, redact=(), timeout=TIMEOUT, env_overrides=None):
     def redacted(text):
         for secret in redact:
             if secret:
                 text = text.replace(secret, "***")
         return text
 
+    env = _env(args)
+    if env_overrides is not None:
+        env = {**(os.environ if env is None else env), **env_overrides}
     # stdin closed so an inherited TTY (e.g. manual docker exec) can't hang.
     try:
-        proc = subprocess.run(["rclone", *args], capture_output=True, text=True, stdin=subprocess.DEVNULL, env=_env(args),
+        proc = subprocess.run(["rclone", *args], capture_output=True, text=True, stdin=subprocess.DEVNULL, env=env,
                               timeout=timeout)
     except subprocess.TimeoutExpired:  # rclone has been stopped
         detail = f"the destination didn't answer within {timeout // 60} minutes - check its connection and try again"
@@ -121,6 +124,9 @@ def config_set(name, backend_type, fields, force=False):
     for key, value in fields.items():
         args += [key, value]
     args += ["config_refresh_token", "false", "--non-interactive"]
+    if any(value.startswith("-") for value in fields.values()):
+        # Cobra can otherwise parse an opaque key beginning with '-' as a flag.
+        args = [*args[:2], "--non-interactive", "--", *args[2:-1]]
     _run(args, redact=[v for k, v in fields.items() if k in SENSITIVE_FIELDS])
 
 
@@ -201,3 +207,12 @@ def check_remote(remote_dir):
     name, colon, _path = remote_dir.partition(":")
     remote_root = name + ":" if colon else remote_dir.split("/", 1)[0] + ":"
     _run(["lsd", "--max-depth", "1", remote_root])
+
+
+def check_bucket(root, fields):
+    """Lists a bucket prefix with temporary credentials and no config writes."""
+    name = root.split(":", 1)[0].upper()
+    env = {f"RCLONE_CONFIG_{name}_{key.upper()}": value
+           for key, value in {"type": "s3", **fields}.items()}
+    _run(["lsf", "--max-depth", "1", root], env_overrides=env,
+         redact=[v for k, v in fields.items() if k in SENSITIVE_FIELDS])

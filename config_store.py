@@ -11,6 +11,7 @@ import threading
 from croniter import croniter
 
 import atomic_file
+import s3_storage
 import secrets_crypto
 from apps.http_headers import RequestHeadersError, validate_request_headers
 
@@ -666,7 +667,7 @@ for _meta in APP_META:
     _meta["category"] = _APP_CATEGORY[_meta["id"]]
     _meta["help_url"] = f"{DOCS_URL}apps/{docs_page(_meta['id'])}/#{SETUP_SECTION}"
 
-DEST_NAMES = ["local", "gdrive", "onedrive", "dropbox"]
+DEST_NAMES = ["local", "gdrive", "onedrive", "dropbox", "s3"]
 
 # Default local-destination backup path - same volume as config.json.
 DEFAULT_LOCAL_DIR = "/config/backuparr/backups"
@@ -693,6 +694,11 @@ DEFAULT_DEST = {
         "item_id": "",
         "retention_days": None,
     },
+    "s3": {
+        "enabled": False,
+        **dict.fromkeys(s3_storage.SETTING_FIELDS, ""),
+        "retention_days": None,
+    },
 }
 
 # Fields POST /api/config can write per destination - excludes OAuth
@@ -702,6 +708,7 @@ DEST_EDITABLE_FIELDS = {
     "gdrive": {"enabled", "client_id", "client_secret", "developer_key", "retention_days"},
     "dropbox": {"enabled", "retention_days"},
     "onedrive": {"enabled", "retention_days"},
+    "s3": {"enabled", "retention_days", *s3_storage.SETTING_FIELDS},
 }
 
 # Drives the Settings > Destinations card generically.
@@ -867,6 +874,24 @@ DESTINATION_META = [
             ],
         },
     },
+    {
+        "id": "s3",
+        "label": "Cloud Storage",
+        "icon": "cloud-storage.svg",
+        "description": "Back up to an S3-compatible bucket.",
+        "providers": s3_storage.PROVIDERS,
+        "setup_help": {
+            "title": "Set up Cloud Storage",
+            "intro": "Create a bucket and an access key pair with permission to list, read, write and delete its objects.",
+            "steps": [
+                "Choose a provider and enter the bucket name. For a service without a preset, choose Other S3-compatible "
+                "and enter its endpoint and signing region.",
+                "Enter the access key ID and secret access key. Use Test to check that Backuparr can list the bucket prefix.",
+                "Click Save settings to start using this destination.",
+            ],
+            "links": [{"label": "Cloud Storage documentation", "url": f"{DOCS_URL}destinations/#cloud-storage"}],
+        },
+    },
 ]
 
 def valid_schedule(schedule):
@@ -1003,7 +1028,8 @@ def _secret_fields(cfg):
             if key in app:  # extra fields aren't in DEFAULT_APP until a card saves one
                 fields.append((("apps", instance_id, key), app, key))
     for dest, key in (("gdrive", "client_secret"), ("gdrive", "developer_key"), ("gdrive", "refresh_token"),
-                      ("onedrive", "token"), ("dropbox", "token")):
+                      ("onedrive", "token"), ("dropbox", "token"),
+                      ("s3", "access_key_id"), ("s3", "secret_access_key")):
         fields.append((("destinations", dest, key), cfg["destinations"][dest], key))
     fields.append((("notify_url",), cfg, "notify_url"))
     rows = cfg.get("request_headers", [])
@@ -1025,8 +1051,9 @@ def _merge_defaults(data):
     for instance_id, app_data in apps.items():
         if instance_id not in APP_NAMES and instance_type(instance_id):
             merged["apps"][instance_id] = {**DEFAULT_INSTANCE, **app_data}
+    destinations = data.get("destinations", {})
     for name in DEST_NAMES:
-        merged["destinations"][name].update(data.get("destinations", {}).get(name, {}))
+        merged["destinations"][name].update(destinations.get(name, {}))
     return merged
 
 

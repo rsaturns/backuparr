@@ -220,6 +220,10 @@ def test_reset_needs_the_exact_phrase_and_deletes_nothing_without_it(isolated_we
 def test_reset_wipes_all_local_state_and_returns_to_setup(isolated_webui, authed_client):
     backups = seed_state(isolated_webui, authed_client)
     anonymous = isolated_webui.app.test_client()  # reset is the forgot-password path: no login needed
+    warning = anonymous.get("/login").get_data(as_text=True)
+    assert "Your cloud destination connections, including Cloud Storage keys" in warning
+    assert "Backups already uploaded to a cloud destination stay there after reset." in warning
+
     response = anonymous.post("/api/reset", json={"confirm": isolated_webui.auth.RESET_CONFIRM_PHRASE})
     assert response.status_code == 200
 
