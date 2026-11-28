@@ -61,7 +61,8 @@ days, and one more while a run uploads, before it deletes the oldest: a daily
 schedule with 7 days' retention keeps up to 8 backups of each app. Beside it
 are what Backuparr's backups use there now and the destination's
 free space, shown as "only ... free" when it isn't enough. On Google Drive,
-OneDrive and Dropbox, the free space is the whole account's.
+OneDrive and Dropbox, the free space is the whole account's. Free space is
+unknown for S3-compatible Cloud Storage.
 
 Under each retention field in Settings, a line says how many backups of each
 app it keeps and the room they need. It changes as you change the retention,
@@ -147,7 +148,7 @@ read once:
 
 - Local Storage is read first. A cloud copy of a backup already read there
   isn't downloaded.
-- Any other backup on Google Drive, OneDrive or Dropbox is downloaded once.
+- Any other backup on a cloud destination is downloaded once.
 - This pauses while a backup or restore runs. Later startups only read backups
   that aren't recorded yet.
 - On a slow or metered connection, set

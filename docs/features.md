@@ -62,8 +62,8 @@ See [Apps](apps/index.md) for how each one is backed up and restored.
 
 ## Destinations
 
-- Local Storage, Google Drive, OneDrive and Dropbox. Every run uploads to each
-  one you enable. See [Destinations](destinations.md).
+- Local Storage, Google Drive, OneDrive, Dropbox and S3-compatible Cloud
+  Storage. Every run uploads to each one you enable. See [Destinations](destinations.md).
 - Cloud connections are made in the web UI, with no rclone config.
 - An optional bandwidth cap for uploads and downloads (`RCLONE_BWLIMIT`).
 

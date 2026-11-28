@@ -5,6 +5,7 @@ import re
 from flask import Blueprint, jsonify, request
 
 import destination_util
+import s3_storage
 from apps import cert_pin
 from apps.http_headers import headers_for_app, refusal_hint, RequestHeadersError, validate_request_headers
 from backup import branded, build_app, humanize_error, notify
@@ -85,8 +86,10 @@ def api_get_config():
     cfg = load_config()
     # The UI only needs to know a destination's OAuth token is there. Only the
     # connect and disconnect routes write it, so it never has to come back.
-    for dest, remote in destination_util.REMOTES.items():
+    for dest, remote in destination_util.OAUTH_REMOTES.items():
         cfg["destinations"][dest][remote.TOKEN_FIELD] = bool(cfg["destinations"][dest][remote.TOKEN_FIELD])
+    s3_cfg = cfg["destinations"]["s3"]
+    s3_cfg["has_secret_access_key"] = bool(s3_cfg.pop("secret_access_key"))
     # For the Overview's warning; Save never sends it back.
     cfg["schedule_valid"] = valid_schedule(cfg.get("cron_schedule"))
     # Home Assistant's token is shown once, when it's made; not even its hash comes back.
@@ -250,6 +253,13 @@ def _validate_config(data, cfg):
             return "OneDrive: connect it first (paste a token from `rclone authorize onedrive`) before enabling"
         if name == "dropbox" and dest_data.get("enabled") and not cfg["destinations"]["dropbox"].get("token"):
             return "Dropbox: connect it first (paste a token from `rclone authorize dropbox`) before enabling"
+        if name == "s3":
+            if "enabled" in dest_data and not isinstance(dest_data["enabled"], bool):
+                return "Cloud Storage: enabled must be true or false"
+            merged = s3_storage.merge_settings(cfg["destinations"][name], dest_data)
+            error = s3_storage.validation_error(merged, required=merged["enabled"])
+            if error:
+                return error
     return None
 
 
@@ -289,9 +299,14 @@ def _apply_config(data, cfg):
     for name in DEST_NAMES:
         if name in data.get("destinations", {}):
             incoming = data["destinations"][name]
-            cfg["destinations"][name].update({k: v for k, v in incoming.items() if k in DEST_EDITABLE_FIELDS[name]})
-            days = cfg["destinations"][name].get("retention_days")
-            cfg["destinations"][name]["retention_days"] = None if days is None else int(days)
+            edits = {k: v for k, v in incoming.items() if k in DEST_EDITABLE_FIELDS[name]}
+            dest = cfg["destinations"][name]
+            if name == "s3":
+                dest.update(s3_storage.merge_settings(dest, edits))
+            else:
+                dest.update(edits)
+            days = dest.get("retention_days")
+            dest["retention_days"] = None if days is None else int(days)
 
 
 # The one-time "Backups are now encrypted" notice for an install that

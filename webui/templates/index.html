@@ -285,7 +285,7 @@
                   <input type="checkbox" class="d-enabled" aria-label="Back up to {{ m.label }}">
                   <span class="slider"></span>
                 </label>
-                {% if m.icon %}<img class="app-icon" src="{{ url_for('static', filename='icons/' ~ m.icon) }}" alt="" width="22" height="22">{% endif %}
+                {% if m.id == 's3' %}<span class="d-provider-icon"></span>{% elif m.icon %}<img class="app-icon" src="{{ url_for('static', filename='icons/' ~ m.icon) }}" alt="" width="22" height="22">{% endif %}
                 <h3>{{ m.label }}</h3>
                 <span class="status-dot" data-state="idle"></span>
               </div>
@@ -342,6 +342,48 @@
                 </div>
                 <div class="app-card-actions">
                   <button type="button" class="btn btn-ghost btn-sm setup-guide-btn" data-dest="{{ m.id }}">Setup guide</button>
+                </div>
+                {% elif m.id == 's3' %}
+                <label class="field">
+                  <span class="field-label">Storage provider</span>
+                  <select class="d-field" data-field="provider" required>
+                    <option value="">Choose a provider</option>
+                    {% for id, provider in m.providers.items() %}
+                    <option value="{{ id }}">{{ provider.label }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <div class="d-provider-fields hidden">
+                  <label class="field">
+                    <span class="field-label">Endpoint URL <span class="muted d-endpoint-optional hidden">(optional)</span></span>
+                    <input type="text" class="d-field" data-field="endpoint" spellcheck="false" required>
+                  </label>
+                  <label class="field">
+                    <span class="field-label">Region <span class="muted d-region-optional hidden">(optional)</span></span>
+                    <input type="text" class="d-field" data-field="region" spellcheck="false">
+                  </label>
+                  <label class="field">
+                    <span class="field-label">Bucket name</span>
+                    <input type="text" class="d-field" data-field="bucket" spellcheck="false" autocapitalize="none" required>
+                  </label>
+                  <label class="field">
+                    <span class="field-label">Path prefix <span class="muted">(optional)</span></span>
+                    <input type="text" class="d-field" data-field="prefix" placeholder="Backuparr">
+                  </label>
+                  <label class="field">
+                    <span class="field-label">Access key ID</span>
+                    <input type="text" class="d-field" data-field="access_key_id" autocomplete="off" spellcheck="false" required>
+                  </label>
+                  <label class="field">
+                    <span class="field-label">Secret access key</span>
+                    <input type="password" class="d-field" data-field="secret_access_key" autocomplete="new-password">
+                    <span id="s3-secret-description" hidden>A secret access key is saved. Leave the field blank to keep it.</span>
+                  </label>
+                  <div class="app-card-actions">
+                    <button type="button" class="btn btn-ghost btn-sm setup-guide-btn" data-dest="s3">Setup guide</button>
+                    <button type="button" class="btn btn-ghost btn-sm test-dest-btn">Test</button>
+                    <span class="test-result" role="status"></span>
+                  </div>
                 </div>
                 {% else %}
                 <div class="app-card-actions">

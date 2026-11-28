@@ -22,8 +22,8 @@ attacker's side.
 ## The principles
 
 - **Your data stays yours.** Backups go only to the destinations you enable:
-  a folder you mount, or your own Google Drive, OneDrive or Dropbox. There's no
-  Backuparr account, cloud service or telemetry.
+  a folder you mount, or your own Google Drive, OneDrive, Dropbox or
+  S3-compatible bucket. There's no Backuparr account, cloud service or telemetry.
 - **Encrypted before it leaves.** Backups are encrypted with a key only your
   install holds, so a destination stores files it can't read.
 - **Secure by default.** The safe setting is the one you get without asking:

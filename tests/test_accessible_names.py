@@ -167,3 +167,13 @@ def test_text_meets_wcag_aa_contrast(theme, text, background):
 def test_button_text_meets_wcag_aa_contrast(theme, button):
     colours = _colours()[theme]
     assert _contrast(colours[f"{button}-contrast"], colours[button]) >= 4.5
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_cloud_storage_placeholders_meet_wcag_aa_contrast(theme):
+    placeholder = re.search(r'\.dest-card\[data-dest="s3"\] :is\(\.d-field, \.d-retention\)::placeholder\s*\{([^}]+)\}', STYLE.read_text())
+    assert placeholder, "give Cloud Storage placeholders a readable color"
+    color = re.search(r"\bcolor:\s*var\(--([a-z-]+)\)", placeholder[1])
+    assert color and re.search(r"\bopacity:\s*1\s*;", placeholder[1])
+    colours = _colours()[theme]
+    assert _contrast(colours[color[1]], colours["bg"]) >= 4.5

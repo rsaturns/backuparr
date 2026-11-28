@@ -16,6 +16,7 @@ import file_cache
 import gdrive_oauth
 import onedrive_oauth
 import rclone_util
+import s3_storage
 from config_store import APP_NAMES, DEFAULT_LOCAL_DIR, MULTI_INSTANCE_APPS, instance_type
 
 
@@ -159,18 +160,18 @@ def local_root(dest_cfg):
     return path
 
 
-# The connected destinations, each an rclone remote kept in rclone.conf.
-# Each module has TOKEN_FIELD (the destination field set once connected),
-# remote_root(), backup_target() and sync_rclone_remote().
-REMOTES = {"gdrive": gdrive_oauth, "onedrive": onedrive_oauth, "dropbox": dropbox_oauth}
-# The rclone remotes Backuparr keeps, by name, and the type each one is.
-OWN_REMOTES = {module.REMOTE_NAME: module.RCLONE_TYPE for module in REMOTES.values()}
-_REMOTE_ERRORS = (gdrive_oauth.GDriveOAuthError, onedrive_oauth.OneDriveOAuthError, dropbox_oauth.DropboxOAuthError)
+# The OAuth destinations, each an rclone remote kept in rclone.conf.
+# Each has TOKEN_FIELD (the destination field set once connected).
+OAUTH_REMOTES = {"gdrive": gdrive_oauth, "onedrive": onedrive_oauth, "dropbox": dropbox_oauth}
+REMOTES = {**OAUTH_REMOTES, "s3": s3_storage}
+# These connections can hold refreshed OAuth tokens that config.json lacks.
+OWN_REMOTES = {module.REMOTE_NAME: module.RCLONE_TYPE for module in OAUTH_REMOTES.values()}
+_REMOTE_ERRORS = (gdrive_oauth.GDriveOAuthError, onedrive_oauth.OneDriveOAuthError,
+                  dropbox_oauth.DropboxOAuthError, s3_storage.S3StorageError)
 
 
 def remote_root(dest_id, dest_cfg):
-    """The rclone remote root (a plain local path, or "name:" for a
-    connected OAuth remote) to pass to rclone_util for this destination."""
+    """The rclone path to pass to rclone_util for this destination."""
     if dest_id == "local":
         return local_root(dest_cfg)
     if dest_id not in REMOTES:
@@ -193,7 +194,7 @@ def _stamps():
 
 
 def sync(cfg):
-    """Keeps rclone.conf in sync with any OAuth-connected destinations
+    """Keeps rclone.conf in sync with the connected destinations
     before an operation touches them - safe/cheap to call unconditionally:
     one `rclone config dump`, and a write only for a remote that differs.
     cfg may hold changes not saved yet (a destination's Test)."""

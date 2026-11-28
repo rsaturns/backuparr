@@ -13,9 +13,9 @@
 
 Scheduled backups of the apps you host - media management, downloaders,
 media servers, network, security, home automation and server apps - sent to
-every destination you enable: Local Storage, Google Drive, OneDrive and
-Dropbox. Backups are encrypted with your own key by default, and most apps
-restore from the web UI. Everything - apps, destinations, schedule, retention
+every destination you enable: Local Storage, Google Drive, OneDrive, Dropbox
+and S3-compatible Cloud Storage. Backups are encrypted with your own key by
+default, and most apps restore from the web UI. Everything - apps, destinations, schedule, retention
 and restores - is set up in the web UI, not env vars.
 
 Most apps are backed up through their own API or web UI; some also need
@@ -35,9 +35,9 @@ If you like Backuparr, give it a ⭐ star - it helps the project grow.
   and servers - Pi-hole, OPNsense, pfSense, UniFi, Vaultwarden, Bitwarden,
   Home Assistant, Immich, Unraid, Synology DSM and QNAP QuTS hero. See the
   [full list](https://docs.backuparr.com/apps/).
-- **Every destination at once:** Local Storage, Google Drive, OneDrive and
-  Dropbox, connected in the web UI, with retention set once or per
-  destination.
+- **Every destination at once:** Local Storage, Google Drive, OneDrive,
+  Dropbox and S3-compatible Cloud Storage, set up in the web UI with
+  retention set once or per destination.
 - **Encrypted with your key** before upload - always for sensitive apps such
   as password managers, firewalls and Home Assistant - and the image's
   `decrypt` command opens a backup without Backuparr.
@@ -154,7 +154,7 @@ live, **History** lists, downloads and deletes backups, and **Restore** restores
 - [Features](https://docs.backuparr.com/features/) - everything Backuparr does, in one list
 - [Getting started](https://docs.backuparr.com/getting-started/)
 - [Apps](https://docs.backuparr.com/apps/) - how each app is backed up and restored
-- [Destinations](https://docs.backuparr.com/destinations/) - Local Storage, Google Drive, OneDrive, Dropbox
+- [Destinations](https://docs.backuparr.com/destinations/) - Local Storage, Google Drive, OneDrive, Dropbox and S3-compatible Cloud Storage
 - [Settings](https://docs.backuparr.com/settings/) - Prowlarr discovery, multiple instances of an app, reverse-proxy headers
 - [Backups and history](https://docs.backuparr.com/backups/) - schedule, retention, run logs, History
 - [Restoring](https://docs.backuparr.com/restoring/) - apps, the version check, and Backuparr itself
@@ -173,12 +173,17 @@ live, **History** lists, downloads and deletes backups, and **Restore** restores
 
 ## Credits
 
-App icons (`webui/static/icons/`) are from the [selfh.st icon
+Most app and destination icons (`webui/static/icons/`) are from the [selfh.st icon
 collection](https://selfh.st/icons/) ([selfhst/icons on
 GitHub](https://github.com/selfhst/icons)), licensed
-[CC BY 4.0](https://github.com/selfhst/icons/blob/main/LICENSE), except
-Synology DSM's (`synology.png`), which is Synology's own icon from
-[synology.com](https://www.synology.com/).
+[CC BY 4.0](https://github.com/selfhst/icons/blob/main/LICENSE).
+The Synology DSM icon (`synology.png`) comes from [Synology](https://www.synology.com/).
+
+Cloud Storage uses the colored S3, Backblaze, Cloudflare, and MinIO marks from
+the selfh.st collection, with a light-colored MinIO stork for dark backgrounds.
+The Wasabi icon uses the brand's green.
+[Simple Icons artwork](https://github.com/simple-icons/simple-icons/blob/develop/icons/wasabi.svg),
+[Wasabi logo](https://a-us.storyblok.com/f/1019449/300x70/28cf78e9fb/secondary-logo-full-color-rgb.svg).
 
 The Server category's icons (`server-outline.png`, `server-filled.png`):
 <a href="https://www.flaticon.com/free-icons/server" title="server icons">Server icons created by Magnific - Flaticon</a>

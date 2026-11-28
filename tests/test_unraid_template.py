@@ -71,10 +71,11 @@ def test_secrets_are_masked(template):
     assert masked == {"BACKUPARR_SECRETS_KEY", "RCLONE_CONFIG_PASS"}
 
 
-def test_ca_profile_has_a_profile():
+def test_ca_profile_lists_cloud_storage(template):
     profile = ET.parse(os.path.join(ROOT, "ca_profile.xml")).getroot()
     assert profile.tag == "CommunityApplications"
-    assert (profile.findtext("Profile") or "").strip()
+    assert "S3-compatible Cloud Storage" in profile.findtext("Profile")
+    assert "S3-compatible Cloud Storage" in template.findtext("Overview")
 
 
 @pytest.mark.parametrize("value, level", [

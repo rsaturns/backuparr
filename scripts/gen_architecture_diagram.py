@@ -41,6 +41,7 @@ from PIL import Image
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
 from config_store import APP_CATEGORIES, APP_META, SELF_APP  # noqa: E402
+from s3_storage import PROVIDERS  # noqa: E402
 ICONS = os.path.join(REPO, "webui", "static", "icons")
 STATIC = os.path.join(REPO, "webui", "static")
 DOCS = os.path.join(REPO, "docs")
@@ -108,6 +109,7 @@ DESTS = [
     ("Google Drive", os.path.join(ICONS, "google-drive.svg"), "svg", "OAuth connect"),
     ("Microsoft OneDrive", os.path.join(ICONS, "microsoft-onedrive.svg"), "svg", "rclone authorize"),
     ("Dropbox", os.path.join(ICONS, "dropbox.svg"), "svg", "rclone authorize"),
+    ("Cloud Storage", os.path.join(ICONS, "cloud-storage.svg"), "svg", "S3-compatible buckets"),
 ]
 
 # A category's box: its name, then its apps' icons in rows of ICONS_PER_ROW.
@@ -169,7 +171,9 @@ def box_height(apps):
 def icon_files():
     """Every icon file the diagram may draw, in either theme."""
     files = {f for _, apps in CATEGORIES for _, light, dark in apps for f in (light, dark)}
-    return sorted(files | {os.path.basename(path) for _, path, _, _ in DESTS if path})
+    files.update(os.path.basename(path) for _, path, _, _ in DESTS if path)
+    files.update(provider[key] for provider in PROVIDERS.values() for key in ("icon", "icon_dark") if key in provider)
+    return sorted(files)
 
 
 def web_ui_theme(browser, theme):
@@ -278,9 +282,17 @@ def build(theme, color, filters):
         y = dest_start_y + i * (DEST_H + DEST_GAP)
         parts.append(f'<rect x="{RIGHT_X}" y="{y}" width="{DEST_W}" height="{DEST_H}" rx="12" fill="{color["card"]}" stroke="{color["border"]}" stroke-width="1.4" filter="url(#shadow)"/>')
         ix, iy = RIGHT_X + 18, y + (DEST_H - DEST_ICON) / 2
-        parts.append(icon(path, kind, ix, iy, DEST_ICON, color, filters.get(os.path.basename(path or ""))))
-        parts.append(f'<text x="{ix + DEST_ICON + 16}" y="{y + DEST_H / 2 - 2}" font-size="16" font-weight="600" fill="{color["text"]}">{label}</text>')
-        parts.append(f'<text x="{ix + DEST_ICON + 16}" y="{y + DEST_H / 2 + 18}" font-size="12.5" fill="{color["muted"]}">{sub}</text>')
+        tx, ty = ix + DEST_ICON + 16, y + DEST_H / 2 - 2
+        if label == "Cloud Storage":
+            tx, ty = ix, y + 25
+            for index, provider in enumerate(PROVIDERS.values()):
+                asset = provider.get("icon_dark", provider["icon"]) if dark else provider["icon"]
+                parts.append(icon(_icon_path(asset), _kind(asset), ix + 33 * index, y + 54, 24, color,
+                                  filters.get(asset)))
+        else:
+            parts.append(icon(path, kind, ix, iy, DEST_ICON, color, filters.get(os.path.basename(path or ""))))
+        parts.append(f'<text x="{tx}" y="{ty}" font-size="16" font-weight="600" fill="{color["text"]}">{label}</text>')
+        parts.append(f'<text x="{tx}" y="{ty + 20}" font-size="12.5" fill="{color["muted"]}">{sub}</text>')
         dest_anchor.append((RIGHT_X, y + DEST_H / 2))
 
     # Converging lines share one arrowhead at the merge point instead of each

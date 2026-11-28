@@ -86,7 +86,7 @@ install:
   in that folder are left alone)
 - the backup record and run logs
 
-Backups already in Google Drive, OneDrive or Dropbox are untouched. While a
+Backups already in a cloud destination are untouched. While a
 backup or restore is running, the reset waits: try again when it finishes.
 
 The reset works without logging in, gated only by a confirmation phrase that's

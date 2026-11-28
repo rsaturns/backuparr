@@ -5,6 +5,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Back up to S3-compatible Cloud Storage, including AWS S3, Backblaze B2, Cloudflare R2, Wasabi, and MinIO (#268).
 - New contributors: @avaldivieso-meraki made their first contribution in #273.
 
 ## [3.0.1] - 2026-11-24
