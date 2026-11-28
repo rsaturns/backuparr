@@ -21,7 +21,8 @@ later.
 [![Open your Home Assistant instance and open the Backuparr repository.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=rsaturns&repository=ha-backuparr&category=integration)
 
 1. Select the badge to open the integration in Home Assistant's
-   **Marketplace** (or HACS before 2026.11), and select **Download**.
+   **Marketplace** (or HACS before 2026.11), or search for **Backuparr**
+   there. Select **Install** (**Download** in HACS).
 2. [Turn on](#turning-it-on) the integration in Backuparr and copy the token.
 3. In Home Assistant, go to **Settings** > **Devices & services** > **Add
    integration**, pick **Backuparr**, and enter Backuparr's address (like

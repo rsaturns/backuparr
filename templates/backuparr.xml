@@ -20,7 +20,10 @@
   <Screenshot>https://raw.githubusercontent.com/rsaturns/backuparr/main/docs/screenshots/settings.png</Screenshot>
   <Screenshot>https://raw.githubusercontent.com/rsaturns/backuparr/main/docs/screenshots/run.png</Screenshot>
   <Screenshot>https://raw.githubusercontent.com/rsaturns/backuparr/main/docs/screenshots/history.png</Screenshot>
-  <Changes>### 3.0.1 (2026-11-24)
+  <Changes>### 3.0.02 (2026-11-28)
+- New contributors: @avaldivieso-meraki made their first contribution in #273.
+
+### 3.0.1 (2026-11-24)
 - After a restart with a config.json Backuparr can't read, the web UI says what's wrong with the file instead of showing the encryption key again and asking for it to be saved (#262).
 - Accessibility: screen readers name every switch and field in the web UI (each app's and destination's on/off switch, the schedule, History and Restore choices, SABnzbd's server passwords on restore), the account button's name starts with the name it shows, and all text in the light theme meets the WCAG AA contrast minimum - its grey, blue, red, green and amber text is a shade darker (#261).
 - The documentation moved to https://docs.backuparr.com (old links redirect), and the project has a website: https://backuparr.com.
@@ -92,13 +95,8 @@
 - Each released image comes with signed build provenance and a list of every package in it (an SBOM), and is built from scratch, tested and scanned on amd64 and arm64 before it's published: check one with gh attestation verify oci://ghcr.io/rsaturns/backuparr:&lt;version&gt; --owner rsaturns (#243). See https://docs.backuparr.com/security-principles/#checking-an-image
 - The image installs Alpine's security updates when it's built, so fixes no longer wait for a new Python base image: it now has zlib 1.4 and OpenSSL 3.5.9-r1 (CVE-2026-4738, CVE-2026-95691, CVE-2026-95692, CVE-2026-107496) (#244).
 
-### 2.5.7 (2026-11-13)
-- rclone 1.76.0 (from 1.75.0), with the security fixes from rclone 1.75.1 and 1.75.2 and its updated Go libraries: the image scan's 2 critical and 20 high findings in rclone are gone.
-- The image no longer has pip, which Backuparr doesn't use once its packages are in: pip's own copies of urllib3, msgpack and setuptools were the scan's other 5 high findings.
-- The release workflow's docker/login-action 4.8.0 and softprops/action-gh-release 3.0.4, as Dependabot proposed (#159, #160).
-
 View all changes: https://github.com/rsaturns/backuparr/blob/main/CHANGELOG.md</Changes>
-  <Date>2026-11-24</Date>
+  <Date>2026-11-28</Date>
   <Config Name="WebUI" Target="8990" Default="8990" Mode="tcp" Description="HTTP port of the Backuparr web UI." Type="Port" Display="always" Required="true" Mask="false">8990</Config>
   <Config Name="WebUI HTTPS" Target="8991" Default="8991" Mode="tcp" Description="HTTPS port of the Backuparr web UI, with a self-signed certificate: your browser warns the first time. See https://docs.backuparr.com/security/#https" Type="Port" Display="always" Required="true" Mask="false">8991</Config>
   <Config Name="Appdata" Target="/config/backuparr" Default="/mnt/user/appdata/backuparr" Mode="rw" Description="Backuparr's settings, encrypted credentials and, with the Local destination, the backups themselves. Back this folder up or keep a cloud destination enabled." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/backuparr</Config>
