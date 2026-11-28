@@ -28,7 +28,7 @@ DEFAULT_PREFIX = "Backuparr"
 _REMOTE = re.compile(r"backuparr-s3-[0-9a-f]{24}")
 _BUCKET = re.compile(r"[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]")
 _REGION = re.compile(r"[a-z0-9][a-z0-9-]{0,62}")
-_AWS_ENDPOINT = re.compile(r"(?:^|\.)s3(?:[.-][a-z0-9-]+)*\.amazonaws\.com(?:\.cn)?$")
+_AWS_HOST_LABEL = re.compile(r"[a-z0-9-]+")
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 
 
@@ -132,6 +132,20 @@ def validation_error(cfg, required=True):
     return None
 
 
+def _is_aws_s3_endpoint(host):
+    """Recognize AWS S3 endpoints by walking the hostname's labels once."""
+    host = host.removesuffix(".cn")
+    service = host.removesuffix(".amazonaws.com")
+    if service == host:
+        return False
+    for label in reversed(service.split(".")):
+        if not _AWS_HOST_LABEL.fullmatch(label):
+            return False
+        if label == "s3" or (label.startswith("s3-") and len(label) > 3):
+            return True
+    return False
+
+
 def _options(cfg):
     error = validation_error(cfg)
     if error:
@@ -139,7 +153,7 @@ def _options(cfg):
     provider = PROVIDERS[cfg["provider"]]
     endpoint = _endpoint(cfg)
     backend = provider["backend"]
-    if cfg["provider"] == "aws" and endpoint and not _AWS_ENDPOINT.search(urlsplit(endpoint).hostname):
+    if cfg["provider"] == "aws" and endpoint and not _is_aws_s3_endpoint(urlsplit(endpoint).hostname):
         # Compatible servers may need path-style requests and lack AWS-specific features.
         backend = s3_other.PROVIDER["backend"]
     return {

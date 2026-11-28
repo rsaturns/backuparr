@@ -20,7 +20,12 @@ CONFIG = {"enabled": True, "provider": "aws", "bucket": "backups-test",
 
 @pytest.mark.parametrize("provider, endpoint, region, backend, expected_region, expected_endpoint", [
     ("aws", "", "", "AWS", "us-east-1", ""),
+    ("aws", "https://s3.amazonaws.com", "", "AWS", "us-east-1", None),
     ("aws", "https://s3.us-east-1.amazonaws.com", "", "AWS", "us-east-1", None),
+    ("aws", "https://s3-us-west-2.amazonaws.com", "us-west-2", "AWS", "us-west-2", None),
+    ("aws", "https://backups-test.s3-accelerate.amazonaws.com", "", "AWS", "us-east-1", None),
+    ("aws", "https://s3.dualstack.cn-north-1.amazonaws.com.cn", "cn-north-1", "AWS", "cn-north-1", None),
+    ("aws", "https://ec2.us-east-1.amazonaws.com", "", "Other", "us-east-1", None),
     ("aws", "https://s3.amazonaws.com.example.test", "", "Other", "us-east-1", None),
     ("aws", "http://garage.example.test:3900", "garage", "Other", "garage", None),
     ("backblaze", "", "", "Other", "us-west-004", "https://s3.us-west-004.backblazeb2.com"),
